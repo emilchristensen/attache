@@ -1,0 +1,235 @@
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, statSync, lstatSync } from "node:fs";
+import { join, relative, sep, basename } from "node:path";
+import { type Db, nowIso, tx } from "../core/db.ts";
+import { parseMarkdown } from "./markdown.ts";
+import { areaOf, type Area } from "./policy.ts";
+
+export interface IndexRoot {
+  /** "data" for the Jarvis data folder, "import:<id>" for imported folders. */
+  id: string;
+  path: string;
+  label: string;
+}
+
+const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".jarvis", ".DS_Store"]);
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+export interface ScanPlan {
+  read: string[];
+  skipped: Array<{ path: string; reason: string }>;
+  totalBytes: number;
+}
+
+/** List what an import would read, without reading contents. */
+export function planScan(rootPath: string, limit = 50_000): ScanPlan {
+  const plan: ScanPlan = { read: [], skipped: [], totalBytes: 0 };
+  const walk = (dir: string) => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch (e) {
+      plan.skipped.push({ path: relative(rootPath, dir) || ".", reason: `unreadable: ${(e as Error).message}` });
+      return;
+    }
+    for (const name of entries.sort()) {
+      const abs = join(dir, name);
+      const rel = relative(rootPath, abs).split(sep).join("/");
+      let st;
+      try {
+        st = lstatSync(abs);
+      } catch {
+        continue;
+      }
+      if (st.isSymbolicLink()) {
+        plan.skipped.push({ path: rel, reason: "symbolic link (not followed)" });
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (SKIP_DIRS.has(name) || name.startsWith(".")) {
+          plan.skipped.push({ path: rel + "/", reason: "hidden or tool folder" });
+          continue;
+        }
+        walk(abs);
+      } else if (st.isFile()) {
+        if (!name.toLowerCase().endsWith(".md")) continue;
+        if (st.size > MAX_FILE_BYTES) {
+          plan.skipped.push({ path: rel, reason: "larger than 2 MB" });
+          continue;
+        }
+        if (plan.read.length >= limit) {
+          plan.skipped.push({ path: rel, reason: "file limit reached" });
+          continue;
+        }
+        plan.read.push(rel);
+        plan.totalBytes += st.size;
+      }
+    }
+  };
+  walk(rootPath);
+  return plan;
+}
+
+export function docId(rootId: string, rel: string): string {
+  return createHash("sha256").update(`${rootId}\0${rel}`).digest("hex").slice(0, 24);
+}
+
+function areaFor(root: IndexRoot, rel: string): Area {
+  if (root.id !== "data") return "import";
+  return areaOf(rel) ?? "import";
+}
+
+export interface IndexResult {
+  indexed: number;
+  unchanged: number;
+  removed: number;
+  errors: Array<{ path: string; error: string }>;
+}
+
+export class Indexer {
+  private readonly db: Db;
+  constructor(db: Db) {
+    this.db = db;
+  }
+
+  indexFile(root: IndexRoot, rel: string): "indexed" | "unchanged" {
+    const abs = join(root.path, rel);
+    const st = statSync(abs);
+    const raw = readFileSync(abs, "utf8");
+    const hash = createHash("sha256").update(raw).digest("hex");
+    const id = docId(root.id, rel);
+    const existing = this.db.prepare("select hash from documents where id = ?").get(id) as { hash: string } | undefined;
+    if (existing?.hash === hash) {
+      this.db.prepare("update documents set mtime_ms = ? where id = ?").run(Math.floor(st.mtimeMs), id);
+      return "unchanged";
+    }
+    const parsed = parseMarkdown(raw, basename(rel, ".md"));
+    const area = areaFor(root, rel);
+    const docType = typeof parsed.frontmatter.type === "string" ? parsed.frontmatter.type : area === "memory" ? rel.split("/")[1]?.replace(/s$/, "") ?? null : null;
+    tx(this.db, () => {
+      this.removeChunks(id);
+      this.db
+        .prepare(
+          `insert into documents (id, root, rel_path, area, doc_type, title, hash, mtime_ms, meta, indexed_at)
+           values (?,?,?,?,?,?,?,?,?,?)
+           on conflict(id) do update set area=excluded.area, doc_type=excluded.doc_type, title=excluded.title, hash=excluded.hash,
+             mtime_ms=excluded.mtime_ms, meta=excluded.meta, indexed_at=excluded.indexed_at`,
+        )
+        .run(id, root.id, rel, area, docType, parsed.title, hash, Math.floor(st.mtimeMs), JSON.stringify(parsed.frontmatter), nowIso());
+      const insChunk = this.db.prepare(
+        "insert into chunks (doc_id, ordinal, heading, start_line, end_line, section, text) values (?,?,?,?,?,?,?)",
+      );
+      const insFts = this.db.prepare("insert into chunks_fts (rowid, title, heading, text) values (?,?,?,?)");
+      let ordinal = 0;
+      for (const s of parsed.sections) {
+        for (const piece of splitLong(s.text, s.contentStartLine)) {
+          if (!piece.text.trim()) continue;
+          const heading = (s.heading ?? "").toLowerCase();
+          const section = heading === "current state" ? "state" : heading === "history" ? "history" : "body";
+          const text = piece.text.replace(/<!--[\s\S]*?-->/g, "").trim();
+          if (!text) continue;
+          const r = insChunk.run(id, ordinal++, s.heading, piece.startLine, Math.max(piece.startLine, Math.min(s.endLine, piece.endLine)), section, text);
+          insFts.run(Number(r.lastInsertRowid), parsed.title, s.heading ?? "", text);
+        }
+      }
+    });
+    return "indexed";
+  }
+
+  private removeChunks(docIdValue: string) {
+    const rows = this.db.prepare("select id from chunks where doc_id = ?").all(docIdValue) as Array<{ id: number }>;
+    const del = this.db.prepare("delete from chunks_fts where rowid = ?");
+    for (const r of rows) del.run(r.id);
+    this.db.prepare("delete from chunks where doc_id = ?").run(docIdValue);
+  }
+
+  removeFile(rootId: string, rel: string): void {
+    const id = docId(rootId, rel);
+    tx(this.db, () => {
+      this.removeChunks(id);
+      this.db.prepare("delete from documents where id = ?").run(id);
+    });
+  }
+
+  removeRoot(rootId: string): number {
+    const rows = this.db.prepare("select rel_path from documents where root = ?").all(rootId) as Array<{ rel_path: string }>;
+    for (const r of rows) this.removeFile(rootId, r.rel_path);
+    return rows.length;
+  }
+
+  /** Incremental scan: index new/changed files, drop documents whose files disappeared. */
+  scan(root: IndexRoot, onlyAreas?: string[]): IndexResult {
+    const result: IndexResult = { indexed: 0, unchanged: 0, removed: 0, errors: [] };
+    const plan = planScan(root.path);
+    const present = new Set<string>();
+    const known = new Map(
+      (this.db.prepare("select rel_path, mtime_ms, hash from documents where root = ?").all(root.id) as Array<{ rel_path: string; mtime_ms: number }>).map(
+        (r) => [r.rel_path, r.mtime_ms],
+      ),
+    );
+    for (const rel of plan.read) {
+      if (onlyAreas && root.id === "data" && !onlyAreas.includes(rel.split("/")[0] ?? "")) continue;
+      present.add(rel);
+      try {
+        const st = statSync(join(root.path, rel));
+        if (known.get(rel) === Math.floor(st.mtimeMs)) {
+          result.unchanged++;
+          continue;
+        }
+        if (this.indexFile(root, rel) === "indexed") result.indexed++;
+        else result.unchanged++;
+      } catch (e) {
+        result.errors.push({ path: rel, error: (e as Error).message });
+      }
+    }
+    for (const rel of known.keys()) {
+      if (!present.has(rel)) {
+        this.removeFile(root.id, rel);
+        result.removed++;
+      }
+    }
+    return result;
+  }
+
+  /** Drop the whole index and rebuild it from files. */
+  rebuild(roots: IndexRoot[]): IndexResult {
+    tx(this.db, () => {
+      this.db.exec("delete from chunks_fts; delete from chunks; delete from documents;");
+    });
+    const total: IndexResult = { indexed: 0, unchanged: 0, removed: 0, errors: [] };
+    for (const root of roots) {
+      const r = this.scan(root);
+      total.indexed += r.indexed;
+      total.unchanged += r.unchanged;
+      total.errors.push(...r.errors);
+    }
+    return total;
+  }
+}
+
+/** Split long sections into ~1200-character pieces on paragraph boundaries, keeping line ranges. */
+function splitLong(text: string, firstLine: number): Array<{ text: string; startLine: number; endLine: number }> {
+  const lines = text.split("\n");
+  const out: Array<{ text: string; startLine: number; endLine: number }> = [];
+  let buf: string[] = [];
+  let start = firstLine;
+  let size = 0;
+  lines.forEach((line, i) => {
+    buf.push(line);
+    size += line.length + 1;
+    if (size >= 1200 && line.trim() === "") {
+      out.push({ text: buf.join("\n"), startLine: start, endLine: firstLine + i });
+      buf = [];
+      size = 0;
+      start = firstLine + i + 1;
+    }
+  });
+  if (buf.length) out.push({ text: buf.join("\n"), startLine: start, endLine: firstLine + lines.length - 1 });
+  // Trim leading blank lines from ranges so citations point at content.
+  return out.map((p) => {
+    const ls = p.text.split("\n");
+    let skip = 0;
+    while (skip < ls.length - 1 && ls[skip]!.trim() === "") skip++;
+    return { text: ls.slice(skip).join("\n"), startLine: p.startLine + skip, endLine: p.endLine };
+  });
+}
