@@ -47,7 +47,7 @@ step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract a
   extract: () => {
     try {
       const j = JSON.parse(readFileSync(join(OUT, "vitest.json"), "utf8"));
-      return { summary: `${j.numPassedTests}/${j.numTotalTests} tests, ${j.numPassedTestSuites}/${j.numTotalTestSuites} files`, passed: j.numPassedTests, total: j.numTotalTests };
+      return { summary: `${j.numPassedTests}/${j.numTotalTests} tests in ${j.testResults?.length ?? "?"} files`, passed: j.numPassedTests, total: j.numTotalTests };
     } catch {
       return {};
     }
@@ -81,7 +81,7 @@ if (!QUICK) {
     },
   });
   if (e2e.suites) {
-    for (const [name, s] of Object.entries(e2e.suites)) if (s.skipped && !s.passed) e2e.status = e2e.status === "pass" ? "blocked" : e2e.status;
+    for (const s of Object.values(e2e.suites)) if (s.skipped && !s.passed) e2e.status = e2e.status === "pass" ? "blocked" : e2e.status;
   }
   step(["A02", "A14"], "Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
     extract: (out) => ({ summary: /(\d+\/\d+) installation checks passed/.exec(out)?.[1] ?? "" }),
