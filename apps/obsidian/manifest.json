@@ -1,0 +1,9 @@
+{
+  "id": "jarvis-companion",
+  "name": "Jarvis",
+  "version": "0.1.0",
+  "minAppVersion": "1.11.4",
+  "description": "Ask your local Jarvis second brain about notes, capture selections with provenance and review attention items. Requires the Jarvis service running on this computer.",
+  "author": "Emil Rømer Christensen",
+  "isDesktopOnly": true
+}

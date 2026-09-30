@@ -31,6 +31,26 @@ function rootPath(app: App, root: string): string {
   return String(rec.settings.path);
 }
 
+export function memoryRoots(app: App): Array<{ root: string; path: string; label: string }> {
+  const out: Array<{ root: string; path: string; label: string }> = [];
+  if (app.memory.dataRoot) out.push({ root: "data", path: app.memory.dataRoot, label: "Jarvis data folder" });
+  for (const rec of app.connections.records()) {
+    if (rec.kind === "vault" && !rec.settings.builtin && rec.status !== "disconnected") out.push({ root: `import:${rec.id}`, path: String(rec.settings.path), label: rec.label });
+  }
+  return out;
+}
+
+/** Map an absolute file path (e.g. the note open in Obsidian) to an indexed root and relative path. */
+export function resolveAbsolute(app: App, absPath: string): { root: string; relPath: string } | null {
+  const norm = absPath.replace(/\\/g, "/");
+  const roots = memoryRoots(app).sort((a, b) => b.path.length - a.path.length);
+  for (const r of roots) {
+    const base = r.path.replace(/\/+$/, "") + "/";
+    if (norm.startsWith(base)) return { root: r.root, relPath: norm.slice(base.length) };
+  }
+  return null;
+}
+
 export function registerDataRoutes(r: Router, app: App) {
   // ---- memory ------------------------------------------------------------------
   r.get("/memory/search", (c) => {
@@ -136,6 +156,13 @@ export function registerDataRoutes(r: Router, app: App) {
     return byType;
   });
 
+  r.get("/memory/roots", () => memoryRoots(app));
+  r.get("/memory/resolve", (c) => {
+    const abs = c.query("absPath");
+    if (!abs) throw new HttpError(400, "invalid_request", "absPath is required");
+    return resolveAbsolute(app, abs) ?? { root: null, relPath: null };
+  });
+
   // ---- conversation ----------------------------------------------------------------
   r.get("/conversations", () => app.conversations.listConversations());
   r.get("/conversations/:id/messages", (c) => app.conversations.messages(c.params.id!));
@@ -144,7 +171,12 @@ export function registerDataRoutes(r: Router, app: App) {
     requireData(app);
     const input = await c.body(ChatInput);
     await app.model();
-    return app.conversations.send({ conversationId: input.conversationId ?? null, text: input.text, ...(input.context ? { context: input.context } : {}), clientId: c.client!.id });
+    let context = input.context;
+    if (context?.absPath && !context.relPath) {
+      const hit = resolveAbsolute(app, context.absPath);
+      context = { ...context, ...(hit ? { relPath: hit.relPath, root: hit.root } : {}) };
+    }
+    return app.conversations.send({ conversationId: input.conversationId ?? null, text: input.text, ...(context ? { context } : {}), clientId: c.client!.id });
   });
   r.get("/messages/:id", (c) => {
     const m = app.conversations.message(c.params.id!);

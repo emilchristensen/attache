@@ -177,7 +177,7 @@ export const CorrectionInput = z.object({
 export const ChatInput = z.object({
   conversationId: z.string().nullable().optional(),
   text: z.string().min(1).max(20_000),
-  context: z.object({ relPath: z.string().optional(), root: z.string().optional(), selection: z.string().max(20_000).optional() }).optional(),
+  context: z.object({ relPath: z.string().optional(), root: z.string().optional(), absPath: z.string().max(4096).optional(), title: z.string().max(300).optional(), selection: z.string().max(20_000).optional() }).optional(),
   voice: z.boolean().optional(),
 });
 

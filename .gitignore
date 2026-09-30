@@ -29,3 +29,5 @@ coverage/
 
 # Operating system files
 .DS_Store
+test-results/
+playwright-report/

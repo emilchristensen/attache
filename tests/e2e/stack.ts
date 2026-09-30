@@ -1,0 +1,101 @@
+/**
+ * Starts the real service bundle and the TEST-ONLY fixture remotes for browser
+ * journeys. Remote services (GitHub, Jira, ...) and the model are fixtures here;
+ * nothing in these journeys is reported as a live integration result.
+ */
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+export const ROOT = resolve(import.meta.dirname, "../..");
+const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
+const NODE = process.execPath;
+
+export interface Stack {
+  url: string;
+  port: number;
+  fixtureUrl: string;
+  stateDir: string;
+  dataDir: string;
+  vaultDir: string;
+  pairUrl(): string;
+  stopService(): Promise<void>;
+  startService(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+function waitForLine(child: ChildProcess, re: RegExp, timeoutMs = 15_000): Promise<string> {
+  return new Promise((res, rej) => {
+    let buf = "";
+    const t = setTimeout(() => rej(new Error(`timeout waiting for ${re}: ${buf}`)), timeoutMs);
+    child.stdout!.on("data", (d) => {
+      buf += String(d);
+      const m = re.exec(buf);
+      if (m) {
+        clearTimeout(t);
+        res(m[1] ?? m[0]);
+      }
+    });
+  });
+}
+
+export function buildAll() {
+  execFileSync(NODE, [join(ROOT, "apps/service/build.mjs")], { stdio: "ignore" });
+  if (!existsSync(join(ROOT, "apps/web/dist/index.html")) || process.env.JARVIS_E2E_REBUILD_WEB !== "0") execFileSync("npx", ["vite", "build"], { cwd: join(ROOT, "apps/web"), stdio: "ignore" });
+}
+
+export function makeVault(dir: string) {
+  const day = (o: number) => new Date(Date.now() + o * 86_400_000).toISOString().slice(0, 10);
+  mkdirSync(join(dir, "Projects"), { recursive: true });
+  mkdirSync(join(dir, "People"), { recursive: true });
+  writeFileSync(join(dir, "Projects/Orion.md"), `---\ntitle: Orion migration\n---\n# Orion migration\n\nOwner: Priya Shah. The Orion migration moves billing to the new ledger service.\n\n## Tasks\n- [ ] Send the cutover plan to finance 📅 ${day(1)}\n- [ ] Review rollback runbook due:${day(-2)}\n\n## Decisions\nWe chose a weekend cutover to avoid invoice runs.\n`);
+  writeFileSync(join(dir, "People/Priya Shah.md"), "# Priya Shah\n\nEngineering manager for billing. Prefers written updates on Mondays.\n");
+}
+
+export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
+  const port = opts.port ?? 7610;
+  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-e2e-state-"));
+  const base = mkdtempSync(join(tmpdir(), "jarvis-e2e-"));
+  const dataDir = join(base, "Jarvis");
+  const vaultDir = join(base, "vault");
+  makeVault(vaultDir);
+  const fixture = spawn(NODE, [join(ROOT, "apps/service/test/fixtures/run-fixture-server.ts"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
+  const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
+  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e" };
+  let service: ChildProcess | null = null;
+  const startService = async () => {
+    service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
+    await waitForLine(service, /jarvis service listening/);
+  };
+  const stopService = async () => {
+    if (!service) return;
+    const s = service;
+    service = null;
+    s.kill("SIGTERM");
+    await new Promise((r) => s.once("exit", r));
+  };
+  await startService();
+  return {
+    url: `http://127.0.0.1:${port}`,
+    port,
+    fixtureUrl,
+    stateDir,
+    dataDir,
+    vaultDir,
+    pairUrl() {
+      const out = JSON.parse(execFileSync(NODE, [BUNDLE, "pair", "--state-dir", stateDir, "--json"], { env }).toString());
+      return out.url;
+    },
+    startService,
+    stopService,
+    async stop() {
+      await stopService();
+      fixture.kill("SIGTERM");
+    },
+  };
+}
+
+export function readRuntime(stateDir: string) {
+  return JSON.parse(readFileSync(join(stateDir, "runtime.json"), "utf8"));
+}

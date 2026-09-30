@@ -5,6 +5,7 @@
  */
 import { startFixtureServer } from "./fixture-server.ts";
 import { installScenarios } from "./scenarios.ts";
+import { installFixtureModel } from "./fixture-model.ts";
 
 const port = Number(process.argv[2] ?? process.env.FIXTURE_PORT ?? 4599);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -14,6 +15,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 
 const fx = await startFixtureServer(port);
 installScenarios(fx, { ...(process.env.FIXTURE_SELF_EMAIL ? { selfEmail: process.env.FIXTURE_SELF_EMAIL } : {}) });
+installFixtureModel(fx, "/model");
 process.stdout.write(`FIXTURE_READY ${fx.url}\n`);
 
 const stop = () => {
