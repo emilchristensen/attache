@@ -1,0 +1,31 @@
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.claude/settings.local.json
+
+# Runtime data and local tooling
+.jarvis-runtime/
+.t3/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# Dependencies and generated builds
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+coverage/
+.pytest_cache/
+.ruff_cache/
+.next/
+
+# Operating system files
+.DS_Store
