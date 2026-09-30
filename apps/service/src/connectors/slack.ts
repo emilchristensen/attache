@@ -1,7 +1,7 @@
 import type { CoverageState } from "@jarvis/contracts";
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, paginate } from "./http.ts";
+import { RemoteError, afterWrite, paginate } from "./http.ts";
 import { asRemoteError, csvList, listingNote, listingState, recordFailure, stringSetting } from "./common.ts";
 
 interface SlackMessage {
@@ -354,7 +354,7 @@ export const slackAdapter: ConnectorAdapter = {
     if (!text) throw new RemoteError("The message is empty", "error");
     const body = { channel, text, ...(threadTs ? { thread_ts: threadTs } : {}), metadata: { event_type: EFFECT_EVENT, event_payload: { key: action.effectKey } } };
     const res = await call<{ channel: string; ts: string }>(ctx, "chat.postMessage", body, { post: true, retries: 0 });
-    const msg = await readBack(ctx, res.channel ?? channel, threadTs, res.ts);
+    const msg = await afterWrite(() => readBack(ctx, res.channel ?? channel, threadTs, res.ts));
     const verified = !!msg && hasEffect(msg, action.effectKey);
     return { verified, remoteId: res.ts, detail: { channel: res.channel ?? channel, ts: res.ts, threadTs } };
   },

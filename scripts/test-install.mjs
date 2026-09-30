@@ -99,6 +99,10 @@ async function main() {
   check("A02", "service runs as a LaunchAgent under the user's session", agentLoaded(), label);
   check("A02", "bundled runtime used (no system Node needed)", readFileSync(join(HOME, "Library/LaunchAgents", `${label}.plist`), "utf8").includes(`${PREFIX}/current/runtime/node`));
 
+  // The data folder already holds the user's own notes (e.g. an existing vault).
+  mkdirSync(DATA, { recursive: true });
+  writeFileSync(join(DATA, "README.md"), "# My own vault readme\n");
+  writeFileSync(join(DATA, "Existing note.md"), "# Mine\n\nWritten before Jarvis.\n");
   // Configure a notes-only workspace with some data.
   let token = await pairToken();
   await http("POST", "/setup/data-folder", { path: DATA }, token);
@@ -187,7 +191,8 @@ async function main() {
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
   check("A14", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
   sh(join(HOME, ".local/bin/jarvis-uninstall"), ["--delete-data", "--yes"]);
-  check("A14", "uninstall --delete-data removes state and the data folder", !existsSync(STATE) && !existsSync(DATA) && !agentLoaded());
+  const remaining = existsSync(DATA) ? readdirSync(DATA).sort() : [];
+  check("A14", "uninstall --delete-data removes service state and only what Jarvis created in the data folder", !existsSync(STATE) && !agentLoaded() && JSON.stringify(remaining) === JSON.stringify(["Existing note.md", "README.md"]) && readFileSync(join(DATA, "README.md"), "utf8").includes("My own vault readme"), `left: ${remaining.join(", ")}`);
 
   // --- Existing brains untouched ---
   const brainsAfter = brainFingerprint();

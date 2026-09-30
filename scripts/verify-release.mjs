@@ -57,32 +57,32 @@ step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract a
 if (!QUICK) {
   step(["A02", "A15"], `Release artifacts ${version}`, process.execPath, ["scripts/build-release.mjs", "--version", version]);
   step(["A02"], `Release artifacts ${nextPatch} (upgrade target)`, process.execPath, ["scripts/build-release.mjs", "--version", nextPatch]);
-  const e2e = step(["A05", "A07", "A08", "A09", "A10", "A11", "A12"], "Browser, voice and Obsidian journeys (Playwright, real Chrome and Obsidian)", npx, ["playwright", "test", "tests/e2e/journeys.spec.ts", "tests/e2e/voice.spec.ts", "tests/e2e/obsidian.spec.ts", "tests/e2e/visual.spec.ts"], {
-    env: { JARVIS_E2E_REBUILD_WEB: "0" },
-    extract: () => {
-      try {
-        const j = JSON.parse(readFileSync(join(OUT, "e2e-results.json"), "utf8"));
-        const specs = [];
-        const walk = (s) => {
-          for (const x of s.suites ?? []) walk(x);
-          for (const sp of s.specs ?? []) specs.push({ file: sp.file, title: sp.title, status: sp.tests?.[0]?.results?.at(-1)?.status ?? (sp.tests?.[0]?.status === "skipped" ? "skipped" : "unknown") });
-        };
-        for (const s of j.suites) walk(s);
-        const by = (f) => specs.filter((s) => s.file.includes(f));
-        const count = (xs, st) => xs.filter((x) => x.status === st).length;
-        return {
-          summary: `${count(specs, "passed")}/${specs.length} passed, ${count(specs, "skipped")} skipped`,
-          suites: Object.fromEntries(["journeys", "voice", "obsidian", "visual"].map((n) => [n, { passed: count(by(n), "passed"), skipped: count(by(n), "skipped"), total: by(n).length }])),
-          specs,
-        };
-      } catch {
-        return {};
-      }
-    },
-  });
-  if (e2e.suites) {
-    for (const s of Object.values(e2e.suites)) if (s.skipped && !s.passed) e2e.status = e2e.status === "pass" ? "blocked" : e2e.status;
-  }
+  const e2eExtract = (file) => () => {
+    try {
+      const j = JSON.parse(readFileSync(join(OUT, `e2e-${file}.json`), "utf8"));
+      const specs = [];
+      const walk = (s) => {
+        for (const x of s.suites ?? []) walk(x);
+        for (const sp of s.specs ?? []) specs.push({ title: sp.title, status: sp.tests?.[0]?.results?.at(-1)?.status ?? (sp.tests?.[0]?.status === "skipped" ? "skipped" : "unknown") });
+      };
+      for (const s of j.suites) walk(s);
+      const passed = specs.filter((x) => x.status === "passed").length;
+      const skipped = specs.filter((x) => x.status === "skipped").length;
+      return { summary: `${passed}/${specs.length} passed${skipped ? `, ${skipped} skipped` : ""}`, passed, skipped, total: specs.length, specs };
+    } catch {
+      return {};
+    }
+  };
+  const e2e = (ids, name, file) => {
+    const rec = step(ids, name, npx, ["playwright", "test", `tests/e2e/${file}.spec.ts`, "--reporter=list,json"], { env: { JARVIS_E2E_REBUILD_WEB: "0", PLAYWRIGHT_JSON_OUTPUT_NAME: join(OUT, `e2e-${file}.json`) }, extract: e2eExtract(file) });
+    // A suite that skipped because its host requirement is missing is blocked validation, not a pass.
+    if (rec.status === "pass" && rec.skipped && !rec.passed) rec.status = "blocked";
+    return rec;
+  };
+  e2e(["A05", "A07", "A08", "A09", "A12"], "Browser journeys (real Chrome)", "journeys");
+  e2e(["A10"], "Voice journeys (whisper.cpp, macOS speech, real Chrome microphone device)", "voice");
+  e2e(["A11"], "Obsidian plugin in the real Obsidian desktop app", "obsidian");
+  e2e(["A12"], "Visual captures (light, dark, narrow)", "visual");
   step(["A02", "A14"], "Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
     extract: (out) => ({ summary: /(\d+\/\d+) installation checks passed/.exec(out)?.[1] ?? "" }),
   });

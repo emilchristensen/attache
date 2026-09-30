@@ -89,7 +89,13 @@ export default class JarvisPlugin extends Plugin {
     return r.client.id;
   }
 
-  unpair() {
+  async unpair() {
+    // Revoke the token on the service first, so a copied token stops working too.
+    try {
+      await this.client().post("/session/logout");
+    } catch {
+      // Service unreachable: the local token is still forgotten; revoke it from Jarvis → Settings → Paired clients.
+    }
     this.app.secretStorage.setSecret(TOKEN_ID, "");
   }
 
@@ -213,8 +219,8 @@ class JarvisSettingTab extends PluginSettingTab {
       );
     if (this.plugin.token()) {
       new Setting(containerEl).setName("Unpair").setDesc("Forget this vault's Jarvis access token.").addButton((b) =>
-        b.setButtonText("Unpair").onClick(() => {
-          this.plugin.unpair();
+        b.setButtonText("Unpair").onClick(async () => {
+          await this.plugin.unpair();
           this.display();
         }),
       );

@@ -50,6 +50,8 @@ export class JobQueue {
   private concurrency: number;
   /** Returns a reason string if the job may not run now (capability disabled, connection gone). */
   gate: (job: JobView) => string | null = () => null;
+  /** Called when a job ends without succeeding (cancelled, blocked, failed). */
+  onUnsuccessful: (job: JobView) => void = () => {};
 
   constructor(db: Db, log: Logger, opts: { concurrency?: number } = {}) {
     this.db = db;
@@ -135,6 +137,7 @@ export class JobQueue {
         this.setStatus(id, "cancelled", { cancel_requested_at: nowIso(), cancel_outcome: "not_started", finished_at: nowIso(), error: reason });
         this.insertEvent(id, "cancelled", { outcome: "not_started", reason });
       });
+      this.onUnsuccessful(this.get(id)!);
       return { job: this.get(id)!, outcome: "not_started" };
     }
     this.db.prepare("update jobs set cancel_requested_at = ?, updated_at = ? where id = ?").run(nowIso(), nowIso(), id);
@@ -147,6 +150,7 @@ export class JobQueue {
     const job = this.get(id);
     if (!job) throw new Error("not_found");
     if (!["failed", "cancelled", "blocked"].includes(job.status)) throw new Error(`Only failed, cancelled or blocked jobs can be retried (status: ${job.status})`);
+    if (job.kind === "action") throw new Error("Sending is not retried automatically. Approve the draft again to send it.");
     tx(this.db, () => {
       this.db.prepare("update jobs set status = 'queued', error = null, cancel_requested_at = null, cancel_outcome = null, finished_at = null, run_after = null, max_attempts = max(max_attempts, attempts + 1), updated_at = ? where id = ?").run(nowIso(), id);
       this.insertEvent(id, "retry_requested", {});
@@ -165,10 +169,19 @@ export class JobQueue {
   /** Requeue work orphaned by a previous service process. */
   recover(): string[] {
     const now = nowIso();
-    const rows = this.db.prepare("select id, lease_owner from jobs where status = 'running'").all() as Array<{ id: string; lease_owner: string | null }>;
+    const rows = this.db.prepare("select id, lease_owner, cancel_requested_at from jobs where status = 'running'").all() as Array<{ id: string; lease_owner: string | null; cancel_requested_at: string | null }>;
     const recovered: string[] = [];
     for (const r of rows) {
       if (r.lease_owner === this.owner) continue;
+      if (r.cancel_requested_at) {
+        // Cancelled before the restart: the interrupted work is not resumed.
+        tx(this.db, () => {
+          this.setStatus(r.id, "cancelled", { cancel_outcome: "stopped", finished_at: now, lease_owner: null, lease_until: null });
+          this.insertEvent(r.id, "cancelled", { outcome: "stopped", note: "Cancelled; the service restarted before the work finished, so it was not resumed." });
+        });
+        this.onUnsuccessful(this.get(r.id)!);
+        continue;
+      }
       tx(this.db, () => {
         this.db.prepare("update jobs set status = 'queued', lease_owner = null, lease_until = null, updated_at = ? where id = ?").run(now, r.id);
         this.insertEvent(r.id, "recovered", { note: "Service restarted while this job was running; resuming from its last checkpoint." });
@@ -226,6 +239,7 @@ export class JobQueue {
       if (blocked) {
         this.setStatus(id, "blocked", { error: blocked, lease_owner: null });
         this.insertEvent(id, "blocked", { reason: blocked });
+        this.onUnsuccessful(this.get(id)!);
         return;
       }
       const runner = this.runners.get(job.kind);
@@ -233,10 +247,11 @@ export class JobQueue {
       this.insertEvent(id, "started", { attempt: job.attempts });
       const ctx = this.context(job, ctrl.signal);
       const result = await runner(ctx);
-      if (ctrl.signal.aborted) throw ctrl.signal.reason ?? new Error("cancelled");
+      // The runner finished; a cancel that arrived meanwhile came too late to stop it.
+      const lateCancel = ctrl.signal.aborted || !!this.get(id)!.cancelRequestedAt;
       tx(this.db, () => {
-        this.setStatus(id, "succeeded", { result: JSON.stringify(redactDeep(result ?? null)), progress: 1, finished_at: nowIso(), lease_owner: null });
-        this.insertEvent(id, "succeeded", { result: (redactDeep(result ?? null) as Record<string, unknown>) ?? null });
+        this.setStatus(id, "succeeded", { result: JSON.stringify(redactDeep(result ?? null)), progress: 1, finished_at: nowIso(), lease_owner: null, ...(lateCancel ? { cancel_outcome: "too_late" } : {}) });
+        this.insertEvent(id, "succeeded", { result: (redactDeep(result ?? null) as Record<string, unknown>) ?? null, ...(lateCancel ? { cancelOutcome: "too_late" } : {}) });
       });
     } catch (e) {
       const err = e as Error;
@@ -262,6 +277,8 @@ export class JobQueue {
         });
       }
       this.log.warn("job ended without success", { id, kind: job.kind, error: err.message });
+      const after = this.get(id)!;
+      if (["cancelled", "blocked", "failed"].includes(after.status)) this.onUnsuccessful(after);
     } finally {
       clearInterval(lease);
       this.running.delete(id);
@@ -300,6 +317,9 @@ export class JobQueue {
             this.insertEvent(id, "effect_recovered", { key });
             return found;
           }
+        } else if (row) {
+          // A previous attempt was definitively rejected before anything was created; try again.
+          this.db.prepare("update side_effects set status = 'pending', job_id = ?, created_at = ?, completed_at = null where effect_key = ?").run(id, nowIso(), key);
         } else {
           this.db.prepare("insert into side_effects (effect_key, job_id, status, created_at) values (?,?, 'pending', ?)").run(key, id, nowIso());
         }

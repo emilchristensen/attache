@@ -97,7 +97,12 @@ export function makeCtx(req: IncomingMessage, res: ServerResponse, url: URL, par
     params,
     client,
     raw,
-    query: (n) => url.searchParams.get(n),
+    query: (n) => {
+      const v = url.searchParams.get(n);
+      // Numeric paging parameters must be positive integers; anything else falls back to defaults.
+      if (v !== null && (n === "limit" || n === "after") && !/^\d{1,9}$/.test(v)) return null;
+      return v;
+    },
     async body<T>(schema: ZodType<T>): Promise<T> {
       const buf = await raw(2 * 1024 * 1024);
       let data: unknown = {};

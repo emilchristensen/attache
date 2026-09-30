@@ -1,6 +1,6 @@
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, paginate } from "./http.ts";
+import { RemoteError, afterWrite, paginate } from "./http.ts";
 import { asRemoteError, listingNote, recordFailure } from "./common.ts";
 import { GOOGLE_SECRET_NAMES, buildAuthorizeUrl, completeGoogleAuthorization, configureGoogle, googleAuthMethod, googleRequest, googleSetupSteps, grantedScopes } from "./google.ts";
 
@@ -324,10 +324,10 @@ export const gmailAdapter: ConnectorAdapter = {
     if (!body) throw new RemoteError("The draft is empty", "error");
     const raw = buildRawReply({ ...t, body, effectKey: action.effectKey });
     const res = await googleRequest<GmailDraft>(ctx, { method: "POST", url: `${base(ctx)}/drafts`, body: { message: { raw, threadId: t.threadId } }, retries: 0 });
-    const check = await googleRequest<GmailDraft>(ctx, { url: `${base(ctx)}/drafts/${encodeURIComponent(res.data.id)}?format=metadata` });
-    const verified = check.data.id === res.data.id && header(check.data.message, EFFECT_HEADER) === action.effectKey;
-    const url = draftUrl(check.data.message?.id ?? res.data.message?.id);
-    return { verified, remoteId: res.data.id, ...(url ? { url } : {}), detail: { threadId: t.threadId, messageId: check.data.message?.id ?? null } };
+    const check = await afterWrite(() => googleRequest<GmailDraft>(ctx, { url: `${base(ctx)}/drafts/${encodeURIComponent(res.data.id)}?format=metadata` }));
+    const verified = !!check && check.data.id === res.data.id && header(check.data.message, EFFECT_HEADER) === action.effectKey;
+    const url = draftUrl(check?.data.message?.id ?? res.data.message?.id);
+    return { verified, remoteId: res.data.id, ...(url ? { url } : {}), detail: { threadId: t.threadId, messageId: check?.data.message?.id ?? null } };
   },
 
   async findEffect(ctx, action) {

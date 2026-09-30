@@ -23,11 +23,18 @@ for a in "$@"; do
 done
 
 DATA_FOLDER=""
+OWNED=""
+CREATED_FOLDER="false"
 if [ "$DELETE" = "1" ] && [ -f "$STATE/jarvis.sqlite" ] && [ -x "$PREFIX/current/runtime/node" ]; then
   DATA_FOLDER="$("$PREFIX/current/runtime/node" -e '
     const { DatabaseSync } = require("node:sqlite");
     try { const d = new DatabaseSync(process.argv[1], { readOnly: true }); const r = d.prepare("select json from config where id = 1").get(); process.stdout.write(r ? (JSON.parse(r.json).dataFolder ?? "") : ""); } catch {}
   ' "$STATE/jarvis.sqlite" 2>/dev/null || true)"
+  if [ -n "$DATA_FOLDER" ] && [ -f "$DATA_FOLDER/.jarvis/owned.json" ]; then
+    # Only entries Jarvis created are ever deleted; files the user already had stay.
+    CREATED_FOLDER="$("$PREFIX/current/runtime/node" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(o.createdFolder === true ? "true" : "false")' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || echo false)"
+    OWNED="$("$PREFIX/current/runtime/node" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); for (const e of o.created ?? []) if (/^[A-Za-z.][A-Za-z0-9._-]*$/.test(e)) console.log(e)' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || true)"
+  fi
 fi
 
 if [ "$DELETE" = "1" ] && [ "$YES" != "1" ]; then
@@ -52,7 +59,16 @@ rm -f "$HOME/.local/bin/jarvis" "$HOME/.local/bin/jarvis-uninstall"
 
 if [ "$DELETE" = "1" ]; then
   rm -rf "$STATE"
-  if [ -n "$DATA_FOLDER" ] && [ -d "$DATA_FOLDER" ] && [ -f "$DATA_FOLDER/README.md" ] && [ -d "$DATA_FOLDER/memory" ]; then rm -rf "$DATA_FOLDER"; fi
+  if [ -n "$DATA_FOLDER" ] && [ -d "$DATA_FOLDER" ]; then
+    if [ "$CREATED_FOLDER" = "true" ]; then
+      rm -rf "$DATA_FOLDER"
+    else
+      printf '%s\n' "$OWNED" | while read -r entry; do
+        [ -n "$entry" ] && rm -rf "$DATA_FOLDER/$entry"
+      done
+      echo "Kept your own files in $DATA_FOLDER; removed only what Jarvis created there."
+    fi
+  fi
   rmdir "$PREFIX" 2>/dev/null || true
   echo "Jarvis removed, including its data."
 else

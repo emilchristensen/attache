@@ -47,6 +47,13 @@ export class App {
   readonly speech: SpeechService;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
+  /** Open event streams per client, closed when the client is revoked or logs out. */
+  readonly streams = new Map<string, Set<() => void>>();
+
+  closeStreams(clientId: string) {
+    for (const close of this.streams.get(clientId) ?? []) close();
+    this.streams.delete(clientId);
+  }
   readonly startedAt = nowIso();
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
 
@@ -91,6 +98,17 @@ export class App {
       return { cancelledJobs, revokedActions };
     };
     this.jobs.gate = (job) => this.jobGate(job);
+    this.jobs.onUnsuccessful = (job) => {
+      if (job.kind !== "action") return;
+      const row = this.db.prepare("select input from jobs where id = ?").get(job.id) as { input: string } | undefined;
+      const actionId = row ? String((JSON.parse(row.input) as { actionId?: string }).actionId ?? "") : "";
+      const a = actionId ? this.actions.get(actionId) : null;
+      if (!a || a.status !== "executing") return;
+      const effect = this.db.prepare("select status from side_effects where effect_key = ?").get(`action:${a.id}:v${a.version}`) as { status: string } | undefined;
+      // Never leave an action "executing": record what is known about whether it was sent.
+      this.actions.finishExecution(a.id, effect?.status === "pending" ? { status: "unknown", receipt: { error: job.error ?? job.status, note: "Stopped while sending; check the target before sending again." } } : { status: "failed", receipt: { error: job.error ?? `Execution ${job.status}`, attempted: false } });
+      this.bus.emit("event", { type: "actions.changed", id: a.id });
+    };
     this.actions.authority = (a) => this.actionAuthority(a.kind, a.connectionId);
     this.scheduler.enqueue = (row, reason) => {
       if (row.jobKind === "sync") return this.jobs.create({ kind: "sync", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
@@ -191,6 +209,7 @@ export class App {
   }
 
   start() {
+    this.conversations.recoverInterrupted();
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {
       try {

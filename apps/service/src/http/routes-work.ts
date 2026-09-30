@@ -48,14 +48,20 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- events (SSE) -------------------------------------------------------------------
   r.get("/events", (c) => {
     const res = c.res;
-    const after = Number(c.req.headers["last-event-id"] ?? c.query("after") ?? 0) || 0;
+    const resume = c.req.headers["last-event-id"] ?? c.query("after");
+    const maxSeq = Number((app.db.prepare("select coalesce(max(seq), 0) m from job_events").get() as { m: number }).m);
+    // A fresh connection starts at "now"; a reconnect (Last-Event-ID) replays everything it missed.
+    const after = resume !== undefined && resume !== null ? Number(resume) || 0 : maxSeq;
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
     const write = (ev: Record<string, unknown>, id?: number) => res.write(`${id !== undefined ? `id: ${id}\n` : ""}data: ${JSON.stringify(ev)}\n\n`);
     let lastSeq = after;
-    // Replay ordered job events the client missed while disconnected.
-    for (const ev of app.jobs.eventsSince(after, undefined, 5000)) {
-      write({ type: "job.event", event: ev }, ev.seq);
-      lastSeq = ev.seq;
+    for (;;) {
+      const batch = app.jobs.eventsSince(lastSeq, undefined, 1000);
+      for (const ev of batch) {
+        write({ type: "job.event", event: ev }, ev.seq);
+        lastSeq = ev.seq;
+      }
+      if (batch.length < 1000) break;
     }
     write({ type: "hello", lastSeq, version: app.startedAt });
     const onEvent = (ev: Record<string, unknown>) => {
@@ -68,10 +74,16 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     };
     app.bus.on("event", onEvent);
     const ping = setInterval(() => res.write(": ping\n\n"), 15_000);
-    c.req.on("close", () => {
+    const clientId = c.client!.id;
+    const close = () => {
       clearInterval(ping);
       app.bus.off("event", onEvent);
-    });
+      app.streams.get(clientId)?.delete(close);
+      if (!res.writableEnded) res.end();
+    };
+    if (!app.streams.has(clientId)) app.streams.set(clientId, new Set());
+    app.streams.get(clientId)!.add(close);
+    c.req.on("close", close);
     return undefined;
   });
 

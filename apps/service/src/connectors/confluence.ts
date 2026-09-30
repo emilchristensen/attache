@@ -1,6 +1,6 @@
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, paginate } from "./http.ts";
+import { RemoteError, afterWrite, paginate } from "./http.ts";
 import { asRemoteError, basicAuth, csvList, listingNote, listingState, normalizeSiteUrl, recordFailure, stringSetting } from "./common.ts";
 
 interface SearchResult {
@@ -279,9 +279,9 @@ export const confluenceAdapter: ConnectorAdapter = {
     const res = await ctx.http.request<FooterComment>({ method: "POST", url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments`, headers: h, body, retries: 0 });
     const id = String(res.data.id);
     const propertyError = await tagComment(ctx, id, action.effectKey, h);
-    const check = await ctx.http.request<FooterComment>({ url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments/${id}?body-format=storage`, headers: h });
-    const verified = String(check.data.id) === id && (await commentHasEffect(ctx, check.data, action.effectKey, h));
-    const url = pageUrl(ctx, check.data._links?.webui ?? res.data._links?.webui);
+    const check = await afterWrite(() => ctx.http.request<FooterComment>({ url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments/${id}?body-format=storage`, headers: h }));
+    const verified = !!check && String(check.data.id) === id && !!(await afterWrite(() => commentHasEffect(ctx, check.data, action.effectKey, h)));
+    const url = pageUrl(ctx, check?.data._links?.webui ?? res.data._links?.webui);
     return { verified, remoteId: id, ...(url ? { url } : {}), detail: { pageId, ...(propertyError ? { propertyError } : {}) } };
   },
 

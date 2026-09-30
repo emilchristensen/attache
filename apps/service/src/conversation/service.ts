@@ -65,6 +65,11 @@ export class ConversationService {
     this.events.setMaxListeners(200);
   }
 
+  /** Answers that were streaming when the service stopped can never finish; mark them so they can be retried. */
+  recoverInterrupted(): number {
+    return Number(this.db.prepare("update messages set status = 'error', error = 'Interrupted by a service restart. Retry the question.', updated_at = ? where status = 'streaming'").run(nowIso()).changes);
+  }
+
   listConversations(limit = 50) {
     return this.db.prepare("select id, title, created_at as createdAt, updated_at as updatedAt from conversations order by updated_at desc limit ?").all(limit);
   }
@@ -161,7 +166,7 @@ export class ConversationService {
     try {
       for await (const delta of model.stream({ system: buildSystemPrompt(new Date(), this.getIdentity()), messages: [...history, { role: "user", content: prompt }], signal: ctrl.signal })) {
         content += delta;
-        this.emit({ type: "message.delta", conversationId, messageId, delta });
+        this.emit({ type: "message.delta", conversationId, messageId, delta: redact(delta) });
         if (Date.now() - lastFlush > 250) {
           setMsg({ content });
           lastFlush = Date.now();

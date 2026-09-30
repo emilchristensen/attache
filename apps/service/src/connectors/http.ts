@@ -158,6 +158,18 @@ export async function paginate<T>(
   }
 }
 
+/**
+ * Run a read-back after a write already succeeded. A failure here must not be
+ * reported as a failed write (the effect exists); it only leaves it unverified.
+ */
+export async function afterWrite<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
+}
+
 /** Parse an RFC 5988 Link header and return the rel="next" URL. */
 export function nextLink(link: string | null): string | null {
   if (!link) return null;

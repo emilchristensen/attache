@@ -65,12 +65,14 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   r.get("/session", (c) => ({ client: c.client, version: VERSION, instance: app.instance, port: port() }));
   r.post("/session/logout", (c) => {
     app.db.prepare("update clients set revoked_at = ? where id = ?").run(nowIso(), c.client!.id);
+    app.closeStreams(c.client!.id);
     return { __status: 200, body: { ok: true }, headers: { "set-cookie": clearedCookie } };
   });
   r.get("/clients", () => app.db.prepare("select id, name, kind, created_at as createdAt, last_seen_at as lastSeenAt, revoked_at as revokedAt from clients order by created_at desc").all());
   r.post("/clients/pairing-code", () => createPairingCode(app.db));
   r.delete("/clients/:id", (c) => {
     app.db.prepare("update clients set revoked_at = ? where id = ?").run(nowIso(), c.params.id!);
+    app.closeStreams(c.params.id!);
     return { ok: true };
   });
 

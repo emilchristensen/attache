@@ -6,6 +6,7 @@ import { Indexer, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
+import { redact } from "../core/log.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -83,6 +84,7 @@ export class MemoryStore {
   /** Create the folder layout (if needed) and take the single-writer lock. */
   open(root: string): { created: string[] } {
     const created: string[] = [];
+    const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
     for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
       const abs = join(root, d);
@@ -94,6 +96,12 @@ export class MemoryStore {
     if (!existsSync(join(root, "README.md"))) {
       writeFileSync(join(root, "README.md"), README);
       created.push("README.md");
+    }
+    // Record what Jarvis created, so a data-deleting uninstall never removes files the user already had.
+    const owned = join(root, ".jarvis", "owned.json");
+    if (!existsSync(owned)) {
+      const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
+      writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
     this.acquireLock(root);
     this.releaseLockIfDifferent(root);
@@ -155,7 +163,8 @@ export class MemoryStore {
     const abs = resolveInside(this.requireRoot(), n);
     mkdirSync(dirname(abs), { recursive: true });
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
-    writeFileSync(tmp, content);
+    // Archived evidence and generated deliverables never keep credentials that appeared in sources.
+    writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
     renameSync(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
   }

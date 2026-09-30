@@ -32,6 +32,7 @@ async function api(method: string, path: string, body?: unknown) {
 }
 
 test.beforeAll(async () => {
+  test.setTimeout(240_000);
   execFileSync(process.execPath, [join(ROOT, "apps/service/build.mjs")], { stdio: "ignore" });
   execFileSync(process.execPath, [join(ROOT, "apps/obsidian/build.mjs")], { stdio: "ignore" });
   stack = await startStack({ port: 7611 });
@@ -55,6 +56,12 @@ test.beforeAll(async () => {
   const home = mkdtempSync(join(tmpdir(), "jarvis-obsidian-home-"));
   mkdirSync(join(home, "Library/Application Support/obsidian"), { recursive: true });
   writeFileSync(join(home, "Library/Application Support/obsidian/obsidian.json"), JSON.stringify({ vaults: { jarvistestvault01: { path: vault, ts: Date.now(), open: true } }, updateDisabled: true }));
+  // Clear any test instance left behind by an earlier interrupted run (matched by its unique debugging port only).
+  try {
+    execFileSync("/usr/bin/pkill", ["-f", "remote-debugging-port=9334"]);
+  } catch {
+    // none running
+  }
   obsidian = spawn(OBSIDIAN, ["--remote-debugging-port=9334"], { env: { ...process.env, CFFIXED_USER_HOME: home, HOME: home }, stdio: "ignore" });
   for (let i = 0; i < 60; i++) {
     try {
@@ -65,6 +72,8 @@ test.beforeAll(async () => {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
+  const targets = await fetch("http://127.0.0.1:9334/json/list").then((r) => r.json(), () => null);
+  if (!targets) throw new Error("Obsidian did not expose its debugging endpoint within 30 s");
   browser = await chromium.connectOverCDP("http://127.0.0.1:9334");
   page = browser.contexts()[0]!.pages().find((p) => p.url().startsWith("app://obsidian.md"))!;
   await page.waitForFunction(() => !!(window as any).app?.workspace?.layoutReady, null, { timeout: 30_000 });
@@ -73,6 +82,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await browser?.close().catch(() => {});
   obsidian?.kill("SIGTERM");
+  setTimeout(() => obsidian?.kill("SIGKILL"), 3000).unref();
   await stack?.stop();
 });
 

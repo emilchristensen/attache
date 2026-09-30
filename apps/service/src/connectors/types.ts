@@ -110,7 +110,9 @@ export class CoverageTracker {
   /** Overall state: the worst scope wins; a successful zero is "empty", never "complete with nothing". */
   finish(note?: string): Coverage {
     const order: CoverageState[] = ["unauthorized", "denied", "offline", "error", "partial", "not_configured", "complete", "empty", "never_run"];
-    const states = this.scopes.map((s) => s.state);
+    // Opt-in scopes with nothing configured are shown but do not make the whole source partial.
+    const configured = this.scopes.filter((s) => s.state !== "not_configured");
+    const states = (configured.length ? configured : this.scopes).map((s) => s.state);
     let state: CoverageState = "never_run";
     if (states.length) {
       const worst = order.find((o) => states.includes(o) && o !== "complete" && o !== "empty");

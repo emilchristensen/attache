@@ -174,7 +174,7 @@ export class JarvisView extends ItemView {
     }
     const content = el.createDiv();
     // Render as Markdown through Obsidian's own renderer (HTML in answers is not trusted).
-    await MarkdownRenderer.render(this.app, m.content.replace(/</g, "&lt;"), content, "", this);
+    await MarkdownRenderer.render(this.app, safeMarkdown(m.content), content, "", this);
     if (m.retrieval && !m.retrieval.supported) el.createDiv({ cls: "jarvis-warn", text: "No supporting evidence was cited from your notes." });
     if (m.citations.length) {
       const src = el.createDiv({ cls: "jarvis-sources" });
@@ -184,6 +184,18 @@ export class JarvisView extends ItemView {
       }
     }
   }
+}
+
+/**
+ * Model output is untrusted: escape HTML, drop images and embeds (a remote image
+ * URL could carry note text out), and keep only http(s) links.
+ */
+export function safeMarkdown(text: string): string {
+  return text
+    .replace(/</g, "&lt;")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/!\[\[[^\]]*\]\]/g, "")
+    .replace(/\[([^\]]*)\]\((?!https?:\/\/)[^)]*\)/g, "$1");
 }
 
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));

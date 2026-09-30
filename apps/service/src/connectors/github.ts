@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, nextLink, paginate } from "./http.ts";
+import { RemoteError, afterWrite, nextLink, paginate } from "./http.ts";
 
 interface SearchItem {
   number: number;
@@ -183,8 +183,8 @@ export const githubAdapter: ConnectorAdapter = {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !Number.isInteger(number)) throw new RemoteError("Invalid comment target", "error");
     const body = `${String(action.payload.body ?? "").trim()}\n\n${MARKER(action.effectKey)}`;
     const res = await ctx.http.request<{ id: number; html_url: string }>({ method: "POST", url: `${base(ctx)}/repos/${repo}/issues/${number}/comments`, headers: await headers(ctx), body: { body }, retries: 0 });
-    const check = await ctx.http.request<{ id: number; body: string }>({ url: `${base(ctx)}/repos/${repo}/issues/comments/${res.data.id}`, headers: await headers(ctx) });
-    const verified = check.data.id === res.data.id && check.data.body.includes(MARKER(action.effectKey));
+    const check = await afterWrite(async () => ctx.http.request<{ id: number; body: string }>({ url: `${base(ctx)}/repos/${repo}/issues/comments/${res.data.id}`, headers: await headers(ctx) }));
+    const verified = !!check && check.data.id === res.data.id && check.data.body.includes(MARKER(action.effectKey));
     return { verified, remoteId: String(res.data.id), url: res.data.html_url, detail: { repo, number } };
   },
 

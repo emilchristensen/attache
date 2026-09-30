@@ -1,6 +1,6 @@
 import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, paginate } from "./http.ts";
+import { RemoteError, afterWrite, paginate } from "./http.ts";
 import { asRemoteError, basicAuth, daysBetween, listingNote, listingState, localDateString, normalizeSiteUrl, recordFailure, stringSetting } from "./common.ts";
 
 interface JiraIssue {
@@ -225,8 +225,8 @@ export const jiraAdapter: ConnectorAdapter = {
     const body = { body: toAdf(text), properties: [{ key: PROPERTY_KEY, value: { effect: action.effectKey } }] };
     const res = await ctx.http.request<{ id: string }>({ method: "POST", url: `${base(ctx)}/rest/api/3/issue/${key}/comment`, headers: await headers(ctx), body, retries: 0 });
     const id = String(res.data.id);
-    const check = await ctx.http.request<JiraComment>({ url: `${base(ctx)}/rest/api/3/issue/${key}/comment/${id}?expand=properties`, headers: await headers(ctx) });
-    const verified = String(check.data.id) === id && hasMarker(check.data, action.effectKey);
+    const check = await afterWrite(async () => ctx.http.request<JiraComment>({ url: `${base(ctx)}/rest/api/3/issue/${key}/comment/${id}?expand=properties`, headers: await headers(ctx) }));
+    const verified = !!check && String(check.data.id) === id && hasMarker(check.data, action.effectKey);
     return { verified, remoteId: id, url: commentUrl(ctx, key, id), detail: { key } };
   },
 

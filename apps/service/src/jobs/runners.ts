@@ -184,40 +184,66 @@ async function runDraft(app: App, ctx: JobContext) {
   return { actionId: action.id, version: action.version, prepared: !!model };
 }
 
+/** A definitive rejection received before anything was created (bad request, auth, permission). */
+function rejectedBeforeWrite(e: unknown): boolean {
+  if (!(e instanceof RemoteError)) return false;
+  if (e.status !== null) return e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
+  return e.state === "unauthorized" || e.state === "denied" || e.state === "not_configured";
+}
+
+function approvalProblem(a: { status: string; expiresAt: string; approval: { expiresAt: string } | null }, now: string): string | null {
+  if (!a.approval) return "The approval is missing";
+  if (a.expiresAt <= now) return "The draft expired before it could be sent";
+  if (a.approval.expiresAt <= now) return "The approval expired before it could be sent";
+  return null;
+}
+
 async function runAction(app: App, ctx: JobContext) {
   const actionId = String(ctx.input.actionId);
   const a = app.actions.get(actionId);
   if (!a) throw new JobBlockedError("Action not found");
   if (a.status !== "executing") return { skipped: true, status: a.status };
-  // Authority is rechecked immediately before the external call.
-  const reason = app.actionAuthority(a.kind, a.connectionId);
-  if (reason) {
-    app.actions.finishExecution(actionId, { status: "failed", receipt: { error: reason, at: nowIso(), attempted: false } });
+  const done = (status: "succeeded" | "failed" | "unknown", receipt: Record<string, unknown>) => {
+    app.actions.finishExecution(actionId, { status, receipt: { ...receipt, at: nowIso() } });
     app.bus.emit("event", { type: "actions.changed", id: actionId });
-    return { status: "failed", reason };
-  }
-  const rec = app.connections.requireRecord(a.connectionId!);
+    return { status, ...receipt };
+  };
+  const effectKey = newEffectKey(a.id, a.version);
+  const pending = app.db.prepare("select status from side_effects where effect_key = ?").get(effectKey) as { status: string } | undefined;
+  // Authority, approval and expiry are rechecked immediately before the external call.
+  const problem = app.actionAuthority(a.kind, a.connectionId) ?? approvalProblem(a, nowIso());
+  if (problem && !pending) return done("failed", { error: problem, attempted: false });
+  const rec = app.connections.record(a.connectionId ?? "");
+  if (!rec) return done(pending ? "unknown" : "failed", { error: "The connection no longer exists", attempted: !!pending });
   const adapter = app.connections.adapter(rec.kind);
   if (!adapter.execute) throw new JobBlockedError(`${adapter.definition.label} has no write actions`);
   const actx = app.connections.context(rec, ctx.signal);
-  const effectKey = newEffectKey(a.id, a.version);
   const req = { kind: a.kind, target: a.target, payload: a.payload, effectKey };
+  if (problem && pending) {
+    // An earlier attempt may have sent it; reconcile, but never send again after authority lapsed.
+    if (pending.status === "done") {
+      const stored = JSON.parse(String((app.db.prepare("select result from side_effects where effect_key = ?").get(effectKey) as { result: string }).result));
+      return done(stored?.verified ? "succeeded" : "unknown", { ...stored, effectKey });
+    }
+    const found = adapter.findEffect ? await adapter.findEffect(actx, req).catch(() => undefined) : undefined;
+    if (found) return done(found.verified ? "succeeded" : "unknown", { ...found, effectKey, recovered: true });
+    return done(found === null ? "failed" : "unknown", { error: found === null ? `${problem}; the earlier attempt did not reach the service` : `${problem}; could not check whether an earlier attempt was sent`, effectKey });
+  }
   try {
     const result = await ctx.effect(effectKey, () => adapter.execute!(actx, req), adapter.findEffect ? () => adapter.findEffect!(actx, req) : undefined);
-    const status = result.verified ? "succeeded" : "unknown";
-    app.actions.finishExecution(actionId, { status, receipt: { ...result, verifiedAt: result.verified ? nowIso() : null, effectKey } });
-    app.bus.emit("event", { type: "actions.changed", id: actionId });
-    return { status, remoteId: result.remoteId ?? null, url: result.url ?? null };
+    return done(result.verified ? "succeeded" : "unknown", { ...result, verifiedAt: result.verified ? nowIso() : null, effectKey, ...(result.verified ? {} : { note: "Sent, but the result could not be read back. Check the target before sending again." }) });
   } catch (e) {
     if (e instanceof JobBlockedError) {
-      app.actions.finishExecution(actionId, { status: "unknown", receipt: { error: e.message, at: nowIso() } });
-      app.bus.emit("event", { type: "actions.changed", id: actionId });
+      done("unknown", { error: e.message, effectKey });
       throw e;
     }
-    const err = e as RemoteError;
-    app.actions.finishExecution(actionId, { status: "failed", receipt: { error: err.message, state: err.state ?? "error", at: nowIso() } });
-    app.bus.emit("event", { type: "actions.changed", id: actionId });
-    return { status: "failed", error: err.message };
+    const err = e as Error;
+    if (rejectedBeforeWrite(e)) {
+      app.db.prepare("update side_effects set status = 'rejected', completed_at = ? where effect_key = ? and status = 'pending'").run(nowIso(), effectKey);
+      return done("failed", { error: err.message, state: (e as RemoteError).state, attempted: true, sent: false });
+    }
+    // Timeouts, network failures, cancellation and 5xx after sending: the effect may exist.
+    return done("unknown", { error: err.message, state: (e as RemoteError).state ?? "error", note: "The request may have reached the service. Check the target before sending again.", effectKey });
   }
 }
 

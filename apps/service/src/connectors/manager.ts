@@ -41,6 +41,8 @@ export class ConnectionManager {
   /** Hooks wired by the app: cancel dependent jobs, revoke approvals, notify clients. */
   onDisconnect: (id: string, kind: ConnectionKind) => { cancelledJobs: string[]; revokedActions: string[] } = () => ({ cancelledJobs: [], revokedActions: [] });
   onChange: (id: string) => void = () => {};
+  /** In-flight syncs per connection, aborted when the connection is disconnected. */
+  private readonly inflight = new Map<string, Set<AbortController>>();
 
   constructor(deps: ManagerDeps) {
     this.d = deps;
@@ -178,6 +180,7 @@ export class ConnectionManager {
   async test(id: string): Promise<TestResult> {
     const rec = this.record(id);
     if (!rec) throw new RemoteError("Connection not found", "not_configured");
+    if (rec.status === "disconnected") return { ok: false, state: "not_configured", account: null, message: "This connection is disconnected. Set it up again to reconnect." };
     const a = this.adapter(rec.kind);
     let result: TestResult;
     try {
@@ -245,6 +248,8 @@ export class ConnectionManager {
     const rec = this.requireRecord(id);
     if (rec.settings.builtin) throw new RemoteError("The Jarvis data folder cannot be disconnected; export a backup or uninstall instead.", "error");
     const effects = this.disconnectEffects(id);
+    // Stop requests already in flight for this connection.
+    for (const c of this.inflight.get(id) ?? []) c.abort(new Error("connection disconnected"));
     for (const n of this.adapter(rec.kind).secretNames.concat(["refresh_token", "access_token", "access_expiry", "clientSecret"])) await this.d.secrets.delete(this.secretKey(id, n));
     this.d.db.prepare("update connections set status = 'disconnected', write_actions = '[]', updated_at = ? where id = ?").run(nowIso(), id);
     const hooks = this.onDisconnect(id, rec.kind);
@@ -281,23 +286,39 @@ export class ConnectionManager {
     this.d.db.prepare("insert into sync_runs (id, connection_id, started_at) values (?,?,?)").run(runId, id, started);
     this.d.db.prepare("update connections set last_attempt_at = ? where id = ?").run(started, id);
     const previous = this.previousCoverage(id);
+    const ctrl = new AbortController();
+    const onOuterAbort = () => ctrl.abort(signal?.reason);
+    signal?.addEventListener("abort", onOuterAbort);
+    const set = this.inflight.get(id) ?? new Set<AbortController>();
+    set.add(ctrl);
+    this.inflight.set(id, set);
     let result: SyncResult;
     try {
-      result = rec.kind === "vault" ? this.syncVault(rec) : await this.syncRemote(rec, signal);
+      result = rec.kind === "vault" ? this.syncVault(rec) : await this.syncRemote(rec, ctrl.signal);
     } catch (e) {
       const err = e as RemoteError;
       const cov = new CoverageTracker();
       cov.add("all", err.state ?? "error", 0, 0, err.message);
       result = { coverage: cov.finish(err.message), observations: [] };
+    } finally {
+      set.delete(ctrl);
+      signal?.removeEventListener("abort", onOuterAbort);
     }
-    const attention = this.store(rec, result, previous);
+    // A disconnect during the sync wins: store nothing and do not revive the connection.
+    const current = this.record(id);
+    if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
+      this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or sync cancelled' where id = ?").run(nowIso(), runId);
+      if (signal?.aborted) throw new RemoteError("Sync cancelled", "error");
+      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the sync" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [] }, observations: 0 };
+    }
+    const attention = this.store(current, result, previous);
     const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
     const now = nowIso();
     const errText = result.coverage.state === "complete" || result.coverage.state === "empty" ? null : redact(result.coverage.scopes.filter((s) => s.note).map((s) => `${s.scope}: ${s.note}`).join("; ") || result.coverage.state);
     this.d.db.prepare("update sync_runs set finished_at = ?, outcome = ?, coverage = ?, item_count = ?, error = ? where id = ?").run(now, result.coverage.state, JSON.stringify(result.coverage), result.observations.length, errText, runId);
-    const newStatus = result.coverage.state === "unauthorized" ? "needs_auth" : rec.status === "needs_auth" && ok ? "connected" : rec.status;
+    const newStatus = result.coverage.state === "unauthorized" ? "needs_auth" : current.status === "needs_auth" && ok ? "connected" : current.status;
     this.d.db
-      .prepare(`update connections set coverage = ?, status = ?, ${ok ? "last_success_at = ?," : ""} last_error = ?, ${errText ? "last_error_at = ?," : ""} updated_at = ? where id = ?`)
+      .prepare(`update connections set coverage = ?, status = ?, ${ok ? "last_success_at = ?," : ""} last_error = ?, ${errText ? "last_error_at = ?," : ""} updated_at = ? where id = ? and status != 'disconnected'`)
       .run(...([JSON.stringify(result.coverage), newStatus, ...(ok ? [now] : []), errText, ...(errText ? [now] : []), now, id] as Array<string | null>));
     this.onChange(id);
     return { coverage: result.coverage, attention, observations: result.observations.length };

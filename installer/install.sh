@@ -44,8 +44,26 @@ if [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/jarvis" ]; then
   JARVIS_STATE_DIR="$STATE" JARVIS_INSTANCE="$INSTANCE" "$PREFIX/current/bin/jarvis" backup --out "$STATE/backups/pre-upgrade-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz" >/dev/null || fail "could not back up the existing installation; nothing was changed"
 fi
 
-# Stop the running service (if any) before switching versions.
-launchctl bootout "gui/$UID_NUM/$LABEL" >/dev/null 2>&1 || true
+# Stop the running service (if any) and wait until launchd has really unloaded it.
+stop_agent() {
+  launchctl bootout "gui/$UID_NUM/$LABEL" >/dev/null 2>&1 || true
+  n=0
+  while launchctl print "gui/$UID_NUM/$LABEL" >/dev/null 2>&1; do
+    n=$((n + 1))
+    [ "$n" -gt 40 ] && break
+    sleep 0.25
+  done
+}
+start_agent() {
+  n=0
+  until launchctl bootstrap "gui/$UID_NUM" "$PLIST" 2>/dev/null; do
+    n=$((n + 1))
+    [ "$n" -gt 5 ] && return 1
+    sleep 1
+  done
+  launchctl kickstart -k "gui/$UID_NUM/$LABEL" >/dev/null 2>&1 || true
+}
+stop_agent
 
 # Copy this version into place atomically, then point "current" at it.
 TMP="$PREFIX/app/.$VERSION.installing.$$"
@@ -103,14 +121,23 @@ cat > "$PLIST" <<EOF
 </plist>
 EOF
 
-launchctl bootstrap "gui/$UID_NUM" "$PLIST" || fail "launchctl could not load $PLIST"
-launchctl kickstart -k "gui/$UID_NUM/$LABEL" >/dev/null 2>&1 || true
+rollback() {
+  if [ -n "$PREVIOUS" ] && [ -d "$PREFIX/app/$PREVIOUS" ]; then
+    say "Rolling back to $PREVIOUS"
+    stop_agent
+    ln -sfn "$PREFIX/app/$PREVIOUS" "$PREFIX/current"
+    start_agent || true
+  fi
+  fail "$1"
+}
+
+start_agent || rollback "launchctl could not load $PLIST"
 
 say "Starting the Jarvis service on http://127.0.0.1:$PORT"
 i=0
 until /usr/bin/curl -fsS "http://127.0.0.1:$PORT/api/v1/health" 2>/dev/null | grep -q "\"version\":\"$VERSION\""; do
   i=$((i + 1))
-  [ "$i" -gt 60 ] && fail "the service did not become healthy; see $STATE/logs/launchd.err.log"
+  [ "$i" -gt 60 ] && rollback "the service did not become healthy; see $STATE/logs/launchd.err.log"
   sleep 0.5
 done
 
