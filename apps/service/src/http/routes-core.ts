@@ -101,6 +101,10 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return { features: app.featureStatuses(), added: result.added, removed: result.removed, effects };
   });
 
+  r.get("/setup/defaults", () => {
+    const home = process.env.HOME ?? "";
+    return { home, suggestion: `${home}/Documents/Jarvis` };
+  });
   r.post("/setup/data-folder/preview", async (c) => {
     const { path } = await c.body(z.object({ path: z.string().min(1) }));
     return dataFolderPreview(path);
@@ -126,14 +130,15 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     if (!cfg.dataFolder) throw new HttpError(409, "needs_data_folder", "Choose a data folder before finishing setup.");
     const next = app.config.patch({ setupCompleted: true });
     app.scheduler.reconcile(next);
+    if (app.featureEnabled("attention")) app.jobs.create({ kind: "sync", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
     app.bus.emit("event", { type: "config.changed" });
     return { config: next, features: app.featureStatuses() };
   });
   r.post("/setup/test", async () => {
-    const results: Array<{ id: string; kind: string; ok: boolean; state: string; message: string }> = [];
+    const results: Array<{ id: string; label: string; kind: string; ok: boolean; state: string; message: string }> = [];
     for (const rec of app.connections.records().filter((x) => x.status !== "disconnected")) {
       const t = await app.connections.test(rec.id);
-      results.push({ id: rec.id, kind: rec.kind, ok: t.ok, state: t.state, message: t.message });
+      results.push({ id: rec.id, label: rec.label, kind: rec.kind, ok: t.ok, state: t.state, message: t.message });
     }
     await app.refreshModel();
     return { connections: results, features: app.featureStatuses() };

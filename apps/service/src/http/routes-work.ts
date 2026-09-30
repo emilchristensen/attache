@@ -235,7 +235,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   r.post("/import", async (c) => {
     requireFeature(app, "capture");
     const body = await c.body(z.object({ path: z.string().min(1), label: z.string().max(100).optional() }));
-    const { status } = await app.connections.configure("vault", { path: body.path, method: "folder", ...(body.label ? { label: body.label } : {}) });
+    const { status } = await app.connections.configure("vault", { path: body.path, method: "folder", label: body.label ?? (body.path.replace(/\/+$/, "").split("/").pop() || "Imported notes") });
     const { job } = app.jobs.create({ kind: "import", title: `Import ${status.label}`, input: { connectionId: status.id }, capability: "capture", connectionId: status.id });
     return { __status: 201, body: { connection: status, job } };
   });

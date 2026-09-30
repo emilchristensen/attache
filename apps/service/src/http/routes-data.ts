@@ -55,8 +55,10 @@ export function registerDataRoutes(r: Router, app: App) {
     const raw = readFileSync(abs, "utf8");
     const parsed = parseMarkdown(raw, rel);
     const doc = app.db.prepare("select id, area, doc_type as docType, indexed_at as indexedAt from documents where root = ? and rel_path = ?").get(root, rel) as Record<string, unknown> | undefined;
+    const rootLabel = root === "data" ? "Jarvis data folder" : (app.connections.record(root.replace(/^import:/, ""))?.label ?? root);
     return {
       root,
+      rootLabel,
       relPath: rel,
       absPath: join(base, rel),
       raw,

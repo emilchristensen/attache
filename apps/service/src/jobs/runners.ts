@@ -10,6 +10,7 @@ import { newEffectKey } from "../actions/service.ts";
 import { RemoteError } from "../connectors/http.ts";
 import { SOURCE_KINDS } from "../capabilities/registry.ts";
 import { nowIso } from "../core/db.ts";
+import { notifyDesktop } from "../core/notify.ts";
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -33,9 +34,17 @@ async function runSync(app: App, ctx: JobContext) {
     const r = await app.connections.sync(id, ctx.signal);
     ctx.event("source_synced", { id, coverage: r.coverage.state, items: r.coverage.items });
     results.push({ id, coverage: r.coverage.state, created: r.attention.created.length, changed: r.attention.changed.length, resolved: r.attention.resolved.length });
+    await notifyUrgent(app, [...r.attention.created, ...r.attention.reopened]);
   }
   app.bus.emit("event", { type: "attention.changed" });
   return { sources: results };
+}
+
+async function notifyUrgent(app: App, keys: string[]) {
+  const cfg = app.config.get();
+  if (!cfg.notifications.desktop || !keys.length) return;
+  const rows = app.db.prepare(`select title, summary from attention_items where state = 'open' and priority >= 70 and item_key in (${keys.map(() => "?").join(",")}) limit 3`).all(...keys) as Array<{ title: string; summary: string }>;
+  for (const r of rows) await notifyDesktop(r.title, r.summary, { quietHours: cfg.notifications.quietHours });
 }
 
 export function coverageList(app: App): SourceCoverage[] {
