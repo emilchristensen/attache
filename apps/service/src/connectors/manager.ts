@@ -243,6 +243,7 @@ export class ConnectionManager {
    */
   async disconnect(id: string, opts: { deleteData: boolean }): Promise<{ effects: DisconnectEffects; cancelledJobs: string[]; revokedActions: string[]; deleted: boolean }> {
     const rec = this.requireRecord(id);
+    if (rec.settings.builtin) throw new RemoteError("The Jarvis data folder cannot be disconnected; export a backup or uninstall instead.", "error");
     const effects = this.disconnectEffects(id);
     for (const n of this.adapter(rec.kind).secretNames.concat(["refresh_token", "access_token", "access_expiry", "clientSecret"])) await this.d.secrets.delete(this.secretKey(id, n));
     this.d.db.prepare("update connections set status = 'disconnected', write_actions = '[]', updated_at = ? where id = ?").run(nowIso(), id);

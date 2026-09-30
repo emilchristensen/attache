@@ -107,6 +107,17 @@ async function main() {
       return status(argv);
     case "version":
       return out(VERSION);
+    case "stop":
+    case "start": {
+      // Controls the LaunchAgent the installer created (macOS).
+      const instance = process.env.JARVIS_INSTANCE ?? "default";
+      const label = instance === "default" ? "dev.jarvis.service" : `dev.jarvis.${instance}`;
+      const plist = `${process.env.HOME}/Library/LaunchAgents/${label}.plist`;
+      const uid = process.getuid?.() ?? 0;
+      const args = cmd === "stop" ? ["bootout", `gui/${uid}/${label}`] : ["bootstrap", `gui/${uid}`, plist];
+      await new Promise<void>((resolve, reject) => execFile("/bin/launchctl", args, (err, _o, stderr) => (err && !(cmd === "stop" && /No such process|not find/i.test(String(stderr))) ? reject(new Error(`launchctl ${args[0]} failed: ${String(stderr).trim() || err.message}`)) : resolve())));
+      return out(cmd === "stop" ? "Jarvis service stopped. Start it again with: jarvis start" : "Jarvis service started.");
+    }
     case "backup": {
       const stateDir = arg("state-dir", argv);
       const app = new App({ ...(stateDir ? { stateDir } : {}), quiet: true });
@@ -119,13 +130,13 @@ async function main() {
       if (!file || !existsSync(file)) throw new Error("Usage: jarvis restore <backup.tar.gz> [--data-folder <path>] [--force]");
       const paths = resolvePaths(arg("state-dir", argv));
       const rt = readRuntime(paths.runtimeFile);
-      if (rt && alive(rt.pid)) throw new Error(`The Jarvis service is running (pid ${rt.pid}). Stop it before restoring.`);
+      if (rt && alive(rt.pid)) throw new Error(`The Jarvis service is running (pid ${rt.pid}). Run \`jarvis stop\` first, then restore, then \`jarvis start\`.`);
       const dataFolder = arg("data-folder", argv);
       const r = await restoreBackup(file, { stateDir: paths.stateDir, ...(dataFolder ? { dataFolder } : {}), force: argv.includes("--force") });
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, pair, status, backup, restore, version`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, backup, restore, version`);
   }
 }
 

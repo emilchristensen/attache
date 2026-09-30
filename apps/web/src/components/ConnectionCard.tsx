@@ -54,6 +54,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
   const [testMsg, setTestMsg] = useState<string | null>(null);
   const m = definition.authMethods.find((x) => x.id === method) ?? definition.authMethods[0];
   const isOAuth = status.kind === "gmail" || status.kind === "gcal";
+  const builtin = status.settings.builtin === true;
 
   const configure = () =>
     run(
@@ -80,7 +81,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
       <div className="row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3>{status.label}</h3>
-          <p className="small muted">{definition.description}</p>
+          <p className="small muted">{builtin ? "Where Jarvis keeps your memory, evidence and deliverables as Markdown. Jarvis reads and writes here; your edits are picked up on the next refresh." : definition.description}</p>
         </div>
         <StatusPill state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
       </div>
@@ -211,12 +212,16 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
                   Sync now
                 </button>
               )}
-              <button className="ghost" onClick={() => setEditing(true)}>
-                Reconfigure
-              </button>
-              <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<Record<string, number>>(`/connections/${status.id}/disconnect-preview`)))}>
-                Disconnect…
-              </button>
+              {!builtin && (
+                <>
+                  <button className="ghost" onClick={() => setEditing(true)}>
+                    Reconfigure
+                  </button>
+                  <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<Record<string, number>>(`/connections/${status.id}/disconnect-preview`)))}>
+                    Disconnect…
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

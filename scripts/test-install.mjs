@@ -129,6 +129,17 @@ async function main() {
   check("A02", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
   check("A14", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
 
+  // --- service control from the command line ---
+  jarvisCli(["stop"]);
+  const stopped = await http("GET", "/health").then(() => false, () => true);
+  jarvisCli(["start"]);
+  let started = false;
+  for (let i = 0; i < 60 && !started; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    started = await http("GET", "/health").then((r) => r.status === 200, () => false);
+  }
+  check("A02", "jarvis stop / jarvis start control the service", stopped && started && agentLoaded());
+
   // --- A14: backup, then restore into a fresh profile ---
   const backup = JSON.parse(jarvisCli(["backup"]));
   check("A14", "backup archive created", existsSync(backup.path) && backup.bytes > 0 && backup.manifest.credentialsIncluded === false, backup.path);

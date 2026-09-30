@@ -1,25 +1,27 @@
 # Jarvis
 
-An original, local-first second brain with a browser interface, easy installation, and selectable features and connections. A desktop Obsidian plugin will use the same backend; an Electron client can follow later.
+A local-first second brain for your Mac.
+It runs in the browser, keeps your knowledge as Markdown in a folder you choose, answers with cited evidence, watches the sources you connect, and prepares drafts that are sent only after you approve the exact version.
+A desktop Obsidian plugin is a second client of the same service.
 
-This repository currently contains research and the implementation brief. The application has not been built yet.
+- **Install:** download `Jarvis-Installer-<version>-macos-arm64.command` from a release and double-click it (or `sh` it). No developer tools needed. See the [user guide](docs/user-guide.md).
+- **Build from source:** see the [developer guide](docs/developer-guide.md).
+- **How it works:** [architecture](docs/architecture.md), [what was reused and why](docs/inspection.md).
+- **Status and evidence:** [build status](docs/build-status.md), [acceptance report](docs/acceptance-report.md).
 
-## Build brief
+## What it does
 
-[JARVIS_BUILD_SPEC.md](JARVIS_BUILD_SPEC.md) defines the product, installation paths, engineering contracts, iteration loop, and required acceptance evidence. It is the authoritative implementation brief and supersedes adoption suggestions in the earlier research.
+- Conversation with grounded recall: every answer searches your notes and cites file and line; search works without a model.
+- Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
+- Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
+- Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
+- Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.
+- Voice: optional push-to-talk with local whisper.cpp recognition and macOS speech, with interruption.
 
-Use external assistant projects for behavioral inspiration only. Build our own application and orchestration, reusing suitable code from Alex's existing second brains after inspection. Hermes, OpenClaw, and other assistant products are excluded as foundations.
+Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, a model provider (Claude Code, Anthropic, OpenAI-compatible) and speech providers.
+Each is optional and starts read-only.
 
-## Start the implementation
+## Research and brief
 
-Open this repository in your coding agent, select Opus 5.5, and paste the command from [jarvis-goal-command.txt](jarvis-goal-command.txt) into a host that supports `/goal`.
-
-The goal requires a working release and acceptance evidence, with progress recorded in `docs/build-status.md` during implementation. Account authorization and host limits can require user input before work can continue.
-
-## Research
-
-- [Research index](research/README.md), covering public activity from July 30 through September 30, 2026.
-- [Existing builds and browser architecture](research/browser-first-direction-2026-09-30.md).
-- [Interactive comparison](.lavish/jarvis-research.html).
-- [Portable comparison](.lavish/jarvis-research-portable.html), which opens as a standalone HTML file.
-
+[JARVIS_BUILD_SPEC.md](JARVIS_BUILD_SPEC.md) is the implementation brief.
+Research inputs are in [research/](research/README.md).
