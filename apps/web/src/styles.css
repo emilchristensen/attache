@@ -1181,3 +1181,51 @@ kbd {
   background: var(--raised);
   color: var(--text-2);
 }
+
+label.field input,
+label.field textarea,
+label.field select {
+  font-weight: 400;
+}
+
+.home-switch {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .home {
+    grid-template-rows: auto 1fr;
+  }
+  .home-switch {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .home-switch button {
+    flex: 1;
+    justify-content: center;
+  }
+  .home-switch button[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .home .inbox-col {
+    max-height: none;
+    border-bottom: none;
+  }
+  .home[data-pane="chat"] .inbox-col,
+  .home[data-pane="inbox"] .chat-col {
+    display: none;
+  }
+  .bottom-nav a {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 2px;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

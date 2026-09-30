@@ -227,7 +227,12 @@ test("narrow screen: bottom navigation, no horizontal overflow, all views reacha
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(1);
   }
   await page.goto(stack.url);
+  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await page.getByRole("button", { name: "Conversation", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Message Jarvis" })).toBeVisible();
+  await expect(page.getByText("Needs your attention")).toBeHidden();
+  const navFits = await page.locator(".bottom-nav").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+  expect(navFits, "bottom navigation fits without scrolling").toBe(true);
   await page.locator(".bottom-nav").getByRole("link", { name: "Memory" }).click();
   await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
 });

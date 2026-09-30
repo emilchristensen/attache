@@ -21,4 +21,6 @@ if (process.argv.includes("--watch")) {
   await ctx.watch();
 } else {
   await build(options);
+  // Library entry for in-process probes (scripts/live-readonly.mjs); not shipped in releases.
+  await build({ ...options, entryPoints: [new URL("./src/live-probe.ts", import.meta.url).pathname], outfile: new URL("./dist/live-probe.mjs", import.meta.url).pathname, sourcemap: false });
 }

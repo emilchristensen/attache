@@ -214,7 +214,7 @@ export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
     <div className="coverage" aria-label="Source freshness">
       {sources.map((s) => (
         <div key={s.id} className="src" data-source={s.id}>
-          <StatusPill state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state ?? "never synced").replace(/_/g, " ") : s.status.replace(/_/g, " ")} />
+          <StatusPill state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never synced").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
           <span>{s.label}</span>
           <span className="when">
             {s.lastSuccessAt ? (

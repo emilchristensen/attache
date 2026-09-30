@@ -17,12 +17,12 @@ interface Session {
   version: string;
 }
 
-export const NAV: Array<{ to: string; label: string; key: string }> = [
+export const NAV: Array<{ to: string; label: string; short?: string; key: string }> = [
   { to: "/", label: "Home", key: "h" },
   { to: "/memory", label: "Memory", key: "m" },
   { to: "/drafts", label: "Drafts", key: "d" },
   { to: "/jobs", label: "Jobs", key: "j" },
-  { to: "/connections", label: "Connections", key: "c" },
+  { to: "/connections", label: "Connections", short: "Sources", key: "c" },
   { to: "/settings", label: "Settings", key: "s" },
 ];
 
@@ -98,6 +98,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
       if (e.key === "/") {
         e.preventDefault();
         if (path !== "/") navigate("/");
+        window.dispatchEvent(new CustomEvent("jarvis:focus-chat"));
         setTimeout(() => document.getElementById("composer")?.focus(), 50);
         return;
       }
@@ -142,8 +143,8 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
       </div>
       <nav className="bottom-nav" aria-label="Main">
         {NAV.map((n) => (
-          <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined}>
-            {n.label}
+          <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={n.label}>
+            {n.short ?? n.label}
           </Link>
         ))}
       </nav>

@@ -40,10 +40,12 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
 
 export function SourceView({ raw, lines }: { raw: string; lines?: [number, number] | undefined }) {
   const ref = useRef<HTMLDivElement>(null);
+  const from = lines?.[0];
+  const to = lines?.[1];
   useEffect(() => {
     const el = ref.current?.querySelector(".line.hl");
     el?.scrollIntoView({ block: "center" });
-  }, [raw, lines?.[0], lines?.[1]]);
+  }, [raw, from, to]);
   const all = raw.split("\n");
   return (
     <div className="source-view" ref={ref} aria-label="File contents with line numbers">
