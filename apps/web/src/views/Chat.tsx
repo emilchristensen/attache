@@ -105,6 +105,10 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
   }, [msgs.error]);
 
   useLiveEvent((ev) => {
+    if (ev.type === "connections.changed" || ev.type === "config.changed" || ev.type === "reconnected") {
+      void api<{ modes: { stt: string; tts: string } }>("/voice/status").then((s) => (voice.modes = s.modes)).catch(() => {});
+      return;
+    }
     if (ev.conversationId !== conversationId) return;
     if (ev.type === "message.delta") {
       const id = String(ev.messageId);
@@ -251,7 +255,7 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
               if (e.key === "Escape") voice.interrupt();
             }}
           />
-          {voiceOn && voice.canListen && (
+          {voiceOn && v.modes.stt !== "none" && (
             <button
               type="button"
               className={v.state === "listening" ? "danger" : ""}
@@ -291,7 +295,7 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
         </div>
         <div className="row hint">
           <span>Enter to send · Shift+Enter for a new line · / to focus</span>
-          {voiceOn && voice.canSpeak && (
+          {voiceOn && v.modes.tts !== "none" && (
             <label className="check" style={{ marginLeft: "auto" }}>
               <input type="checkbox" checked={speakReplies} onChange={(e) => setSpeakReplies(e.target.checked)} /> Speak replies to voice questions
             </label>

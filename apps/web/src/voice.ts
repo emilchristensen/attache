@@ -4,6 +4,7 @@ import { api, API_PREFIX, ApiError } from "./api.ts";
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
 export interface VoiceSnapshot {
+  modes: { stt: string; tts: string };
   state: VoiceState;
   message: string | null;
   micDenied: boolean;
@@ -52,7 +53,7 @@ function downsample(input: Float32Array, from: number, to: number): Float32Array
 }
 
 class VoiceController {
-  private snap: VoiceSnapshot = { state: "idle", message: null, micDenied: false, level: 0 };
+  private snap: VoiceSnapshot = { modes: { stt: "none", tts: "none" }, state: "idle", message: null, micDenied: false, level: 0 };
   private listeners = new Set<() => void>();
   private stream: MediaStream | null = null;
   private ctx: AudioContext | null = null;
@@ -61,7 +62,12 @@ class VoiceController {
   private audio: HTMLAudioElement | null = null;
   private speakAbort: AbortController | null = null;
   private recognition: { stop(): void; abort(): void } | null = null;
-  modes: { stt: string; tts: string } = { stt: "none", tts: "none" };
+  get modes() {
+    return this.snap.modes;
+  }
+  set modes(m: { stt: string; tts: string }) {
+    this.set({ modes: m });
+  }
 
   get snapshot() {
     return this.snap;

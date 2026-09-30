@@ -258,7 +258,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const text = await app.speech.transcribe(audio);
       return { text };
     } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : 503, `speech_${e.kind}`, e.message);
+      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
       throw e;
     }
   });
@@ -269,7 +269,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const out = await app.speech.synthesize(text);
       return { __raw: out.audio, mime: out.mime };
     } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : 503, `speech_${e.kind}`, e.message);
+      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
       throw e;
     }
   });

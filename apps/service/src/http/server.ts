@@ -145,7 +145,8 @@ export async function startServer(app: App, opts: { port: number; host?: string 
       send(res, 200, out ?? { ok: true }, cors);
     } catch (e) {
       const { status, body } = errorResponse(e);
-      if (status >= 500) app.log.error("request failed", { method: req.method, url: req.url, error: (e as Error).message, stack: (e as Error).stack });
+      if (status === 500) app.log.error("request failed", { method: req.method, url: req.url, error: (e as Error).message, stack: (e as Error).stack });
+      else if (status >= 502) app.log.warn("upstream unavailable", { method: req.method, url: req.url, error: (e as Error).message });
       send(res, status, body);
     }
   });

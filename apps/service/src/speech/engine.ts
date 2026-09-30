@@ -15,7 +15,7 @@ export interface SpeechSettings {
 }
 
 export class SpeechError extends Error {
-  readonly kind: "not_configured" | "unavailable" | "failed";
+  readonly kind: "not_configured" | "unavailable" | "failed" | "invalid";
   constructor(kind: SpeechError["kind"], message: string) {
     super(message);
     this.kind = kind;
@@ -44,7 +44,7 @@ function run(cmd: string, args: string[], timeoutMs = 60_000): Promise<{ stdout:
 
 /** Transcribe 16-bit PCM WAV audio. */
 export async function transcribe(settings: SpeechSettings, wav: Buffer, apiKey: string | null, signal?: AbortSignal): Promise<string> {
-  if (wav.length < 44 || wav.toString("ascii", 0, 4) !== "RIFF") throw new SpeechError("failed", "Audio must be a WAV file");
+  if (wav.length < 44 || wav.toString("ascii", 0, 4) !== "RIFF") throw new SpeechError("invalid", "Audio must be a 16-bit PCM WAV file");
   if (settings.stt === "whisper-local") {
     const bin = settings.whisperBin || findWhisperBin();
     if (!bin) throw new SpeechError("not_configured", "whisper.cpp is not installed. Install it with `brew install whisper-cpp`, or choose another speech provider.");
