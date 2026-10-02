@@ -14,7 +14,8 @@ export interface ContextInput {
   searchCommand: string;
 }
 
-const MAX_DETAILED_PER_TYPE = 15;
+/** Notes per type whose first fact (the gist) every new session reads. */
+export const MAX_DETAILED_PER_TYPE = 15;
 const MAX_TITLES_PER_TYPE = 40;
 const MAX_GIST_CHARS = 120;
 const MAX_LOG_CHARS = 6000;

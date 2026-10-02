@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, type FeatureId } from "@jarvis/contracts";
+import { AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
+import { saveToMemory } from "../memory/save.ts";
+import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
 
 export function requireFeature(app: App, id: FeatureId) {
   if (!app.featureEnabled(id)) throw new HttpError(409, "feature_disabled", `${app.featureLabel(id)} is turned off. Turn it on in Settings.`, { feature: id });
@@ -122,6 +124,21 @@ export function registerDataRoutes(r: Router, app: App) {
     const change = app.memory.correct(input.relPath, { subject: input.subject, value: input.value, reason: input.reason }, "user");
     app.bus.emit("event", { type: "memory.changed" });
     return { change, document: app.memory.describe(input.relPath) };
+  });
+  r.post("/memory/save", async (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const input = await c.body(MemorySaveInput);
+    const out = saveToMemory(app, input, c.client?.id ?? null);
+    app.bus.emit("event", { type: "memory.changed" });
+    return out;
+  });
+  r.get("/memory/audit", (c) => {
+    requireFeature(app, "recall");
+    requireData(app);
+    const days = Number(c.query("staleDays") ?? DEFAULT_STALE_DAYS);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new HttpError(400, "invalid_request", "staleDays must be a whole number of days between 1 and 3650");
+    return auditMemory(app, { staleDays: days });
   });
   r.put("/memory/notes-body", async (c) => {
     requireFeature(app, "capture");

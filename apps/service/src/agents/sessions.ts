@@ -311,13 +311,15 @@ export class AgentSessions {
       writeFileSync(tmp, text, { mode: 0o600 });
       renameSync(tmp, file);
     }
-    // Agents without a session-start hook read the same context from a rule file.
-    for (const a of AGENT_INTEGRATIONS.filter((x) => x.rulesDir)) {
+    for (const a of AGENT_INTEGRATIONS) {
       if (this.app.connections.record(a.kind)?.status !== "connected") continue;
       try {
+        // Agents without a session-start hook read the same context from a rule file.
         this.hooks.writeRules(a, text);
+        // Keep the save and audit skills in step with this version.
+        this.hooks.skills.install(a);
       } catch (e) {
-        this.app.log.warn("could not update agent memory rule", { agent: a.kind, error: (e as Error).message });
+        this.app.log.warn("could not update agent memory rule or skills", { agent: a.kind, error: (e as Error).message });
       }
     }
   }

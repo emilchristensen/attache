@@ -10,38 +10,14 @@ import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, search } from "./memory/search.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
+import { alive, readRuntime, type Runtime } from "./cli/client.ts";
+import { auditCommand, saveCommand, type CliIo } from "./cli/memory-commands.ts";
 
 export const DEFAULT_PORT = 7427;
-
-interface Runtime {
-  pid: number;
-  port: number;
-  url: string;
-  version: string;
-  startedAt: string;
-  instance: string;
-}
 
 function arg(name: string, argv: string[]): string | undefined {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : undefined;
-}
-
-function readRuntime(file: string): Runtime | null {
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as Runtime;
-  } catch {
-    return null;
-  }
-}
-
-function alive(pid: number) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 const out = (s: string) => process.stdout.write(s + "\n");
@@ -134,7 +110,7 @@ async function agentHooksCmd(argv: string[]) {
   if (sub === "status") {
     return out(JSON.stringify(agents.map((a) => {
       const s = hooks.status(a);
-      return { agent: a.kind, path: s.path, hooks: s.installed.length, current: s.current, rules: s.rules };
+      return { agent: a.kind, path: s.path, hooks: s.installed.length, current: s.current, rules: s.rules, skills: s.skills };
     })));
   }
   if (sub === "uninstall") {
@@ -145,6 +121,10 @@ async function agentHooksCmd(argv: string[]) {
     return;
   }
   throw new Error("Usage: jarvis agent-hooks status|uninstall [--agent claude-code|codex|antigravity]");
+}
+
+function cliIo(): CliIo {
+  return { out, readStdin: () => (process.stdin.isTTY ? "" : readFileSync(0, "utf8")), cwd: process.cwd(), env: process.env };
 }
 
 async function main() {
@@ -163,6 +143,10 @@ async function main() {
       return searchCmd(argv);
     case "agent-hooks":
       return agentHooksCmd(argv);
+    case "save":
+      return saveCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
+    case "audit":
+      return auditCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":
     case "start": {
       // Controls the LaunchAgent the installer created (macOS).
@@ -192,7 +176,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, agent-hooks, backup, restore, version`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, agent-hooks, backup, restore, version`);
   }
 }
 

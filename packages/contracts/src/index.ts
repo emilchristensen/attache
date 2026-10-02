@@ -139,7 +139,7 @@ export interface Citation {
 }
 
 export const SourceRefInput = z.object({
-  kind: z.enum(["capture", "note", "import", "connector", "conversation", "user"]),
+  kind: z.enum(["capture", "note", "import", "connector", "conversation", "user", "agent-session"]),
   ref: z.string().min(1).max(2000),
   root: z.string().optional(),
   lines: z.tuple([z.number().int().min(1), z.number().int().min(1)]).optional(),
@@ -170,6 +170,78 @@ export const CorrectionInput = z.object({
   value: z.string().min(1).max(5000),
   reason: z.string().min(1).max(1000),
 });
+
+const SaveFact = z.object({ subject: z.string().trim().min(1).max(100), value: z.string().trim().min(1).max(5000) });
+const SaveEvent = z.string().trim().min(1).max(2000);
+
+/**
+ * What the user asked a coding agent to save (`jarvis save`). State goes into
+ * `facts` (one current value per subject, replacing the old one), events into
+ * `events` (appended to History). Validated as a whole before anything is written.
+ */
+export const MemorySaveInput = z.object({
+  /** The coding-agent session the items were distilled from. */
+  origin: z
+    .object({
+      agent: z.string().trim().min(1).max(40),
+      sessionId: z.string().trim().max(200).optional(),
+      cwd: z.string().max(2000).optional(),
+    })
+    .optional(),
+  items: z
+    .array(
+      z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("create"),
+          type: z.enum(["person", "project", "decision", "note"]),
+          title: z.string().trim().min(1).max(200),
+          facts: z.array(SaveFact).min(1).max(50),
+          notes: z.string().max(20_000).optional(),
+          events: z.array(SaveEvent).max(20).optional(),
+          tags: z.array(z.string().max(50)).max(20).optional(),
+        }),
+        z.object({
+          action: z.literal("update"),
+          path: z.string().trim().min(1).max(500),
+          facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
+          events: z.array(SaveEvent).max(20).optional(),
+        }),
+      ]),
+    )
+    .min(1)
+    .max(20),
+});
+export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
+
+export interface MemorySaveResult {
+  saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
+}
+
+export interface MemoryAuditEntry {
+  subject: string;
+  value: string;
+  date: string;
+  ageDays: number;
+  source: string | null;
+  line: number;
+  /** Deterministic problems with this entry: `stale`, `unsourced`, `missing-source`, `duplicate-subject`. */
+  flags: string[];
+  /** Documents that mention the note and changed after this entry was dated: where a contradiction would show up. */
+  newerEvidence: Array<{ root: string; relPath: string; title: string; startLine: number; endLine: number; snippet: string; modified: string }>;
+}
+
+export interface MemoryAuditReport {
+  generatedAt: string;
+  dataFolder: string;
+  staleDays: number;
+  notes: number;
+  entries: number;
+  /** Counts per flag, so two runs can be compared. */
+  counts: Record<string, number>;
+  findings: Array<{ relPath: string; absPath: string; title: string; type: string; inSessionIndex: boolean; flags: string[]; entries: MemoryAuditEntry[] }>;
+  /** Pairs of notes whose titles reduce to the same name. */
+  possibleDuplicates: Array<{ title: string; relPaths: string[] }>;
+}
 
 // ---------------------------------------------------------------------------
 // Conversation
