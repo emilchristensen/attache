@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { HookSpec } from "./hooks-config.ts";
+import type { SkillPackaging } from "./skills.ts";
 import type { HookEvent } from "./spool.ts";
 import { parseAntigravity, parseClaudeCode, parseCodex, type ParsedSession } from "./transcripts.ts";
 
@@ -24,7 +25,11 @@ export interface AgentIntegration {
   detect(home: string): boolean;
   hookSpecs(command: (event: HookEvent) => string): HookSpec[];
   parseTranscript(raw: string): ParsedSession;
-  /** Shown before the user connects; explains what changes and anything the agent asks them to do. */
+  /** Where the user-invoked save and audit skills go, and how they are kept away from the model. */
+  skills?: SkillPackaging;
+  /** How the user types a skill in this agent, e.g. `/jarvis-save`. */
+  skillInvocation(name: string): string;
+  /** Shown before the user connects; explains what changes and anything the agent asks them to do. The skills are described separately. */
   setupNote: string;
 }
 
@@ -43,6 +48,9 @@ export const claudeCode: AgentIntegration = {
     { event: "SessionEnd", matcher: "", command: command("session-end"), timeout: 5 },
   ],
   parseTranscript: parseClaudeCode,
+  // Claude Code reads only ~/.claude/skills.
+  skills: { dir: ".claude/skills" },
+  skillInvocation: (name) => `/${name}`,
   setupNote: "Adds three hooks to ~/.claude/settings.json: SessionStart gives each new session your Jarvis memory, PreCompact and SessionEnd save the conversation. Your other settings and hooks are kept, and the file is backed up first.",
 };
 
@@ -59,6 +67,9 @@ export const codex: AgentIntegration = {
     { event: "SessionEnd", matcher: "", command: command("session-end"), timeout: 3 },
   ],
   parseTranscript: parseCodex,
+  // ~/.agents/skills is Codex's user skill folder; the older ~/.codex/skills would list the skill twice.
+  skills: { dir: ".agents/skills" },
+  skillInvocation: (name) => `$${name}`,
   setupNote:
     "Adds three hooks to ~/.codex/hooks.json: SessionStart gives each new session your Jarvis memory, PreCompact and SessionEnd save the conversation. Your other hooks are kept, and the file is backed up first. Codex runs new hooks only after you approve them: the next time Codex starts, choose Review hooks and trust the three Jarvis hooks. Codex remembers that trust by position, so after you disconnect it may ask you to review hooks that came after Jarvis's again.",
 };
@@ -73,6 +84,9 @@ export const antigravity: AgentIntegration = {
   // Antigravity has no session-end or compaction event; Stop fires after every turn.
   hookSpecs: (command) => [{ event: "Stop", command: command("turn-end"), timeout: 10 }],
   parseTranscript: parseAntigravity,
+  // The global customizations root, read by the app and the agy CLI.
+  skills: { dir: ".gemini/config/skills" },
+  skillInvocation: (name) => `/${name}`,
   setupNote:
     "Adds a Jarvis entry to ~/.gemini/config/hooks.json that saves the conversation after each turn, and an always-on rule ~/.gemini/config/rules/jarvis-memory.md that gives each session your Jarvis memory. Other tools' hooks and rules are kept, and the hooks file is backed up first. Applies to the Antigravity app and the agy CLI.",
 };

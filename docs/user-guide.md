@@ -101,8 +101,17 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
   Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Jarvis's again; reconnecting updates Jarvis's hooks in place and leaves yours where they are.
 - **If Jarvis is not running,** sessions are queued on your Mac and saved the next time it starts.
+- **Save and audit skills:** connecting an agent also adds two skills that only you can run; the agent never starts them on its own.
+  In Claude Code and Antigravity type `/jarvis-save` or `/jarvis-audit`; in Codex type `$jarvis-save` or `$jarvis-audit`.
+  - `/jarvis-save` distills the important parts of the last turn (decisions, lessons, current facts about people and projects) into your curated memory.
+    It updates the note that already covers a topic instead of creating a second one, keeps every replaced value in the note's History, and records which session it came from.
+    Add a few words after the command to say what to focus on.
+  - `/jarvis-audit` checks your memory for facts that have quietly stopped being true, starting with the ones every new session reads.
+    It reports contradicted and unsupported facts with the evidence, and corrects only what you approve.
+  - Both use the Jarvis command line, so Jarvis must be running; `jarvis save --help` shows the format, and `jarvis audit` prints the same report from a terminal.
+  - The skills live in `~/.claude/skills`, `~/.agents/skills` (Codex) and `~/.gemini/config/skills`; Jarvis never changes a skill folder it did not create, and **Disconnect** removes them.
 
-Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks.
+Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks and skills.
 Uninstalling Jarvis removes them too.
 
 ## Voice
@@ -157,8 +166,9 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 | Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
 | Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
+| Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
 
 ## Troubleshooting

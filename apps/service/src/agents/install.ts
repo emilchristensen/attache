@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { defaultStateDir } from "../core/paths.ts";
 import { HooksFileError, ourHooks, replaceFile, ourNamedHooks, readSettings, sameHooks, withNamedHooks, withOurHooks, withoutNamedHooks, withoutOurHooks, writeSettings, type HookSpec } from "./hooks-config.ts";
 import type { AgentIntegration } from "./integrations.ts";
+import { AgentSkills } from "./skills.ts";
 
 /** Home directory whose agent settings Jarvis edits. Tests point this at a temporary folder. */
 export function agentHome(): string {
@@ -39,6 +40,17 @@ export function hookScript(): string {
   throw new Error(`The Jarvis agent hook script is missing next to ${here}`);
 }
 
+/**
+ * The `jarvis` command line of this install, pinned to its state folder, for
+ * agents to run: the bundled service in releases, `JARVIS_CLI_SCRIPT` when set
+ * (tests, development), otherwise `jarvis` on PATH.
+ */
+export function cliCommand(stateDir: string): string {
+  const script = process.env.JARVIS_CLI_SCRIPT || (process.argv[1] && /jarvis-service\.mjs$/.test(process.argv[1]) ? process.argv[1] : "");
+  const env = `JARVIS_STATE_DIR=${quote(stateDir)}`;
+  return script ? `${env} ${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : `${env} jarvis`;
+}
+
 const RULE_MARKER = "<!-- managed by Jarvis: this file is rewritten when your memory changes, and removed when you disconnect -->";
 
 /** Turn the memory context into an always-on rule file (Antigravity's rule format). */
@@ -49,10 +61,13 @@ export function ruleFileText(context: string): string {
 export class AgentHooks {
   private readonly stateDir: string;
   private readonly backupDir: string;
+  /** The user-invoked save and audit skills installed alongside the hooks. */
+  readonly skills: AgentSkills;
 
   constructor(stateDir: string, backupDir: string) {
     this.stateDir = stateDir;
     this.backupDir = backupDir;
+    this.skills = new AgentSkills({ home: agentHome, stateDir, owner: () => this.ownerKey(), cli: () => cliCommand(stateDir) });
   }
 
   configPath(a: AgentIntegration): string {
@@ -82,12 +97,13 @@ export class AgentHooks {
     return a.format === "named" ? ourNamedHooks(settings, this.isOurs) : ourHooks(settings, this.isOurs);
   }
 
-  status(a: AgentIntegration): { path: string; installed: HookSpec[]; current: boolean; rules: string | null } {
+  status(a: AgentIntegration): { path: string; installed: HookSpec[]; current: boolean; rules: string | null; skills: string[] } {
     const path = this.configPath(a);
     const installed = this.installed(a, readSettings(path));
     const rules = this.rulesPath(a);
     const rulesOk = !rules || (existsSync(rules) && readFileSync(rules, "utf8").includes(RULE_MARKER));
-    return { path, installed, current: installed.length > 0 && sameHooks(installed, this.expected(a)) && rulesOk, rules };
+    const skills = this.skills.status(a);
+    return { path, installed, current: installed.length > 0 && sameHooks(installed, this.expected(a)) && rulesOk && skills.current, rules, skills: skills.folders };
   }
 
   install(a: AgentIntegration, context: string): { path: string; backup: string | null; hooks: HookSpec[] } {
@@ -95,6 +111,8 @@ export class AgentHooks {
     const before = readSettings(path);
     const hooks = this.expected(a);
     const next = a.format === "named" ? withNamedHooks(before, this.ownerKey(), hooks, this.isOurs) : withOurHooks(before, hooks, this.isOurs);
+    // Skills first: a skill folder Jarvis must not replace stops the connection before anything changes.
+    this.skills.install(a);
     this.writeRules(a, context);
     if (JSON.stringify(next) === JSON.stringify(before)) return { path, backup: null, hooks };
     return { path, backup: writeSettings(path, next, this.backupDir).backup, hooks };
@@ -124,6 +142,7 @@ export class AgentHooks {
   uninstall(a: AgentIntegration): { path: string; removed: number; backup: string | null } {
     const rules = this.rulesPath(a);
     if (rules && existsSync(rules) && readFileSync(rules, "utf8").includes(RULE_MARKER)) rmSync(rules);
+    this.skills.uninstall(a);
     const path = this.configPath(a);
     if (!existsSync(path)) return { path, removed: 0, backup: null };
     const before = readSettings(path);

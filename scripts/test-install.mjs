@@ -172,6 +172,22 @@ async function main() {
   }
   check("A02", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
 
+  // --- the user-invoked save and audit skills run the installed CLI, with no jarvis on PATH ---
+  const skillsDir = join(HOME, ".claude/skills");
+  const saveSkill = existsSync(skillsDir) ? readdirSync(skillsDir).find((d) => d.endsWith("-save")) : undefined;
+  const saveMd = saveSkill ? readFileSync(join(skillsDir, saveSkill, "SKILL.md"), "utf8") : "";
+  const saveLine = saveMd.split("\n").find((l) => / save <<'JSON'$/.test(l))?.trim() ?? "";
+  check("A02", "connecting Claude Code adds user-only save and audit skills that call the stable `current` CLI", saveMd.includes("disable-model-invocation: true") && existsSync(join(skillsDir, saveSkill.replace(/-save$/, "-audit"), "SKILL.md")) && saveLine.includes(`${PREFIX}/current/service/jarvis-service.mjs`) && !saveMd.includes(`/app/${FROM}/`), saveSkill ?? "no skill");
+  const skillItems = { items: [{ action: "create", type: "decision", title: "Skills call the installed CLI", facts: [{ subject: "Decision", value: "The save skill runs the bundled node and service, so it needs nothing on PATH" }] }] };
+  let skillOut = "";
+  try {
+    skillOut = execFileSync("/bin/sh", ["-c", `${saveLine}\n${JSON.stringify(skillItems)}\nJSON\n`], { env: { ...cleanEnv, CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "inst-1" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    skillOut = String(e.stderr ?? e.message);
+  }
+  const savedNote = join(DATA, "memory/decisions/skills-call-the-installed-cli.md");
+  check("A02", "the save skill's command writes curated memory citing the session", existsSync(savedNote) && readFileSync(savedNote, "utf8").includes("agent-session: evidence/sessions/transcripts/claude-code/"), skillOut.trim());
+
   // --- service control from the command line ---
   jarvisCli(["stop"]);
   const stopped = await http("GET", "/health").then(() => false, () => true);
@@ -226,6 +242,7 @@ async function main() {
   check("A14", "uninstall stops and removes the service", healthGone && !agentLoaded() && !existsSync(join(PREFIX, "app")));
   check("A14", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
   check("A14", "uninstall removes exactly the hooks Jarvis added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
+  check("A14", "uninstall removes the skills Jarvis added", !existsSync(skillsDir) || readdirSync(skillsDir).length === 0, existsSync(skillsDir) ? readdirSync(skillsDir).join(", ") : "");
   sh(artifact(TO));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;

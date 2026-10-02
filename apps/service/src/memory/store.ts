@@ -12,7 +12,7 @@ export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
 
 export interface SourceRef {
-  kind: "capture" | "note" | "import" | "connector" | "conversation" | "user";
+  kind: "capture" | "note" | "import" | "connector" | "conversation" | "user" | "agent-session";
   /** Relative path inside a root, or an external URL. */
   ref: string;
   root?: string;

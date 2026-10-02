@@ -152,6 +152,21 @@ Antigravity has no session-start hook, so the same text is written to an always-
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Jarvis's own model calls run with `--setting-sources ""`, so neither recurses.
 Turning the feature off disconnects every agent; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first.
 
+### Save and audit skills
+
+Connecting an agent also installs two user-level skills, `jarvis-save` and `jarvis-audit` (`agents/skills.ts`, text in `agents/skill-text.ts`), in `~/.claude/skills`, `~/.agents/skills` (Codex) or `~/.gemini/config/skills` (Antigravity).
+Only the user can invoke them: every skill folder carries `disable-model-invocation: true` (Claude Code, Antigravity) and `agents/openai.yaml` with `allow_implicit_invocation: false` (Codex, which ignores the frontmatter key), because an agent Jarvis is not connected to may read a shared folder, for example when `~/.claude/skills` is a symlink to `~/.agents/skills`.
+A `.jarvis-skill.json` marker records the state folder and the connected agents a folder serves; Jarvis never writes or removes a folder without its own marker, removes a shared folder only when the last agent reading it disconnects, and rewrites the skills on each context refresh so upgrades reach them.
+Skills call this install's CLI through the `current` path with `JARVIS_STATE_DIR` pinned, so they need nothing on `PATH`.
+
+`jarvis save` and `jarvis audit` are clients of the running service (`cli/`), because the service holds the data folder's writer lock.
+The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
+`POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
+Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
+The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID`.
+`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer documents that mention the note, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
+It counts; the audit skill judges contradictions and proposes corrections through `jarvis save` for the user to approve.
+
 ## Capability registry
 
 `capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, voice, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.

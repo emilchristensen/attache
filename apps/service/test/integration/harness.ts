@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { App } from "../../src/app.ts";
@@ -9,6 +9,8 @@ process.env.JARVIS_CREDENTIAL_STORE = "file";
 process.env.JARVIS_NO_NOTIFY = "1";
 // Coding-agent hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
 process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home-"));
+// The command skills tell agents to run: the CLI from source, since tests have no bundle.
+process.env.JARVIS_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts");
 
 export interface TestService {
   app: App;
@@ -31,6 +33,8 @@ export async function startTestService(opts: { stateDir?: string; dataDir?: stri
   const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}` });
   const server = await startServer(app, { port: 0 });
   app.start();
+  // What `jarvis serve` writes, so the CLI finds this service.
+  writeFileSync(app.paths.runtimeFile, JSON.stringify({ pid: process.pid, port: server.port, url: server.url, version: "test", startedAt: app.startedAt, instance: app.instance }));
   const { code } = createPairingCode(app.db);
   const token = redeemPairingCode(app.db, code, { name: "test", kind: "cli" })!.token;
   const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
