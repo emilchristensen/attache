@@ -22,6 +22,18 @@ export interface SourceRef {
   label?: string;
 }
 
+export interface IndexedDocument {
+  id: string;
+  root: string;
+  relPath: string;
+  area: string;
+  docType: string | null;
+  title: string;
+  meta: Record<string, unknown>;
+  indexedAt: string;
+  mtimeMs: number;
+}
+
 export interface MemoryChange {
   id: string;
   docRelPath: string;
@@ -43,7 +55,7 @@ Jarvis keeps your knowledge here as plain Markdown. You can read and edit these 
 
 - \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
-- \`evidence/\` is archived evidence: captures, conversation archives and connector observations.
+- \`evidence/\` is archived evidence: captures, conversation archives, coding-agent sessions and connector observations.
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
 
@@ -86,7 +98,7 @@ export class MemoryStore {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
-    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
+    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
       const abs = join(root, d);
       if (!existsSync(abs)) {
         mkdirSync(abs, { recursive: true });
@@ -365,6 +377,27 @@ export class MemoryStore {
     return { relPath: rel };
   }
 
+  /**
+   * The conversation of one coding-agent session. Rewritten as the session
+   * grows (compaction, then the end), so one session is always one file.
+   */
+  archiveAgentSession(rel: string, meta: { agent: string; agentLabel: string; sessionId: string; title: string; cwd: string | null; startedAt: string | null }, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
+    const fm = { id: meta.sessionId, type: "agent-session", title: meta.title, agent: meta.agent, cwd: meta.cwd, started_at: meta.startedAt, archived_at: nowIso(), provenance: "agent-session-archive" };
+    const body = turns.map((t) => `### ${t.role === "user" ? userName : meta.agentLabel}${t.at ? ` · ${t.at}` : ""}\n\n${t.text.trim()}`).join("\n\n");
+    const where = [meta.agentLabel, meta.cwd ? `in \`${meta.cwd}\`` : null, meta.startedAt ? `started ${meta.startedAt}` : null].filter(Boolean).join(" · ");
+    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${meta.title}\n\n${where}\n\n${body}\n`, "service");
+    return { relPath: rel };
+  }
+
+  /** Append one section to the session log for `date` (YYYY-MM-DD), creating the day's file when needed. */
+  appendSessionLog(date: string, section: string): { relPath: string } {
+    const rel = `evidence/sessions/${date}.md`;
+    const head = `---\n${stringifyYaml({ type: "session-log", title: `Agent sessions on ${date}`, date, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# Agent sessions on ${date}\n`;
+    const existing = this.exists(rel) ? this.read(rel).trimEnd() : head.trimEnd();
+    this.writeFile(rel, `${existing}\n\n${section.trim()}\n`, "service");
+    return { relPath: rel };
+  }
+
   /** Daily evidence snapshot of what a connector observed, so recall can cite it. */
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
     const rel = `evidence/connectors/${slugify(kind)}/${today()}.md`;
@@ -392,7 +425,7 @@ export class MemoryStore {
     return { relPath: rel };
   }
 
-  listDocuments(opts: { area?: string; docType?: string; root?: string; limit?: number } = {}) {
+  listDocuments(opts: { area?: string; docType?: string; root?: string; limit?: number } = {}): IndexedDocument[] {
     const where: string[] = [];
     const args: string[] = [];
     if (opts.area) {
@@ -412,7 +445,10 @@ export class MemoryStore {
         `select id, root, rel_path as relPath, area, doc_type as docType, title, meta, indexed_at as indexedAt, mtime_ms as mtimeMs from documents ${where.length ? "where " + where.join(" and ") : ""} order by mtime_ms desc limit ${Math.min(opts.limit ?? 200, 2000)}`,
       )
       .all(...args)
-      .map((r) => ({ ...(r as Record<string, unknown>), meta: json((r as { meta: string }).meta, {}) }));
+      .map((r) => {
+        const row = r as Omit<IndexedDocument, "meta"> & { meta: string };
+        return { ...row, meta: json<Record<string, unknown>>(row.meta, {}) };
+      });
   }
 
   describe(rel: string) {

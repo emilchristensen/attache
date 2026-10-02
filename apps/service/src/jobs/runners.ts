@@ -3,7 +3,7 @@ import type { JobContext } from "./queue.ts";
 import { JobBlockedError } from "./queue.ts";
 import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
 import { getItem } from "../attention/engine.ts";
-import { search, type SearchHit } from "../memory/search.ts";
+import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
 import { complete } from "../models/providers.ts";
 import { toCitation } from "../conversation/service.ts";
 import { newEffectKey } from "../actions/service.ts";
@@ -115,7 +115,7 @@ async function runResearch(app: App, ctx: JobContext) {
   const stepMs = Number(ctx.input.stepDelayMs ?? 0);
   for (let i = cp.done; i < cp.queries.length; i++) {
     if (ctx.signal.aborted) throw ctx.signal.reason;
-    const hits = search(app.db, cp.queries[i]!, { limit: 6, excludePrefixes: ["evidence/conversations/"] });
+    const hits = search(app.db, cp.queries[i]!, { limit: 6, excludePrefixes: RECALL_EXCLUDE });
     for (const h of hits) if (!cp.hits.some((x) => x.chunkId === h.chunkId)) cp.hits.push(h);
     cp.done = i + 1;
     ctx.saveCheckpoint(cp);
@@ -147,7 +147,7 @@ async function runDraft(app: App, ctx: JobContext) {
   if (!item.draftable) throw new JobBlockedError("This item has no action Jarvis can draft");
   const d = item.draftable;
   ctx.progress(0.1, "Gathering context");
-  const related = search(app.db, `${item.title} ${String(d.context.title ?? "")}`, { limit: 5, areas: ["memory", "import", "evidence"], excludePrefixes: ["evidence/conversations/"] });
+  const related = search(app.db, `${item.title} ${String(d.context.title ?? "")}`, { limit: 5, areas: ["memory", "import", "evidence"], excludePrefixes: RECALL_EXCLUDE });
   const extra: Record<string, unknown> = {};
   const rec = item.connectionId ? app.connections.record(item.connectionId) : null;
   const adapter = rec ? app.connections.adapter(rec.kind) : null;
@@ -291,4 +291,5 @@ export function registerRunners(app: App) {
   app.jobs.register("reindex", (ctx) => runReindex(app, ctx));
   app.jobs.register("import", (ctx) => runImport(app, ctx));
   app.jobs.register("demo-long", (ctx) => runDiagnostics(app, ctx));
+  app.jobs.register("session-distill", (ctx) => app.sessions.distill(ctx));
 }

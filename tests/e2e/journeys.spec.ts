@@ -74,6 +74,21 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await gh.getByRole("button", { name: "Connect" }).click();
   await expect(gh.getByText("connected", { exact: true })).toBeVisible();
   await expect(gh.getByText("Signed in as alex")).toBeVisible();
+  // Coding agents: connecting Claude Code adds Jarvis's hooks and keeps the user's own.
+  const claude = page.locator('[data-connection="claude-code"]');
+  await claude.getByRole("button", { name: "Set up" }).click();
+  await expect(claude.getByText(/Adds three hooks to ~\/.claude\/settings.json/)).toBeVisible();
+  await claude.getByRole("button", { name: "Connect" }).click();
+  await expect(claude.getByText("connected", { exact: true })).toBeVisible();
+  const claudeSettings = JSON.parse(readFileSync(join(stack.agentHome, ".claude/settings.json"), "utf8"));
+  expect(claudeSettings.hooks.PreToolUse[0].hooks[0].command).toBe("rtk hook claude");
+  for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(claudeSettings.hooks[e])).toContain("jarvis-agent-hook");
+  // An agent that is not installed says so instead of writing anything.
+  const codex = page.locator('[data-connection="codex"]');
+  await codex.getByRole("button", { name: "Set up" }).click();
+  await codex.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByText(/Codex was not found on this Mac/)).toBeVisible();
+  await expect(codex.getByText("not connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Model, voice and schedules" })).toBeVisible();

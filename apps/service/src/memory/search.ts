@@ -48,6 +48,9 @@ export function queryTerms(query: string): string[] {
 
 const quote = (t: string) => `"${t.replace(/"/g, '""')}"`;
 
+/** Raw archives that recall never quotes as evidence: Jarvis conversations and coding-agent transcripts. Their summaries are searchable. */
+export const RECALL_EXCLUDE = ["evidence/conversations/", "evidence/sessions/transcripts/"];
+
 const AREA_WEIGHT: Record<string, number> = { memory: 1.0, import: 0.9, deliverables: 0.7, evidence: 0.75 };
 const SECTION_WEIGHT: Record<string, number> = { state: 1.15, body: 1.0, history: 0.55 };
 const RRF_K = 60;

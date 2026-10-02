@@ -238,6 +238,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
 }
 
 const SOURCE_KINDS = ["github", "jira", "confluence", "slack", "gmail", "gcal"];
+const AGENT_KINDS = ["claude-code", "codex", "antigravity"];
 
 function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const caps = useResource<Caps>("/capabilities", ["connections.changed"]);
@@ -250,15 +251,19 @@ function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () =>
       {oauth && <div className={`state ${oauth === "ok" ? "partial" : "error"} small`}>{loc.search.get("message")}</div>}
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
-      {caps.data &&
-        SOURCE_KINDS.map((k) => {
-          const st = caps.data!.connections.find((c) => c.kind === k)!;
-          const def = caps.data!.definitions.find((d) => d.kind === k)!;
-          return st && def ? <ConnectionCard key={k} status={st} definition={def} onChanged={caps.reload} compact /> : null;
-        })}
+      {caps.data && SOURCE_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
+      <h2>Coding agents</h2>
+      <p className="muted">Connect the coding agents you use. Jarvis saves each session in your data folder with a short summary of what was decided, and gives every new session your memory. Only Jarvis's own hooks are added to the agent's settings; everything else in them is left as it is.</p>
+      {caps.data && AGENT_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <Nav onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </section>
   );
+}
+
+function SetupCard({ kind, caps, onChanged }: { kind: string; caps: Caps; onChanged: () => void }) {
+  const st = caps.connections.find((c) => c.kind === kind);
+  const def = caps.definitions.find((d) => d.kind === kind);
+  return st && def ? <ConnectionCard status={st} definition={def} onChanged={onChanged} compact /> : null;
 }
 
 function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => void; onNext: () => void }) {

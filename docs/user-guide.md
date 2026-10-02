@@ -27,12 +27,13 @@ Setup has five steps and each works without the ones after it.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
    Conversation and search are always on.
-   Capture, background work, attention and briefings, drafts and approvals, and voice are optional.
+   Capture, background work, attention and briefings, drafts and approvals, agent sessions and voice are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
    Every connection starts read-only.
    Steps that need an account or admin action on the other service (a Slack app, a Google Cloud OAuth client, an Atlassian API token, a GitHub token) are explained on the card before you connect.
+   Under *Coding agents*, connect Claude Code, Codex or Antigravity if you use them (see Agent sessions below).
 4. **Model, voice and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
@@ -79,6 +80,28 @@ Drafts expire after 48 business hours.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
 Cancelling tells you whether the work stopped or had already finished.
 
+## Agent sessions
+
+Jarvis can remember your work with coding agents: Claude Code, Codex and Antigravity.
+Connect each agent you use under Connections → *Coding agents*; the card says exactly which file changes before you connect.
+
+- **What changes in the agent:** Jarvis adds its own hooks to the agent's settings (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json`).
+  Your other settings and hooks are kept, the file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
+- **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
+  Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
+- **Session log:** each session gets an entry in `evidence/sessions/<date>.md` with what was decided and learned, written by your model.
+  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
+  Session logs are searchable; raw transcripts are kept but never quoted as evidence.
+- **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/jarvis-memory.md`.
+- **Codex asks first:** Codex runs new hooks only after you approve them.
+  The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
+  Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Jarvis's again; reconnecting updates Jarvis's hooks in place and leaves yours where they are.
+- **If Jarvis is not running,** sessions are queued on your Mac and saved the next time it starts.
+
+Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks.
+Uninstalling Jarvis removes them too.
+
 ## Voice
 
 Voice is optional and push-to-talk only; the microphone is never on otherwise.
@@ -120,7 +143,7 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
   Credentials stay in your Keychain and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
-- **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app and service and keeps your data.
+- **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app and service, removes Jarvis's hooks from your coding agents, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
 
 ## Where things live
@@ -131,7 +154,8 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 | Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
 
 ## Troubleshooting

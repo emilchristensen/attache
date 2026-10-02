@@ -19,6 +19,8 @@ export interface Stack {
   stateDir: string;
   dataDir: string;
   vaultDir: string;
+  /** Home folder whose coding-agent settings the service edits; never the real one. */
+  agentHome: string;
   pairUrl(): string;
   stopService(): Promise<void>;
   startService(): Promise<void>;
@@ -60,9 +62,12 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const dataDir = join(base, "Jarvis");
   const vaultDir = join(base, "vault");
   makeVault(vaultDir);
+  const agentHome = join(base, "home");
+  mkdirSync(join(agentHome, ".claude"), { recursive: true });
+  writeFileSync(join(agentHome, ".claude", "settings.json"), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }] } }, null, 2));
   const fixture = spawn(NODE, [join(ROOT, "apps/service/test/fixtures/run-fixture-server.ts"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
-  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e" };
+  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome };
   let service: ChildProcess | null = null;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
@@ -83,6 +88,7 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
     stateDir,
     dataDir,
     vaultDir,
+    agentHome,
     pairUrl() {
       const out = JSON.parse(execFileSync(NODE, [BUNDLE, "pair", "--state-dir", stateDir, "--json"], { env }).toString());
       return out.url;

@@ -84,6 +84,13 @@ export class JobQueue {
     return { job: this.get(id)!, existing: false };
   }
 
+  /** Move when a queued job may start: `null` runs it as soon as a slot is free. */
+  reschedule(id: string, runAfter: string | null): boolean {
+    const r = this.db.prepare("update jobs set run_after = ?, updated_at = ? where id = ? and status = 'queued'").run(runAfter, nowIso(), id);
+    if (Number(r.changes)) this.kick();
+    return Number(r.changes) > 0;
+  }
+
   get(id: string): JobView | null {
     const r = this.db.prepare("select * from jobs where id = ?").get(id) as Record<string, unknown> | undefined;
     return r ? toView(r) : null;

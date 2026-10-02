@@ -16,7 +16,7 @@ import { scanDeadlines } from "./vault.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
 
-export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech"];
+export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech", "claude-code", "codex", "antigravity"];
 
 export interface ManagerDeps {
   db: Db;

@@ -39,6 +39,7 @@ export class Scheduler {
   private readonly db: Db;
   private readonly log: Logger;
   private timer: NodeJS.Timeout | null = null;
+  private firstTick: NodeJS.Timeout | null = null;
   private lastTick = Date.now();
   readonly tickMs: number;
   /** Enqueue a job for a due schedule; returns the job id (or null if nothing was enqueued). */
@@ -95,12 +96,16 @@ export class Scheduler {
     this.lastTick = Date.now();
     this.timer = setInterval(() => this.tick(), this.tickMs);
     this.timer.unref();
-    setTimeout(() => this.tick(), 1000).unref();
+    this.firstTick = setTimeout(() => this.tick(), 1000);
+    this.firstTick.unref();
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
+    // The first tick is a one-off timer; left running it fires on a closed database.
+    if (this.firstTick) clearTimeout(this.firstTick);
     this.timer = null;
+    this.firstTick = null;
   }
 
   /** Run due schedules. Exposed for tests; `now` can be injected. */

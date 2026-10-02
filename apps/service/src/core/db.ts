@@ -118,6 +118,13 @@ const MIGRATIONS: string[] = [
   create index attention_state on attention_items(state, priority);
   create table seen_clients (client_id text primary key, last_seen_at text not null);
   `,
+  `
+  create table agent_sessions (
+    agent text not null, session_id text not null, rel_path text not null, title text, cwd text,
+    started_at text, updated_at text not null, turns integer not null, distilled_turns integer not null default 0,
+    primary key (agent, session_id)
+  );
+  `,
 ];
 
 export function openDb(file: string): Db {

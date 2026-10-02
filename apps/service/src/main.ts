@@ -6,6 +6,10 @@ import { createPairingCode } from "./http/security.ts";
 import { resolvePaths } from "./core/paths.ts";
 import { openDb } from "./core/db.ts";
 import { createBackup, restoreBackup } from "./backup.ts";
+import { ConfigStore } from "./core/config.ts";
+import { RECALL_EXCLUDE, search } from "./memory/search.ts";
+import { AgentHooks } from "./agents/install.ts";
+import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 
 export const DEFAULT_PORT = 7427;
 
@@ -95,6 +99,54 @@ async function status(argv: string[]) {
   }
 }
 
+/** Recall from a shell, for coding agents: top hits with file, lines and a snippet. Reads the index; never writes. */
+async function searchCmd(argv: string[]) {
+  const query = argv.slice(1).filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--state-dir" && all[i - 1] !== "--limit").join(" ").trim();
+  if (!query) throw new Error('Usage: jarvis search "your query" [--limit 8] [--json]');
+  const paths = resolvePaths(arg("state-dir", argv));
+  const db = openDb(paths.dbFile);
+  try {
+    const dataFolder = new ConfigStore(db).get().dataFolder;
+    const roots = new Map((db.prepare("select id, settings from connections where kind = 'vault'").all() as Array<{ id: string; settings: string }>).map((r) => [`import:${r.id}`, String((JSON.parse(r.settings) as { path?: string }).path ?? "")]));
+    const hits = search(db, query, { limit: Math.min(Number(arg("limit", argv) ?? 8), 30), excludePrefixes: RECALL_EXCLUDE }).map((h) => ({
+      file: h.root === "data" && dataFolder ? `${dataFolder}/${h.relPath}` : `${roots.get(h.root) ?? h.root}/${h.relPath}`,
+      lines: [h.startLine, h.endLine],
+      title: h.title,
+      snippet: h.snippet,
+    }));
+    if (argv.includes("--json")) return out(JSON.stringify(hits));
+    if (!hits.length) return out(`No matches for "${query}".`);
+    out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}\n    ${h.snippet}`).join("\n"));
+  } finally {
+    db.close();
+  }
+}
+
+/** Inspect or remove this install's coding-agent hooks (the uninstaller calls `agent-hooks uninstall`). */
+async function agentHooksCmd(argv: string[]) {
+  const paths = resolvePaths(arg("state-dir", argv));
+  const hooks = new AgentHooks(paths.stateDir, paths.backupsDir);
+  const sub = argv[1] ?? "status";
+  const only = arg("agent", argv);
+  const picked = only ? integrationFor(only) : null;
+  if (only && !picked) throw new Error(`Unknown agent ${only}. Agents: ${AGENT_INTEGRATIONS.map((a) => a.kind).join(", ")}`);
+  const agents = picked ? [picked] : AGENT_INTEGRATIONS;
+  if (sub === "status") {
+    return out(JSON.stringify(agents.map((a) => {
+      const s = hooks.status(a);
+      return { agent: a.kind, path: s.path, hooks: s.installed.length, current: s.current, rules: s.rules };
+    })));
+  }
+  if (sub === "uninstall") {
+    const results = hooks.uninstallAll(agents);
+    out(JSON.stringify(results));
+    const failed = results.filter((r) => r.error);
+    if (failed.length) throw new Error(`Could not remove the Jarvis hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the entries that mention jarvis-agent-hook by hand.`);
+    return;
+  }
+  throw new Error("Usage: jarvis agent-hooks status|uninstall [--agent claude-code|codex|antigravity]");
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const cmd = argv[0] ?? "serve";
@@ -107,6 +159,10 @@ async function main() {
       return status(argv);
     case "version":
       return out(VERSION);
+    case "search":
+      return searchCmd(argv);
+    case "agent-hooks":
+      return agentHooksCmd(argv);
     case "stop":
     case "start": {
       // Controls the LaunchAgent the installer created (macOS).
@@ -136,7 +192,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, backup, restore, version`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, agent-hooks, backup, restore, version`);
   }
 }
 
