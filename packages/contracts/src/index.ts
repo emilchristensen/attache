@@ -7,10 +7,10 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // ---------------------------------------------------------------------------
 // Features and connections
 
-export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "voice"]);
+export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "voice", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech", "claude-code", "codex", "antigravity"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -227,7 +227,7 @@ export const AttentionDecision = z.object({
 // ---------------------------------------------------------------------------
 // Jobs
 
-export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long"]);
+export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill"]);
 export type JobKind = z.infer<typeof JobKind>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";

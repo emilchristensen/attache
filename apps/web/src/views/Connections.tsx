@@ -68,6 +68,8 @@ export function ConnectionsView() {
           <ImportFolder onDone={caps.reload} />
           <h2>Work sources</h2>
           {d.connections.filter((c) => ["github", "jira", "confluence", "slack", "gmail", "gcal"].includes(c.kind)).map(card)}
+          <h2>Coding agents</h2>
+          {d.connections.filter((c) => ["claude-code", "codex", "antigravity"].includes(c.kind)).map(card)}
           <h2>Model and speech</h2>
           {d.connections.filter((c) => c.kind === "model" || c.kind === "speech").map(card)}
         </div>

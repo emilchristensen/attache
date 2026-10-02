@@ -55,6 +55,8 @@ Data folder (user-chosen, Markdown):
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
     captures/ conversations/ connectors/
+    sessions/                coding-agent session logs, one file per day (searchable)
+      transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
   deliverables/             generated work products (briefings, research, drafts)
 ```
 
@@ -131,9 +133,28 @@ The attention engine follows these rules:
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The conversation model has no tools, so injected text cannot trigger actions.
 
+## Coding-agent sessions
+
+Claude Code, Codex and Antigravity are connections (`connectors/agent.ts`, `agents/integrations.ts`).
+Connecting one adds hooks to that agent's settings file, through an editor that only adds, replaces or removes entries whose command names `jarvis-agent-hook` and this install's `--state-dir`, so other tools' hooks and other Jarvis instances are never touched (`agents/hooks-config.ts`, `agents/install.ts`).
+The file is backed up before every write, and a file Jarvis cannot parse is refused rather than overwritten.
+Hook commands go through the installer's `current` symlink, so upgrades do not break them.
+
+The hook (`agents/jarvis-agent-hook.ts`, bundled as `jarvis-agent-hook.mjs`) does no network calls and never waits for the service: SessionEnd budgets are 1.5 s (Claude Code) and 3 s (Codex).
+On session end, compaction, or (Antigravity) a fully idle turn, it clones the transcript into `state/agents/spool/` and writes a small record last.
+The service ingests the spool on change, every minute and at start, so a session ends up in the data folder even if Jarvis was stopped when it ended.
+Ingest parses each agent's transcript format down to user and assistant text, dropping tool calls, tool output, thinking, injected reminders and developer-role context (where Jarvis's own memory block lands in Codex), archives it, and queues a `session-distill` job.
+That job asks the model for durable decisions and lessons, appends one entry per session (or per continuation) to the day's session log, and records how many turns are summarised so a compaction followed by the end adds only new turns.
+Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
+
+At session start the hook prints `state/agents/session-context.md`, which the service rewrites when memory changes: identity, an index of memory titles, the last two session logs, and the `jarvis search` command for deeper recall from the agent's shell.
+Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
+Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Jarvis's own model calls run with `--setting-sources ""`, so neither recurses.
+Turning the feature off disconnects every agent; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first.
+
 ## Capability registry
 
-`capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, voice) and connections, with their dependencies, required scopes, schedules and job kinds.
+`capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, voice, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
 The setup checklist, dependency validation, API access checks (`requireFeature`) and scheduler all read it.
 Disabling a feature disables its schedules, rejects its endpoints with `feature_disabled`, and cancels its queued jobs.
 Disconnecting a connection deletes its credentials, stops new requests, cancels queued jobs that depend on it, revokes pending approvals targeting it, and offers to keep or delete its retained observations.

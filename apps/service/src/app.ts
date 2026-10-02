@@ -19,6 +19,9 @@ import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { wakeSnoozed } from "./attention/engine.ts";
 import { SpeechService } from "./speech/service.ts";
+import { AgentSessions } from "./agents/sessions.ts";
+import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
+import { agentAdapter } from "./connectors/agent.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -45,6 +48,8 @@ export class App {
   readonly actions: ActionService;
   readonly conversations: ConversationService;
   readonly speech: SpeechService;
+  readonly sessions: AgentSessions;
+  private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
   /** Open event streams per client, closed when the client is revoked or logs out. */
@@ -66,12 +71,15 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.memory = new MemoryStore(this.db, null, this.instance);
     this.bus.setMaxListeners(500);
+    this.sessions = new AgentSessions(this);
+    // Agent connections install hooks for this instance's state folder, so they are built per App.
+    this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
     this.connections = new ConnectionManager({
       db: this.db,
       secrets: this.secrets,
       log: this.log,
       memory: this.memory,
-      adapters: ADAPTERS,
+      adapters: this.adapters,
       selfEmail: () => this.config.get().identity?.email ?? null,
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
@@ -93,6 +101,14 @@ export class App {
       this.bus.emit("event", { type: "connections.changed", id });
     };
     this.connections.onDisconnect = (id, kind) => {
+      const agent = integrationFor(kind);
+      if (agent) {
+        try {
+          this.sessions.hooks.uninstall(agent);
+        } catch (e) {
+          this.log.error("could not remove agent hooks", { agent: kind, error: (e as Error).message });
+        }
+      }
       const cancelledJobs = this.jobs.cancelWhere((j) => j.connectionId === id || (kind === "model" && (j.kind === "research" || j.kind === "draft")), `Connection ${id} was disconnected`);
       const revokedActions = this.actions.revokeWhere((a) => a.connectionId === id, "connection disconnected");
       return { cancelledJobs, revokedActions };
@@ -178,7 +194,10 @@ export class App {
     for (const f of disabled) {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
+      // No hooks may keep spooling or injecting memory for a feature that is off.
+      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
     }
+    this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
     this.bus.emit("event", { type: "config.changed" });
     return { cancelledJobs: cancelled, disabled: disabled.map((f) => f.id), enabled: FEATURES.filter((f) => !before[f.id] && after[f.id]).map((f) => f.id) };
@@ -227,6 +246,7 @@ export class App {
     this.scheduler.reconcile(cfg);
     this.jobs.start();
     this.scheduler.start();
+    this.sessions.start();
     const housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
@@ -237,6 +257,7 @@ export class App {
   }
 
   async stop() {
+    this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();
     this.memory.releaseLock();
@@ -244,6 +265,6 @@ export class App {
   }
 
   connectionKinds(): ConnectionKind[] {
-    return [...ADAPTERS.keys()];
+    return [...this.adapters.keys()];
   }
 }

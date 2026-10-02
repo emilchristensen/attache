@@ -33,6 +33,9 @@ const cleanEnv = { HOME, PATH: "/usr/bin:/bin:/usr/sbin:/sbin", JARVIS_PORT: Str
 const sh = (file, args = [], env = cleanEnv) => execFileSync("/bin/sh", [file, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const jarvisCli = (args, extraEnv = {}) => execFileSync(join(HOME, ".local/bin/jarvis"), args, { env: { ...cleanEnv, ...extraEnv }, encoding: "utf8" });
 const label = `dev.jarvis.${INSTANCE}`;
+// The user's own Claude Code settings, with a hook of their own, from before Jarvis existed.
+const CLAUDE_SETTINGS = join(HOME, ".claude/settings.json");
+const CLAUDE_BEFORE = JSON.stringify({ model: "opus", hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }] } }, null, 2);
 const agentLoaded = () => {
   try {
     execFileSync("/bin/launchctl", ["print", `gui/${process.getuid()}/${label}`], { stdio: "ignore" });
@@ -43,7 +46,16 @@ const agentLoaded = () => {
 };
 
 async function http(method, path, body, token) {
-  const r = await fetch(`http://127.0.0.1:${PORT}/api/v1${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", "x-jarvis-client": "1" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const send = () => fetch(`http://127.0.0.1:${PORT}/api/v1${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", "x-jarvis-client": "1" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  let r;
+  try {
+    r = await send();
+  } catch (e) {
+    // This test restarts the service on purpose; fetch may reuse a pooled keep-alive socket to the old
+    // process, and non-idempotent requests are not retried for us. A fresh connection settles it.
+    if (e?.cause?.code !== "ECONNRESET" && e?.cause?.code !== "UND_ERR_SOCKET") throw e;
+    r = await send();
+  }
   return { status: r.status, body: await r.json().catch(() => null) };
 }
 async function pairToken() {
@@ -77,10 +89,19 @@ function brainFingerprint() {
   };
 }
 
+/** Run the command Jarvis registered for a Claude Code hook event, as Claude Code does: a login shell, JSON on stdin. */
+function runClaudeHook(event, input) {
+  const s = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
+  const cmd = s.hooks[event].flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook")).command;
+  return execFileSync("/bin/sh", ["-lc", cmd], { input: JSON.stringify(input), env: cleanEnv, encoding: "utf8" });
+}
+
 async function main() {
   for (const v of [FROM, TO]) if (!existsSync(artifact(v))) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v], { stdio: "inherit" });
   const brainsBefore = brainFingerprint();
   console.log(`Clean profile HOME=${HOME} instance=${INSTANCE} port=${PORT}`);
+  mkdirSync(join(HOME, ".claude"), { recursive: true });
+  writeFileSync(CLAUDE_SETTINGS, CLAUDE_BEFORE);
 
   // --- A02: clean-profile install from the artifact, no developer tools on PATH ---
   const out1 = sh(artifact(FROM));
@@ -110,6 +131,10 @@ async function main() {
   await http("PATCH", "/config", { schedules: { syncEveryMinutes: 55 } }, token);
   await http("POST", "/memory/capture", { text: "The Helios budget review is on Thursday.", title: "Helios", source: { kind: "user", ref: "install-test" }, decision: { title: "Helios budget", decision: "Cap Helios at 40k" } }, token);
   await http("POST", "/setup/complete", {}, token);
+  check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
+  const hookCmds = JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")).hooks);
+  check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && hookCmds.includes(`${PREFIX}/current/runtime/node`) && hookCmds.includes(`${PREFIX}/current/service/jarvis-agent-hook.mjs`) && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
   const cfgBefore = (await http("GET", "/config", null, token)).body.config;
 
   // --- A02: reinstall is idempotent ---
@@ -132,6 +157,20 @@ async function main() {
   check("A02", "upgrade preserves configuration", JSON.stringify(cfgAfterUpgrade) === JSON.stringify(cfgBefore));
   check("A02", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
   check("A14", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
+
+  // --- A02: the hooks keep working across the upgrade and save a real session ---
+  const hookTest = await http("POST", "/connections/claude-code/test", {}, token);
+  check("A02", "Claude Code hooks are still current after the upgrade", hookTest.body?.test?.ok === true, hookTest.body?.test?.message);
+  const transcript = join(HOME, "session.jsonl");
+  writeFileSync(transcript, [{ type: "user", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "user", content: "Where do sessions go?" } }, { type: "assistant", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: "We decided they go to the data folder." }] } }].map((r) => JSON.stringify(r)).join("\n"));
+  runClaudeHook("SessionEnd", { session_id: "inst-1", transcript_path: transcript, cwd: HOME, reason: "exit" });
+  const saved = join(DATA, "evidence/sessions/transcripts/claude-code");
+  let sessionSaved = false;
+  for (let i = 0; i < 80 && !sessionSaved; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    sessionSaved = existsSync(saved) && readdirSync(saved).some((f) => f.includes("inst-1"));
+  }
+  check("A02", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
 
   // --- service control from the command line ---
   jarvisCli(["stop"]);
@@ -186,6 +225,7 @@ async function main() {
   const healthGone = await http("GET", "/health").then(() => false, () => true);
   check("A14", "uninstall stops and removes the service", healthGone && !agentLoaded() && !existsSync(join(PREFIX, "app")));
   check("A14", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
+  check("A14", "uninstall removes exactly the hooks Jarvis added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
   sh(artifact(TO));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;

@@ -66,6 +66,7 @@ async function main() {
   chmodSync(join(STAGE, "runtime/node"), 0o755);
   mkdirSync(join(STAGE, "service"), { recursive: true });
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-service.mjs"), join(STAGE, "service/jarvis-service.mjs"));
+  copyFileSync(join(ROOT, "apps/service/dist/jarvis-agent-hook.mjs"), join(STAGE, "service/jarvis-agent-hook.mjs"));
   cpSync(join(ROOT, "apps/web/dist"), join(STAGE, "web"), { recursive: true, filter: (s) => !s.endsWith(".map") });
   cpSync(join(ROOT, "apps/obsidian/dist/jarvis-companion"), join(STAGE, "obsidian-plugin"), { recursive: true });
   mkdirSync(join(STAGE, "bin"), { recursive: true });

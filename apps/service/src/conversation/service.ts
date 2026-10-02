@@ -4,7 +4,7 @@ import type { Citation, MessageView } from "@jarvis/contracts";
 import { type Db, json, nowIso } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { redact } from "../core/log.ts";
-import { search, type SearchHit } from "../memory/search.ts";
+import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
 import type { MemoryStore } from "../memory/store.ts";
 import { ModelError, type ModelProvider, type ChatMessage } from "../models/providers.ts";
 
@@ -117,7 +117,7 @@ export class ConversationService {
   retrieve(text: string, context?: SendInput["context"]): SearchHit[] {
     if (!this.recallEnabled()) return [];
     // Conversation archives are excluded: earlier answers are not evidence for new ones.
-    let hits = search(this.db, text, { limit: MAX_EVIDENCE, excludePrefixes: ["evidence/conversations/"] });
+    let hits = search(this.db, text, { limit: MAX_EVIDENCE, excludePrefixes: RECALL_EXCLUDE });
     if (context?.relPath) {
       const root = context.root ?? "data";
       const own = this.db

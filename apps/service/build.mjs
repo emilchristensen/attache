@@ -21,6 +21,8 @@ if (process.argv.includes("--watch")) {
   await ctx.watch();
 } else {
   await build(options);
+  // The command coding agents run from their hooks: small, so it starts fast inside an agent's hook budget.
+  await build({ ...options, entryPoints: [new URL("./src/agents/jarvis-agent-hook.ts", import.meta.url).pathname], outfile: new URL("./dist/jarvis-agent-hook.mjs", import.meta.url).pathname, sourcemap: false, banner: {} });
   // Library entry for in-process probes (scripts/live-readonly.mjs); not shipped in releases.
   await build({ ...options, entryPoints: [new URL("./src/live-probe.ts", import.meta.url).pathname], outfile: new URL("./dist/live-probe.mjs", import.meta.url).pathname, sourcemap: false });
 }

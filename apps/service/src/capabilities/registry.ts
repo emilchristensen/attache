@@ -1,4 +1,5 @@
 import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@jarvis/contracts";
+import { AGENT_KINDS } from "../agents/integrations.ts";
 
 /**
  * The single server-side definition of what Jarvis can do. The setup
@@ -102,6 +103,20 @@ export const FEATURES: FeatureDefinition[] = [
     schedules: [],
     jobKinds: [],
   },
+  {
+    id: "sessions",
+    label: "Agent sessions",
+    description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, and give each new session your Jarvis memory.",
+    core: false,
+    defaultEnabled: true,
+    requiresFeatures: ["capture", "jobs"],
+    connections: [
+      { kinds: AGENT_KINDS, label: "A coding agent (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
+      { kinds: ["model"], label: "A model to summarise sessions", required: false, missingEffect: "Sessions are saved without a summary." },
+    ],
+    schedules: [],
+    jobKinds: ["session-distill"],
+  },
 ];
 
 export const featureDef = (id: FeatureId) => FEATURES.find((f) => f.id === id)!;
@@ -189,7 +204,7 @@ export function computeStatus(
     if (!eff[f.id]) return { ...base, readiness: "disabled" as ReadinessState, reason: null };
     const missingFeatures = f.requiresFeatures.filter((d) => !eff[d]);
     if (missingFeatures.length) return { ...base, readiness: "needs_setup" as ReadinessState, reason: `Turn on ${missingFeatures.map((m) => featureDef(m).label).join(", ")}.` };
-    if ((f.id === "recall" || f.id === "capture" || f.id === "conversation") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
+    if ((f.id === "recall" || f.id === "capture" || f.id === "conversation" || f.id === "sessions") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
     let readiness: ReadinessState = "ready";
     let reason: string | null = null;
     for (const c of f.connections) {

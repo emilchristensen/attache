@@ -46,6 +46,12 @@ fi
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
 rm -f "$PLIST"
 
+# Coding agents would otherwise keep calling a hook that no longer exists. Only this install's hooks are removed.
+if [ -x "$PREFIX/current/runtime/node" ] && [ -f "$PREFIX/current/service/jarvis-service.mjs" ]; then
+  # Failures are reported per agent on stderr; the uninstall carries on either way.
+  JARVIS_STATE_DIR="$STATE" "$PREFIX/current/runtime/node" "$PREFIX/current/service/jarvis-service.mjs" agent-hooks uninstall --state-dir "$STATE" >/dev/null || true
+fi
+
 if [ "$DELETE" = "1" ]; then
   if [ -f "$STATE/keychain-index.json" ] && [ -x "$PREFIX/current/runtime/node" ]; then
     "$PREFIX/current/runtime/node" -e 'for (const k of JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))) console.log(k)' "$STATE/keychain-index.json" | while read -r key; do

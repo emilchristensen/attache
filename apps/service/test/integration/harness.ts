@@ -7,6 +7,8 @@ import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts
 
 process.env.JARVIS_CREDENTIAL_STORE = "file";
 process.env.JARVIS_NO_NOTIFY = "1";
+// Coding-agent hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
+process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home-"));
 
 export interface TestService {
   app: App;
