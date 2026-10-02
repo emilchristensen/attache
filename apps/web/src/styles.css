@@ -222,22 +222,58 @@ pre,
 
 .home {
   display: grid;
-  grid-template-columns: minmax(320px, 440px) 1fr;
+  /* The conversation keeps a fixed, user-resizable width; the briefing column takes the rest. */
+  grid-template-columns: minmax(360px, 1fr) 1px minmax(320px, var(--chat-w, 440px));
   height: 100%;
   min-height: 0;
 }
 .home > section {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
 .home .inbox-col {
-  border-right: 1px solid var(--border);
   overflow-y: auto;
-  padding: 20px 18px 40px;
+  padding: 20px 24px 40px;
 }
-.home .chat-col {
-  min-width: 0;
+/* Long lines get hard to read once the column is wide. */
+.home .inbox-col > * {
+  width: 100%;
+  max-width: 920px;
+}
+
+.splitter {
+  position: relative;
+  z-index: 2;
+  background: var(--border);
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+/* A wider invisible hit area than the 1px line. */
+.splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0 -5px;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0 -1px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.splitter[data-dragging]::after {
+  opacity: 1;
+}
+html.col-resizing,
+html.col-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 .banner {
@@ -617,10 +653,90 @@ label.field .help {
   padding: 14px 16px;
   margin-bottom: 16px;
 }
-.briefing p {
+.briefing-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.briefing-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+button.count-chip {
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  gap: 6px;
+}
+.count-chip b {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.briefing-counts .pill {
+  align-self: center;
+}
+.briefing-lines {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-width: 72ch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.briefing-lines li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text);
+  text-wrap: pretty;
+}
+.briefing-lines li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.briefing-lines li:only-child {
+  padding-left: 0;
+}
+.briefing-lines li:only-child::before {
+  display: none;
+}
+.briefing-lines li.caveat {
+  color: var(--muted);
+  font-size: 13px;
+}
+.briefing-lines li.caveat::before {
+  background: var(--warn);
+}
+.briefing-meetings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.briefing-empty {
   color: var(--text-2);
   font-size: 14px;
   margin-top: 6px;
+}
+.attention-group {
+  scroll-margin-top: 12px;
 }
 .section-title {
   font-size: 11.5px;
@@ -708,7 +824,8 @@ label.field .help {
 }
 .chat-head select {
   width: auto;
-  max-width: 280px;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 .messages {
   flex: 1;
@@ -1106,9 +1223,11 @@ label.field .help {
     grid-template-rows: auto 1fr;
   }
   .home .inbox-col {
-    border-right: none;
     border-bottom: 1px solid var(--border);
     max-height: 42vh;
+  }
+  .splitter {
+    display: none;
   }
   .split {
     grid-template-columns: 1fr;

@@ -47,8 +47,11 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 ## Everyday use
 
 **Home** shows the attention inbox beside a persistent conversation.
+Drag the line between them to resize the conversation, or focus it and use the arrow keys; double-click it to reset.
+Jarvis remembers the width in that browser.
 
-- The briefing summarises what changed, what needs your judgment and what Jarvis has prepared.
+- The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
+  The counts under it jump to each group; drafts and memory changes open their own screens.
   **Away summary** covers the last three days.
 - **Sources** shows each source's last successful refresh and whether the last sync was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.

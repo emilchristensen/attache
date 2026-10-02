@@ -4,6 +4,7 @@ import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
+import { briefingLines } from "../briefing-text.ts";
 
 interface Briefing {
   id: string;
@@ -123,6 +124,31 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
   );
 }
 
+const KIND_LABEL: Record<string, string> = { daily: "Daily", away: "Away summary", manual: "On demand" };
+// Briefing sections that live on another screen instead of in the attention list below.
+const SECTION_ROUTE: Record<string, string> = { prepared: "/drafts", memory: "/memory" };
+
+function jumpTo(sectionId: string) {
+  const route = SECTION_ROUTE[sectionId];
+  if (route) return navigate(route);
+  document.getElementById(`attention-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function BriefingOverview({ briefing }: { briefing: Briefing }) {
+  const fresh = [briefing.counts.new && `${briefing.counts.new} new`, briefing.counts.changed && `${briefing.counts.changed} changed`].filter(Boolean).join(" · ");
+  return (
+    <div className="briefing-counts" role="group" aria-label="Briefing at a glance">
+      {briefing.sections.map((s) => (
+        <button key={s.id} className="count-chip" onClick={() => jumpTo(s.id)} title={SECTION_ROUTE[s.id] ? `Open ${s.title.toLowerCase()}` : `Jump to ${s.title.toLowerCase()}`}>
+          <b>{s.items.length}</b>
+          {s.title}
+        </button>
+      ))}
+      {fresh && <span className="pill accent">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</span>}
+    </div>
+  );
+}
+
 function BriefingCard({ canRun }: { canRun: boolean }) {
   const b = useResource<{ briefing: Briefing | null }>("/briefings/latest", ["briefing.created"]);
   const [job, setJob] = useState<{ id: string; progress: number; note: string | null; status: string } | null>(null);
@@ -145,17 +171,29 @@ function BriefingCard({ canRun }: { canRun: boolean }) {
   const running = job && !["succeeded", "failed", "cancelled", "blocked"].includes(job.status);
   return (
     <div className="briefing" aria-live="polite">
-      <div className="row">
+      <div className="briefing-head">
         <h2>Briefing</h2>
         {br && (
           <span className="small muted">
-            <Time iso={br.createdAt} />
-            {br.kind === "away" ? " · away summary" : ""}
+            {KIND_LABEL[br.kind] ?? br.kind} · <Time iso={br.createdAt} />
           </span>
         )}
       </div>
       {b.loading && !b.data && <Loading lines={2} />}
-      {br ? <p>{br.summary}</p> : !b.loading && <p>No briefing yet. Prepare one to see what changed across your sources.</p>}
+      {br ? (
+        <>
+          <ul className="briefing-lines">
+            {briefingLines(br.summary).map((l, n) => (
+              <li key={n} className={l.caveat ? "caveat" : undefined}>
+                {l.text}
+              </li>
+            ))}
+          </ul>
+          {br.sections.length > 0 && <BriefingOverview briefing={br} />}
+        </>
+      ) : (
+        !b.loading && <p className="briefing-empty">No briefing yet. Prepare one to see what changed across your sources.</p>
+      )}
       {running && (
         <div className="stack-sm" style={{ marginTop: 8 }}>
           <div className="progress" aria-label="Briefing progress">
@@ -166,14 +204,14 @@ function BriefingCard({ canRun }: { canRun: boolean }) {
       )}
       {job?.status === "failed" && <p className="small error-text">Briefing failed: {job.note}</p>}
       {br && expanded && (
-        <div className="stack-sm" style={{ marginTop: 10 }}>
+        <div className="briefing-meetings" aria-label="Meeting context">
           {br.sections.filter((s) => s.id === "meetings").flatMap((s) => s.items).map((i) => (
             <div key={i.id} className="small">
               <strong>{i.title}</strong>
               {(i.related ?? []).length > 0 ? (
                 <div className="row" style={{ marginTop: 4 }}>
                   {i.related!.map((r) => (
-                    <button key={r.relPath} className="source-chip" onClick={() => open({ root: "data", relPath: r.relPath, lines: r.lines, title: r.title })}>
+                    <button key={`${r.relPath}:${r.lines.join("-")}`} className="source-chip" onClick={() => open({ root: "data", relPath: r.relPath, lines: r.lines, title: r.title })}>
                       {r.title}
                     </button>
                   ))}
@@ -278,7 +316,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
         </Empty>
       )}
       {grouped.map((g) => (
-        <section key={g.id} aria-label={g.title}>
+        <section key={g.id} id={`attention-${g.id}`} className="attention-group" aria-label={g.title}>
           <div className="section-title">
             {g.title} <span className="muted">{g.items.length}</span>
           </div>

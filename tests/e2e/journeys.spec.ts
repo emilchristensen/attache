@@ -129,7 +129,9 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await item.getByRole("button", { name: "Dismiss" }).click();
   await expect(item).toBeHidden();
   await page.getByRole("button", { name: "Prepare briefing" }).click();
-  await expect(page.locator(".briefing p").first()).not.toContainText("No briefing yet", { timeout: 30_000 });
+  await expect(page.locator(".briefing-lines li").first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
+  await expect(page.getByRole("region", { name: "Review queue" })).toBeInViewport();
   await page.reload();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible();
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toHaveCount(0);
@@ -137,6 +139,39 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toBeVisible();
   await page.getByRole("button", { name: "Show open" }).click();
   await expect(page.locator(".coverage")).toContainText("GitHub");
+});
+
+test("home: drag the divider to resize the conversation; size persists; keyboard and reset", async () => {
+  const page = await open("/");
+  const chat = page.locator(".home .chat-col");
+  const inbox = page.locator(".home .inbox-col");
+  const divider = page.getByRole("separator", { name: "Resize conversation" });
+  const width = async (l: typeof chat) => Math.round((await l.boundingBox())!.width);
+  // The briefing column is the wide one by default.
+  expect(await width(chat)).toBe(440);
+  expect(await width(inbox)).toBeGreaterThan(440);
+
+  const box = (await divider.boundingBox())!;
+  const grab = { x: box.x + box.width / 2, y: box.y + 300 };
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move(grab.x - 160, grab.y, { steps: 8 });
+  await page.mouse.up();
+  expect(await width(chat)).toBe(600);
+  await page.reload();
+  expect(await width(chat)).toBe(600);
+
+  // It never squeezes either pane below its minimum.
+  await divider.focus();
+  await page.keyboard.press("End");
+  expect(await width(chat)).toBe(320);
+  await page.keyboard.press("ArrowLeft");
+  await expect(divider).toHaveAttribute("aria-valuenow", "344");
+  await page.keyboard.press("Home");
+  expect(await width(inbox)).toBe(360);
+
+  await divider.dblclick();
+  expect(await width(chat)).toBe(440);
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
