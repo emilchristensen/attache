@@ -161,6 +161,8 @@ describe("review fixes", () => {
 
   it("#11 a fresh event stream starts at now; a reconnect replays every missed event beyond one batch", async () => {
     const job = svc.app.jobs.create({ kind: "demo-long", title: "events", input: { steps: 1, stepMs: 1 } }).job;
+    // Let the job's own live events land first, or a fresh stream rightly delivers them.
+    await svc.waitJob(job.id);
     const start = Number((svc.app.db.prepare("select max(seq) m from job_events").get() as { m: number }).m);
     const ins = svc.app.db.prepare("insert into job_events (job_id, type, data, at) values (?, 'progress', '{}', ?)");
     for (let i = 0; i < 1500; i++) ins.run(job.id, new Date().toISOString());
