@@ -51,6 +51,9 @@ describe("meeting preparation, team recall and pending replies through real OAut
 
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {
     await svc.post("/memory/notes", { type: "person", title: "Mia Jensen", state: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] });
+    // Long enough to be indexed as several passages that all match the meeting.
+    const passage = (n: number) => `Design review round ${n} with Mia Jensen. ${"Async design review notes and decisions. ".repeat(32)}`;
+    await svc.post("/memory/notes", { type: "note", title: "Design review log", state: [{ subject: "Owner", value: "Mia Jensen" }], notes: [1, 2, 3].map(passage).join("\n\n") });
     const { job } = await svc.post("/briefings", { kind: "manual" });
     const done = await svc.waitJob(job.id);
     expect(done.job.status).toBe("succeeded");
@@ -59,6 +62,8 @@ describe("meeting preparation, team recall and pending replies through real OAut
     const review = meetings.items.find((i: any) => i.title.includes("Design review"));
     expect(review).toBeTruthy();
     expect(review.related.map((r: any) => r.title)).toContain("Mia Jensen");
+    // One chip per note: several matching passages of the same note collapse to its best one.
+    for (const m of meetings.items) expect(new Set(m.related.map((r: any) => r.relPath)).size).toBe(m.related.length);
     expect(meetings.items.some((i: any) => /Offsite planning/.test(i.title))).toBe(true);
     // All-day events are not meeting prep.
     expect(JSON.stringify(b.sections)).not.toContain("Company holiday");
