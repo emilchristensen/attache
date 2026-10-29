@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync, lstatSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync, lstatSync } from "node:fs";
 import { join, relative, sep, basename } from "node:path";
 import { type Db, nowIso, tx } from "../core/db.ts";
 import { parseMarkdown } from "./markdown.ts";
@@ -149,6 +149,45 @@ export class Indexer {
       this.removeChunks(id);
       this.db.prepare("delete from documents where id = ?").run(id);
     });
+  }
+
+  /**
+   * Bring one path's index entry in line with the file on disk, by the same rules as `scan`:
+   * hidden and tool folders, symbolic links (the file or any parent inside the root), non-Markdown
+   * and oversized files are never indexed. Folders, and paths that are gone but are not Markdown
+   * files (a moved or deleted folder), need a full scan.
+   */
+  syncPath(root: IndexRoot, rel: string): "changed" | "unchanged" | "ignored" | "rescan" {
+    const parts = rel.split(sep).join("/").split("/").filter((p) => p && p !== ".");
+    if (!parts.length || parts.includes("..")) return "rescan";
+    if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p) || p.startsWith("."))) return "ignored";
+    const n = parts.join("/");
+    const isMarkdown = n.toLowerCase().endsWith(".md");
+    const abs = join(root.path, n);
+    let st;
+    try {
+      st = lstatSync(abs);
+    } catch {
+      return isMarkdown ? this.forget(root.id, n) : "rescan";
+    }
+    if (st.isDirectory()) return parts.at(-1)!.startsWith(".") || SKIP_DIRS.has(parts.at(-1)!) ? "ignored" : "rescan";
+    if (!isMarkdown || parts.at(-1)!.startsWith(".")) return "ignored";
+    if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_FILE_BYTES) return this.forget(root.id, n);
+    let real: string;
+    try {
+      real = realpathSync(abs);
+    } catch {
+      return this.forget(root.id, n);
+    }
+    // A symlinked parent folder would make this path point elsewhere; `scan` never follows those.
+    if (real !== join(realpathSync(root.path), n)) return this.forget(root.id, n);
+    return this.indexFile(root, n) === "indexed" ? "changed" : "unchanged";
+  }
+
+  private forget(rootId: string, rel: string): "changed" | "unchanged" {
+    if (!this.db.prepare("select 1 from documents where id = ?").get(docId(rootId, rel))) return "unchanged";
+    this.removeFile(rootId, rel);
+    return "changed";
   }
 
   removeRoot(rootId: string): number {

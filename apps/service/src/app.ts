@@ -7,6 +7,7 @@ import { resolvePaths, type ServicePaths } from "./core/paths.ts";
 import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
 import { ConfigStore } from "./core/config.ts";
 import { MemoryStore } from "./memory/store.ts";
+import { FolderWatcher } from "./memory/watcher.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
 import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
@@ -61,6 +62,8 @@ export class App {
   }
   readonly startedAt = nowIso();
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
+  /** Re-indexes edits made to the data folder outside the service. */
+  private dataWatcher: FolderWatcher | null = null;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
@@ -223,7 +226,11 @@ export class App {
     } else {
       this.db.prepare("update connections set settings = ?, status = 'connected', account = ?, updated_at = ? where id = 'vault-data'").run(JSON.stringify({ builtin: true, path }), path, now);
     }
-    this.memory.indexer.scan(this.memory.rootRef!);
+    const root = this.memory.rootRef!;
+    this.memory.indexer.scan(root);
+    this.dataWatcher?.stop();
+    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, { onChange: () => this.bus.emit("event", { type: "memory.changed" }) });
+    this.dataWatcher.start();
     return r;
   }
 
@@ -257,6 +264,7 @@ export class App {
   }
 
   async stop() {
+    this.dataWatcher?.stop();
     this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();

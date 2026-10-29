@@ -86,7 +86,12 @@ Chunks are Markdown sections with exact line ranges.
 Each chunk is labelled `state`, `history` or `body`; History chunks are down-weighted and presented to the model as superseded.
 Queries are tokenised and every term is quoted before FTS5 `MATCH`, blocking operator injection.
 Ranking uses BM25 with column weights (title 6, heading 3, text 1), fused by reciprocal rank with a prefix-match list (`k = 60`), then adjusted: curated memory above imports, imports above evidence, current state above history.
-The index is updated synchronously on every write and by a file watcher/rescan for edits made in Obsidian, fixing the new build's unscheduled indexer (four weeks stale when inspected).
+The index is updated synchronously on every service write, fixing the new build's unscheduled indexer (four weeks stale when inspected).
+Edits made to the data folder outside the service (Obsidian, an editor, a coding agent) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
+Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
+The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
+If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
+Imported vaults are not watched; they are rescanned when their connection syncs.
 Vector search is deliberately not in this release: no embedding model is guaranteed on a clean install, and lexical recall with exact citations is verifiable.
 
 Answers: the service retrieves first, numbers the evidence `[S1]..[Sn]`, sends it to the model as quoted data with an instruction that documents are untrusted, and maps cited markers back to exact file and line ranges.
