@@ -15,7 +15,7 @@ export interface ClientIdentity {
 }
 
 export function allowedOrigins(port: number): Set<string> {
-  const set = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, "app://obsidian.md"]);
+  const set = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
   for (const o of (process.env.JARVIS_DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) set.add(o);
   return set;
 }

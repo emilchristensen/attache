@@ -1,13 +1,13 @@
 # Jarvis architecture
 
-Jarvis is one local service with two thin clients.
+Jarvis is one local service with a thin browser client and a command line.
 The service owns memory writes, credentials, tool authority, durable jobs, scheduling and action execution.
-The browser client and the Obsidian plugin render state and submit requests; neither writes memory or schedules work.
+The browser client and the CLI render state and submit requests; neither writes memory or schedules work.
 
 ```mermaid
 flowchart LR
   Browser[Browser client] -- HTTPS-less loopback + pairing token --> API
-  Obsidian[Obsidian plugin] -- same versioned API --> API
+  CLI[jarvis CLI] -- same versioned API --> API
   Electron[Future Electron client] -.-> API
   subgraph Service[jarvis service - Node 24, one process]
     API[/api/v1 router + SSE/]
@@ -39,7 +39,6 @@ flowchart LR
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, conversations, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Obsidian | Official plugin API, `ItemView`, `requestUrl`, `SecretStorage` | Desktop-only thin client over the same API. |
 | Secrets | macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); 0600 file fallback off macOS | Outside the vault and outside frontend storage. |
 | Install | Self-extracting installer bundling Node, the service bundle, web assets, launchd agent | One command/double-click; no developer tools required. |
 
@@ -133,8 +132,8 @@ The attention engine follows these rules:
 ## Security
 
 - The service binds `127.0.0.1` only. The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
-- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; Obsidian stores its token in Obsidian `SecretStorage`.
-- `Origin` must be the service origin or `app://obsidian.md`. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
+- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a 0600 file in the service state directory.
+- `Origin`, when present, must be the service origin. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The conversation model has no tools, so injected text cannot trigger actions.
 
@@ -182,7 +181,7 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
 ## Clients
 
 - Browser: React. Home combines the attention inbox and a persistent conversation; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
-- Obsidian: a desktop plugin with a Jarvis view (attention + ask), settings (service URL, pairing), and commands (ask about current note, capture selection with provenance, open attention). It uses the same API and never writes memory itself.
+- Obsidian: no plugin. The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher. (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
 - Electron: not in this release. The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
 
 ## What was reused and what inspired the design

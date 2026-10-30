@@ -69,7 +69,7 @@ stop_agent
 TMP="$PREFIX/app/.$VERSION.installing.$$"
 rm -rf "$TMP"
 mkdir -p "$TMP"
-cp -R "$SRC/runtime" "$SRC/service" "$SRC/web" "$SRC/bin" "$SRC/obsidian-plugin" "$SRC/VERSION" "$SRC/uninstall.sh" "$TMP/"
+cp -R "$SRC/runtime" "$SRC/service" "$SRC/web" "$SRC/bin" "$SRC/VERSION" "$SRC/uninstall.sh" "$TMP/"
 rm -rf "$APP"
 mv "$TMP" "$APP"
 # -n replaces the existing link itself instead of descending into the directory it points at.
@@ -90,7 +90,7 @@ JARVIS_PREFIX="$PREFIX" JARVIS_INSTANCE="$INSTANCE" exec /bin/sh "$PREFIX/curren
 EOF
 chmod 755 "$BIN/jarvis" "$BIN/jarvis-uninstall"
 
-# LaunchAgent: starts at login, restarts on crash, independent of any browser or Obsidian.
+# LaunchAgent: starts at login, restarts on crash, independent of any browser.
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -149,4 +149,3 @@ else
 fi
 say ""
 say "Command line: $BIN/jarvis (status, pair, backup, restore). Uninstall: $BIN/jarvis-uninstall"
-say "Obsidian plugin files: $PREFIX/current/obsidian-plugin"

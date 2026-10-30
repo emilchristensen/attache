@@ -42,7 +42,7 @@ export function memoryRoots(app: App): Array<{ root: string; path: string; label
   return out;
 }
 
-/** Map an absolute file path (e.g. the note open in Obsidian) to an indexed root and relative path. */
+/** Map an absolute file path (e.g. a note open in an editor) to an indexed root and relative path. */
 export function resolveAbsolute(app: App, absPath: string): { root: string; relPath: string } | null {
   const norm = absPath.replace(/\\/g, "/");
   const roots = memoryRoots(app).sort((a, b) => b.path.length - a.path.length);
@@ -174,11 +174,6 @@ export function registerDataRoutes(r: Router, app: App) {
   });
 
   r.get("/memory/roots", () => memoryRoots(app));
-  r.get("/memory/resolve", (c) => {
-    const abs = c.query("absPath");
-    if (!abs) throw new HttpError(400, "invalid_request", "absPath is required");
-    return resolveAbsolute(app, abs) ?? { root: null, relPath: null };
-  });
 
   // ---- conversation ----------------------------------------------------------------
   r.get("/conversations", () => app.conversations.listConversations());

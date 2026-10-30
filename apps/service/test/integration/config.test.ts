@@ -123,7 +123,8 @@ describe("A13 security boundaries", () => {
     expect((await raw("/status")).status).toBe(401);
     expect((await raw("/status", { headers: { authorization: "Bearer not-a-real-token-xxxxxxxxxxxxxxxx" } })).status).toBe(401);
     expect((await raw("/health", { headers: { origin: "https://evil.example" } })).status).toBe(403);
-    expect((await raw("/status", { headers: { authorization: `Bearer ${svc.token}`, origin: "app://obsidian.md" } })).headers.get("access-control-allow-origin")).toBe("app://obsidian.md");
+    // The Obsidian plugin is gone, so its app origin is refused like any other.
+    expect((await raw("/health", { headers: { origin: "app://obsidian.md" } })).status).toBe(403);
     const noCsrf = await raw("/memory/capture", { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify({ text: "x", source: { kind: "user", ref: "x" } }) });
     expect(noCsrf.status).toBe(403);
     // Host header rebinding (raw HTTP so the header is not normalised).
@@ -132,7 +133,7 @@ describe("A13 security boundaries", () => {
     expect(status).toBe(421);
     // Pairing codes are single use.
     const { code } = createPairingCode(svc.app.db);
-    const pair = (c: string) => raw("/pair", { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code: c, kind: "obsidian", clientName: "vault" }) });
+    const pair = (c: string) => raw("/pair", { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code: c, kind: "cli", clientName: "script" }) });
     expect((await pair(code)).status).toBe(200);
     expect((await pair(code)).status).toBe(401);
     // Path traversal is refused.

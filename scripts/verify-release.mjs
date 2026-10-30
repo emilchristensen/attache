@@ -39,10 +39,9 @@ function step(id, name, cmd, args, opts = {}) {
 const npx = "npx";
 step(["A01"], "Excluded platform check", process.execPath, ["scripts/check-excluded.mjs"]);
 step(["A13"], "Lint (ESLint, zero warnings)", npx, ["eslint", ".", "--max-warnings", "0"]);
-for (const pkg of ["packages/contracts", "apps/service", "apps/web", "apps/obsidian"]) step(["A13"], `Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
+for (const pkg of ["packages/contracts", "apps/service", "apps/web"]) step(["A13"], `Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
 step(["A13"], "Build service", process.execPath, ["apps/service/build.mjs"]);
 step(["A13", "A12"], "Build web client", npx, ["vite", "build", "apps/web"]);
-step(["A11", "A15"], "Build Obsidian plugin", process.execPath, ["apps/obsidian/build.mjs"]);
 step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/vitest.json"], {
   extract: () => {
     try {
@@ -81,7 +80,6 @@ if (!QUICK) {
   };
   e2e(["A05", "A07", "A08", "A09", "A12"], "Browser journeys (real Chrome)", "journeys");
   e2e(["A10"], "Voice journeys (whisper.cpp, macOS speech, real Chrome microphone device)", "voice");
-  e2e(["A11"], "Obsidian plugin in the real Obsidian desktop app", "obsidian");
   e2e(["A12"], "Visual captures (light, dark, narrow)", "visual");
   step(["A02", "A14"], "Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
     extract: (out) => ({ summary: /(\d+\/\d+) installation checks passed/.exec(out)?.[1] ?? "" }),
@@ -110,11 +108,10 @@ const ACCEPTANCE = {
   A08: "Durable jobs, reconnection replay, restart recovery, retry/cancel outcomes",
   A09: "Draft/approval enforcement, replay protection, verified receipts",
   A10: "Real voice input/output, interruption, denied microphone, typed chat during work",
-  A11: "Built Obsidian plugin in a real test vault",
   A12: "Browser journeys incl. keyboard, narrow screen, reconnection, console errors",
   A13: "Lint, typecheck, build, behavioural tests",
   A14: "Backup/restore to fresh profile, upgrade, data-preserving uninstall, brains intact",
-  A15: "Docs, artifacts, plugin assets, acceptance report",
+  A15: "Docs, artifacts, acceptance report",
 };
 const rollup = Object.fromEntries(
   Object.keys(ACCEPTANCE).map((id) => {
@@ -125,10 +122,10 @@ const rollup = Object.fromEntries(
 );
 const docs = ["README.md", "docs/architecture.md", "docs/inspection.md", "docs/user-guide.md", "docs/developer-guide.md", "docs/build-status.md", "docs/acceptance-report.md"];
 const missingDocs = docs.filter((d) => !existsSync(join(ROOT, d)));
-const artifacts = [`release/${version}/Jarvis-Installer-${version}-macos-arm64.command`, `release/${version}/jarvis-${version}-macos-arm64.tar.gz`, `release/${version}/jarvis-obsidian-plugin-${version}.zip`, `release/${version}/SHA256SUMS`];
+const artifacts = [`release/${version}/Jarvis-Installer-${version}-macos-arm64.command`, `release/${version}/jarvis-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
 const missingArtifacts = artifacts.filter((a) => !existsSync(join(ROOT, a)));
 rollup.A15 = { status: missingDocs.length || missingArtifacts.length ? "fail" : "pass", checks: [`docs present: ${docs.length - missingDocs.length}/${docs.length}${missingDocs.length ? ` (missing ${missingDocs.join(", ")})` : ""}`, `artifacts present: ${artifacts.length - missingArtifacts.length}/${artifacts.length}${missingArtifacts.length ? ` (missing ${missingArtifacts.join(", ")})` : ""}`] };
-if (QUICK) for (const id of ["A02", "A10", "A11", "A12", "A14"]) if (rollup[id].status === "not run" || rollup[id].status === "pass") rollup[id] = { ...rollup[id], status: rollup[id].checks.length ? rollup[id].status : "not run" };
+if (QUICK) for (const id of ["A02", "A10", "A12", "A14"]) if (rollup[id].status === "not run" || rollup[id].status === "pass") rollup[id] = { ...rollup[id], status: rollup[id].checks.length ? rollup[id].status : "not run" };
 
 const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, acceptance: rollup, live };
 writeFileSync(join(OUT, "verification-report.json"), JSON.stringify(report, null, 2));

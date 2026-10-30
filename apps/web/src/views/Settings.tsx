@@ -95,7 +95,7 @@ function Clients() {
   return (
     <div className="card stack">
       <h3>Paired clients</h3>
-      <p className="small muted">Pair the Obsidian plugin or another browser with a one-time code. Codes expire after 10 minutes.</p>
+      <p className="small muted">Pair another browser with a one-time code. Codes expire after 10 minutes.</p>
       <div className="row">
         <button onClick={() => run("code", async () => setCode(await post("/clients/pairing-code")))}>Create pairing code</button>
         {code && (

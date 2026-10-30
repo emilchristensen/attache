@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Versioned API contract shared by the service, browser client, Obsidian plugin and any future client. */
+/** Versioned API contract shared by the service, browser client, CLI and any future client. */
 export const API_VERSION = "v1";
 export const API_PREFIX = `/api/${API_VERSION}`;
 

@@ -128,19 +128,11 @@ Jarvis transcribes, answers in text, and speaks the answer if *Speak replies* is
 
 If the microphone is blocked, Jarvis tells you how to allow it; typing always works.
 
-## Obsidian
+## Editing notes in Obsidian
 
-Jarvis includes a desktop Obsidian plugin that talks to the same service.
-
-1. Copy the three files from `~/Library/Application Support/Jarvis/current/obsidian-plugin` (or unzip `jarvis-obsidian-plugin-<version>.zip`) into `<your vault>/.obsidian/plugins/jarvis-companion/`.
-2. In Obsidian: Settings → Community plugins → turn off Restricted mode if needed → enable **Jarvis**.
-3. In Jarvis (browser): Settings → Paired clients → **Create pairing code**.
-   In Obsidian: Settings → Jarvis → enter the code → **Pair**.
-   The access token is stored in Obsidian's secret storage (Settings → Keychain), not in the vault.
-4. Use the commands *Jarvis: Ask about the current note*, *Capture selection with provenance*, *Open attention items* and *Research the current note in the background*, or the robot icon in the ribbon.
-
-If the vault should be searchable by Jarvis, also import it in Jarvis → Connections → *Import a Markdown folder*.
-Closing Obsidian does not stop Jarvis.
+Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
+Jarvis picks up your edits within a few seconds.
+There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
 
 ## Sleep, offline and notifications
 

@@ -52,7 +52,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   r.post(
     "/pair",
     async (c) => {
-      const body = await c.body(z.object({ code: z.string().min(6).max(20), clientName: z.string().max(100).default("Browser"), kind: z.enum(["browser", "obsidian", "cli", "electron"]).default("browser") }));
+      const body = await c.body(z.object({ code: z.string().min(6).max(20), clientName: z.string().max(100).default("Browser"), kind: z.enum(["browser", "cli", "electron"]).default("browser") }));
       const redeemed = redeemPairingCode(app.db, body.code, { name: body.clientName, kind: body.kind });
       if (!redeemed) throw new HttpError(401, "invalid_code", "That pairing code is wrong, expired or already used. Create a new one.");
       app.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), redeemed.client.id, "client_paired", JSON.stringify({ name: body.clientName, kind: body.kind }));

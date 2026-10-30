@@ -9,21 +9,20 @@ Developer setup is separate from end-user installation: users run the installer 
 | `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
 | `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, speech, HTTP API |
 | `apps/web` | Browser client (React + Vite), served by the service |
-| `apps/obsidian` | Obsidian desktop plugin (thin client over the same API) |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
-| `tests/e2e` | Playwright journeys (Chrome, real Obsidian, voice, visual captures) |
+| `tests/e2e` | Playwright journeys (Chrome, voice, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
 Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `speech/`, `http/`.
 
 ## Requirements
 
-- macOS on Apple silicon for the full suite (launchd, Keychain, `say`, Obsidian).
+- macOS on Apple silicon for the full suite (launchd, Keychain, `say`).
 - Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
-- Optional: `/Applications/Obsidian.app` for plugin tests, `brew install whisper-cpp` for voice tests, the Claude Code CLI for live model use.
+- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI for live model use.
 
 ```sh
 pnpm install
@@ -66,21 +65,20 @@ Produces in `release/0.1.0/`:
 
 - `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer (double-click or `sh`).
 - `jarvis-0.1.0-macos-arm64.tar.gz` — the same release as a folder with `install.sh`.
-- `jarvis-obsidian-plugin-0.1.0.zip` — `main.js`, `manifest.json`, `styles.css`.
 - `SHA256SUMS`.
 
 The build downloads the official Node runtime for the pinned version from nodejs.org, verifies it against `SHASUMS256.txt`, and bundles it.
-Artifacts are unsigned; notarisation and Obsidian community-directory submission are external steps (see the acceptance report).
+Artifacts are unsigned; notarisation is an external step (see the acceptance report).
 
 ## Verification
 
 ```sh
-node scripts/verify-release.mjs           # everything: checks, builds, e2e, voice, Obsidian, install/upgrade/restore/uninstall, live read-only
+node scripts/verify-release.mjs           # everything: checks, builds, e2e, voice, install/upgrade/restore/uninstall, live read-only
 node scripts/verify-release.mjs --quick   # lint, typecheck, builds, Vitest only
 ```
 
 Results: `test-results/verification-summary.md` (acceptance table) and `test-results/verification-report.json`.
-Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/obsidian.spec.ts`, `npx playwright test tests/e2e/voice.spec.ts`.
+Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/voice.spec.ts`.
 
 ## Rules for changes
 

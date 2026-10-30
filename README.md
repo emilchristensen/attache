@@ -2,7 +2,7 @@
 
 A local-first second brain for your Mac.
 It runs in the browser, keeps your knowledge as Markdown in a folder you choose, answers with cited evidence, watches the sources you connect, and prepares drafts that are sent only after you approve the exact version.
-A desktop Obsidian plugin is a second client of the same service.
+You can also read and edit the notes in Obsidian or any other Markdown editor.
 
 - **Install:** download `Jarvis-Installer-<version>-macos-arm64.command` from a release and double-click it (or `sh` it). No developer tools needed. See the [user guide](docs/user-guide.md).
 - **Build from source:** see the [developer guide](docs/developer-guide.md).

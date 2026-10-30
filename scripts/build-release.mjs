@@ -3,7 +3,6 @@
  * Build locally installable, unsigned release artifacts:
  *   release/<version>/jarvis-<version>-macos-arm64.tar.gz        extracted release (install.sh inside)
  *   release/<version>/Jarvis-Installer-<version>-macos-arm64.command   self-extracting one-step installer
- *   release/<version>/jarvis-obsidian-plugin-<version>.zip        Obsidian plugin assets (main.js, manifest.json, styles.css)
  *   release/<version>/SHA256SUMS
  *
  * The Node.js runtime is bundled (Node 24 LTS, which has SQLite FTS5 built in),
@@ -56,7 +55,6 @@ async function main() {
   mkdirSync(STAGE, { recursive: true });
   run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, JARVIS_VERSION: VERSION } });
   run("npx", ["vite", "build"], { cwd: join(ROOT, "apps/web") });
-  run(process.execPath, [join(ROOT, "apps/obsidian/build.mjs")], { env: { ...process.env } });
 
   const node = await nodeRuntime();
   const nodeV = execFileSync(node, ["--version"]).toString().trim();
@@ -68,7 +66,6 @@ async function main() {
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-service.mjs"), join(STAGE, "service/jarvis-service.mjs"));
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-agent-hook.mjs"), join(STAGE, "service/jarvis-agent-hook.mjs"));
   cpSync(join(ROOT, "apps/web/dist"), join(STAGE, "web"), { recursive: true, filter: (s) => !s.endsWith(".map") });
-  cpSync(join(ROOT, "apps/obsidian/dist/jarvis-companion"), join(STAGE, "obsidian-plugin"), { recursive: true });
   mkdirSync(join(STAGE, "bin"), { recursive: true });
   writeFileSync(join(STAGE, "bin/jarvis"), '#!/bin/sh\nD="$(cd "$(dirname "$0")/.." && pwd -P)"\nexec "$D/runtime/node" "$D/service/jarvis-service.mjs" "$@"\n');
   chmodSync(join(STAGE, "bin/jarvis"), 0o755);
@@ -102,14 +99,11 @@ __JARVIS_PAYLOAD__
   appendFileSync(cmdPath, readFileSync(tarPath));
   chmodSync(cmdPath, 0o755);
 
-  const zipName = `jarvis-obsidian-plugin-${VERSION}.zip`;
-  run("/usr/bin/ditto", ["-c", "-k", "--norsrc", join(ROOT, "apps/obsidian/dist/jarvis-companion"), join(OUT, zipName)]);
-
   const lines = [];
-  for (const f of [tarName, cmdName, zipName]) lines.push(`${await sha256(join(OUT, f))}  ${f}`);
+  for (const f of [tarName, cmdName]) lines.push(`${await sha256(join(OUT, f))}  ${f}`);
   writeFileSync(join(OUT, "SHA256SUMS"), lines.join("\n") + "\n");
   rmSync(STAGE, { recursive: true, force: true });
-  for (const f of [tarName, cmdName, zipName, "SHA256SUMS"]) console.log(`  ${join(OUT, f)}  ${(statSync(join(OUT, f)).size / 1_048_576).toFixed(1)} MB`);
+  for (const f of [tarName, cmdName, "SHA256SUMS"]) console.log(`  ${join(OUT, f)}  ${(statSync(join(OUT, f)).size / 1_048_576).toFixed(1)} MB`);
 }
 
 main().catch((e) => {
