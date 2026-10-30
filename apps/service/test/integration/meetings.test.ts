@@ -1,17 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
-import { installScenarios } from "../fixtures/scenarios.ts";
+import { ATLASSIAN_SITE, installScenarios } from "../fixtures/scenarios.ts";
+import { useFakeClaude } from "../fixtures/claude-connectors.ts";
 
 let svc: TestService;
 let fx: FixtureServer;
 
-async function connectGoogle(kind: "gcal" | "gmail") {
-  await svc.post(`/connections/${kind}/configure`, { method: "oauth", fields: { clientId: "fixture-client.apps.googleusercontent.com", clientSecret: "fixture-secret" } });
-  const { url, redirectUri } = await svc.post(`/connections/${kind}/oauth/start`, { includeWrite: false });
+async function connectClaude(kind: "gcal" | "gmail") {
+  const r = await svc.post(`/connections/${kind}/configure`, { method: "claude-ai", fields: {} });
+  expect(r.test).toMatchObject({ ok: true });
+}
+
+/** Browser sign-in against the Atlassian MCP authorization server, through the service's own routes. */
+async function connectJiraWithOAuth() {
+  const saved = await svc.post("/connections/jira/configure", { method: "oauth", fields: { siteUrl: ATLASSIAN_SITE } });
+  expect(saved.test.message).toMatch(/sign in/i);
+  const { url, redirectUri } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
   expect(url).toContain("code_challenge_method=S256");
   expect(url).toContain(encodeURIComponent(redirectUri));
-  // The provider redirects the browser back to the service with a code and the state.
   const authorize = await fetch(url, { redirect: "manual" });
   const callback = authorize.headers.get("location")!;
   expect(callback.startsWith(redirectUri)).toBe(true);
@@ -26,6 +33,7 @@ async function connectGoogle(kind: "gcal" | "gmail") {
 beforeAll(async () => {
   fx = await startFixtureServer();
   installScenarios(fx, { selfEmail: "alex@example.com" });
+  useFakeClaude(fx.url);
   process.env.JARVIS_TEST_ENDPOINTS = "1";
   process.env.JARVIS_FIXTURE_URL = fx.url;
   svc = await startTestService();
@@ -38,15 +46,29 @@ afterAll(async () => {
   delete process.env.JARVIS_FIXTURE_URL;
 });
 
-describe("meeting preparation, team recall and pending replies through real OAuth adapters", () => {
-  it("connects Google Calendar and Gmail through the browser sign-in flow", async () => {
-    await connectGoogle("gcal");
-    await connectGoogle("gmail");
+describe("meeting preparation, team recall and pending replies through claude.ai connectors and Atlassian sign-in", () => {
+  it("connects Google Calendar and Gmail through the claude.ai connectors, and Jira through Atlassian OAuth", async () => {
+    await connectClaude("gcal");
+    await connectClaude("gmail");
+    await connectJiraWithOAuth();
     const conns = await svc.get("/connections");
-    expect(conns.find((c: any) => c.kind === "gcal").status).toBe("connected");
-    expect(conns.find((c: any) => c.kind === "gmail").status).toBe("connected");
+    for (const kind of ["gcal", "gmail", "jira"]) expect(conns.find((c: any) => c.kind === kind).status).toBe("connected");
+    expect(conns.find((c: any) => c.kind === "jira").account).toBe("alex@example.com");
     // Tokens are stored as credentials, never returned by the API.
-    expect(JSON.stringify(conns)).not.toMatch(/fixture-refresh|ya29\./);
+    expect(JSON.stringify(conns)).not.toMatch(/atl-access|atl-refresh/);
+  });
+
+  it("an abandoned Atlassian sign-in does not replace the working client", async () => {
+    // Pretend the stored client was registered for another port, so starting sign-in registers a new one.
+    const rec = svc.app.connections.record("jira")!;
+    const old = rec.settings.oauthClient as Record<string, unknown>;
+    svc.app.connections.mergeSettings("jira", { oauthClient: { ...old, redirectUri: "http://127.0.0.1:1/api/v1/oauth/callback" } });
+    const { url } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
+    expect(new URL(url).searchParams.get("client_id")).not.toBe(old.clientId);
+    // Never completed: the stored client is unchanged and the connection still works.
+    expect((svc.app.connections.record("jira")!.settings.oauthClient as Record<string, unknown>).clientId).toBe(old.clientId);
+    svc.app.connections.mergeSettings("jira", { oauthClient: old });
+    expect((await svc.post("/connections/jira/test")).test).toMatchObject({ ok: true });
   });
 
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {

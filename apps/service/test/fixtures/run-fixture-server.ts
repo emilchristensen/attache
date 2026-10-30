@@ -14,7 +14,15 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 
 const fx = await startFixtureServer(port);
-installScenarios(fx, { ...(process.env.FIXTURE_SELF_EMAIL ? { selfEmail: process.env.FIXTURE_SELF_EMAIL } : {}) });
+const { claude } = installScenarios(fx, { ...(process.env.FIXTURE_SELF_EMAIL ? { selfEmail: process.env.FIXTURE_SELF_EMAIL } : {}) });
+// Browser journeys flip a claude.ai connector's state (e.g. to "needs-auth") from outside the process.
+fx.route("POST", "/__control/claude-server", (req) => {
+  const b = req.body as { name: string; status: string };
+  const s = claude.servers.find((x) => x.name === b.name);
+  if (!s) return { status: 404, json: { error: `unknown server ${b.name}` } };
+  s.status = b.status;
+  return { json: { ok: true } };
+});
 installFixtureModel(fx, "/model");
 process.stdout.write(`FIXTURE_READY ${fx.url}\n`);
 

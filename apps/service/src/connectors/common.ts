@@ -68,3 +68,24 @@ export function stringSetting(settings: Record<string, unknown>, key: string): s
 export function csvList(raw: string): string[] {
   return [...new Set(raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
 }
+
+/** Clock-skew allowance when recognising an earlier attempt by time. */
+const SKEW_MS = 120_000;
+
+/** Earliest time (ms) a remote object can have been created by the attempt that started at `since`. */
+export function attemptStartMs(since: string | undefined, fallbackMs: number): number {
+  const t = Date.parse(since ?? "");
+  return Number.isFinite(t) ? t - SKEW_MS : fallbackMs;
+}
+
+/** Text identity that survives Markdown being rendered into another format (ADF, Slack mrkdwn, storage HTML). */
+export function sameLooseText(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s
+      .replace(/<([^|>]+)\|([^>]+)>/g, "$2")
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "");
+  const x = norm(a);
+  return x.length > 0 && x === norm(b);
+}

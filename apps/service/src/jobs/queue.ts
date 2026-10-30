@@ -20,12 +20,16 @@ export interface JobContext {
    * looked up with `find` before any retry. Without `find`, a pending effect
    * blocks the job for human review instead of risking a duplicate.
    */
-  effect<T>(key: string, run: () => Promise<T>, find?: () => Promise<T | null>): Promise<T>;
+  /** `find` receives when the pending attempt started, so a lookup can ignore anything older. */
+  effect<T>(key: string, run: () => Promise<T>, find?: (since: string) => Promise<T | null>): Promise<T>;
 }
 
 export type JobRunner = (ctx: JobContext) => Promise<unknown>;
 
 export class JobBlockedError extends Error {}
+
+/** Checking for an earlier attempt failed: the effect may exist, so it must be neither repeated nor treated as rejected. */
+export class EffectCheckError extends Error {}
 
 export interface CreateJob {
   kind: JobKind;
@@ -310,15 +314,20 @@ export class JobQueue {
       saveCheckpoint: (value) => {
         this.db.prepare("update jobs set checkpoint = ?, updated_at = ? where id = ?").run(JSON.stringify(value), nowIso(), id);
       },
-      effect: async <T>(key: string, run: () => Promise<T>, find?: () => Promise<T | null>): Promise<T> => {
-        const row = this.db.prepare("select status, result from side_effects where effect_key = ?").get(key) as { status: string; result: string | null } | undefined;
+      effect: async <T>(key: string, run: () => Promise<T>, find?: (since: string) => Promise<T | null>): Promise<T> => {
+        const row = this.db.prepare("select status, result, created_at from side_effects where effect_key = ?").get(key) as { status: string; result: string | null; created_at: string } | undefined;
         if (row?.status === "done") {
           this.insertEvent(id, "effect_reused", { key });
           return json<T>(row.result, null as T);
         }
         if (row?.status === "pending") {
           if (!find) throw new JobBlockedError(`An earlier attempt of side effect ${key} may have completed; it cannot be checked automatically, so it will not be repeated.`);
-          const found = await find();
+          let found: T | null;
+          try {
+            found = await find(row.created_at);
+          } catch (e) {
+            throw new EffectCheckError(`Could not check whether an earlier attempt of ${key} was sent: ${(e as Error).message}`);
+          }
           if (found !== null) {
             this.db.prepare("update side_effects set status = 'done', result = ?, completed_at = ? where effect_key = ?").run(JSON.stringify(found), nowIso(), key);
             this.insertEvent(id, "effect_recovered", { key });

@@ -1,6 +1,7 @@
 import type { AdapterContext, ConnectionRecord } from "../../src/connectors/types.ts";
 import { createHttpClient } from "../../src/connectors/http.ts";
 import { createLogger } from "../../src/core/log.ts";
+import { createClaudeConnectorRunner } from "../../src/connectors/claude/runner.ts";
 import type { ConnectionKind } from "@jarvis/contracts";
 
 /** Build an adapter context whose endpoints point at a fixture server. */
@@ -39,5 +40,6 @@ export function fixtureContext(opts: {
     now: () => opts.now ?? new Date("2026-09-30T10:00:00Z"),
     endpoint: () => opts.baseUrl,
     selfEmail: opts.selfEmail ?? null,
+    claude: createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10 }),
   };
 }

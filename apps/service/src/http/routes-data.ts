@@ -1,13 +1,13 @@
 import { z } from "zod";
-import { AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
 import { search } from "../memory/search.ts";
 import { decide, getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
@@ -112,7 +112,29 @@ export function registerDataRoutes(r: Router, app: App) {
     requireFeature(app, "capture");
     requireData(app);
     const input = await c.body(MemoryCreateInput);
-    const out = app.memory.createMemory({ type: input.type, title: input.title, state: input.state, ...(input.notes ? { notes: input.notes } : {}), ...(input.sources ? { sources: input.sources } : {}) }, "user");
+    const out = app.memory.createMemory(
+      {
+        type: input.type,
+        title: input.title,
+        state: input.state.map((e) => ({ subject: e.subject, value: e.value, ...(e.date ? { date: e.date } : {}), ...(e.source ? { source: e.source } : {}) })),
+        ...(input.notes ? { notes: input.notes } : {}),
+        ...(input.sources ? { sources: input.sources } : {}),
+        ...(input.history ? { history: input.history } : {}),
+        ...(input.provenance ? { provenance: input.provenance } : {}),
+        ...(input.tags ? { tags: input.tags } : {}),
+      },
+      "user",
+    );
+    app.bus.emit("event", { type: "memory.changed" });
+    return out;
+  });
+  r.post("/memory/archive", async (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const input = await c.body(ArchiveInput);
+    const path = resolve(input.path.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+    if (!existsSync(path) || !statSync(path).isDirectory()) throw new HttpError(400, "not_found", `Folder not found: ${path}`);
+    const out = app.memory.archiveFolder({ path, label: input.label, exclude: input.exclude, ...(input.origin ? { origin: input.origin } : {}) });
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });

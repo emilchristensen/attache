@@ -149,6 +149,24 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(posted).toHaveLength(1);
   });
 
+  it("a failed check for an earlier attempt is never treated as 'not sent': the action is unknown and nothing is sent", async () => {
+    await svc.put("/connections/github/write-actions", { writeActions: ["github.comment"], confirm: true });
+    const d = svc.app.actions.createDraft({ kind: "github.comment", connectionId: "github", title: "t", target: { repo: "acme/web", number: 7 }, payload: { body: "retry me" }, context: {}, createdBy: "test" });
+    const ap = await svc.post(`/actions/${d.id}/approve`, { version: 1, payloadHash: d.payloadHash });
+    // An earlier attempt was interrupted after it may have sent; the lookup that would confirm it is refused.
+    svc.app.db.prepare("insert into side_effects (effect_key, status, created_at) values (?, 'pending', ?)").run(`action:${d.id}:v1`, new Date().toISOString());
+    fx.route("GET", "/gh/repos/acme/web/issues/7/comments", () => ({ status: 401, json: { message: "Bad credentials" } }));
+    const before = posted.length;
+    const exec = await svc.post(`/actions/${d.id}/execute`, { nonce: ap.approval.nonce, version: 1, payloadHash: d.payloadHash });
+    await svc.waitJob(exec.job.id);
+    const after = await svc.get(`/actions/${d.id}`);
+    expect(after.status).toBe("unknown");
+    expect(after.receipt.error).toMatch(/Could not check whether an earlier attempt/);
+    expect(posted.length).toBe(before);
+    expect((svc.app.db.prepare("select status from side_effects where effect_key = ?").get(`action:${d.id}:v1`) as { status: string }).status).toBe("pending");
+    fx.route("GET", "/gh/repos/acme/web/issues/7/comments", () => ({ json: posted }));
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");

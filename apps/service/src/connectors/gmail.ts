@@ -1,45 +1,39 @@
+/**
+ * Gmail through the user's claude.ai Gmail connector (see claude-adapter.ts).
+ * search_threads returns every message of each thread with its labels, so
+ * one call per page is enough to decide who owes a reply. The one write
+ * saves a reply as a draft (create_draft); Jarvis never sends mail.
+ */
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, afterWrite, paginate } from "./http.ts";
-import { asRemoteError, listingNote, recordFailure } from "./common.ts";
-import { GOOGLE_SECRET_NAMES, buildAuthorizeUrl, completeGoogleAuthorization, configureGoogle, googleAuthMethod, googleRequest, googleSetupSteps, grantedScopes } from "./google.ts";
+import { RemoteError, afterWrite } from "./http.ts";
+import { attemptStartMs, recordFailure } from "./common.ts";
+import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
+import { str } from "./atlassian-shapes.ts";
 
-interface GmailHeader {
-  name: string;
-  value: string;
-}
-
-interface GmailMessage {
+export interface GmailMessage {
   id: string;
   threadId?: string;
   labelIds?: string[];
   snippet?: string;
+  subject?: string;
+  sender?: string;
+  date?: string;
   internalDate?: string;
-  payload?: { headers?: GmailHeader[] };
+  toRecipients?: string[];
 }
 
-interface GmailThread {
+export interface GmailThread {
   id: string;
   messages?: GmailMessage[];
+  viewUrl?: string;
 }
 
-interface GmailDraft {
-  id: string;
-  message?: GmailMessage;
-}
-
-export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-export const GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
-/** Scopes that include permission to create drafts. */
-const DRAFT_CAPABLE = [GMAIL_COMPOSE_SCOPE, "https://www.googleapis.com/auth/gmail.modify", "https://mail.google.com/"];
-
-const DEFAULT_BASE = "https://gmail.googleapis.com";
 const WINDOW_DAYS = 7;
-const MAX_LIST_PAGES = 4;
-const MAX_THREADS = 100;
-const EFFECT_HEADER = "X-Jarvis-Effect";
-const THREAD_HEADERS = ["From", "Subject", "Date", "Message-ID", "Reply-To", "References"];
+const MAX_PAGES = 4;
+const PAGE_SIZE = 25;
 const SCOPE_LABEL = "Inbox threads (7 days)";
+const THREAD_ID = /^[A-Za-z0-9]+$/;
 
 /** Case-insensitive substrings identifying calendar notification mail, which never needs a reply. */
 export const CALENDAR_NOTIFICATION_MARKERS = [
@@ -56,14 +50,7 @@ export const CALENDAR_NOTIFICATION_MARKERS = [
   "calendar-notification@google.com",
 ];
 
-function base(ctx: AdapterContext): string {
-  return `${ctx.endpoint(DEFAULT_BASE).replace(/\/$/, "")}/gmail/v1/users/me`;
-}
-
-export function header(m: GmailMessage | undefined, name: string): string {
-  const h = (m?.payload?.headers ?? []).find((x) => x.name.toLowerCase() === name.toLowerCase());
-  return h?.value ?? "";
-}
+const server = (ctx: AdapterContext) => serverName(ctx, CLAUDE_SERVERS.gmail);
 
 export function emailAddress(from: string): string {
   const m = /<([^>]+)>/.exec(from);
@@ -83,7 +70,7 @@ export function isCalendarNotification(subject: string, from: string): boolean {
 function messageTime(m: GmailMessage): number | null {
   const internal = Number(m.internalDate);
   if (Number.isFinite(internal) && internal > 0) return internal;
-  const d = Date.parse(header(m, "Date"));
+  const d = Date.parse(m.date ?? "");
   return Number.isFinite(d) ? d : null;
 }
 
@@ -98,24 +85,21 @@ export interface ThreadSummary {
   fromSelf: boolean;
   calendarNotification: boolean;
   awaiting: boolean;
-  replyTo: string;
-  messageIdHeader: string;
-  references: string;
   snippet: string;
+  url: string;
 }
 
 /** Classify a thread. Unread/important come only from Gmail labels; the last message decides who owes a reply. */
 export function summarizeThread(t: GmailThread, selfEmail: string | null): ThreadSummary | null {
   const messages = [...(t.messages ?? [])].sort((a, b) => (messageTime(a) ?? 0) - (messageTime(b) ?? 0));
   const last = messages[messages.length - 1];
-  if (!last) return null;
+  if (!last?.id) return null;
   const at = messageTime(last);
   const labels = (m: GmailMessage) => m.labelIds ?? [];
-  const from = header(last, "From");
-  const subject = header(last, "Subject") || header(messages[0], "Subject");
+  const from = last.sender ?? "";
+  const subject = last.subject || messages.find((m) => m.subject)?.subject || "";
   const fromSelf = labels(last).includes("SENT") || (!!selfEmail && emailAddress(from) === selfEmail.toLowerCase());
   const calendarNotification = isCalendarNotification(subject, from);
-  const messageIdHeader = header(last, "Message-ID");
   return {
     threadId: t.id,
     subject,
@@ -127,21 +111,18 @@ export function summarizeThread(t: GmailThread, selfEmail: string | null): Threa
     fromSelf,
     calendarNotification,
     awaiting: !fromSelf && !calendarNotification,
-    replyTo: header(last, "Reply-To") || from,
-    messageIdHeader,
-    references: [header(last, "References"), messageIdHeader].filter(Boolean).join(" ").trim(),
     snippet: last.snippet ?? "",
+    url: t.viewUrl && /^https:\/\/mail\.google\.com\//.test(t.viewUrl) ? t.viewUrl : `https://mail.google.com/mail/u/0/#inbox/${t.id}`,
   };
 }
 
 function toObservation(s: ThreadSummary): Observation {
-  const url = `https://mail.google.com/mail/u/0/#inbox/${s.threadId}`;
   const pending = s.awaiting && (s.unread || s.important);
   return {
     kind: "gmail_thread",
     externalId: s.threadId,
     title: s.subject || "(no subject)",
-    url,
+    url: s.url,
     author: s.from,
     ...(s.lastMessageAt ? { occurredAt: s.lastMessageAt } : {}),
     data: { unread: s.unread, important: s.important, awaiting: s.awaiting, fromSelf: s.fromSelf, calendarNotification: s.calendarNotification, lastMessageId: s.lastMessageId, snippet: s.snippet.slice(0, 1000) },
@@ -154,151 +135,126 @@ function toObservation(s: ThreadSummary): Observation {
             title: `Reply to ${displayName(s.from)}: ${s.subject || "(no subject)"}`,
             summary: s.snippet.slice(0, 280),
             why: `The latest message is from someone else and the thread is ${[s.unread ? "unread" : "", s.important ? "marked important" : ""].filter(Boolean).join(" and ")}.`,
-            url,
+            url: s.url,
             priority: s.important ? 70 : 60,
-            draftable: { actionKind: "gmail.draft", target: { threadId: s.threadId, to: s.replyTo, subject: s.subject, inReplyTo: s.messageIdHeader, references: s.references }, context: { from: s.from, subject: s.subject, snippet: s.snippet } },
+            draftable: { actionKind: "gmail.draft", target: { threadId: s.threadId, to: emailAddress(s.from), subject: s.subject, replyToMessageId: s.lastMessageId }, context: { from: s.from, subject: s.subject, snippet: s.snippet } },
           },
         }
       : {}),
   };
 }
 
-async function listThreadIds(ctx: AdapterContext) {
-  return paginate<{ id: string }>(
-    async (cursor) => {
-      const qs = new URLSearchParams({ q: `in:inbox newer_than:${WINDOW_DAYS}d`, maxResults: "50" });
-      if (cursor) qs.set("pageToken", cursor);
-      const res = await googleRequest<{ threads?: Array<{ id: string }>; nextPageToken?: string }>(ctx, { url: `${base(ctx)}/threads?${qs}` });
-      return { items: res.data.threads ?? [], next: res.data.nextPageToken ?? null };
-    },
-    { maxPages: MAX_LIST_PAGES },
-  );
-}
-
-async function fetchThread(ctx: AdapterContext, id: string): Promise<GmailThread> {
-  const qs = new URLSearchParams({ format: "metadata" });
-  for (const h of THREAD_HEADERS) qs.append("metadataHeaders", h);
-  const res = await googleRequest<GmailThread>(ctx, { url: `${base(ctx)}/threads/${encodeURIComponent(id)}?${qs}` });
-  return res.data;
+/** Parse one search_threads page. "{}" is the connector's documented empty result. */
+export function parseThreadPage(text: string): { items: GmailThread[]; next: string | null; unreadable: number } {
+  let res: { threads?: unknown; nextPageToken?: unknown };
+  try {
+    res = JSON.parse(text) as typeof res;
+  } catch {
+    throw new RemoteError("Gmail search returned an unreadable result", "error");
+  }
+  if (!res || typeof res !== "object") throw new RemoteError("Gmail search returned an unreadable result", "error");
+  // An error reported inside the result, not as a tool error, is still an error.
+  const err = (res as { error?: unknown }).error;
+  if (err !== undefined) throw toolError("Gmail", "search_threads", typeof err === "string" ? err : JSON.stringify(err));
+  const threads = res.threads === undefined ? [] : res.threads;
+  if (!Array.isArray(threads)) throw new RemoteError("Gmail search returned an unexpected result shape", "error");
+  const items = threads.filter((t): t is GmailThread => !!t && typeof t === "object" && typeof (t as GmailThread).id === "string" && THREAD_ID.test((t as GmailThread).id));
+  return { items, next: str(res.nextPageToken), unreadable: threads.length - items.length };
 }
 
 async function syncInbox(ctx: AdapterContext, cov: CoverageTracker, out: Observation[]) {
-  const list = await listThreadIds(ctx);
+  const results = await paginateStreams<GmailThread>(ctx, server(ctx), [
+    {
+      id: "inbox",
+      label: SCOPE_LABEL,
+      maxPages: MAX_PAGES,
+      call: (cursor) => ({ tool: "search_threads", args: { query: `in:inbox newer_than:${WINDOW_DAYS}d`, pageSize: PAGE_SIZE, view: "THREAD_VIEW_MINIMAL", ...(cursor ? { pageToken: cursor } : {}) } }),
+      parse: parseThreadPage,
+    },
+  ]);
+  const r = streamOrThrow(results.get("inbox"));
   const windowStart = ctx.now().getTime() - WINDOW_DAYS * 86_400_000;
   const selfEmail = ctx.selfEmail ?? ctx.connection.account;
-  let failed = 0;
   let dropped = 0;
+  let undated = 0;
   let items = 0;
-  for (const { id } of list.items.slice(0, MAX_THREADS)) {
-    let thread: GmailThread;
-    try {
-      thread = await fetchThread(ctx, id);
-    } catch (e) {
-      const err = asRemoteError(e);
-      if (err.state === "unauthorized" || err.state === "denied") throw err;
-      failed++;
+  for (const t of r.items) {
+    const s = summarizeThread(t, selfEmail);
+    // A thread that cannot be dated or read is unreadable (partial); unknown age is not freshness.
+    if (!s || !s.lastMessageAt) {
+      undated++;
       continue;
     }
-    const s = summarizeThread(thread, selfEmail);
-    if (!s || !s.lastMessageAt || Date.parse(s.lastMessageAt) < windowStart) {
+    if (Date.parse(s.lastMessageAt) < windowStart) {
       dropped++;
       continue;
     }
     items++;
     out.push(toObservation(s));
   }
-  const capped = list.items.length > MAX_THREADS;
   const notes = [
-    ...(capped ? [`Read the newest ${MAX_THREADS} of ${list.items.length}+ threads`] : []),
-    ...(failed ? [`${failed} thread(s) could not be read`] : []),
-    ...(dropped ? [`${dropped} thread(s) outside the ${WINDOW_DAYS}-day window or undated were skipped`] : []),
+    ...(r.error ? [r.error.message] : !r.complete ? [`Read the newest ${r.items.length} threads (${MAX_PAGES} pages)`] : []),
+    ...(r.unreadable + undated ? [`${r.unreadable + undated} thread(s) could not be read or dated`] : []),
+    ...(dropped ? [`${dropped} thread(s) outside the ${WINDOW_DAYS}-day window were skipped`] : []),
   ];
-  const complete = list.complete && !capped && !failed;
-  cov.add(SCOPE_LABEL, complete ? (items ? "complete" : "empty") : "partial", items, list.pages, listingNote(list, MAX_LIST_PAGES, notes));
+  const complete = r.complete && !r.unreadable && !undated;
+  cov.add(SCOPE_LABEL, complete ? (items ? "complete" : "empty") : "partial", items, r.pages, notes.length ? notes.join("; ") : undefined);
 }
 
-function assertHeaderSafe(name: string, value: string): string {
-  if (/[\r\n]/.test(value)) throw new RemoteError(`Invalid ${name} header`, "error");
-  return value;
-}
-
-function encodeHeaderValue(value: string): string {
-  return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+function draftTarget(target: Record<string, unknown>) {
+  const threadId = String(target.threadId ?? "");
+  const to = String(target.to ?? "").trim();
+  const replyToMessageId = String(target.replyToMessageId ?? "");
+  if (!THREAD_ID.test(threadId)) throw new RemoteError("Invalid Gmail thread", "error");
+  if (!/^[^\s@<>]+@[^\s@<>]+$/.test(to)) throw new RemoteError("The draft has no valid recipient", "error");
+  if (replyToMessageId && !THREAD_ID.test(replyToMessageId)) throw new RemoteError("Invalid Gmail message", "error");
+  return { threadId, to, subject: String(target.subject ?? ""), replyToMessageId };
 }
 
 function replySubject(subject: string): string {
   return /^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`;
 }
 
-/** RFC 822 reply as base64url, carrying the effect key in a custom header for recovery. */
-export function buildRawReply(p: { to: string; subject: string; inReplyTo: string; references: string; body: string; effectKey: string }): string {
-  const headers = [
-    `To: ${assertHeaderSafe("To", p.to)}`,
-    `Subject: ${encodeHeaderValue(assertHeaderSafe("Subject", replySubject(p.subject)))}`,
-    ...(p.inReplyTo ? [`In-Reply-To: ${assertHeaderSafe("In-Reply-To", p.inReplyTo)}`] : []),
-    ...(p.references ? [`References: ${assertHeaderSafe("References", p.references)}`] : []),
-    `${EFFECT_HEADER}: ${assertHeaderSafe(EFFECT_HEADER, p.effectKey)}`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
-  ];
-  const body = (Buffer.from(p.body, "utf8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
-  return Buffer.from(`${headers.join("\r\n")}\r\n\r\n${body}\r\n`, "utf8").toString("base64url");
+interface Draft {
+  id?: string;
+  date?: string;
+  threadId?: string;
+  thread_id?: string;
+  viewUrl?: string;
+  plaintextBody?: string;
+  plaintext_body?: string;
+  message?: { threadId?: string; plaintextBody?: string; plaintext_body?: string };
 }
 
-function draftTarget(target: Record<string, unknown>) {
-  const threadId = String(target.threadId ?? "");
-  const to = String(target.to ?? "").trim();
-  if (!/^[A-Za-z0-9]+$/.test(threadId)) throw new RemoteError("Invalid Gmail thread", "error");
-  if (!to.includes("@")) throw new RemoteError("The draft has no recipient", "error");
-  const inReplyTo = String(target.inReplyTo ?? "");
-  return { threadId, to, subject: String(target.subject ?? ""), inReplyTo, references: String(target.references ?? inReplyTo) };
-}
+const draftThread = (d: Draft) => d.threadId ?? d.thread_id ?? d.message?.threadId ?? null;
+const draftBody = (d: Draft) => d.plaintextBody ?? d.plaintext_body ?? d.message?.plaintextBody ?? d.message?.plaintext_body ?? "";
+const squash = (s: string) => s.replace(/\s+/g, " ").trim();
 
-const draftUrl = (messageId: string | undefined) => (messageId ? `https://mail.google.com/mail/u/0/#drafts?compose=${messageId}` : undefined);
-
-async function draftCarriesEffect(ctx: AdapterContext, messageId: string, effectKey: string): Promise<boolean> {
-  const res = await googleRequest<GmailMessage>(ctx, { url: `${base(ctx)}/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=${EFFECT_HEADER}` });
-  return header(res.data, EFFECT_HEADER) === effectKey;
-}
-
-async function identify(ctx: AdapterContext): Promise<string | null> {
-  const res = await googleRequest<{ emailAddress?: string }>(ctx, { url: `${base(ctx)}/profile`, retries: 1 });
-  return res.data.emailAddress ?? null;
+function selfEmailOf(text: string): string | null {
+  return /authuser=([^&#\s"]+@[^&#\s"]+)/.exec(text)?.[1] ?? null;
 }
 
 export const gmailAdapter: ConnectorAdapter = {
   kind: "gmail",
-  secretNames: GOOGLE_SECRET_NAMES,
+  secretNames: [],
   definition: {
     kind: "gmail",
     label: "Gmail",
     description: "Recent inbox threads where someone is waiting for your reply.",
-    authMethods: [googleAuthMethod()],
+    authMethods: claudeAuthMethods(CLAUDE_SERVERS.gmail),
     scopes: [{ id: "inbox_recent", label: "Inbox threads from the last 7 days", default: true }],
     writeActions: [{ id: "gmail.draft", label: "Save a reply as a Gmail draft (never sends)" }],
-    setupHelp: "Jarvis reads Gmail with read-only access. Saving drafts needs a separate, additional Google permission (gmail.compose) that you grant only if you authorise drafting. Jarvis never sends mail.",
-    unavoidableSteps: googleSetupSteps("Gmail API"),
+    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gmail)} Jarvis never sends mail; with drafting authorised it only saves replies as Gmail drafts.`,
+    unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.gmail),
   },
 
-  configure: configureGoogle,
-
-  async authorizeUrl(ctx, p) {
-    return buildAuthorizeUrl(ctx, { ...p, scopes: p.scopes.length ? p.scopes : [GMAIL_READ_SCOPE] });
-  },
-
-  async completeAuthorization(ctx, p) {
-    return completeGoogleAuthorization(ctx, p, identify);
-  },
+  configure: async (_ctx, fields) => configureClaude(fields, CLAUDE_SERVERS.gmail),
 
   async test(ctx) {
-    try {
-      const account = await identify(ctx);
-      return { ok: true, state: "complete", account, message: `Signed in as ${account ?? "unknown"}`, grantedScopes: grantedScopes(ctx) };
-    } catch (e) {
-      const err = asRemoteError(e);
-      return { ok: false, state: err.state, account: null, message: err.message };
-    }
+    return testClaude(ctx, server(ctx), { tool: "search_threads", args: { query: "in:inbox", pageSize: 1, view: "THREAD_VIEW_METADATA_ONLY" } }, (text) => {
+      parseThreadPage(text);
+      return { account: selfEmailOf(text) };
+    });
   },
 
   async sync(ctx): Promise<SyncResult> {
@@ -316,39 +272,40 @@ export const gmailAdapter: ConnectorAdapter = {
 
   async execute(ctx, action): Promise<ExecuteResult> {
     if (action.kind !== "gmail.draft") throw new RemoteError(`Unsupported action ${action.kind}`, "error");
-    if (!grantedScopes(ctx).some((s) => DRAFT_CAPABLE.includes(s))) {
-      throw new RemoteError("Saving Gmail drafts needs the additional gmail.compose permission. Authorise \"Save a reply as a Gmail draft\" for this connection and reconnect Google.", "denied");
-    }
     const t = draftTarget(action.target);
     const body = String(action.payload.body ?? "").trim();
     if (!body) throw new RemoteError("The draft is empty", "error");
-    const raw = buildRawReply({ ...t, body, effectKey: action.effectKey });
-    const res = await googleRequest<GmailDraft>(ctx, { method: "POST", url: `${base(ctx)}/drafts`, body: { message: { raw, threadId: t.threadId } }, retries: 0 });
-    const check = await afterWrite(() => googleRequest<GmailDraft>(ctx, { url: `${base(ctx)}/drafts/${encodeURIComponent(res.data.id)}?format=metadata` }));
-    const verified = !!check && check.data.id === res.data.id && header(check.data.message, EFFECT_HEADER) === action.effectKey;
-    const url = draftUrl(check?.data.message?.id ?? res.data.message?.id);
-    return { verified, remoteId: res.data.id, ...(url ? { url } : {}), detail: { threadId: t.threadId, messageId: check?.data.message?.id ?? null } };
+    const raw = await callOne(ctx, server(ctx), "create_draft", { to: [t.to], subject: replySubject(t.subject), body, ...(t.replyToMessageId ? { replyToMessageId: t.replyToMessageId } : {}) }, { write: true });
+    let created: Draft = {};
+    try {
+      created = JSON.parse(raw) as Draft;
+    } catch {
+      // Unreadable confirmation: reported as unverified below.
+    }
+    if (!created.id) return { verified: false, detail: { threadId: t.threadId, note: "Gmail did not return a draft id", response: raw.slice(0, 300) } };
+    const check = await afterWrite(async () => JSON.parse(await callOne(ctx, server(ctx), "get_draft", { draftId: created.id, messageFormat: "MINIMAL" })) as Draft);
+    const verified = !!check && (check.id === created.id || !!check.message);
+    return { verified, remoteId: created.id, ...(created.viewUrl ? { url: created.viewUrl } : {}), detail: { threadId: draftThread(created) ?? t.threadId } };
   },
 
   async findEffect(ctx, action) {
-    const threadId = String(action.target.threadId ?? "");
-    const r = await paginate<GmailDraft>(
-      async (cursor) => {
-        const qs = new URLSearchParams({ maxResults: "50" });
-        if (cursor) qs.set("pageToken", cursor);
-        const res = await googleRequest<{ drafts?: GmailDraft[]; nextPageToken?: string }>(ctx, { url: `${base(ctx)}/drafts?${qs}` });
-        return { items: res.data.drafts ?? [], next: res.data.nextPageToken ?? null };
-      },
-      { maxPages: 4 },
-    );
-    const candidates = r.items.filter((d) => d.message?.id && (!threadId || d.message.threadId === threadId));
-    for (const d of candidates) {
-      if (await draftCarriesEffect(ctx, d.message!.id, action.effectKey)) {
-        const url = draftUrl(d.message!.id);
-        return { verified: true, remoteId: d.id, ...(url ? { url } : {}), detail: { threadId, messageId: d.message!.id, recovered: true } };
-      }
+    const t = draftTarget(action.target);
+    const body = squash(String(action.payload.body ?? ""));
+    const text = await callOne(ctx, server(ctx), "list_drafts", { pageSize: 50, view: "DRAFT_VIEW_FULL" });
+    let res: { drafts?: Draft[]; nextPageToken?: string } = {};
+    try {
+      res = JSON.parse(text) as typeof res;
+    } catch {
+      throw new RemoteError("Gmail returned an unreadable draft list", "error");
     }
-    if (!r.complete) throw new RemoteError("Could not read all drafts to check for an earlier attempt", "partial");
+    // The connector cannot set custom headers, so an earlier attempt is recognised by thread, time and body.
+    const fromMs = attemptStartMs(action.since, 0);
+    const found = (res.drafts ?? []).find((d) => {
+      const at = Date.parse(d.date ?? "");
+      return draftThread(d) === t.threadId && !(Number.isFinite(at) && at < fromMs) && body.length > 0 && squash(draftBody(d)).startsWith(body);
+    });
+    if (found?.id) return { verified: true, remoteId: found.id, ...(found.viewUrl ? { url: found.viewUrl } : {}), detail: { threadId: t.threadId, recovered: true, matchedBy: "thread and body" } };
+    if (res.nextPageToken) throw new RemoteError("More than 50 drafts; could not check them all for an earlier attempt", "partial");
     return null;
   },
 };

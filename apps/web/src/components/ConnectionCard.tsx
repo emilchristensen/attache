@@ -47,13 +47,16 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
   const { busy, run } = useAction();
   const configured = status.status !== "not_configured" && status.status !== "disconnected";
   const [editing, setEditing] = useState(!configured && !compact);
-  const [method, setMethod] = useState(definition.authMethods[0]?.id ?? "");
+  const [method, setMethod] = useState(definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? ""));
   const [fields, setFields] = useState<Record<string, string>>({});
   const [scopes, setScopes] = useState<string[]>(configured ? status.readScopes : definition.scopes.filter((s) => s.default).map((s) => s.id));
   const [preview, setPreview] = useState<Record<string, number> | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
   const m = definition.authMethods.find((x) => x.id === method) ?? definition.authMethods[0];
-  const isOAuth = status.kind === "gmail" || status.kind === "gcal";
+  // Browser sign-in follows the method being edited, or the method the connection was saved with.
+  const current = definition.authMethods.find((a) => a.id === status.authMethod);
+  const isOAuth = editing ? !!m?.browserSignIn : !!current?.browserSignIn;
+  const signInWith = ((editing ? m : current)?.label ?? "Sign in").replace(/\s*\(.*\)$/, "");
   const builtin = status.settings.builtin === true;
 
   const configure = () =>
@@ -61,13 +64,14 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
       "configure",
       async () => {
         const r = await post<{ test: { ok: boolean; message: string } }>(`/connections/${status.kind}/configure`, { method, fields, readScopes: definition.scopes.length ? scopes : undefined });
-        setTestMsg(r.test.message);
+        // Before browser sign-in there is no test result to show; the toast says what to do next.
+        setTestMsg(isOAuth && !r.test.ok ? null : r.test.message);
         setFields({});
-        if (!isOAuth) setEditing(false);
+        setEditing(false);
         onChanged();
         return r;
       },
-      isOAuth ? "Saved. Now sign in with Google." : undefined,
+      isOAuth ? `Saved. Now ${signInWith.charAt(0).toLowerCase()}${signInWith.slice(1)}.` : undefined,
     );
 
   const signIn = (includeWrite = false) =>
@@ -75,6 +79,21 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
       const r = await post<{ url: string }>(`/connections/${status.kind}/oauth/start`, { includeWrite });
       window.location.href = r.url;
     });
+
+  // Methods with secrets need new ones; claude.ai-style methods only need the outside sign-in fixed and a fresh test.
+  const reconnect = () => {
+    if (current?.fields.some((f) => f.secret)) {
+      setMethod(current.id);
+      setEditing(true);
+      return;
+    }
+    void run("reconnect", async () => {
+      const r = await post<{ test: { ok: boolean; message: string } }>(`/connections/${status.id}/test`);
+      setTestMsg(r.test.message);
+      onChanged();
+      if (!r.test.ok) throw new Error(`Still not signed in: ${r.test.message}`);
+    }, "Reconnected");
+  };
 
   return (
     <div className="card stack" data-connection={status.id}>
@@ -187,10 +206,22 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
         </div>
       )}
 
+      {!isOAuth && configured && status.status === "needs_auth" && !editing && (
+        <div className="state partial small" role="status" aria-label="Sign-in needed">
+          <strong style={{ color: "var(--warn)" }}>Sign-in needed</strong>
+          <span>{current?.reconnectHelp ?? `Enter new credentials for ${status.label} to reconnect.`}</span>
+          <div className="row">
+            <button className="primary" disabled={busy !== null} onClick={reconnect}>
+              {busy === "reconnect" ? "Reconnecting…" : "Reconnect"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {isOAuth && status.status === "needs_auth" && !editing && (
         <div className="row">
           <button className="primary" disabled={busy !== null} onClick={() => signIn(false)}>
-            Sign in with Google (read-only)
+            {signInWith} (read-only)
           </button>
         </div>
       )}
@@ -207,7 +238,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
               <button disabled={busy !== null} onClick={() => run("test", async () => { const r = await post<{ test: { message: string } }>(`/connections/${status.id}/test`); setTestMsg(r.test.message); onChanged(); })}>
                 {busy === "test" ? "Testing…" : "Test"}
               </button>
-              {definition.scopes.length > 0 && status.kind !== "model" && (
+              {definition.scopes.length > 0 && status.kind !== "model" && status.status !== "needs_auth" && (
                 <button disabled={busy !== null} onClick={() => run("sync", () => post(`/connections/${status.id}/sync`).then(onChanged), "Refresh started")}>
                   Sync now
                 </button>
@@ -246,7 +277,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
         </details>
       )}
 
-      {configured && !compact && definition.writeActions.length > 0 && <WriteAuthority status={status} definition={definition} onChanged={onChanged} onSignIn={isOAuth ? () => signIn(true) : undefined} />}
+      {configured && !compact && definition.writeActions.length > 0 && <WriteAuthority status={status} definition={definition} onChanged={onChanged} onSignIn={isOAuth ? () => signIn(true) : undefined} signInWith={signInWith} />}
 
       {preview && (
         <div className="state error small" role="alertdialog" aria-label="Disconnect">
@@ -274,7 +305,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
   );
 }
 
-function WriteAuthority({ status, definition, onChanged, onSignIn }: { status: ConnectionStatus; definition: ConnectionDefinition; onChanged: () => void; onSignIn: (() => void) | undefined }) {
+function WriteAuthority({ status, definition, onChanged, onSignIn, signInWith }: { status: ConnectionStatus; definition: ConnectionDefinition; onChanged: () => void; onSignIn: (() => void) | undefined; signInWith: string }) {
   const { run } = useAction();
   const [sel, setSel] = useState<string[]>(status.writeActions);
   const [confirm, setConfirm] = useState(false);
@@ -292,7 +323,7 @@ function WriteAuthority({ status, definition, onChanged, onSignIn }: { status: C
         ))}
         {onSignIn && sel.length > 0 && (
           <p className="small muted">
-            Google needs an extra permission to create drafts. <button className="small" onClick={onSignIn}>Grant write access with Google</button>
+            Writing needs an extra permission from the provider. <button className="small" onClick={onSignIn}>{signInWith} again to grant write access</button>
           </p>
         )}
         {changed && (
