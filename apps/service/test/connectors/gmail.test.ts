@@ -33,6 +33,25 @@ function inbox(threads: GmailThread[], pageSize = 25) {
   });
 }
 
+/**
+ * The claude.ai Gmail connector as observed 2026-11-02: search_threads returns only id, sender (dots
+ * stripped from the local part), subject, recipients and threadId per message, whatever the view;
+ * get_thread still returns date, internalDate, labelIds and viewUrl.
+ */
+function currentConnectorInbox(threads: GmailThread[]) {
+  const undot = (from: string) => from.replace(/([^<\s@]+)@/, (_, local: string) => `${local.replace(/\./g, "")}@`);
+  onTool(claude, SERVER, "search_threads", () =>
+    jsonAnswer({
+      resultCountEstimate: String(threads.length),
+      threads: threads.map((t) => ({ id: t.id, messageCount: t.messages!.length, messages: t.messages!.map((x) => ({ id: x.id, threadId: t.id, sender: undot(x.sender ?? ""), subject: x.subject })) })),
+    }),
+  );
+  onTool(claude, SERVER, "get_thread", (a) => {
+    const t = threads.find((x) => x.id === a.threadId);
+    return t ? jsonAnswer({ ...t, messageCount: t.messages!.length }) : { text: "Requested entity was not found. 404", isError: true };
+  });
+}
+
 const ctx = (scopes = ["inbox_recent"]) => fixtureContext({ kind: "gmail", baseUrl: fx.url, settings: { authMethod: "claude-ai" }, readScopes: scopes, selfEmail: SELF, now: new Date(NOW) });
 const calls = (tool: string) => claude.calls.filter((c) => c.tool === tool);
 
@@ -88,6 +107,36 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
     expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("partial");
     onTool(claude, SERVER, "search_threads", () => ({ text: "not json" }));
     expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("error");
+  });
+
+  it("search results without dates or labels are completed with get_thread (metadata only, no bodies)", async () => {
+    const self = "alex.morgan@example.com";
+    const dotted = (scopes = ["inbox_recent"]) => fixtureContext({ kind: "gmail", baseUrl: fx.url, settings: { authMethod: "claude-ai" }, readScopes: scopes, selfEmail: self, now: new Date(NOW) });
+    currentConnectorInbox([
+      thread("t1", [m("a", "Mia <mia.berg@client.example>", 3, ["INBOX", "UNREAD", "IMPORTANT"])]),
+      thread("t2", [m("b", "bob@client.example", 30, ["INBOX"]), m("c", self, 20, ["SENT"])]),
+      thread("t3", [m("d", "old@client.example", 24 * 9, ["INBOX"])]),
+    ]);
+    const r = await gmailAdapter.sync!(dotted());
+    expect(r.coverage, JSON.stringify(r.coverage)).toMatchObject({ state: "complete", items: 2 });
+    // The reply goes to the real address, and my own last message (dots and all) is recognised.
+    expect(r.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:t1"]);
+    expect(r.observations.find((o) => o.externalId === "t1")!.attention!.draftable).toMatchObject({ target: { to: "mia.berg@client.example", replyToMessageId: "a" } });
+    expect(calls("get_thread").map((c) => c.args)).toEqual(["t1", "t2", "t3"].map((threadId) => ({ threadId, messageFormat: "MINIMAL" })));
+  });
+
+  it("a thread whose details cannot be read stays unread coverage, not a silent drop", async () => {
+    currentConnectorInbox([thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])]), thread("t2", [m("b", "bob@client.example", 2, ["INBOX"])])]);
+    onTool(claude, SERVER, "get_thread", (a) => (a.threadId === "t2" ? { text: "Backend unavailable 503", isError: true } : jsonAnswer(thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])]))));
+    const r = await gmailAdapter.sync!(ctx());
+    expect(r.coverage).toMatchObject({ state: "partial", items: 1 });
+    expect(r.coverage.scopes[0]!.note).toMatch(/1 thread\(s\) could not be read or dated/);
+  });
+
+  it("search results that already carry dates and labels make no get_thread calls", async () => {
+    inbox([thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])])]);
+    await gmailAdapter.sync!(ctx());
+    expect(calls("get_thread")).toHaveLength(0);
   });
 
   it("coverage: undated threads make the scope partial; an error inside the result is an error, not zero threads", async () => {

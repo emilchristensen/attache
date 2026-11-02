@@ -1,13 +1,15 @@
 /**
  * Gmail through the user's claude.ai Gmail connector (see claude-adapter.ts).
- * search_threads returns every message of each thread with its labels, so
- * one call per page is enough to decide who owes a reply. The one write
+ * search_threads lists the inbox. The connector's search results stopped
+ * carrying dates and labels (and strip dots from addresses), so a thread
+ * without them is completed with get_thread in its MINIMAL format: metadata,
+ * subject and snippet, never bodies. The one write
  * saves a reply as a draft (create_draft); Jarvis never sends mail.
  */
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
-import { attemptStartMs, recordFailure } from "./common.ts";
+import { asRemoteError, attemptStartMs, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
 
@@ -34,6 +36,8 @@ const MAX_PAGES = 4;
 const PAGE_SIZE = 25;
 const SCOPE_LABEL = "Inbox threads (7 days)";
 const THREAD_ID = /^[A-Za-z0-9]+$/;
+/** get_thread calls per Claude Code session: small enough to finish well inside the session timeout. */
+const DETAIL_BATCH = 10;
 
 /** Case-insensitive substrings identifying calendar notification mail, which never needs a reply. */
 export const CALENDAR_NOTIFICATION_MARKERS = [
@@ -162,6 +166,45 @@ export function parseThreadPage(text: string): { items: GmailThread[]; next: str
   return { items, next: str(res.nextPageToken), unreadable: threads.length - items.length };
 }
 
+/** A search result without a date or labels on every message cannot say who owes a reply or how old the thread is. */
+function needsDetails(t: GmailThread): boolean {
+  return !t.messages?.length || t.messages.some((m) => !m.labelIds || !(m.internalDate || m.date));
+}
+
+/** Parse one get_thread result; anything else is null, so the thread stays undated. */
+export function parseThread(text: string, threadId: string): GmailThread | null {
+  try {
+    const t = JSON.parse(text) as GmailThread;
+    return t && t.id === threadId && Array.isArray(t.messages) ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Complete the threads that need it with get_thread; a thread that cannot be read is returned unchanged (and counts as undated). */
+async function withDetails(ctx: AdapterContext, threads: GmailThread[]): Promise<{ threads: GmailThread[]; error: RemoteError | null }> {
+  const missing = threads.filter(needsDetails);
+  const batches = Array.from({ length: Math.ceil(missing.length / DETAIL_BATCH) }, (_, i) => missing.slice(i * DETAIL_BATCH, (i + 1) * DETAIL_BATCH));
+  const detailed = new Map<string, GmailThread>();
+  let error: RemoteError | null = null;
+  await Promise.all(
+    batches.map(async (batch) => {
+      const calls = batch.map((t) => ({ id: t.id, tool: "get_thread", args: { threadId: t.id, messageFormat: "MINIMAL" } }));
+      try {
+        const outcomes = await ctx.claude.run(server(ctx), calls, { signal: ctx.signal });
+        for (const c of calls) {
+          const o = outcomes.get(c.id);
+          const t = o?.status === "ok" ? parseThread(o.text, c.id) : null;
+          if (t) detailed.set(c.id, t);
+        }
+      } catch (e) {
+        error ??= asRemoteError(e);
+      }
+    }),
+  );
+  return { threads: threads.map((t) => detailed.get(t.id) ?? t), error };
+}
+
 async function syncInbox(ctx: AdapterContext, cov: CoverageTracker, out: Observation[]) {
   const results = await paginateStreams<GmailThread>(ctx, server(ctx), [
     {
@@ -173,12 +216,13 @@ async function syncInbox(ctx: AdapterContext, cov: CoverageTracker, out: Observa
     },
   ]);
   const r = streamOrThrow(results.get("inbox"));
+  const details = await withDetails(ctx, r.items);
   const windowStart = ctx.now().getTime() - WINDOW_DAYS * 86_400_000;
   const selfEmail = ctx.selfEmail ?? ctx.connection.account;
   let dropped = 0;
   let undated = 0;
   let items = 0;
-  for (const t of r.items) {
+  for (const t of details.threads) {
     const s = summarizeThread(t, selfEmail);
     // A thread that cannot be dated or read is unreadable (partial); unknown age is not freshness.
     if (!s || !s.lastMessageAt) {
@@ -195,6 +239,7 @@ async function syncInbox(ctx: AdapterContext, cov: CoverageTracker, out: Observa
   const notes = [
     ...(r.error ? [r.error.message] : !r.complete ? [`Read the newest ${r.items.length} threads (${MAX_PAGES} pages)`] : []),
     ...(r.unreadable + undated ? [`${r.unreadable + undated} thread(s) could not be read or dated`] : []),
+    ...(details.error ? [`Thread details: ${details.error.message}`] : []),
     ...(dropped ? [`${dropped} thread(s) outside the ${WINDOW_DAYS}-day window were skipped`] : []),
   ];
   const complete = r.complete && !r.unreadable && !undated;

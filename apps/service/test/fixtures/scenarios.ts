@@ -296,7 +296,20 @@ function mountSlack(c: ClaudeFixture, s: () => ScenarioState) {
 
 function mountGmail(c: ClaudeFixture, s: () => ScenarioState) {
   const threadJson = (id: string, msgs: GmailMessage[]) => ({ id, viewUrl: `https://mail.google.com/mail/?authuser=${s().selfEmail}#all/${id}`, messages: msgs.map((m) => ({ id: m.id, threadId: id, sender: m.from, subject: m.subject, snippet: `${m.subject} …`, labelIds: m.labels, internalDate: String(m.at), date: iso(m.at) })) });
-  onTool(c, GMAIL, "search_threads", () => jsonAnswer(s().gmail.threads.size ? { threads: [...s().gmail.threads].map(([id, msgs]) => threadJson(id, msgs)) } : {}));
+  // As the connector answers since 2026-11: search results carry no date, labels, snippet or viewUrl and strip dots
+  // from addresses; get_thread has the full metadata.
+  const undot = (from: string) => from.replace(/([^<\s@]+)@/, (_, local: string) => `${local.replace(/\./g, "")}@`);
+  onTool(c, GMAIL, "search_threads", () =>
+    jsonAnswer(
+      s().gmail.threads.size
+        ? { resultCountEstimate: String(s().gmail.threads.size), threads: [...s().gmail.threads].map(([id, msgs]) => ({ id, messageCount: msgs.length, messages: msgs.map((m) => ({ id: m.id, threadId: id, sender: undot(m.from), subject: m.subject })) })) }
+        : {},
+    ),
+  );
+  onTool(c, GMAIL, "get_thread", (a) => {
+    const msgs = s().gmail.threads.get(String(a.threadId));
+    return msgs ? jsonAnswer({ ...threadJson(String(a.threadId), msgs), messageCount: msgs.length }) : { text: "Requested entity was not found. 404", isError: true };
+  });
   onTool(c, GMAIL, "create_draft", (a) => {
     const reply = [...s().gmail.threads].find(([, msgs]) => msgs.some((m) => m.id === a.replyToMessageId));
     const d = { id: `r-${++s().nextId}`, threadId: reply?.[0] ?? `thr-${s().nextId}`, body: String(a.body ?? "") };
