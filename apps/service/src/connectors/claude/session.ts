@@ -92,7 +92,15 @@ function toolResultText(content: unknown): string {
   return "";
 }
 
+/** Claude Code's first request exceeded the context window: too many MCP tool definitions were loaded. */
+export class PromptTooLongError extends RemoteError {
+  constructor(text: string) {
+    super(`Claude Code's connector session is too large for the model (${text.slice(0, 160)}). Too many MCP tools were loaded alongside the connector.`, "error");
+  }
+}
+
 function classifyFailure(text: string): RemoteError {
+  if (/prompt is too long/i.test(text)) return new PromptTooLongError(text);
   if (/not logged in|please run \/login|invalid api key|authentication_error|oauth token/i.test(text)) return new RemoteError(`Claude Code is not signed in: ${text.slice(0, 200)}`, "unauthorized");
   if (/usage limit|rate.?limit|overloaded|529|429/i.test(text)) return new RemoteError(`Claude Code is rate limited: ${text.slice(0, 200)}`, "offline");
   return new RemoteError(`Claude Code failed: ${text.slice(0, 300)}`, "error");
@@ -166,7 +174,8 @@ function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Prom
       const s = servers.find((x) => x.name === req.server);
       out.server = s ? { name: s.name, status: s.status, source: s.source ?? null } : null;
       out.otherServers = servers.filter((x) => x.name !== req.server).map((x) => x.name);
-      if (!s || s.status !== "connected" || s.source !== "claudeai") stop();
+      // A session without planned calls only discovers the servers: stop before the model is asked anything.
+      if (!req.calls.length || !s || s.status !== "connected" || s.source !== "claudeai") stop();
       return;
     }
     if (ev.type === "control_request") {

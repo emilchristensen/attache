@@ -15,7 +15,9 @@ export type ToolHandler = (args: Record<string, unknown>) => ToolAnswer | Promis
 export interface ClaudeFixture {
   servers: Array<{ name: string; status: string; source: string }>;
   auth: { loggedIn: boolean; authMethod?: string; email?: string; orgName?: string };
-  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "preapproved";
+  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "preapproved" | "too-long-unless-hidden";
+  /** Every session the fixture CLI started: the tools it was told to disallow and how many calls were planned. */
+  started: Array<{ disallowed: string[]; planned: number }>;
   /** Connector sessions started (one per Claude Code run). */
   sessions: number;
   /** Modes for the next sessions, consumed one per session before `mode` applies. */
@@ -35,7 +37,7 @@ export function useFakeClaude(fixtureUrl: string): void {
   process.env.CLAUDE_CONFIG_DIR ??= mkdtempSync(join(tmpdir(), "jarvis-claude-config-"));
 }
 
-export function mountClaude(fx: FixtureServer, init: Partial<Omit<ClaudeFixture, "tools" | "calls" | "sessions" | "nextModes">> = {}): ClaudeFixture {
+export function mountClaude(fx: FixtureServer, init: Partial<Omit<ClaudeFixture, "tools" | "calls" | "sessions" | "nextModes" | "started">> = {}): ClaudeFixture {
   const f: ClaudeFixture = {
     servers: init.servers ?? ["claude.ai Slack", "claude.ai Gmail", "claude.ai Google Calendar"].map((name) => ({ name, status: "connected", source: "claudeai" })),
     auth: init.auth ?? { loggedIn: true, authMethod: "claude.ai", email: "alex@example.com", orgName: "Example Org" },
@@ -44,7 +46,12 @@ export function mountClaude(fx: FixtureServer, init: Partial<Omit<ClaudeFixture,
     calls: [],
     sessions: 0,
     nextModes: [],
+    started: [],
   };
+  fx.route("POST", "/claude/started", (req) => {
+    f.started.push(req.body as ClaudeFixture["started"][number]);
+    return { json: { ok: true } };
+  });
   fx.route("GET", "/claude/auth", () => ({ json: f.auth }));
   fx.route("GET", "/claude/servers", () => ({ json: { servers: f.servers } }));
   fx.route("GET", "/claude/behavior", () => {

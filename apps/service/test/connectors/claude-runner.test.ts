@@ -92,6 +92,32 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     expect(claude.calls.filter((c) => c.tool === "slack_send_message")).toHaveLength(0);
   });
 
+  it("hides every other MCP server, learned once without a model turn, so the connector's tools fit the context", async () => {
+    claude.servers.push({ name: "claude.ai Google Drive", status: "connected", source: "claudeai" }, { name: "rea", status: "connected", source: "user" });
+    claude.mode = "too-long-unless-hidden";
+    const r = runner();
+    expect((await r.run(SLACK, [read("a", "C1")], { signal: signal() })).get("a")!.status).toBe("ok");
+    // First the listing session (no calls, every MCP tool disallowed), then the real one with the others hidden.
+    expect(claude.started[0]).toEqual({ disallowed: ["mcp__*"], planned: 0 });
+    expect(claude.started[1]!.disallowed.sort()).toEqual(["mcp__claude_ai_Gmail", "mcp__claude_ai_Google_Calendar", "mcp__claude_ai_Google_Drive", "mcp__rea"]);
+    expect(claude.calls).toHaveLength(1);
+    // The list is reused for later sessions.
+    await r.run(SLACK, [read("b", "C2")], { signal: signal() });
+    expect(claude.started.filter((s) => s.planned === 0)).toHaveLength(1);
+  });
+
+  it("a server added since the listing overflows the context once: Jarvis lists again and retries, even a write", async () => {
+    claude.mode = "too-long-unless-hidden";
+    const r = runner();
+    await r.run(SLACK, [read("a", "C1")], { signal: signal() });
+    claude.servers.push({ name: "t3code", status: "connected", source: "user" });
+    const out = await r.run(SLACK, [{ id: "w", tool: "slack_send_message", args: { channel_id: "C1", message: "hi" } }], { signal: signal(), write: true });
+    expect(out.get("w")!.status).toBe("ok");
+    expect(claude.started.filter((s) => s.planned === 0)).toHaveLength(2);
+    expect(claude.started.at(-1)!.disallowed).toContain("mcp__t3code");
+    expect(claude.calls.filter((c) => c.tool === "slack_send_message")).toHaveLength(1);
+  });
+
   it("connector status: missing, needs-auth, not from claude.ai and not connected are distinct failures", async () => {
     claude.servers = [];
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: signal() })).rejects.toMatchObject({ state: "not_configured" });

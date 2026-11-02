@@ -75,8 +75,23 @@ const msg = await firstMessage;
 const text = typeof msg.message?.content === "string" ? msg.message.content : "";
 const plan = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(text)?.[1] ?? "[]");
 const { servers } = await get("/claude/servers");
-const { mode = "normal" } = await get("/claude/behavior");
+const flag = args.indexOf("--disallowedTools");
+const disallowed = flag < 0 ? [] : args.slice(flag + 1).filter((a, i, all) => !all.slice(0, i + 1).some((x) => x.startsWith("--")));
+await post("/claude/started", { disallowed, planned: plan.length });
+// A session without planned calls only lists the servers; it does not consume a behaviour.
+const { mode = "normal" } = plan.length ? await get("/claude/behavior") : {};
 emit({ type: "system", subtype: "init", tools: [], mcp_servers: servers });
+
+if (mode === "too-long-unless-hidden") {
+  // Like the real CLI with tool search off: every visible server's tool definitions are inlined.
+  const hidden = (name) => disallowed.includes("mcp__*") || disallowed.includes(prefix(name));
+  const target = (plan[0]?.tool ?? "").split("__")[1] ?? "";
+  if (servers.some((s) => prefix(s.name).split("__")[1] !== target && !hidden(s.name))) {
+    emit({ type: "result", subtype: "error_during_execution", is_error: true, result: "Prompt is too long: 266386 tokens > 200000 maximum" });
+    process.stdout.write("", () => process.exit(1));
+    await new Promise(() => {});
+  }
+}
 
 if (mode === "not-logged-in") {
   emit({ type: "result", subtype: "error_during_execution", is_error: true, result: "Not logged in · Please run /login" });

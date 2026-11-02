@@ -13,7 +13,7 @@ import { RemoteError } from "../http.ts";
 import type { Logger } from "../../core/log.ts";
 import { findClaudeCli } from "../../models/providers.ts";
 import { preApprovingRules, serverPrefix, type CallOutcome, type PlannedCall } from "./plan.ts";
-import { CONNECTOR_CWD, runSession } from "./session.ts";
+import { CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
 
 const exec = promisify(execFile);
 
@@ -112,6 +112,21 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
   let active = 0;
   const waiting: Array<() => void> = [];
   const knownServers = new Set<string>();
+  let discovery: Promise<void> | null = null;
+
+  /**
+   * Learn every MCP server the user's Claude Code loads (their own and all claude.ai connectors), so a
+   * connector session can hide the others: with tool search off their definitions would otherwise be
+   * inlined and can exceed the model's context. All MCP tools are disallowed and the session stops at
+   * init, so discovery makes no tool call and asks the model nothing.
+   */
+  const discover = (server: string, signal: AbortSignal): Promise<void> =>
+    (discovery ??= runSession({ server, calls: [], hideServers: ["mcp__*"], signal, timeoutMs: sessionMs(0) })
+      .then((out) => {
+        for (const s of [out.server?.name, ...out.otherServers]) if (s) knownServers.add(s);
+      })
+      .catch((e: unknown) => log.warn("claude connector: could not list Claude Code's MCP servers", { error: (e as Error).message }))
+      .finally(() => (discovery = null)));
   const acquire = async () => {
     if (active >= MAX_CONCURRENT) await new Promise<void>((r) => waiting.push(r));
     active++;
@@ -127,14 +142,25 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
     if (rules.length) {
       throw new RemoteError(`Your Claude Code settings auto-approve ${label} tools (${rules.join(", ")}). Jarvis must approve each connector call itself; remove that rule from ${join(claudeConfigDir(), "settings.json")} and test again.`, "denied");
     }
-    const hideServers = [...knownServers].filter((s) => s !== server).map(serverPrefix);
+    if (!knownServers.size) await discover(server, run.signal);
+    const hidden = () => [...knownServers].filter((s) => s !== server).map(serverPrefix);
     await acquire();
     try {
-      let out = await runSession({ server, calls, hideServers, signal: run.signal, timeoutMs: sessionMs(calls.length) });
+      const session = () => runSession({ server, calls, hideServers: hidden(), signal: run.signal, timeoutMs: sessionMs(calls.length) });
+      let out: Awaited<ReturnType<typeof runSession>>;
+      try {
+        out = await session();
+      } catch (e) {
+        // The context overflows at the first request, before any tool call, so starting again is safe even for a write.
+        if (!(e instanceof PromptTooLongError) || run.signal.aborted) throw e;
+        log.warn("claude connector session too large; listing MCP servers again", { server });
+        await discover(server, run.signal);
+        out = await session();
+      }
       // A session that met a pending connector stopped at init, before any call, so starting again is safe even for a write.
       for (let attempt = 1; out.server?.status === "pending" && attempt < PENDING_ATTEMPTS && !run.signal.aborted; attempt++) {
         await new Promise((r) => setTimeout(r, pendingDelayMs));
-        out = await runSession({ server, calls, hideServers, signal: run.signal, timeoutMs: sessionMs(calls.length) });
+        out = await session();
       }
       for (const s of [out.server?.name, ...out.otherServers]) if (s) knownServers.add(s);
       log.info("claude connector session", { server, calls: calls.length, answered: out.outcomes.size, violations: out.violations.length, costUsd: out.costUsd });
