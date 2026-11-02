@@ -1,6 +1,7 @@
 import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState } from "@jarvis/contracts";
 import type { Logger } from "../core/log.ts";
 import type { HttpClient } from "./http.ts";
+import type { ClaudeConnectorRunner } from "./claude/runner.ts";
 
 export interface ConnectionRecord {
   id: string;
@@ -25,6 +26,8 @@ export interface AdapterContext {
   endpoint(defaultBase: string): string;
   /** Identity of the user (email) for "sent by me" classification. */
   selfEmail: string | null;
+  /** Reaches the user's claude.ai connectors through Claude Code (Slack, Gmail, Google Calendar). */
+  claude: ClaudeConnectorRunner;
 }
 
 export interface Observation {
@@ -65,6 +68,8 @@ export interface TestResult {
   account: string | null;
   message: string;
   grantedScopes?: string[];
+  /** Non-secret settings learned while testing (e.g. a resolved site id), merged into the connection. */
+  settings?: Record<string, unknown>;
 }
 
 export interface ExecuteResult {
@@ -83,12 +88,19 @@ export interface ConnectorAdapter {
   test(ctx: AdapterContext): Promise<TestResult>;
   sync?(ctx: AdapterContext): Promise<SyncResult>;
   execute?(ctx: AdapterContext, action: { kind: string; target: Record<string, unknown>; payload: Record<string, unknown>; effectKey: string }): Promise<ExecuteResult>;
-  /** Look for an effect already applied with this key (restart recovery). */
-  findEffect?(ctx: AdapterContext, action: { kind: string; target: Record<string, unknown>; payload: Record<string, unknown>; effectKey: string }): Promise<ExecuteResult | null>;
-  /** OAuth adapters: the browser URL that starts authorization (PKCE, S256). */
-  authorizeUrl?(ctx: AdapterContext, p: { redirectUri: string; state: string; codeChallenge: string; scopes: string[] }): Promise<string>;
+  /**
+   * Look for an effect already applied with this key (restart recovery). `since` is when the pending
+   * attempt started; matches older than that are someone else's. Throwing means "could not check".
+   */
+  findEffect?(ctx: AdapterContext, action: { kind: string; target: Record<string, unknown>; payload: Record<string, unknown>; effectKey: string; since?: string }): Promise<ExecuteResult | null>;
+  /** OAuth adapters: scopes to request; includeWrite adds what the enabled write actions need. */
+  oauthScopes?(includeWrite: boolean): string[];
+  /** OAuth adapters: the browser URL that starts authorization (PKCE, S256), plus settings to persist first (e.g. a registered client). */
+  authorizeUrl?(ctx: AdapterContext, p: { redirectUri: string; state: string; codeChallenge: string; scopes: string[] }): Promise<{ url: string; settings?: Record<string, unknown> }>;
   /** OAuth adapters: exchange the authorization code, store tokens as secrets, return account and settings to persist. */
   completeAuthorization?(ctx: AdapterContext, p: { code: string; redirectUri: string; codeVerifier: string }): Promise<{ account: string | null; settings: Record<string, unknown> }>;
+  /** Whether usable credentials are stored; OAuth adapters report false until browser sign-in completed. */
+  isAuthorized?(ctx: AdapterContext): Promise<boolean>;
   /** Extra read-only context for preparing a draft (e.g. PR changed files). */
   prepareContext?(ctx: AdapterContext, target: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** Secret names this adapter stores. */

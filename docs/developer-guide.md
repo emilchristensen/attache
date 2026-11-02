@@ -22,7 +22,7 @@ Service modules: `core/` (db, config, logging with redaction, credential store, 
 - Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
-- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI for live model use.
+- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
 
 ```sh
 pnpm install
@@ -50,10 +50,12 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 
 ## Fixtures versus live
 
-Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub, Jira, Confluence, Slack, Google OAuth, Gmail, Calendar and an OpenAI-compatible model.
+Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
 The service talks to it only when `JARVIS_TEST_ENDPOINTS=1` and `JARVIS_FIXTURE_URL` are set; normal operation never reads those variables.
+The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
+It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
-`scripts/live-readonly.mjs` performs real, read-only checks with credentials already on the machine (currently the GitHub CLI login) in a throwaway profile and reports them separately.
+`scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
 
 ## Release
 

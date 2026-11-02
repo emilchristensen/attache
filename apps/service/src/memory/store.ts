@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Db, nowIso, json } from "../core/db.ts";
-import { Indexer, type IndexRoot } from "./indexer.ts";
+import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
@@ -202,7 +202,7 @@ export class MemoryStore {
   // ---- memory notes ----------------------------------------------------------
 
   createMemory(
-    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[] },
+    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[] },
     actor: WriteActor,
     opts: { approvedProposal?: boolean } = {},
   ): { relPath: string } {
@@ -221,9 +221,9 @@ export class MemoryStore {
         sources: (input.sources ?? []).map(sourceToYaml),
       },
       title: input.title,
-      state: input.state.map((s) => ({ subject: s.subject, date: today(), value: s.value, source: sourceLabel })),
+      state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? today(), value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [`- ${today()} — created by ${actor}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
+      history: [...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)), `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
     });
     this.writeFile(rel, doc, actor, opts);
     this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
@@ -353,6 +353,42 @@ export class MemoryStore {
     const body = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${quoted}\n\nSource: ${formatSource(input.source)}\n`;
     this.writeFile(rel, body, actor === "user" ? "user" : "connector");
     return { relPath: rel };
+  }
+
+  /**
+   * Copy a folder's Markdown files verbatim into evidence/archive/<label>/, keeping
+   * their paths so line numbers cited by migrated memory stay exact once the
+   * original is gone. Re-running updates changed files only. ARCHIVE.md records
+   * the origin and a hash per file.
+   */
+  archiveFolder(input: { path: string; label: string; exclude: string[]; origin?: string }): { relPath: string; written: number; unchanged: number; excluded: number; files: number } {
+    const plan = planScan(input.path);
+    const excluded = (rel: string) => input.exclude.some((e) => rel === e || rel.startsWith(e.endsWith("/") ? e : `${e}/`));
+    const base = `evidence/archive/${input.label}`;
+    const rows: string[] = [];
+    let written = 0;
+    let unchanged = 0;
+    let skipped = 0;
+    for (const rel of plan.read) {
+      if (excluded(rel)) {
+        skipped++;
+        continue;
+      }
+      const content = readFileSync(join(input.path, rel), "utf8");
+      const target = `${base}/${rel}`;
+      const hash = createHash("sha256").update(content).digest("hex");
+      if (this.exists(target) && createHash("sha256").update(this.read(target)).digest("hex") === hash) unchanged++;
+      else {
+        this.writeFile(target, content, "user");
+        written++;
+      }
+      rows.push(`| ${rel} | ${Buffer.byteLength(content)} | ${hash.slice(0, 16)} |`);
+    }
+    const origin = input.origin ?? input.path;
+    const fm = { type: "archive", title: `Archive of ${origin}`, source_path: input.path, ...(input.origin ? { origin: input.origin } : {}), archived_at: nowIso(), files: rows.length, excluded: input.exclude, provenance: "archived-verbatim" };
+    const manifest = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# Archive of ${origin}\n\nVerbatim copies of ${rows.length} Markdown files, at the same relative paths, so citations keep their line numbers.\n\n| File | Bytes | SHA-256 (first 16) |\n| --- | --- | --- |\n${rows.join("\n")}\n`;
+    this.writeFile(`${base}/ARCHIVE.md`, manifest, "user");
+    return { relPath: `${base}/ARCHIVE.md`, written, unchanged, excluded: skipped, files: rows.length };
   }
 
   /** A source-linked decision: curated memory that cites the evidence it came from. */

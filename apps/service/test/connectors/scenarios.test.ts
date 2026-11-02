@@ -8,17 +8,20 @@ import { gmailAdapter } from "../../src/connectors/gmail.ts";
 import { gcalAdapter } from "../../src/connectors/gcal.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
-import { FIXTURE_PREFIX, addJiraOverdue, atlassianSiteUrls, grantGmailCompose, installScenarios, setPrHeadSha, type ScenarioState } from "../fixtures/scenarios.ts";
+import { ATLASSIAN_SITE, ATLASSIAN_TOKEN, FIXTURE_PREFIX, addJiraOverdue, installScenarios, setPrHeadSha, type ScenarioState } from "../fixtures/scenarios.ts";
+import { useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
 
 let fx: FixtureServer;
 let state: ScenarioState;
+let claude: ClaudeFixture;
 beforeAll(async () => {
   fx = await startFixtureServer();
+  useFakeClaude(fx.url);
 });
 afterAll(() => fx.close());
 beforeEach(() => {
   fx.reset();
-  state = installScenarios(fx, { selfEmail: "alex@example.com" });
+  ({ state, claude } = installScenarios(fx, { selfEmail: "alex@example.com" }));
 });
 
 /** A context that routes each default base through its scenario prefix, like JARVIS_TEST_ENDPOINTS does. */
@@ -31,19 +34,7 @@ function scenarioCtx(kind: ConnectionKind, opts: { scopes: string[]; secrets?: R
   return c;
 }
 
-const googleSettings = { clientId: "123-abc.apps.googleusercontent.com" };
-
-async function connectGoogle(kind: "gmail" | "gcal", scopes: string[]) {
-  const adapter = kind === "gmail" ? gmailAdapter : gcalAdapter;
-  const c = scenarioCtx(kind, { scopes, settings: googleSettings, secrets: { clientSecret: "GOCSPX-fixture" } });
-  const authUrl = await adapter.authorizeUrl!(c, { redirectUri: "http://127.0.0.1:1/oauth/callback", state: "st", codeChallenge: "ch", scopes: [] });
-  const res = await fetch(authUrl, { redirect: "manual" });
-  const back = new URL(res.headers.get("location")!);
-  expect(back.searchParams.get("state")).toBe("st");
-  const done = await adapter.completeAuthorization!(c, { code: back.searchParams.get("code")!, redirectUri: "http://127.0.0.1:1/oauth/callback", codeVerifier: "verifier" });
-  c.connection.settings = done.settings;
-  return { c, done };
-}
+const atlassianSettings = { siteUrl: ATLASSIAN_SITE, email: "alex@example.com", authMethod: "api-token" };
 
 describe("scenario fixtures drive every adapter end to end", () => {
   it("GitHub: review requests, and a new head sha changes the fingerprint", async () => {
@@ -56,9 +47,11 @@ describe("scenario fixtures drive every adapter end to end", () => {
     expect(b.observations[0]!.fingerprintParts).not.toEqual(a.observations[0]!.fingerprintParts);
   });
 
-  it("Jira: due item, then an added overdue item; comment round-trip", async () => {
-    const c = scenarioCtx("jira", { scopes: ["assigned_open", "due_soon"], secrets: { apiToken: "t" }, settings: { siteUrl: atlassianSiteUrls(fx).jira, email: "alex@example.com" } });
-    expect((await jiraAdapter.test(c)).account).toBe("alex@example.com");
+  it("Jira: due item, then an added overdue item; comment round-trip through the Atlassian MCP server", async () => {
+    const c = scenarioCtx("jira", { scopes: ["assigned_open", "due_soon"], secrets: { apiToken: ATLASSIAN_TOKEN }, settings: atlassianSettings });
+    const t = await jiraAdapter.test(c);
+    expect(t.account).toBe("alex@example.com");
+    c.connection.settings = { ...c.connection.settings, ...t.settings };
     const a = await jiraAdapter.sync!(c);
     expect(a.observations.filter((o) => o.attention).map((o) => o.attention!.kind)).toEqual(["due_work_item"]);
     addJiraOverdue(state, "ABC-9", "Send invoice", 2);
@@ -69,8 +62,8 @@ describe("scenario fixtures drive every adapter end to end", () => {
     expect((await jiraAdapter.findEffect!(c, action))?.verified).toBe(true);
   });
 
-  it("Confluence: mention attention and comment round-trip under the /confluence site prefix", async () => {
-    const c = scenarioCtx("confluence", { scopes: ["mentions", "my_recent"], secrets: { apiToken: "t" }, settings: { siteUrl: atlassianSiteUrls(fx).confluence, email: "alex@example.com" } });
+  it("Confluence: mention attention and comment round-trip through the Atlassian MCP server", async () => {
+    const c = scenarioCtx("confluence", { scopes: ["mentions", "my_recent"], secrets: { apiToken: ATLASSIAN_TOKEN }, settings: atlassianSettings });
     expect((await confluenceAdapter.test(c)).ok).toBe(true);
     const s = await confluenceAdapter.sync!(c);
     expect(s.coverage.state).toBe("complete");
@@ -80,8 +73,8 @@ describe("scenario fixtures drive every adapter end to end", () => {
     expect((await confluenceAdapter.findEffect!(c, action))?.verified).toBe(true);
   });
 
-  it("Slack: pending DM, mention, watched channel, and a verified post", async () => {
-    const c = scenarioCtx("slack", { scopes: ["dms", "mentions", "channels"], secrets: { token: "xoxp-fixture" }, settings: { channels: "C0000001" } });
+  it("Slack: pending DM, mention, watched channel, and a verified post through the claude.ai connector", async () => {
+    const c = scenarioCtx("slack", { scopes: ["dms", "mentions", "channels"], settings: { authMethod: "claude-ai", channels: "C0000001" } });
     const s = await slackAdapter.sync!(c);
     expect(s.coverage.state).toBe("complete");
     expect(s.observations.filter((o) => o.attention).map((o) => o.attention!.kind).sort()).toEqual(["mention", "pending_reply"]);
@@ -90,27 +83,25 @@ describe("scenario fixtures drive every adapter end to end", () => {
     expect((await slackAdapter.findEffect!(c, action))?.verified).toBe(true);
   });
 
-  it("Gmail: OAuth redirect flow, one pending reply, draft denied until compose is granted", async () => {
-    const { c, done } = await connectGoogle("gmail", ["inbox_recent"]);
-    expect(done.account).toBe("alex@example.com");
+  it("Gmail: one pending reply; the reply is saved as a draft, never sent", async () => {
+    const c = scenarioCtx("gmail", { scopes: ["inbox_recent"], settings: { authMethod: "claude-ai" } });
+    expect((await gmailAdapter.test(c)).account).toBe("alex@example.com");
     const s = await gmailAdapter.sync!(c);
     expect(s.coverage.state).toBe("complete");
     expect(s.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:thr1"]);
-    const draft = s.observations[0]!.attention!.draftable!;
+    const draft = s.observations.find((o) => o.attention)!.attention!.draftable!;
     const action = { kind: "gmail.draft", target: draft.target, payload: { body: "Happy to renew." }, effectKey: "e4" };
-    await expect(gmailAdapter.execute!(c, action)).rejects.toMatchObject({ state: "denied" });
-    grantGmailCompose(state);
-    const again = await connectGoogle("gmail", ["inbox_recent"]);
-    expect((await gmailAdapter.execute!(again.c, action)).verified).toBe(true);
-    expect((await gmailAdapter.findEffect!(again.c, action))?.verified).toBe(true);
+    expect((await gmailAdapter.execute!(c, action)).verified).toBe(true);
+    expect(state.gmail.drafts).toMatchObject([{ threadId: "thr1", body: "Happy to renew." }]);
+    expect((await gmailAdapter.findEffect!(c, action))?.verified).toBe(true);
+    expect(claude.calls.some((x) => x.tool === "send_message")).toBe(false);
   });
 
-  it("Calendar: meeting prep and an invite response; revoked refresh token is unauthorized", async () => {
-    const { c } = await connectGoogle("gcal", ["upcoming"]);
+  it("Calendar: meeting prep and an invite response; a disconnected connector is unauthorized", async () => {
+    const c = scenarioCtx("gcal", { scopes: ["upcoming"], settings: { authMethod: "claude-ai" } });
     const s = await gcalAdapter.sync!(c);
     expect(s.observations.filter((o) => o.attention).map((o) => [o.attention!.key, o.attention!.kind])).toEqual([["gcal:evt1", "meeting_prep"], ["gcal:evt2", "invite_response"]]);
-    state.google.revoked = true;
-    c.secrets.set("accessTokenExpiresAt", new Date(0).toISOString());
+    claude.servers = claude.servers.map((x) => (x.name === "claude.ai Google Calendar" ? { ...x, status: "needs-auth" } : x));
     expect((await gcalAdapter.sync!(c)).coverage.state).toBe("unauthorized");
   });
 });

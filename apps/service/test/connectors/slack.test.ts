@@ -1,207 +1,176 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { slackAdapter } from "../../src/connectors/slack.ts";
-import { startFixtureServer, type FixtureServer, type FixtureResponse } from "../fixtures/fixture-server.ts";
+import { parseHistory, parseSearch, sameText, sentTs } from "../../src/connectors/slack-format.ts";
+import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
+import { jsonAnswer, mountClaude, onTool, slackHistoryAnswer, slackProfileAnswer, slackSearchAnswer, slackSearchInvalid, useFakeClaude, type ClaudeFixture, type SlackFixtureMessage } from "../fixtures/claude-connectors.ts";
 
 let fx: FixtureServer;
-beforeAll(async () => {
-  fx = await startFixtureServer();
-});
-afterAll(() => fx.close());
-beforeEach(() => fx.reset());
-
-const TOKEN = "xoxp-1234567890-testtokentesttoken";
+let claude: ClaudeFixture;
+const SERVER = "claude.ai Slack";
 const SELF = "U0SELF";
-// Fixture clock is 2026-09-30T10:00:00Z; the 48h window starts at 2026-09-28T10:00:00Z.
+// Fixture clock: the 48h window starts at 2026-09-28T10:00:00Z.
 const NOW_S = Date.parse("2026-09-30T10:00:00Z") / 1000;
 const ts = (hoursAgo: number, n = 0) => `${(NOW_S - hoursAgo * 3600).toFixed(0)}.${String(n).padStart(6, "0")}`;
+const msg = (channel: string, user: string, hoursAgo: number, text: string, extra: Partial<SlackFixtureMessage> = {}): SlackFixtureMessage => ({ channel, user, userName: user === SELF ? "Alex" : `Person ${user}`, ts: ts(hoursAgo), text, ...extra });
 
-const slack = (data: Record<string, unknown>): FixtureResponse => ({ json: { ok: true, ...data } });
-const slackErr = (error: string): FixtureResponse => ({ json: { ok: false, error } });
+beforeAll(async () => {
+  fx = await startFixtureServer();
+  useFakeClaude(fx.url);
+});
+afterAll(() => fx.close());
 
-const ctx = (scopes = ["dms"], opts: { secrets?: Record<string, string>; channels?: string } = {}) =>
-  fixtureContext({ kind: "slack", baseUrl: fx.url, secrets: opts.secrets ?? { token: TOKEN }, settings: { channels: opts.channels ?? "" }, readScopes: scopes });
-
-function authOk() {
-  fx.route("POST", "/auth.test", (req) => (req.headers.authorization === `Bearer ${TOKEN}` ? slack({ user_id: SELF, user: "alex", team: "Acme", url: "https://acme.slack.com/" }) : slackErr("invalid_auth")));
-}
-
-function ims(histories: Record<string, unknown[] | FixtureResponse>) {
-  fx.route("GET", "/conversations.list", () => slack({ channels: Object.keys(histories).map((id) => ({ id, user: `U${id}` })), response_metadata: { next_cursor: "" } }));
-  fx.route("GET", "/conversations.history", (req) => {
-    const h = histories[req.query.get("channel")!];
-    return Array.isArray(h) ? slack({ messages: h, has_more: false }) : (h ?? slackErr("channel_not_found"));
+function searchable(dms: SlackFixtureMessage[], mentions: SlackFixtureMessage[], pageSize = 20) {
+  onTool(claude, SERVER, "slack_search_public_and_private", (a) => {
+    const invalid = slackSearchInvalid(a);
+    if (invalid) return invalid;
+    const list = a.channel_types === "im" ? dms : mentions;
+    const start = Number(a.cursor ?? 0);
+    const page = [...list].sort((x, y) => Number(y.ts) - Number(x.ts)).slice(start, start + pageSize);
+    return slackSearchAnswer(page, start + pageSize < list.length ? String(start + pageSize) : null);
   });
 }
 
-const count = (path: string) => fx.requests.filter((r) => r.path === path).length;
+beforeEach(() => {
+  fx.reset();
+  claude = mountClaude(fx);
+  onTool(claude, SERVER, "slack_read_user_profile", () => slackProfileAnswer(SELF));
+});
 
-describe("Slack adapter contract", () => {
-  it("authorization: bearer token via auth.test reports user and team", async () => {
-    authOk();
-    expect(await slackAdapter.test(ctx())).toMatchObject({ ok: true, account: "alex @ Acme" });
-    expect(fx.requests[0]!.headers.authorization).toBe(`Bearer ${TOKEN}`);
+const ctx = (scopes = ["dms"], settings: Record<string, unknown> = {}) => fixtureContext({ kind: "slack", baseUrl: fx.url, settings: { authMethod: "claude-ai", ...settings }, readScopes: scopes });
+const calls = (tool: string) => claude.calls.filter((c) => c.tool === tool);
+
+describe("Slack adapter contract (claude.ai Slack connector)", () => {
+  it("authorization: test reports the Slack user through the claude.ai account and caches the user id", async () => {
+    const r = await slackAdapter.test(ctx());
+    expect(r).toMatchObject({ ok: true, state: "complete", account: "alex@example.com", settings: { userId: SELF } });
+    expect(r.message).toMatch(/claude\.ai \(alex@example\.com, Example Org\)/);
   });
 
-  it("ok:false errors map to coverage states (HTTP 200 is not success)", async () => {
-    for (const [error, state] of [["invalid_auth", "unauthorized"], ["token_revoked", "unauthorized"], ["account_inactive", "unauthorized"], ["missing_scope", "denied"], ["no_permission", "denied"], ["ratelimited", "partial"]] as const) {
-      fx.reset();
-      fx.route("POST", "/auth.test", () => slackErr(error));
-      expect((await slackAdapter.test(ctx())).state).toBe(state);
-    }
-    fx.reset();
-    fx.route("POST", "/auth.test", () => slackErr("invalid_auth"));
+  it("authorization: an unconnected Slack connector or signed-out Claude Code fails every selected scope, never empty", async () => {
+    claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
+    expect(await slackAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
     const s = await slackAdapter.sync!(ctx(["dms", "mentions"]));
     expect(s.coverage.state).toBe("unauthorized");
     expect(s.coverage.scopes).toHaveLength(2);
+    claude.servers = [{ name: SERVER, status: "connected", source: "claudeai" }];
+    claude.auth = { loggedIn: false };
+    expect(await slackAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
   });
 
-  it("scope: only selected scopes are queried; a bot token's not_allowed_token_type on search is denied", async () => {
-    authOk();
-    ims({});
-    fx.route("GET", "/search.messages", () => slackErr("not_allowed_token_type"));
-    const a = await slackAdapter.sync!(ctx(["dms"]));
-    expect(count("/search.messages")).toBe(0);
-    expect(a.coverage.state).toBe("empty");
-    const b = await slackAdapter.sync!(ctx(["dms", "mentions"]));
-    expect(b.coverage.scopes.find((c) => c.scope.includes("Mentions"))).toMatchObject({ state: "denied" });
-    expect(b.coverage.state).toBe("partial");
+  it("scope: DMs search only 1:1 conversations inside the window; mentions search for my user id; nothing else is called", async () => {
+    searchable([msg("D01", "U0MIA", 1, "Can you look at this?")], [msg("C01", "U0BOB", 2, `<@${SELF}|Alex> ping`, { channelName: "general" })]);
+    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    expect(r.coverage.state).toBe("complete");
+    const search = calls("slack_search_public_and_private");
+    expect(search.find((c) => c.args.channel_types === "im")!.args).toMatchObject({ filters: "is:dm", after: String(NOW_S - 48 * 3600), sort: "timestamp", include_bots: false });
+    expect(search.find((c) => c.args.channel_types !== "im")!.args.keywords).toEqual([`<@${SELF}>`]);
+    expect(calls("slack_read_user_profile")).toHaveLength(0);
+    expect(r.observations.map((o) => o.attention?.kind).sort()).toEqual(["mention", "pending_reply"]);
+    // Both scopes' first pages go in one Claude Code session.
+    expect(claude.sessions).toBe(1);
   });
 
-  it("pagination: conversations.list follows next_cursor; search.messages follows page_count", async () => {
-    authOk();
-    fx.route("GET", "/conversations.list", (req) =>
-      req.query.get("cursor") === "c2" ? slack({ channels: [{ id: "D2" }], response_metadata: { next_cursor: "" } }) : slack({ channels: [{ id: "D1" }], response_metadata: { next_cursor: "c2" } }),
-    );
-    fx.route("GET", "/conversations.history", (req) => slack({ messages: [{ ts: ts(1), user: `U${req.query.get("channel")}`, text: "hi" }] }));
-    fx.route("GET", "/search.messages", (req) => {
-      const page = Number(req.query.get("page"));
-      const m = { ts: ts(page), user: "UMIA", text: `<@${SELF}> look ${page}`, channel: { id: "C1", name: "eng" }, permalink: `https://acme.slack.com/archives/C1/p${page}` };
-      return slack({ messages: { matches: [m], pagination: { page, page_count: 2 } } });
-    });
-    const s = await slackAdapter.sync!(ctx(["dms", "mentions"]));
-    expect(s.coverage.scopes.map((c) => [c.state, c.items])).toEqual([["complete", 2], ["complete", 2]]);
-    expect(fx.requests.find((r) => r.path === "/search.messages")!.query.get("query")).toBe(`<@${SELF}>`);
-    expect(count("/search.messages")).toBe(2);
-    expect(s.observations.filter((o) => o.attention?.kind === "mention").map((o) => o.attention!.key)).toEqual([`slack:C1:${ts(1)}`, `slack:C1:${ts(2)}`]);
+  it("awaiting reply: only when the newest human message in the DM is from someone else", async () => {
+    searchable([msg("D01", SELF, 1, "Sent it."), msg("D01", "U0MIA", 3, "Got it?"), msg("D02", "U0BOB", 2, "Lunch?"), msg("D03", "UBOT", 1, "Reminder", { bot: true })], []);
+    const r = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const byChannel = Object.fromEntries(r.observations.map((o) => [String(o.data.channel), o.data.awaiting]));
+    expect(byChannel).toEqual({ D01: false, D02: true });
+    expect(r.observations.find((o) => o.data.channel === "D02")!.attention).toMatchObject({ kind: "pending_reply", title: "Reply to Person U0BOB in Slack" });
   });
 
-  it("mentions stop at the 48h window and skip my own messages", async () => {
-    authOk();
-    fx.route("GET", "/search.messages", () => slack({ messages: { matches: [{ ts: ts(1), user: SELF, text: "me", channel: { id: "C1" } }, { ts: ts(3), user: "UMIA", text: "hey", channel: { id: "C1" } }, { ts: ts(60), user: "UMIA", text: "old", channel: { id: "C1" } }], pagination: { page: 1, page_count: 5 } } }));
-    const s = await slackAdapter.sync!(ctx(["mentions"]));
-    expect(count("/search.messages")).toBe(1);
-    expect(s.observations.map((o) => o.data.text)).toEqual(["hey"]);
-    expect(s.coverage.scopes[0]!.state).toBe("complete");
+  it("pagination: follows the search cursor; stops at the window edge; a page cap is partial", async () => {
+    const many = Array.from({ length: 45 }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.5 + i * 0.1, `m${i}`));
+    searchable(many, []);
+    const r = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    expect(r.coverage).toMatchObject({ state: "complete", items: 45 });
+    expect(calls("slack_search_public_and_private")).toHaveLength(3);
+    claude.calls.length = 0;
+    searchable([...many.slice(0, 5), msg("D999", "U0MIA", 60, "too old")], [], 3);
+    const edge = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    expect(edge.observations.map((o) => o.data.channel)).not.toContain("D999");
+    expect(edge.coverage.state).toBe("complete");
+    searchable(Array.from({ length: 300 }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.1 + i * 0.01, `x${i}`)), [], 20);
+    const capped = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    expect(capped.coverage.scopes[0]).toMatchObject({ state: "partial", items: 200, pages: 10, note: "Stopped after 10 pages" });
   });
 
-  it("retry: HTTP 429 with Retry-After is retried, then succeeds", async () => {
-    authOk();
-    let calls = 0;
-    fx.route("GET", "/conversations.list", () => (++calls < 3 ? { status: 429, headers: { "retry-after": "0" }, json: { ok: false, error: "ratelimited" } } : slack({ channels: [] })));
-    const s = await slackAdapter.sync!(ctx());
-    expect(calls).toBe(3);
-    expect(s.coverage.state).toBe("empty");
+  it("retry and failures: a tool error on the first page fails the scope; a later page failure keeps it partial", async () => {
+    onTool(claude, SERVER, "slack_search_public_and_private", (a) => (a.channel_types === "im" ? { text: "missing_scope: search:read", isError: true } : slackSearchAnswer([])));
+    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    expect(r.coverage.scopes.find((s) => s.scope.startsWith("Direct"))!.state).toBe("denied");
+    expect(r.coverage.scopes.find((s) => s.scope.startsWith("Mentions"))!.state).toBe("empty");
+    expect(r.coverage.state).toBe("partial");
+    onTool(claude, SERVER, "slack_search_public_and_private", (a) => (a.cursor ? { text: "ratelimited", isError: true } : slackSearchAnswer([msg("D01", "U0MIA", 1, "hi")], "20")));
+    const p = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    expect(p.coverage.state).toBe("partial");
+    expect(p.observations).toHaveLength(1);
   });
 
-  it("empty result: no DMs in the window is 'empty'", async () => {
-    authOk();
-    ims({ D1: [] });
-    const s = await slackAdapter.sync!(ctx());
-    expect(s.coverage.scopes[0]).toMatchObject({ state: "empty", items: 0 });
-    expect(fx.requests.find((r) => r.path === "/conversations.history")!.query.get("oldest")).toBe(String((NOW_S - 48 * 3600).toFixed(6)));
+  it("empty and unreadable: zero matches is empty; an unreadable result is partial, not empty", async () => {
+    searchable([], []);
+    expect((await slackAdapter.sync!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("empty");
+    onTool(claude, SERVER, "slack_search_public_and_private", () => jsonAnswer({ results: "### Result 1 of 1\nChannel: ???\nText: \nno ids\n\n---\n" }));
+    expect((await slackAdapter.sync!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("partial");
   });
 
-  it("partial coverage: list failure after page one, and a rate-limited DM history", async () => {
-    authOk();
-    fx.route("GET", "/conversations.list", (req) => (req.query.get("cursor") ? { status: 500, json: {} } : slack({ channels: [{ id: "D1" }], response_metadata: { next_cursor: "c2" } })));
-    fx.route("GET", "/conversations.history", () => slack({ messages: [{ ts: ts(1), user: "UMIA", text: "yo" }] }));
-    const a = await slackAdapter.sync!(ctx());
-    expect(a.coverage.state).toBe("partial");
-    expect(a.observations).toHaveLength(1);
-    fx.reset();
-    authOk();
-    ims({ D1: [{ ts: ts(1), user: "UMIA", text: "yo" }], D2: slackErr("ratelimited") });
-    const b = await slackAdapter.sync!(ctx());
-    expect(b.coverage.scopes[0]).toMatchObject({ state: "partial", items: 1 });
-    expect(b.coverage.scopes[0]!.note).toMatch(/D2/);
+  it("format drift: hits that no reader recognises make the scope partial, not empty", async () => {
+    onTool(claude, SERVER, "slack_search_public_and_private", (a) => slackSearchInvalid(a) ?? slackSearchAnswer([msg("C01", "U0MIA", 1, "@Alex changed rendering", { channelName: "eng" })]));
+    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    expect(r.coverage.scopes.map((s) => s.state)).toEqual(["partial", "partial"]);
+    expect(r.coverage.scopes[1]!.note).toMatch(/recognised form/);
   });
 
-  it("disconnect: without a stored token no request is made", async () => {
-    const s = await slackAdapter.sync!(ctx(["dms", "mentions"], { secrets: {} }));
-    expect(s.coverage.state).toBe("unauthorized");
-    expect(fx.requests).toHaveLength(0);
+  it("watched channels: history per channel; unconfigured is not_configured; an unreadable channel is partial", async () => {
+    expect((await slackAdapter.sync!(ctx(["channels"], { userId: SELF }))).coverage.scopes[0]).toMatchObject({ state: "not_configured" });
+    onTool(claude, SERVER, "slack_read_channel", (a) => (a.channel_id === "C01" ? slackHistoryAnswer("C01", [msg("C01", "U0BOB", 3, "Standup moved")]) : { text: "channel_not_found", isError: true }));
+    const r = await slackAdapter.sync!(ctx(["channels"], { userId: SELF, channels: "C01,C02" }));
+    expect(r.observations.map((o) => o.kind)).toEqual(["slack_channel_message"]);
+    // History carries no permalink; the link is built from the workspace URL once a search result reveals it.
+    expect(r.observations[0]!.url).toBeUndefined();
+    onTool(claude, SERVER, "slack_search_public_and_private", (a) => slackSearchInvalid(a) ?? slackSearchAnswer([msg("D01", "U0MIA", 1, "hi")]));
+    const linked = await slackAdapter.sync!(ctx(["dms", "channels"], { userId: SELF, channels: "C01" }));
+    expect(linked.observations.find((o) => o.kind === "slack_channel_message")!.url).toMatch(/^https:\/\/acme\.slack\.com\/archives\/C01\/p\d+$/);
+    expect(r.coverage.scopes[0]).toMatchObject({ state: "partial", note: expect.stringMatching(/Not read: C02/) });
   });
 
-  it("DMs: awaiting only when the latest human message is from someone else; bots never count", async () => {
-    authOk();
-    ims({
-      D1: [{ ts: ts(1), user: "UMIA", text: "can you check?" }],
-      D2: [{ ts: ts(1), user: SELF, text: "done" }, { ts: ts(2), user: "UBOB", text: "?" }],
-      D3: [{ ts: ts(1), bot_id: "B1", subtype: "bot_message", text: "deploy ok" }],
-      D4: [{ ts: ts(1), bot_id: "B1", user: "UBOT", text: "reminder" }, { ts: ts(2), user: SELF, text: "noted" }],
-    });
-    const s = await slackAdapter.sync!(ctx());
-    const byChannel = Object.fromEntries(s.observations.map((o) => [o.data.channel, o]));
-    expect(byChannel.D1!.attention).toMatchObject({ key: `slack:D1:${ts(1)}`, kind: "pending_reply", draftable: { actionKind: "slack.post", target: { channel: "D1" } } });
-    expect(byChannel.D1!.fingerprintParts).toEqual(["can you check?", true]);
-    expect(byChannel.D2!.attention).toBeUndefined();
-    expect(byChannel.D2!.fingerprintParts).toEqual(["done", false]);
-    expect(byChannel.D3).toBeUndefined();
-    expect(byChannel.D4!.attention).toBeUndefined();
-  });
-
-  it("channels: every requested channel is audited; unreadable ones make the scope partial", async () => {
-    authOk();
-    fx.route("GET", "/conversations.history", (req) => (req.query.get("channel") === "C0000002" ? slackErr("not_in_channel") : slack({ messages: [{ ts: ts(1), user: "UMIA", text: "standup notes" }] })));
-    const s = await slackAdapter.sync!(ctx(["channels"], { channels: "C0000001,C0000002" }));
-    expect(s.coverage.scopes[0]).toMatchObject({ state: "partial", items: 1 });
-    expect(s.coverage.scopes[0]!.note).toContain("C0000002 (not_in_channel)");
-    expect(s.observations[0]!.attention).toBeUndefined();
-    fx.reset();
-    authOk();
-    fx.route("GET", "/conversations.history", () => slack({ messages: [] }));
-    expect((await slackAdapter.sync!(ctx(["channels"], { channels: "C0000001" }))).coverage.scopes[0]!.state).toBe("empty");
-  });
-
-  it("write: posts once with effect metadata, verifies by read-back, recovery finds it", async () => {
-    authOk();
-    const posted: Array<Record<string, unknown>> = [];
-    fx.route("POST", "/chat.postMessage", (req) => {
-      const b = req.body as { channel: string; text: string; metadata: unknown };
-      const m = { ts: `${NOW_S}.000100`, user: SELF, text: b.text, metadata: b.metadata };
+  it("execute: posts once through the gate, verifies by reading the message back; recovery matches author and text", async () => {
+    const posted: SlackFixtureMessage[] = [];
+    onTool(claude, SERVER, "slack_send_message", (a) => {
+      const m = msg(String(a.channel_id), SELF, 0, String(a.message), a.thread_ts ? { threadTs: String(a.thread_ts) } : {});
       posted.push(m);
-      return slack({ channel: b.channel, ts: m.ts });
+      return jsonAnswer({ ok: true, message_link: `https://acme.slack.com/archives/${m.channel}/p${m.ts.replace(".", "")}` });
     });
-    fx.route("GET", "/conversations.history", (req) => {
-      const allMeta = req.query.get("include_all_metadata") === "true";
-      const msgs = posted.map((m) => (allMeta ? m : { ...m, metadata: undefined }));
-      return slack({ messages: req.query.get("latest") ? msgs.filter((m) => m.ts === req.query.get("latest")) : msgs, has_more: false });
-    });
-    const action = { kind: "slack.post", target: { channel: "D0000001" }, payload: { text: "On it" }, effectKey: "eff-s" };
-    const r = await slackAdapter.execute!(ctx(), action);
-    expect(r).toMatchObject({ verified: true, remoteId: `${NOW_S}.000100` });
-    expect(posted[0]!.metadata).toEqual({ event_type: "jarvis_effect", event_payload: { key: "eff-s" } });
-    expect(fx.requests.find((q) => q.path === "/chat.postMessage")!.headers.authorization).toBe(`Bearer ${TOKEN}`);
-    expect(await slackAdapter.findEffect!(ctx(), action)).toMatchObject({ verified: true, remoteId: `${NOW_S}.000100` });
-    expect(await slackAdapter.findEffect!(ctx(), { ...action, effectKey: "other" })).toBeNull();
-    expect(count("/chat.postMessage")).toBe(1);
+    onTool(claude, SERVER, "slack_read_thread", (a) => slackHistoryAnswer(String(a.channel_id), posted.filter((p) => p.threadTs === a.message_ts)));
+    const action = { kind: "slack.post", target: { channel: "C01", thread_ts: "1790000000.000100" }, payload: { text: "**Looking** now" }, effectKey: "e3" };
+    const c = ctx(["dms"], { userId: SELF });
+    expect(await slackAdapter.findEffect!(c, action)).toBeNull();
+    const r = await slackAdapter.execute!(c, action);
+    expect(r).toMatchObject({ verified: true, remoteId: posted[0]!.ts, url: expect.stringContaining("/archives/C01/") });
+    expect(calls("slack_send_message")).toEqual([{ server: SERVER, tool: "slack_send_message", args: { channel_id: "C01", message: "**Looking** now", thread_ts: "1790000000.000100" } }]);
+    // Slack rewrote the Markdown; recovery still recognises our message.
+    posted[0]!.text = "*Looking* now";
+    expect(await slackAdapter.findEffect!(c, action)).toMatchObject({ verified: true, remoteId: posted[0]!.ts });
+    await expect(slackAdapter.execute!(c, { ...action, target: { channel: "not-a-channel" } })).rejects.toThrow(/Invalid Slack channel/);
   });
 
-  it("write: thread replies are read back via conversations.replies", async () => {
-    authOk();
-    fx.route("POST", "/chat.postMessage", (req) => slack({ channel: "C0000001", ts: "1759226400.000200", message: req.body }));
-    fx.route("GET", "/conversations.replies", (req) =>
-      slack({ messages: [{ ts: req.query.get("ts"), user: "UMIA", text: "parent" }, { ts: "1759226400.000200", user: SELF, text: "reply", metadata: { event_type: "jarvis_effect", event_payload: { key: "eff-t" } } }] }),
-    );
-    const r = await slackAdapter.execute!(ctx(), { kind: "slack.post", target: { channel: "C0000001", thread_ts: "1759220000.000100" }, payload: { text: "reply" }, effectKey: "eff-t" });
-    expect(r.verified).toBe(true);
-    expect((fx.requests.find((q) => q.path === "/chat.postMessage")!.body as { thread_ts: string }).thread_ts).toBe("1759220000.000100");
+  it("recovery: matches only my message created after the attempt started, with links in either Markdown form", async () => {
+    const history: SlackFixtureMessage[] = [msg("C01", SELF, 30, "see <https://x.example/doc|the doc>")];
+    onTool(claude, SERVER, "slack_read_channel", (a) => slackHistoryAnswer("C01", history.filter((m) => Number(m.ts) >= Number(a.oldest ?? 0))));
+    const action = { kind: "slack.post", target: { channel: "C01" }, payload: { text: "see [the doc](https://x.example/doc)" }, effectKey: "e9" };
+    const c = ctx(["dms"], { userId: SELF });
+    // Same text, but posted a day before this attempt started: not ours.
+    expect(await slackAdapter.findEffect!(c, { ...action, since: new Date(NOW_S * 1000 - 3_600_000).toISOString() })).toBeNull();
+    expect(await slackAdapter.findEffect!(c, { ...action, since: new Date(NOW_S * 1000 - 31 * 3_600_000).toISOString() })).toMatchObject({ verified: true });
   });
 
-  it("recovery throws partial when recent history cannot all be read", async () => {
-    authOk();
-    fx.route("GET", "/conversations.history", () => slack({ messages: [], has_more: true, response_metadata: { next_cursor: "more" } }));
-    await expect(slackAdapter.findEffect!(ctx(), { kind: "slack.post", target: { channel: "C0000001" }, payload: {}, effectKey: "k" })).rejects.toMatchObject({ state: "partial" });
+  it("parsers: search, history, send confirmation and loose text identity", () => {
+    const s = parseSearch(slackSearchAnswer([msg("C01", "U0MIA", 1, "multi\nline", { threadTs: "1790000000.000001", channelName: "eng" })], "abc=").text);
+    expect(s).toMatchObject({ cursor: "abc=", unreadable: 0, items: [{ channel: "C01", channelName: "eng", user: "U0MIA", threadTs: "1790000000.000001", text: "multi\nline" }] });
+    const h = parseHistory(slackHistoryAnswer("C01", [msg("C01", "UBOB1234", 2, "hello")], "next").text, "C01");
+    expect(h).toMatchObject({ cursor: "next", items: [{ user: "UBOB1234", text: "hello" }] });
+    expect(sentTs('{"ts":"1790000000.123456"}').ts).toBe("1790000000.123456");
+    expect(sameText("<https://x.com|link> **bold**", "link bold")).toBe(true);
+    expect(sameText("", "")).toBe(false);
   });
 });

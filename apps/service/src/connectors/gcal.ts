@@ -1,8 +1,14 @@
+/**
+ * Google Calendar through the user's claude.ai Google Calendar connector
+ * (see claude-adapter.ts). list_events returns recurring events expanded
+ * into instances, in the same shape as the Calendar REST API. Read-only.
+ */
 import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, SyncResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { paginate } from "./http.ts";
-import { asRemoteError, daysBetween, listingNote, listingState, recordFailure } from "./common.ts";
-import { GOOGLE_SECRET_NAMES, buildAuthorizeUrl, completeGoogleAuthorization, configureGoogle, googleAuthMethod, googleRequest, googleSetupSteps, grantedScopes } from "./google.ts";
+import { RemoteError } from "./http.ts";
+import { daysBetween, listingState, recordFailure } from "./common.ts";
+import { CLAUDE_SERVERS, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
+import { str } from "./atlassian-shapes.ts";
 
 export interface EventTime {
   date?: string;
@@ -25,15 +31,13 @@ interface CalendarEvent {
   htmlLink?: string;
   location?: string;
   hangoutLink?: string;
+  conferenceUrl?: string;
   start?: EventTime;
   end?: EventTime;
   attendees?: Attendee[];
   organizer?: { email?: string; displayName?: string; self?: boolean };
 }
 
-export const GCAL_READ_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
-
-const DEFAULT_BASE = "https://www.googleapis.com";
 const HOUR = 3_600_000;
 const RANGE_MS = 48 * HOUR;
 const PREP_MS = 24 * HOUR;
@@ -42,9 +46,7 @@ const MAX_NAMES = 6;
 const SCOPE_LABEL = "Upcoming events (48 hours)";
 const WALL_TIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/;
 
-function base(ctx: AdapterContext): string {
-  return `${ctx.endpoint(DEFAULT_BASE).replace(/\/$/, "")}/calendar/v3`;
-}
+const server = (ctx: AdapterContext) => serverName(ctx, CLAUDE_SERVERS.gcal);
 
 function isMidnight(m: RegExpExecArray): boolean {
   return m[2] === "00" && m[3] === "00" && (m[4] ?? "00") === "00" && /^0*$/.test(m[5] ?? "");
@@ -117,63 +119,52 @@ function toObservation(ev: CalendarEvent, nowMs: number): Observation {
     ...(ev.htmlLink ? { url: ev.htmlLink } : {}),
     ...(ev.organizer?.email ? { author: ev.organizer.email } : {}),
     ...(start ? { occurredAt: start } : {}),
-    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map((a) => a.displayName || a.email || ""), location: ev.location ?? null, meetLink: ev.hangoutLink ?? null },
+    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map((a) => a.displayName || a.email || ""), location: ev.location ?? null, meetLink: ev.conferenceUrl ?? ev.hangoutLink ?? null },
     fingerprintParts: [start, end, response, count],
     ...(attention ? { attention } : {}),
   };
 }
 
-async function listEvents(ctx: AdapterContext) {
-  const now = ctx.now();
-  return paginate<CalendarEvent>(
-    async (cursor) => {
-      const qs = new URLSearchParams({ timeMin: now.toISOString(), timeMax: new Date(now.getTime() + RANGE_MS).toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "100" });
-      if (cursor) qs.set("pageToken", cursor);
-      const res = await googleRequest<{ items?: CalendarEvent[]; nextPageToken?: string }>(ctx, { url: `${base(ctx)}/calendars/primary/events?${qs}` });
-      return { items: res.data.items ?? [], next: res.data.nextPageToken ?? null };
-    },
-    { maxPages: MAX_PAGES },
-  );
+/** Parse one list_events page. */
+export function parseEventPage(text: string): { items: CalendarEvent[]; next: string | null; unreadable: number; calendar: string | null } {
+  let res: { events?: unknown; items?: unknown; nextPageToken?: unknown; summary?: unknown };
+  try {
+    res = JSON.parse(text) as typeof res;
+  } catch {
+    throw new RemoteError("Google Calendar returned an unreadable result", "error");
+  }
+  if (!res || typeof res !== "object") throw new RemoteError("Google Calendar returned an unreadable result", "error");
+  const err = (res as { error?: unknown }).error;
+  if (err !== undefined) throw toolError("Google Calendar", "list_events", typeof err === "string" ? err : JSON.stringify(err));
+  const events = res.events ?? res.items ?? [];
+  if (!Array.isArray(events)) throw new RemoteError("Google Calendar returned an unexpected result shape", "error");
+  const items = events.filter((e): e is CalendarEvent => !!e && typeof e === "object" && typeof (e as CalendarEvent).id === "string");
+  return { items, next: str(res.nextPageToken), unreadable: events.length - items.length, calendar: str(res.summary) };
 }
 
-async function identify(ctx: AdapterContext): Promise<string | null> {
-  const res = await googleRequest<{ id?: string }>(ctx, { url: `${base(ctx)}/calendars/primary`, retries: 1 });
-  return res.data.id ?? null;
+/** The window is fixed once per listing: a page token only belongs to the query that produced it. */
+function eventsCall(now: Date, cursor: string | null, pageSize = 100) {
+  return { tool: "list_events", args: { startTime: now.toISOString(), endTime: new Date(now.getTime() + RANGE_MS).toISOString(), orderBy: "startTime", pageSize, ...(cursor ? { pageToken: cursor } : {}) } };
 }
 
 export const gcalAdapter: ConnectorAdapter = {
   kind: "gcal",
-  secretNames: GOOGLE_SECRET_NAMES,
+  secretNames: [],
   definition: {
     kind: "gcal",
     label: "Google Calendar",
     description: "Meetings in the next 48 hours that need preparation, and invitations waiting for your response.",
-    authMethods: [googleAuthMethod()],
+    authMethods: claudeAuthMethods(CLAUDE_SERVERS.gcal),
     scopes: [{ id: "upcoming", label: "My primary calendar, next 48 hours", default: true }],
     writeActions: [],
-    setupHelp: "Jarvis reads your primary calendar with read-only access and never changes events.",
-    unavoidableSteps: googleSetupSteps("Google Calendar API"),
+    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gcal)} Jarvis only reads your primary calendar and never changes events.`,
+    unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.gcal),
   },
 
-  configure: configureGoogle,
-
-  async authorizeUrl(ctx, p) {
-    return buildAuthorizeUrl(ctx, { ...p, scopes: p.scopes.length ? p.scopes : [GCAL_READ_SCOPE] });
-  },
-
-  async completeAuthorization(ctx, p) {
-    return completeGoogleAuthorization(ctx, p, identify);
-  },
+  configure: async (_ctx, fields) => configureClaude(fields, CLAUDE_SERVERS.gcal),
 
   async test(ctx) {
-    try {
-      const res = await googleRequest<{ items?: Array<{ id: string; primary?: boolean }> }>(ctx, { url: `${base(ctx)}/users/me/calendarList?maxResults=1`, retries: 1 });
-      const primary = (res.data.items ?? []).find((c) => c.primary)?.id ?? ctx.connection.account ?? null;
-      return { ok: true, state: "complete", account: primary, message: primary ? `Signed in as ${primary}` : "Connected to Google Calendar", grantedScopes: grantedScopes(ctx) };
-    } catch (e) {
-      const err = asRemoteError(e);
-      return { ok: false, state: err.state, account: null, message: err.message };
-    }
+    return testClaude(ctx, server(ctx), eventsCall(ctx.now(), null, 1), (text) => ({ account: parseEventPage(text).calendar }));
   },
 
   async sync(ctx): Promise<SyncResult> {
@@ -181,11 +172,14 @@ export const gcalAdapter: ConnectorAdapter = {
     const observations: Observation[] = [];
     if (!ctx.connection.readScopes.includes("upcoming")) return { coverage: cov.finish(), observations };
     try {
-      const r = await listEvents(ctx);
-      const events = r.items.filter((e) => e.id && e.status !== "cancelled");
-      const nowMs = ctx.now().getTime();
+      const now = ctx.now();
+      const results = await paginateStreams<CalendarEvent>(ctx, server(ctx), [{ id: "upcoming", label: SCOPE_LABEL, maxPages: MAX_PAGES, call: (cursor) => eventsCall(now, cursor), parse: parseEventPage }]);
+      const r = streamOrThrow(results.get("upcoming"));
+      const events = r.items.filter((e) => e.status !== "cancelled");
+      const nowMs = now.getTime();
       for (const ev of events) observations.push(toObservation(ev, nowMs));
-      cov.add(SCOPE_LABEL, listingState(r, events.length), events.length, r.pages, listingNote(r, MAX_PAGES));
+      const notes = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${MAX_PAGES} pages`] : []), ...(r.unreadable ? [`${r.unreadable} event(s) could not be read`] : [])];
+      cov.add(SCOPE_LABEL, r.unreadable ? "partial" : listingState({ items: events, complete: r.complete }), events.length, r.pages, notes.length ? notes.join("; ") : undefined);
     } catch (e) {
       recordFailure(cov, SCOPE_LABEL, e);
     }

@@ -1,6 +1,6 @@
 import type { App } from "../app.ts";
 import type { JobContext } from "./queue.ts";
-import { JobBlockedError } from "./queue.ts";
+import { EffectCheckError, JobBlockedError } from "./queue.ts";
 import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
 import { getItem } from "../attention/engine.ts";
 import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
@@ -209,7 +209,7 @@ async function runAction(app: App, ctx: JobContext) {
     return { status, ...receipt };
   };
   const effectKey = newEffectKey(a.id, a.version);
-  const pending = app.db.prepare("select status from side_effects where effect_key = ?").get(effectKey) as { status: string } | undefined;
+  const pending = app.db.prepare("select status, created_at from side_effects where effect_key = ?").get(effectKey) as { status: string; created_at: string } | undefined;
   // Authority, approval and expiry are rechecked immediately before the external call.
   const problem = app.actionAuthority(a.kind, a.connectionId) ?? approvalProblem(a, nowIso());
   if (problem && !pending) return done("failed", { error: problem, attempted: false });
@@ -225,12 +225,12 @@ async function runAction(app: App, ctx: JobContext) {
       const stored = JSON.parse(String((app.db.prepare("select result from side_effects where effect_key = ?").get(effectKey) as { result: string }).result));
       return done(stored?.verified ? "succeeded" : "unknown", { ...stored, effectKey });
     }
-    const found = adapter.findEffect ? await adapter.findEffect(actx, req).catch(() => undefined) : undefined;
+    const found = adapter.findEffect ? await adapter.findEffect(actx, { ...req, since: pending.created_at }).catch(() => undefined) : undefined;
     if (found) return done(found.verified ? "succeeded" : "unknown", { ...found, effectKey, recovered: true });
     return done(found === null ? "failed" : "unknown", { error: found === null ? `${problem}; the earlier attempt did not reach the service` : `${problem}; could not check whether an earlier attempt was sent`, effectKey });
   }
   try {
-    const result = await ctx.effect(effectKey, () => adapter.execute!(actx, req), adapter.findEffect ? () => adapter.findEffect!(actx, req) : undefined);
+    const result = await ctx.effect(effectKey, () => adapter.execute!(actx, req), adapter.findEffect ? (since) => adapter.findEffect!(actx, { ...req, since }) : undefined);
     return done(result.verified ? "succeeded" : "unknown", { ...result, verifiedAt: result.verified ? nowIso() : null, effectKey, ...(result.verified ? {} : { note: "Sent, but the result could not be read back. Check the target before sending again." }) });
   } catch (e) {
     if (e instanceof JobBlockedError) {
@@ -238,6 +238,10 @@ async function runAction(app: App, ctx: JobContext) {
       throw e;
     }
     const err = e as Error;
+    if (e instanceof EffectCheckError) {
+      // The earlier attempt stays pending: the next run checks again instead of sending blind.
+      return done("unknown", { error: err.message, note: "An earlier attempt may have been sent and could not be checked. Check the target before sending again.", effectKey });
+    }
     if (rejectedBeforeWrite(e)) {
       app.db.prepare("update side_effects set status = 'rejected', completed_at = ? where effect_key = ? and status = 'pending'").run(nowIso(), effectKey);
       return done("failed", { error: err.message, state: (e as RemoteError).state, attempted: true, sent: false });

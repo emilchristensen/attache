@@ -1,11 +1,15 @@
 /**
- * TEST-ONLY happy-path scenarios for every remote service Jarvis talks to,
- * mounted on the fixture server under one path prefix per service. End-to-end
- * tests mutate `scenarioState` (e.g. push a new PR head, make a Jira item
- * overdue) and re-sync to observe the change. Nothing here is live evidence.
+ * TEST-ONLY happy-path scenarios for every remote service Jarvis talks to.
+ * GitHub is emulated as REST under /github; Jira and Confluence through the
+ * Atlassian MCP fixture (atlassian-mcp.ts); Slack, Gmail and Google Calendar
+ * as claude.ai connector tools answered for fake-claude.mjs
+ * (claude-connectors.ts). End-to-end tests mutate `scenarioState` (push a new
+ * PR head, make a Jira item overdue) and re-sync. Nothing here is live evidence.
  */
 import type { FixtureRequest, FixtureResponse, FixtureServer } from "./fixture-server.ts";
 import { FIXTURE_PREFIX } from "../../src/connectors/test-endpoints.ts";
+import { executeOps, mountAtlassianMcp, type AtlassianFixture } from "./atlassian-mcp.ts";
+import { jsonAnswer, mountClaude, onTool, slackHistoryAnswer, slackProfileAnswer, slackSearchAnswer, slackSearchInvalid, type ClaudeFixture, type SlackFixtureMessage } from "./claude-connectors.ts";
 
 export { FIXTURE_PREFIX };
 
@@ -39,15 +43,6 @@ interface ConfluencePage {
   mentionsMe: boolean;
 }
 
-interface SlackMessage {
-  ts: string;
-  user?: string;
-  bot_id?: string;
-  text: string;
-  thread_ts?: string;
-  metadata?: unknown;
-}
-
 interface GmailMessage {
   id: string;
   from: string;
@@ -68,19 +63,19 @@ interface CalendarEvent {
 export interface ScenarioState {
   selfEmail: string;
   github: { login: string; prs: GithubPr[]; comments: Map<string, Array<{ id: number; body: string; html_url: string }>> };
-  jira: { issues: JiraIssue[]; comments: Map<string, Array<{ id: string; body: unknown; properties: Array<{ key: string; value: unknown }> }>> };
-  confluence: { pages: ConfluencePage[]; comments: Array<{ id: string; pageId: string; body: { storage: { value: string } } }>; properties: Map<string, Array<{ key: string; value: unknown }>> };
-  slack: { selfId: string; ims: Map<string, SlackMessage[]>; channels: Map<string, SlackMessage[]>; mentions: Array<SlackMessage & { channel: string }> };
-  google: { grantedScopes: string; accessToken: string; refreshToken: string; revoked: boolean; issued: number };
-  gmail: { threads: Map<string, GmailMessage[]>; drafts: Array<{ id: string; messageId: string; threadId: string; headers: Array<{ name: string; value: string }> }> };
+  jira: { issues: JiraIssue[]; comments: Map<string, Array<{ id: string; body: string; author: { accountId: string } }>> };
+  confluence: { pages: ConfluencePage[]; comments: Array<{ id: string; pageId: string; body: { storage: { value: string } }; version: { authorId: string } }> };
+  slack: { selfId: string; messages: SlackFixtureMessage[] };
+  gmail: { threads: Map<string, GmailMessage[]>; drafts: Array<{ id: string; threadId: string; body: string }> };
   gcal: { events: CalendarEvent[] };
   nextId: number;
 }
 
+/** The Atlassian site the scenarios answer for; any connection must use this site URL. */
+export const ATLASSIAN_SITE = "https://example.atlassian.net";
+export const ATLASSIAN_TOKEN = "ATATT3xFfGF0scenario-token";
+
 const HOUR = 3_600_000;
-const GMAIL_READ = "https://www.googleapis.com/auth/gmail.readonly";
-const GMAIL_COMPOSE = "https://www.googleapis.com/auth/gmail.compose";
-const CAL_READ = "https://www.googleapis.com/auth/calendar.readonly";
 
 const localDate = (ms: number) => {
   const d = new Date(ms);
@@ -93,6 +88,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 export function createScenarioState(opts: { selfEmail?: string; now?: number } = {}): ScenarioState {
   const now = opts.now ?? Date.now();
   const selfEmail = opts.selfEmail ?? "alex@example.com";
+  const sm = (channel: string, user: string, at: number, text: string, extra: Partial<SlackFixtureMessage> = {}): SlackFixtureMessage => ({ channel, user, userName: user === "U0SELF" ? "Alex" : user === "U0MIA" ? "Mia Jensen" : "Bob", ts: slackTs(at), text, ...extra });
   return {
     selfEmail,
     github: {
@@ -116,18 +112,17 @@ export function createScenarioState(opts: { selfEmail?: string; now?: number } =
         { id: "1002", title: "Runbook: deploys", version: 8, space: "OPS", mentionsMe: false },
       ],
       comments: [],
-      properties: new Map(),
     },
     slack: {
       selfId: "U0SELF",
-      ims: new Map([
-        ["D0000001", [{ ts: slackTs(now - HOUR), user: "U0MIA", text: "Can you look at the checkout PR today?" }]],
-        ["D0000002", [{ ts: slackTs(now - 2 * HOUR), user: "U0SELF", text: "Sent it over." }, { ts: slackTs(now - 3 * HOUR), user: "U0BOB", text: "Got the numbers?" }]],
-      ]),
-      channels: new Map([["C0000001", [{ ts: slackTs(now - 4 * HOUR), user: "U0BOB", text: "Standup moved to 10:30" }]]]),
-      mentions: [{ channel: "C0000001", ts: slackTs(now - 5 * HOUR), user: "U0MIA", text: "<@U0SELF> can you confirm the release date?" }],
+      messages: [
+        sm("D0000001", "U0MIA", now - HOUR, "Can you look at the checkout PR today?"),
+        sm("D0000002", "U0SELF", now - 2 * HOUR, "Sent it over."),
+        sm("D0000002", "U0BOB", now - 3 * HOUR, "Got the numbers?"),
+        sm("C0000001", "U0BOB", now - 4 * HOUR, "Standup moved to 10:30", { channelName: "general" }),
+        sm("C0000001", "U0MIA", now - 5 * HOUR, "<@U0SELF|Alex> can you confirm the release date?", { channelName: "general" }),
+      ],
     },
-    google: { grantedScopes: `${GMAIL_READ} ${CAL_READ}`, accessToken: "ya29.fixture-access-0", refreshToken: "1//fixture-refresh", revoked: false, issued: 0 },
     gmail: {
       threads: new Map([
         ["thr1", [{ id: "msg1", from: "Mia Jensen <mia@client.example>", subject: "Contract renewal", labels: ["INBOX", "UNREAD", "IMPORTANT"], at: now - 3 * HOUR }]],
@@ -171,10 +166,6 @@ export function setPrHeadSha(state: ScenarioState, number: number, sha: string):
 
 export function addJiraOverdue(state: ScenarioState, key: string, summary: string, daysOverdue = 1): void {
   state.jira.issues = [...state.jira.issues.filter((i) => i.key !== key), { key, summary, status: "In Progress", duedate: localDate(Date.now() - daysOverdue * 24 * HOUR), priority: "High" }];
-}
-
-export function grantGmailCompose(state: ScenarioState): void {
-  if (!state.google.grantedScopes.includes(GMAIL_COMPOSE)) state.google.grantedScopes = `${state.google.grantedScopes} ${GMAIL_COMPOSE}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,207 +212,131 @@ function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
 }
 
 // ---------------------------------------------------------------------------
-// Jira (site URL = <fixture>/jira)
+// Jira and Confluence (Atlassian Rovo MCP server)
 
 function jiraIssueJson(i: JiraIssue) {
   return { key: i.key, fields: { summary: i.summary, status: { name: i.status, statusCategory: { key: "indeterminate" } }, duedate: i.duedate, priority: { name: i.priority }, assignee: { displayName: "Alex" }, project: { key: i.key.split("-")[0] } } };
 }
 
-function mountJira(fx: FixtureServer, s: () => ScenarioState) {
-  const P = "/jira/rest/api/3";
-  mount(fx, "GET", `${P}/myself`, authed(() => json({ accountId: "acc-alex", displayName: "Alex", emailAddress: s().selfEmail })));
-  mount(fx, "GET", `${P}/search/jql`, authed((req) => {
-    const jql = req.query.get("jql") ?? "";
+function mountAtlassian(fx: FixtureServer, s: () => ScenarioState): AtlassianFixture {
+  const atl = mountAtlassianMcp(fx);
+  atl.apiTokens.add(`${s().selfEmail}:${ATLASSIAN_TOKEN}`);
+  atl.tools.set("atlassianUserInfo", () => ({ account_id: "acc-alex", email: s().selfEmail, name: "Alex" }));
+  atl.tools.set("getAccessibleAtlassianResources", () => [{ id: "cloud-example", url: ATLASSIAN_SITE, name: "Example" }]);
+  atl.tools.set("searchJiraIssuesUsingJql", (args) => {
+    const jql = String(args.jql ?? "");
     const soon = localDate(Date.now() + 7 * 24 * HOUR);
     let issues = s().jira.issues.filter((i) => (jql.startsWith("reporter") ? i.reporterIsMe : true));
     if (jql.includes("duedate <= 7d")) issues = issues.filter((i) => i.duedate && i.duedate <= soon);
-    return json({ issues: issues.map(jiraIssueJson), isLast: true });
-  }));
-  mount(fx, "POST", `${P}/issue/:key/comment`, authed((req, [key]) => {
-    const b = req.body as { body: unknown; properties?: Array<{ key: string; value: unknown }> };
-    const c = { id: id(s()), body: b.body, properties: b.properties ?? [] };
-    s().jira.comments.set(key!, [...(s().jira.comments.get(key!) ?? []), c]);
-    return json({ id: c.id, body: c.body }, 201);
-  }));
-  mount(fx, "GET", `${P}/issue/:key/comment/:id`, authed((req, [key, cid]) => {
-    const c = (s().jira.comments.get(key!) ?? []).find((x) => x.id === cid);
-    if (!c) return json({ errorMessages: ["Not found"] }, 404);
-    return json(req.query.get("expand") === "properties" ? c : { id: c.id, body: c.body });
-  }));
-  mount(fx, "GET", `${P}/issue/:key/comment`, authed((req, [key]) => {
-    const all = s().jira.comments.get(key!) ?? [];
-    const startAt = Number(req.query.get("startAt") ?? 0);
-    const max = Number(req.query.get("maxResults") ?? 50);
-    return json({ startAt, maxResults: max, total: all.length, comments: all.slice(startAt, startAt + max) });
-  }));
-}
-
-// ---------------------------------------------------------------------------
-// Confluence (site URL = <fixture>/confluence)
-
-function mountConfluence(fx: FixtureServer, s: () => ScenarioState) {
-  const P = "/confluence/wiki";
-  mount(fx, "GET", `${P}/rest/api/user/current`, authed(() => json({ type: "known", accountId: "acc-alex", displayName: "Alex", email: s().selfEmail })));
-  mount(fx, "GET", `${P}/rest/api/search`, authed((req) => {
-    const cql = req.query.get("cql") ?? "";
+    return { issues: issues.map(jiraIssueJson), isLast: true };
+  });
+  atl.tools.set("addOrEditJiraIssueComment", (args) => {
+    const key = String(args.issueIdOrKey);
+    const c = { id: String(++s().nextId), body: String(args.commentBody ?? ""), author: { accountId: "acc-alex" } };
+    s().jira.comments.set(key, [...(s().jira.comments.get(key) ?? []), c]);
+    return { commentId: c.id, body: c.body, appliedContentFormat: "markdown" };
+  });
+  atl.tools.set("searchConfluence", (args) => {
+    const cql = String(args.cql ?? "");
     const pages = s().confluence.pages.filter((p) => (cql.startsWith("mention") ? p.mentionsMe : cql.startsWith("contributor") ? true : cql.includes(`"${p.space}"`)));
-    const results = pages.map((p) => ({ content: { id: p.id, type: "page", title: p.title, version: { number: p.version, by: { displayName: "Mia" } }, space: { key: p.space, name: p.space }, _links: { webui: `/spaces/${p.space}/pages/${p.id}` } }, title: p.title, excerpt: `${p.title} excerpt`, lastModified: iso(Date.now() - HOUR) }));
-    return json({ results, start: 0, limit: 50, size: results.length, _links: { base: "https://example.atlassian.net/wiki", context: "/wiki" } });
-  }));
-  mount(fx, "POST", `${P}/api/v2/footer-comments`, authed((req) => {
-    const b = req.body as { pageId: string; body: { value: string } };
-    const c = { id: id(s()), pageId: b.pageId, body: { storage: { value: b.body.value } }, _links: { webui: `/spaces/ENG/pages/${b.pageId}?focusedCommentId=${s().nextId}` } };
-    s().confluence.comments.push(c);
-    return json(c);
-  }));
-  mount(fx, "GET", `${P}/api/v2/footer-comments/:id`, authed((_req, [cid]) => {
-    const c = s().confluence.comments.find((x) => x.id === cid);
-    return c ? json(c) : json({ message: "Not found" }, 404);
-  }));
-  mount(fx, "POST", `${P}/api/v2/footer-comments/:id/properties`, authed((req, [cid]) => {
-    s().confluence.properties.set(cid!, [...(s().confluence.properties.get(cid!) ?? []), req.body as { key: string; value: unknown }]);
-    return json(req.body);
-  }));
-  mount(fx, "GET", `${P}/api/v2/footer-comments/:id/properties`, authed((_req, [cid]) => json({ results: s().confluence.properties.get(cid!) ?? [], _links: {} })));
-  mount(fx, "GET", `${P}/api/v2/pages/:id/footer-comments`, authed((_req, [pid]) => json({ results: s().confluence.comments.filter((c) => c.pageId === pid), _links: {} })));
+    const results = pages.map((p) => ({ content: { id: p.id, type: "page", title: p.title, version: { number: p.version, by: { displayName: "Mia" } }, space: { key: p.space, name: p.space }, _links: { webui: `/spaces/${p.space}/pages/${p.id}` } }, excerpt: `${p.title} excerpt`, lastModified: iso(Date.now() - HOUR) }));
+    return { results };
+  });
+  executeOps(atl, {
+    listJiraIssueComments: (inputs) => {
+      const all = s().jira.comments.get(String(inputs.issueIdOrKey)) ?? [];
+      return { comments: all, total: all.length, startAt: 0 };
+    },
+    createConfluenceComment: (inputs) => {
+      const c = { id: String(++s().nextId), pageId: String(inputs.pageId), body: { storage: { value: String((inputs.body as { value?: string })?.value ?? "") } }, version: { authorId: "acc-alex" }, _links: { webui: `/spaces/ENG/pages/${String(inputs.pageId)}?focusedCommentId=${s().nextId}` } };
+      s().confluence.comments.push(c);
+      return c;
+    },
+    listConfluenceComments: (inputs) => ({ results: s().confluence.comments.filter((c) => c.pageId === String(inputs.pageId)) }),
+  });
+  return atl;
 }
 
 // ---------------------------------------------------------------------------
-// Slack (slack.com/api)
+// Slack, Gmail and Google Calendar (claude.ai connectors through fake-claude.mjs)
 
-function mountSlack(fx: FixtureServer, s: () => ScenarioState) {
-  const P = FIXTURE_PREFIX["https://slack.com/api"];
-  const ok = (data: Record<string, unknown>) => json({ ok: true, ...data });
-  const slackAuthed = (h: Handler): Handler => (req, p) => (req.headers.authorization ? h(req, p) : json({ ok: false, error: "not_authed" }));
-  const history = (channel: string) => s().slack.ims.get(channel) ?? s().slack.channels.get(channel);
-  mount(fx, "POST", `${P}/auth.test`, slackAuthed(() => ok({ user_id: s().slack.selfId, user: "alex", team: "Acme", url: "https://acme.slack.com/" })));
-  mount(fx, "GET", `${P}/conversations.list`, slackAuthed(() => ok({ channels: [...s().slack.ims.keys()].map((cid) => ({ id: cid, is_im: true })), response_metadata: { next_cursor: "" } })));
-  mount(fx, "GET", `${P}/conversations.history`, slackAuthed((req) => {
-    const msgs = history(req.query.get("channel") ?? "");
-    if (!msgs) return json({ ok: false, error: "channel_not_found" });
-    const latest = req.query.get("latest");
-    const withMeta = req.query.get("include_all_metadata") === "true";
-    const top = [...msgs].filter((m) => !m.thread_ts || m.thread_ts === m.ts).sort((a, b) => Number(b.ts) - Number(a.ts));
-    const picked = latest ? top.filter((m) => Number(m.ts) <= Number(latest)).slice(0, Number(req.query.get("limit") ?? 100)) : top;
-    return ok({ messages: picked.map((m) => (withMeta ? m : { ...m, metadata: undefined })), has_more: false });
-  }));
-  mount(fx, "GET", `${P}/conversations.replies`, slackAuthed((req) => {
-    const msgs = history(req.query.get("channel") ?? "");
-    if (!msgs) return json({ ok: false, error: "channel_not_found" });
-    const root = req.query.get("ts");
-    return ok({ messages: msgs.filter((m) => m.ts === root || m.thread_ts === root), has_more: false });
-  }));
-  mount(fx, "GET", `${P}/search.messages`, slackAuthed(() => ok({ messages: { matches: s().slack.mentions.map((m) => ({ ...m, channel: { id: m.channel, name: "general" } })), pagination: { page: 1, page_count: 1 } } })));
-  mount(fx, "POST", `${P}/chat.postMessage`, slackAuthed((req) => {
-    const b = req.body as { channel: string; text: string; thread_ts?: string; metadata?: unknown };
-    const list = history(b.channel);
-    if (!list) return json({ ok: false, error: "channel_not_found" });
-    const m: SlackMessage = { ts: slackTs(Date.now(), ++s().nextId % 1_000_000), user: s().slack.selfId, text: b.text, ...(b.thread_ts ? { thread_ts: b.thread_ts } : {}), ...(b.metadata ? { metadata: b.metadata } : {}) };
-    list.push(m);
-    return ok({ channel: b.channel, ts: m.ts, message: m });
-  }));
-}
+const SLACK = "claude.ai Slack";
+const GMAIL = "claude.ai Gmail";
+const GCAL = "claude.ai Google Calendar";
 
-// ---------------------------------------------------------------------------
-// Google OAuth, Gmail and Calendar
-
-function mountGoogleOAuth(fx: FixtureServer, s: () => ScenarioState) {
-  mount(fx, "GET", `${FIXTURE_PREFIX["https://accounts.google.com"]}/o/oauth2/v2/auth`, (req) => {
-    const redirect = req.query.get("redirect_uri");
-    if (!redirect) return json({ error: "invalid_request" }, 400);
-    const to = new URL(redirect);
-    to.searchParams.set("code", "fixture-code");
-    to.searchParams.set("state", req.query.get("state") ?? "");
-    return { status: 302, headers: { location: to.toString() }, text: "" };
+function mountSlack(c: ClaudeFixture, s: () => ScenarioState) {
+  const newestFirst = (list: SlackFixtureMessage[]) => [...list].sort((a, b) => Number(b.ts) - Number(a.ts));
+  const after = (a: Record<string, unknown>) => Number(a.after ?? 0);
+  onTool(c, SLACK, "slack_read_user_profile", () => slackProfileAnswer(s().slack.selfId, s().selfEmail));
+  onTool(c, SLACK, "slack_search_public_and_private", (a) => {
+    const invalid = slackSearchInvalid(a);
+    if (invalid) return invalid;
+    const im = a.channel_types === "im";
+    const keywords = (a.keywords as string[] | undefined) ?? [];
+    const hits = s().slack.messages.filter((m) => Number(m.ts) >= after(a) && (im ? m.channel.startsWith("D") : keywords.every((k) => m.text.includes(k.replace(/>$/, "")))));
+    return slackSearchAnswer(newestFirst(hits));
   });
-  mount(fx, "POST", `${FIXTURE_PREFIX["https://oauth2.googleapis.com"]}/token`, (req) => {
-    const f = req.body as Record<string, string>;
-    const g = s().google;
-    const issue = () => {
-      g.issued++;
-      g.accessToken = `ya29.fixture-access-${g.issued}`;
-      return { access_token: g.accessToken, expires_in: 3599, token_type: "Bearer", scope: g.grantedScopes };
-    };
-    if (f.grant_type === "authorization_code") return f.code === "fixture-code" && f.code_verifier ? json({ ...issue(), refresh_token: g.refreshToken }) : json({ error: "invalid_grant" }, 400);
-    if (f.grant_type === "refresh_token") return !g.revoked && f.refresh_token === g.refreshToken ? json(issue()) : json({ error: "invalid_grant", error_description: "Token has been expired or revoked." }, 400);
-    return json({ error: "unsupported_grant_type" }, 400);
+  onTool(c, SLACK, "slack_read_channel", (a) => {
+    const channel = String(a.channel_id);
+    const list = s().slack.messages.filter((m) => m.channel === channel && !m.threadTs && Number(m.ts) >= Number(a.oldest ?? 0));
+    return s().slack.messages.some((m) => m.channel === channel) ? slackHistoryAnswer(channel, newestFirst(list)) : { text: "channel_not_found", isError: true };
+  });
+  onTool(c, SLACK, "slack_read_thread", (a) => {
+    const channel = String(a.channel_id);
+    return slackHistoryAnswer(channel, newestFirst(s().slack.messages.filter((m) => m.channel === channel && (m.ts === a.message_ts || m.threadTs === a.message_ts))));
+  });
+  onTool(c, SLACK, "slack_send_message", (a) => {
+    const channel = String(a.channel_id);
+    if (!s().slack.messages.some((m) => m.channel === channel)) return { text: "channel_not_found", isError: true };
+    const m: SlackFixtureMessage = { channel, user: s().slack.selfId, userName: "Alex", ts: slackTs(Date.now(), ++s().nextId % 1_000_000), text: String(a.message), ...(a.thread_ts ? { threadTs: String(a.thread_ts) } : {}) };
+    s().slack.messages.push(m);
+    return jsonAnswer({ ok: true, message_link: `https://acme.slack.com/archives/${channel}/p${m.ts.replace(".", "")}` });
   });
 }
 
-const googleAuthed = (s: () => ScenarioState, h: Handler): Handler => (req, p) => (req.headers.authorization === `Bearer ${s().google.accessToken}` ? h(req, p) : json({ error: { code: 401, message: "Invalid Credentials" } }, 401));
-
-function gmailMessageJson(m: GmailMessage, threadId: string) {
-  return { id: m.id, threadId, labelIds: m.labels, snippet: `${m.subject} …`, internalDate: String(m.at), payload: { headers: [{ name: "From", value: m.from }, { name: "Subject", value: m.subject }, { name: "Date", value: new Date(m.at).toUTCString() }, { name: "Message-ID", value: `<${m.id}@mail.example>` }] } };
-}
-
-function parseRawHeaders(raw: string): Array<{ name: string; value: string }> {
-  const text = Buffer.from(raw, "base64url").toString("utf8");
-  return text.split("\r\n\r\n")[0]!.split("\r\n").map((l) => ({ name: l.slice(0, l.indexOf(":")), value: l.slice(l.indexOf(":") + 1).trim() }));
-}
-
-function mountGmail(fx: FixtureServer, s: () => ScenarioState) {
-  const P = `${FIXTURE_PREFIX["https://gmail.googleapis.com"]}/gmail/v1/users/me`;
-  const draftJson = (d: ScenarioState["gmail"]["drafts"][number]) => ({ id: d.id, message: { id: d.messageId, threadId: d.threadId, payload: { headers: d.headers } } });
-  mount(fx, "GET", `${P}/profile`, googleAuthed(s, () => json({ emailAddress: s().selfEmail, messagesTotal: 42 })));
-  mount(fx, "GET", `${P}/threads`, googleAuthed(s, () => json({ threads: [...s().gmail.threads.keys()].map((tid) => ({ id: tid })), resultSizeEstimate: s().gmail.threads.size })));
-  mount(fx, "GET", `${P}/threads/:id`, googleAuthed(s, (_req, [tid]) => {
-    const t = s().gmail.threads.get(tid!);
-    return t ? json({ id: tid, historyId: String(Date.now()), messages: t.map((m) => gmailMessageJson(m, tid!)) }) : json({ error: { message: "Not Found" } }, 404);
-  }));
-  mount(fx, "POST", `${P}/drafts`, googleAuthed(s, (req) => {
-    if (!s().google.grantedScopes.includes(GMAIL_COMPOSE)) return json({ error: { code: 403, message: "Request had insufficient authentication scopes." } }, 403);
-    const b = req.body as { message: { raw: string; threadId?: string } };
-    const d = { id: `r-${id(s())}`, messageId: `m-${s().nextId}`, threadId: b.message.threadId ?? `thr-${s().nextId}`, headers: parseRawHeaders(b.message.raw) };
+function mountGmail(c: ClaudeFixture, s: () => ScenarioState) {
+  const threadJson = (id: string, msgs: GmailMessage[]) => ({ id, viewUrl: `https://mail.google.com/mail/?authuser=${s().selfEmail}#all/${id}`, messages: msgs.map((m) => ({ id: m.id, threadId: id, sender: m.from, subject: m.subject, snippet: `${m.subject} …`, labelIds: m.labels, internalDate: String(m.at), date: iso(m.at) })) });
+  onTool(c, GMAIL, "search_threads", () => jsonAnswer(s().gmail.threads.size ? { threads: [...s().gmail.threads].map(([id, msgs]) => threadJson(id, msgs)) } : {}));
+  onTool(c, GMAIL, "create_draft", (a) => {
+    const reply = [...s().gmail.threads].find(([, msgs]) => msgs.some((m) => m.id === a.replyToMessageId));
+    const d = { id: `r-${++s().nextId}`, threadId: reply?.[0] ?? `thr-${s().nextId}`, body: String(a.body ?? "") };
     s().gmail.drafts.push(d);
-    return json({ id: d.id, message: { id: d.messageId, threadId: d.threadId, labelIds: ["DRAFT"] } });
-  }));
-  mount(fx, "GET", `${P}/drafts`, googleAuthed(s, () => json({ drafts: s().gmail.drafts.map((d) => ({ id: d.id, message: { id: d.messageId, threadId: d.threadId } })) })));
-  mount(fx, "GET", `${P}/drafts/:id`, googleAuthed(s, (_req, [did]) => {
-    const d = s().gmail.drafts.find((x) => x.id === did);
-    return d ? json(draftJson(d)) : json({ error: { message: "Not Found" } }, 404);
-  }));
-  mount(fx, "GET", `${P}/messages/:id`, googleAuthed(s, (_req, [mid]) => {
-    const d = s().gmail.drafts.find((x) => x.messageId === mid);
-    return d ? json(draftJson(d).message) : json({ error: { message: "Not Found" } }, 404);
-  }));
+    return jsonAnswer({ id: d.id, threadId: d.threadId, viewUrl: `https://mail.google.com/mail/#drafts/${d.id}` });
+  });
+  onTool(c, GMAIL, "get_draft", (a) => {
+    const d = s().gmail.drafts.find((x) => x.id === a.draftId);
+    return d ? jsonAnswer({ id: d.id, message: { threadId: d.threadId } }) : { text: "Requested entity was not found. 404", isError: true };
+  });
+  onTool(c, GMAIL, "list_drafts", () => jsonAnswer({ drafts: s().gmail.drafts.map((d) => ({ id: d.id, threadId: d.threadId, plaintextBody: d.body })) }));
 }
 
-function mountCalendar(fx: FixtureServer, s: () => ScenarioState) {
-  const P = `${FIXTURE_PREFIX["https://www.googleapis.com"]}/calendar/v3`;
-  mount(fx, "GET", `${P}/users/me/calendarList`, googleAuthed(s, () => json({ items: [{ id: s().selfEmail, primary: true, summary: s().selfEmail }] })));
-  mount(fx, "GET", `${P}/calendars/primary`, googleAuthed(s, () => json({ id: s().selfEmail, summary: s().selfEmail })));
-  mount(fx, "GET", `${P}/calendars/primary/events`, googleAuthed(s, (req) => {
-    const min = Date.parse(req.query.get("timeMin") ?? "");
-    const max = Date.parse(req.query.get("timeMax") ?? "");
+function mountCalendar(c: ClaudeFixture, s: () => ScenarioState) {
+  onTool(c, GCAL, "list_events", (a) => {
+    const min = Date.parse(String(a.startTime ?? ""));
+    const max = Date.parse(String(a.endTime ?? ""));
     const inRange = (e: CalendarEvent) => {
       const start = Date.parse(e.start.dateTime ?? `${e.start.date}T00:00:00`);
       const end = Date.parse(e.end.dateTime ?? `${e.end.date}T00:00:00`);
       return (!Number.isFinite(min) || end > min) && (!Number.isFinite(max) || start < max);
     };
-    const items = s().gcal.events.filter(inRange).map((e) => ({ status: "confirmed", htmlLink: `https://calendar.google.com/event?eid=${e.id}`, organizer: { email: "mia@client.example" }, ...e }));
-    return json({ kind: "calendar#events", items });
-  }));
+    const events = s().gcal.events.filter(inRange).map((e) => ({ status: "confirmed", htmlLink: `https://calendar.google.com/event?eid=${e.id}`, organizer: { email: "mia@client.example" }, ...e }));
+    return jsonAnswer({ events, summary: s().selfEmail, timeZone: "Europe/Copenhagen" });
+  });
 }
 
 /**
- * Mount realistic happy-path routes for every service on the fixture server.
- * Routes read `scenarioState` on every request, so mutations are visible to
- * the next sync without re-installing.
+ * Mount realistic happy-path answers for every service on the fixture server.
+ * Handlers read `scenarioState` on every call, so mutations are visible to the
+ * next sync without re-installing.
  */
-export function installScenarios(fx: FixtureServer, opts: { selfEmail?: string } = {}): ScenarioState {
+export function installScenarios(fx: FixtureServer, opts: { selfEmail?: string } = {}): { state: ScenarioState; atlassian: AtlassianFixture; claude: ClaudeFixture } {
   scenarioState = createScenarioState(opts);
   const s = () => scenarioState;
   mountGithub(fx, s);
-  mountJira(fx, s);
-  mountConfluence(fx, s);
-  mountSlack(fx, s);
-  mountGoogleOAuth(fx, s);
-  mountGmail(fx, s);
-  mountCalendar(fx, s);
-  return scenarioState;
-}
-
-/** Settings an E2E test gives Jira/Confluence so their site URL points at the fixture. */
-export function atlassianSiteUrls(fx: FixtureServer): { jira: string; confluence: string } {
-  return { jira: `${fx.url}/jira`, confluence: `${fx.url}/confluence` };
+  const atlassian = mountAtlassian(fx, s);
+  const claude = mountClaude(fx, { auth: { loggedIn: true, authMethod: "claude.ai", email: s().selfEmail, orgName: "Example Org" } });
+  mountSlack(claude, s);
+  mountGmail(claude, s);
+  mountCalendar(claude, s);
+  return { state: scenarioState, atlassian, claude };
 }

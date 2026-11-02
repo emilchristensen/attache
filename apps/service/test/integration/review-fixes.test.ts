@@ -161,7 +161,7 @@ describe("review fixes", () => {
 
   it("#11 a fresh event stream starts at now; a reconnect replays every missed event beyond one batch", async () => {
     const job = svc.app.jobs.create({ kind: "demo-long", title: "events", input: { steps: 1, stepMs: 1 } }).job;
-    // Let the job's own live events land first, or a fresh stream rightly delivers them.
+    // Let the job finish first: its own live events would otherwise reach the fresh stream.
     await svc.waitJob(job.id);
     const start = Number((svc.app.db.prepare("select max(seq) m from job_events").get() as { m: number }).m);
     const ins = svc.app.db.prepare("insert into job_events (job_id, type, data, at) values (?, 'progress', '{}', ?)");
@@ -204,5 +204,27 @@ describe("review fixes", () => {
     expect(t.status.status).toBe("disconnected");
     expect((await svc.call("GET", "/jobs?limit=abc")).status).toBe(200);
     expect((await svc.call("GET", "/memory/changes?limit=-5")).status).toBe(200);
+  });
+
+  it("connections from the old transports lose their stale credentials once and ask to be set up again", async () => {
+    const app = svc.app;
+    const ins = app.db.prepare("insert into connections (id, kind, label, status, settings, read_scopes, write_actions, created_at, updated_at) values (?,?,?,?,?,?,?,?,?)");
+    const now = new Date().toISOString();
+    ins.run("slack", "slack", "Slack", "connected", JSON.stringify({ authMethod: "token", channels: "C0123" }), '["dms"]', '["slack.post"]', now, now);
+    ins.run("confluence", "confluence", "Confluence", "connected", JSON.stringify({ authMethod: "api-token", siteUrl: "https://acme.atlassian.net", email: "e@x.com" }), '["mentions"]', "[]", now, now);
+    ins.run("gcal", "gcal", "Google Calendar", "connected", JSON.stringify({ authMethod: "claude-ai" }), '["upcoming"]', "[]", now, now);
+    await app.secrets.set("conn:slack:token", "xoxp-legacy-token-value");
+    await app.secrets.set("conn:confluence:apiToken", "ATATT-legacy");
+    expect(await app.connections.migrateLegacyTransports()).toEqual(["slack", "confluence"]);
+    expect(await app.secrets.get("conn:slack:token")).toBeNull();
+    expect(await app.secrets.get("conn:confluence:apiToken")).toBeNull();
+    const slack = app.connections.record("slack")!;
+    expect(slack).toMatchObject({ status: "needs_auth", readScopes: ["dms"], writeActions: ["slack.post"] });
+    expect(slack.settings.channels).toBe("C0123");
+    expect(app.connections.status(slack).lastError).toMatch(/claude\.ai connector/);
+    expect(app.connections.record("gcal")!.status).toBe("connected");
+    // Idempotent: a second start changes nothing.
+    expect(await app.connections.migrateLegacyTransports()).toEqual([]);
+    for (const id of ["slack", "confluence", "gcal"]) app.db.prepare("delete from connections where id = ?").run(id);
   });
 });

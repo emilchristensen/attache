@@ -10,7 +10,8 @@ import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { SpeechError } from "../speech/engine.ts";
 
-const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number }>();
+/** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
+const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
 
 function featureForJob(kind: JobKind) {
   return FEATURES.find((f) => f.jobKinds.includes(kind))?.id ?? "jobs";
@@ -205,9 +206,9 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const verifier = randomBytes(48).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     const redirectUri = `http://127.0.0.1:${port()}${API_PREFIX}/oauth/callback`;
-    const scopes = oauthScopes(kind, body.includeWrite);
-    oauthPending.set(state, { kind, verifier, redirectUri, expires: Date.now() + 10 * 60_000 });
-    const url = await adapter.authorizeUrl(app.connections.context(rec), { redirectUri, state, codeChallenge: challenge, scopes });
+    const scopes = adapter.oauthScopes?.(body.includeWrite) ?? [];
+    const { url, settings } = await adapter.authorizeUrl(app.connections.context(rec), { redirectUri, state, codeChallenge: challenge, scopes });
+    oauthPending.set(state, { kind, verifier, redirectUri, expires: Date.now() + 10 * 60_000, settings: settings ?? {} });
     return { url, redirectUri };
   });
   r.get(
@@ -228,8 +229,11 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const rec = app.connections.requireRecord(pending.kind);
       const adapter = app.connections.adapter(pending.kind);
       try {
-        const res = await adapter.completeAuthorization!(app.connections.context(rec), { code, redirectUri: pending.redirectUri, codeVerifier: pending.verifier });
-        app.db.prepare("update connections set settings = ?, account = coalesce(?, account) where id = ?").run(JSON.stringify({ ...rec.settings, ...res.settings }), res.account, rec.id);
+        // Exchange the code with the client this sign-in started with; persist it only now that it worked.
+        const started = { ...rec, settings: { ...rec.settings, ...pending.settings } };
+        const res = await adapter.completeAuthorization!(app.connections.context(started), { code, redirectUri: pending.redirectUri, codeVerifier: pending.verifier });
+        app.connections.mergeSettings(rec.id, { ...pending.settings, ...res.settings });
+        if (res.account) app.db.prepare("update connections set account = ? where id = ?").run(res.account, rec.id);
         const t = await app.connections.test(rec.id);
         return back(t.ok ? `Connected ${adapter.definition.label}` : t.message, t.ok);
       } catch (e) {
@@ -289,12 +293,6 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- backup ---------------------------------------------------------------------------------
   r.get("/backups", () => listBackups(app));
   r.post("/backups", async () => ({ __status: 201, body: await createBackup(app) }));
-}
-
-function oauthScopes(kind: ConnectionKind, includeWrite: boolean): string[] {
-  if (kind === "gmail") return ["https://www.googleapis.com/auth/gmail.readonly", ...(includeWrite ? ["https://www.googleapis.com/auth/gmail.compose"] : []), "openid", "email"];
-  if (kind === "gcal") return ["https://www.googleapis.com/auth/calendar.readonly", "openid", "email"];
-  return [];
 }
 
 function defaultTitle(kind: JobKind, input: Record<string, unknown>): string {

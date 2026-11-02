@@ -1,346 +1,262 @@
-import type { CoverageState } from "@jarvis/contracts";
+/**
+ * Slack through the user's claude.ai Slack connector (see claude-adapter.ts).
+ * Direct messages and mentions come from connector search, sorted newest
+ * first inside the 48-hour window; watched channels from channel history.
+ * The search tool rejects a query with neither keywords nor filters
+ * (parameter_validation_failed), so the DM search filters on is:dm.
+ * Posting is slack_send_message, read back from the channel or thread.
+ */
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, afterWrite, paginate } from "./http.ts";
-import { asRemoteError, csvList, listingNote, listingState, recordFailure, stringSetting } from "./common.ts";
+import { RemoteError, afterWrite } from "./http.ts";
+import { attemptStartMs, csvList, recordFailure, stringSetting } from "./common.ts";
+import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, type Stream, type StreamResult } from "./claude-adapter.ts";
+import { parseHistory, parseProfile, parseSearch, sameText, sentTs, type SlackItem } from "./slack-format.ts";
 
-interface SlackMessage {
-  ts: string;
-  text?: string;
-  user?: string;
-  bot_id?: string;
-  subtype?: string;
-  thread_ts?: string;
-  metadata?: { event_type?: string; event_payload?: { key?: unknown } };
-}
-
-interface SlackMatch {
-  ts: string;
-  text?: string;
-  user?: string;
-  username?: string;
-  permalink?: string;
-  channel?: { id?: string; name?: string; is_im?: boolean };
-}
-
-interface SlackIm {
-  id: string;
-  user?: string;
-  is_user_deleted?: boolean;
-  is_archived?: boolean;
-}
-
-interface Self {
-  userId: string;
-  teamUrl: string | null;
-}
-
-/** Query/body parameters; nested objects (e.g. metadata) are only valid in JSON POST bodies. */
-type Params = Record<string, unknown>;
-
-const DEFAULT_BASE = "https://slack.com/api";
 const WINDOW_MS = 48 * 3_600_000;
-const MAX_LIST_PAGES = 5;
-const MAX_SEARCH_PAGES = 3;
-const MAX_IMS = 100;
-const EFFECT_EVENT = "jarvis_effect";
+const RECOVERY_WINDOW_MS = 7 * 86_400_000;
+/** DMs include my own messages (needed to tell who owes a reply), so a busy 48 hours needs more pages. */
+const MAX_DM_PAGES = 10;
+const MAX_MENTION_PAGES = 5;
+const SEARCH_PAGE = 20;
 const CHANNEL_ID = /^[CGD][A-Z0-9]{2,}$/;
-/** Messages that are not something a person said and can never be awaiting a reply. */
-const NON_HUMAN_SUBTYPES = new Set(["bot_message", "channel_join", "channel_leave", "channel_topic", "channel_purpose", "channel_name", "tombstone", "message_deleted", "message_changed"]);
+const USER_ID = /^[UW][A-Z0-9]{2,}$/;
+const TS = /^\d+\.\d+$/;
 
-const ERROR_STATES: Record<string, CoverageState> = {
-  invalid_auth: "unauthorized",
-  not_authed: "unauthorized",
-  token_revoked: "unauthorized",
-  token_expired: "unauthorized",
-  account_inactive: "unauthorized",
-  missing_scope: "denied",
-  not_allowed_token_type: "denied",
-  no_permission: "denied",
-  ratelimited: "partial",
-  channel_not_found: "partial",
-  not_in_channel: "partial",
-};
+const LABELS = { dms: "Direct messages (48 hours)", mentions: "Mentions of me (48 hours)", channels: "Watched channels (48 hours)" } as const;
 
-/** Slack reports most failures as HTTP 200 with {ok:false,error}; the code is kept for per-channel handling. */
-export class SlackError extends RemoteError {
-  readonly code: string;
-  constructor(method: string, code: string, needed?: string) {
-    const state = ERROR_STATES[code] ?? "error";
-    super(`Slack ${method} failed: ${code}${needed ? ` (needs ${needed})` : ""}`, state);
-    this.code = code;
-  }
+const server = (ctx: AdapterContext) => serverName(ctx, CLAUDE_SERVERS.slack);
+const windowStartS = (ctx: AdapterContext) => Math.floor((ctx.now().getTime() - WINDOW_MS) / 1000);
+
+function searchStream(ctx: AdapterContext, id: string, label: string, maxPages: number, args: Record<string, unknown>): Stream<SlackItem> {
+  const since = windowStartS(ctx);
+  return {
+    id,
+    label,
+    maxPages,
+    call: (cursor) => ({ tool: "slack_search_public_and_private", args: { ...args, after: String(since), sort: "timestamp", sort_dir: "desc", limit: SEARCH_PAGE, include_context: false, response_format: "detailed", natural_language_query: "", ...(cursor ? { cursor } : {}) } }),
+    parse: (text) => {
+      const p = parseSearch(text);
+      const inWindow = p.items.filter((m) => Number(m.ts) >= since);
+      // Sorted newest first: once a page reaches before the window, later pages cannot be newer.
+      const reachedEnd = inWindow.length < p.items.length;
+      return { items: inWindow, next: reachedEnd ? null : p.cursor, unreadable: p.unreadable };
+    },
+  };
 }
 
-const isChannelError = (e: unknown) => e instanceof SlackError && (e.code === "channel_not_found" || e.code === "not_in_channel");
-
-function base(ctx: AdapterContext): string {
-  return ctx.endpoint(DEFAULT_BASE).replace(/\/$/, "");
+function channelStream(ctx: AdapterContext, channel: string): Stream<SlackItem> {
+  return {
+    id: `channel:${channel}`,
+    label: channel,
+    maxPages: 1,
+    call: () => ({ tool: "slack_read_channel", args: { channel_id: channel, oldest: String(windowStartS(ctx)), limit: 100, response_format: "detailed" } }),
+    parse: (text) => {
+      const p = parseHistory(text, channel);
+      return { items: p.items, next: p.cursor, unreadable: p.unreadable };
+    },
+  };
 }
 
-async function authHeader(ctx: AdapterContext): Promise<Record<string, string>> {
-  const token = await ctx.secret("token");
-  if (!token) throw new RemoteError("No Slack token stored", "unauthorized");
-  return { authorization: `Bearer ${token}` };
+const isHuman = (m: SlackItem) => !m.bot && !!m.user;
+
+function messageUrl(m: SlackItem, teamUrl: string | null): string | undefined {
+  if (m.permalink) return m.permalink;
+  if (!teamUrl) return undefined;
+  return `${teamUrl.replace(/\/$/, "")}/archives/${m.channel}/p${m.ts.replace(".", "")}`;
 }
 
-function query(params: Params): string {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined) qs.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
-  return qs.toString();
-}
-
-async function call<T>(ctx: AdapterContext, method: string, params: Params = {}, opts: { post?: boolean; retries?: number } = {}): Promise<T> {
-  const headers = await authHeader(ctx);
-  const res = opts.post
-    ? await ctx.http.request<T & { ok: boolean; error?: string; needed?: string }>({ method: "POST", url: `${base(ctx)}/${method}`, headers, body: params, retries: opts.retries ?? 0 })
-    : await ctx.http.request<T & { ok: boolean; error?: string; needed?: string }>({ url: `${base(ctx)}/${method}?${query(params)}`, headers });
-  if (!res.data || typeof res.data !== "object") throw new RemoteError(`Slack ${method} returned an unexpected response`, "error");
-  if (!res.data.ok) throw new SlackError(method, res.data.error ?? "unknown_error", res.data.needed);
-  return res.data;
-}
-
-async function whoAmI(ctx: AdapterContext): Promise<Self & { user: string | null; team: string | null }> {
-  const r = await call<{ user_id: string; user?: string; team?: string; url?: string }>(ctx, "auth.test", {}, { post: true, retries: 1 });
-  return { userId: r.user_id, user: r.user ?? null, team: r.team ?? null, teamUrl: r.url ?? null };
-}
-
-const cursorOf = (r: { response_metadata?: { next_cursor?: string } }) => r.response_metadata?.next_cursor || null;
-const windowStart = (ctx: AdapterContext) => (ctx.now().getTime() - WINDOW_MS) / 1000;
-const isHuman = (m: SlackMessage) => !m.bot_id && !(m.subtype && NON_HUMAN_SUBTYPES.has(m.subtype)) && !!m.user;
-
-function messageUrl(self: Self, channel: string, ts: string, permalink?: string): string | undefined {
-  if (permalink) return permalink;
-  if (!self.teamUrl) return undefined;
-  return `${self.teamUrl.replace(/\/$/, "")}/archives/${channel}/p${ts.replace(".", "")}`;
-}
-
-function messageObservation(p: { self: Self; kind: string; channel: string; msg: { ts: string; text?: string; user?: string; thread_ts?: string }; awaiting: boolean; attentionKind: string | null; why: string; permalink?: string; channelName?: string }): Observation {
-  const { self, channel, msg } = p;
-  const url = messageUrl(self, channel, msg.ts, p.permalink);
-  const text = (msg.text ?? "").slice(0, 4000);
-  const occurredAt = new Date(Number(msg.ts) * 1000).toISOString();
-  const threadTs = msg.thread_ts ?? (p.kind === "slack_dm" ? undefined : msg.ts);
+function observation(p: { msg: SlackItem; kind: string; awaiting: boolean; attentionKind: string | null; why: string; teamUrl: string | null }): Observation {
+  const { msg } = p;
+  const url = messageUrl(msg, p.teamUrl);
+  const text = msg.text.slice(0, 4000);
+  const threadTs = msg.threadTs ?? (p.kind === "slack_dm" ? undefined : msg.ts);
+  const who = msg.userName ?? msg.user ?? "someone";
   return {
     kind: p.kind,
-    externalId: `${channel}:${msg.ts}`,
+    externalId: `${msg.channel}:${msg.ts}`,
     title: text.split("\n")[0]!.slice(0, 120) || "(message)",
     ...(url ? { url } : {}),
-    ...(msg.user ? { author: msg.user } : {}),
-    occurredAt,
-    data: { channel, channelName: p.channelName ?? null, ts: msg.ts, threadTs: msg.thread_ts ?? null, user: msg.user ?? null, text, awaiting: p.awaiting },
+    ...(msg.user ? { author: msg.userName ?? msg.user } : {}),
+    occurredAt: new Date(Number(msg.ts) * 1000).toISOString(),
+    data: { channel: msg.channel, channelName: msg.channelName, ts: msg.ts, threadTs: msg.threadTs, user: msg.user, userName: msg.userName, text, awaiting: p.awaiting },
     fingerprintParts: [text, p.awaiting],
     ...(p.attentionKind && p.awaiting
       ? {
           attention: {
-            key: `slack:${channel}:${msg.ts}`,
+            key: `slack:${msg.channel}:${msg.ts}`,
             kind: p.attentionKind,
-            title: p.attentionKind === "pending_reply" ? `Reply to <@${msg.user}> in Slack` : `Mentioned in ${p.channelName ? `#${p.channelName}` : "Slack"}`,
+            title: p.attentionKind === "pending_reply" ? `Reply to ${who} in Slack` : `Mentioned in ${msg.channelName ? `#${msg.channelName}` : "Slack"}`,
             summary: text.slice(0, 280),
             why: p.why,
             ...(url ? { url } : {}),
             priority: p.attentionKind === "pending_reply" ? 65 : 55,
-            draftable: { actionKind: "slack.post", target: { channel, ...(threadTs ? { thread_ts: threadTs } : {}) }, context: { text, user: msg.user ?? null } },
+            draftable: { actionKind: "slack.post", target: { channel: msg.channel, ...(threadTs ? { thread_ts: threadTs } : {}) }, context: { text, user: msg.user, userName: msg.userName } },
           },
         }
       : {}),
   };
 }
 
-async function listIms(ctx: AdapterContext) {
-  return paginate<SlackIm>(
-    async (cursor) => {
-      const r = await call<{ channels?: SlackIm[]; response_metadata?: { next_cursor?: string } }>(ctx, "conversations.list", { types: "im", limit: 200, exclude_archived: true, cursor: cursor ?? undefined });
-      return { items: r.channels ?? [], next: cursorOf(r) };
-    },
-    { maxPages: MAX_LIST_PAGES },
-  );
+function noteFor(r: StreamResult<SlackItem>, extra: string[] = []): string | undefined {
+  const parts = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${r.pages} pages`] : []), ...(r.unreadable ? [`${r.unreadable} result(s) could not be read`] : []), ...extra];
+  return parts.length ? parts.join("; ") : undefined;
 }
 
-async function recentHistory(ctx: AdapterContext, channel: string, limit: number) {
-  return paginate<SlackMessage>(
-    async (cursor) => {
-      const r = await call<{ messages?: SlackMessage[]; has_more?: boolean; response_metadata?: { next_cursor?: string } }>(ctx, "conversations.history", { channel, oldest: windowStart(ctx).toFixed(6), limit, cursor: cursor ?? undefined });
-      return { items: r.messages ?? [], next: r.has_more ? cursorOf(r) : null };
-    },
-    { maxPages: 1 },
-  );
+function stateOf(r: StreamResult<SlackItem>, items: number) {
+  if (!r.complete || r.unreadable) return "partial" as const;
+  return items ? ("complete" as const) : ("empty" as const);
 }
 
-async function syncDms(ctx: AdapterContext, self: Self, cov: CoverageTracker, out: Observation[]) {
-  const label = "Direct messages (48 hours)";
-  const list = await listIms(ctx);
-  const ims = list.items.filter((im) => !im.is_user_deleted && !im.is_archived);
-  const failed: string[] = [];
-  let pages = list.pages;
-  let items = 0;
-  for (const im of ims.slice(0, MAX_IMS)) {
-    try {
-      const h = await recentHistory(ctx, im.id, 50);
-      pages += h.pages;
-      const latest = h.items.find(isHuman);
-      if (!latest) continue;
-      items++;
-      const awaiting = latest.user !== self.userId;
-      out.push(messageObservation({ self, kind: "slack_dm", channel: im.id, msg: latest, awaiting, attentionKind: "pending_reply", why: "The latest message in this direct conversation is from someone else." }));
-    } catch (e) {
-      if (!isChannelError(e) && asRemoteError(e).state !== "partial") throw e;
-      failed.push(im.id);
-    }
-  }
-  const notes: string[] = [];
-  if (ims.length > MAX_IMS) notes.push(`Read ${MAX_IMS} of ${ims.length} direct conversations`);
-  if (failed.length) notes.push(`Could not read ${failed.length} conversation(s): ${failed.join(", ")}`);
-  const complete = list.complete && ims.length <= MAX_IMS && !failed.length;
-  cov.add(label, listingState({ items: [], complete }, items), items, pages, listingNote(list, MAX_LIST_PAGES, notes));
+async function selfId(ctx: AdapterContext): Promise<string> {
+  const cached = stringSetting(ctx.connection.settings, "userId");
+  if (USER_ID.test(cached)) return cached;
+  const p = parseProfile(await callOne(ctx, server(ctx), "slack_read_user_profile", { response_format: "detailed" }));
+  if (!p.userId) throw new RemoteError("The Slack connector did not report your user id", "error");
+  return p.userId;
 }
 
-async function syncMentions(ctx: AdapterContext, self: Self, cov: CoverageTracker, out: Observation[]) {
-  const since = windowStart(ctx);
-  const r = await paginate<SlackMatch>(
-    async (cursor) => {
-      const page = Number(cursor ?? 1);
-      const res = await call<{ messages?: { matches?: SlackMatch[]; paging?: { pages?: number }; pagination?: { page_count?: number } } }>(ctx, "search.messages", { query: `<@${self.userId}>`, sort: "timestamp", sort_dir: "desc", count: 50, page });
-      const matches = res.messages?.matches ?? [];
-      const pageCount = res.messages?.pagination?.page_count ?? res.messages?.paging?.pages ?? 1;
-      const reachedWindowEnd = matches.some((m) => Number(m.ts) < since);
-      return { items: matches.filter((m) => Number(m.ts) >= since), next: !reachedWindowEnd && page < pageCount ? String(page + 1) : null };
-    },
-    { maxPages: MAX_SEARCH_PAGES },
-  );
-  const mine = r.items.filter((m) => m.user !== self.userId && m.channel?.id);
-  for (const m of mine) {
-    out.push(messageObservation({ self, kind: "slack_mention", channel: m.channel!.id!, msg: m, awaiting: true, attentionKind: "mention", why: "Someone @mentioned you in Slack in the last 48 hours.", ...(m.permalink ? { permalink: m.permalink } : {}), ...(m.channel?.name ? { channelName: m.channel.name } : {}) }));
-  }
-  cov.add("Mentions of me (48 hours)", listingState(r, mine.length), mine.length, r.pages, listingNote(r, MAX_SEARCH_PAGES));
-}
-
-async function syncChannels(ctx: AdapterContext, self: Self, cov: CoverageTracker, out: Observation[]) {
-  const label = "Watched channels (48 hours)";
-  const requested = csvList(stringSetting(ctx.connection.settings, "channels"));
-  if (!requested.length) {
-    cov.add(label, "not_configured", 0, 0, "No channels configured to watch");
-    return;
-  }
-  const missing: string[] = [];
-  let pages = 0;
-  let items = 0;
-  let capped = false;
-  for (const channel of requested) {
-    if (!CHANNEL_ID.test(channel)) {
-      missing.push(`${channel} (not a channel ID)`);
-      continue;
-    }
-    try {
-      const h = await recentHistory(ctx, channel, 100);
-      pages += h.pages;
-      if (!h.complete) capped = true;
-      for (const msg of h.items.filter(isHuman)) {
-        items++;
-        out.push(messageObservation({ self, kind: "slack_channel_message", channel, msg, awaiting: false, attentionKind: null, why: "" }));
+/** Workspace URL (for links to messages read from history, which carry no permalink), taken from any search permalink. */
+export function teamUrlFrom(results: Map<string, StreamResult<SlackItem>>): string | null {
+  for (const r of results.values()) {
+    const link = r.items.find((m) => m.permalink)?.permalink;
+    if (link) {
+      try {
+        return new URL(link).origin;
+      } catch {
+        // ignore a malformed permalink
       }
-    } catch (e) {
-      if (!isChannelError(e) && asRemoteError(e).state !== "partial") throw e;
-      missing.push(`${channel} (${e instanceof SlackError ? e.code : asRemoteError(e).message})`);
     }
   }
-  const notes = [...(missing.length ? [`Not read: ${missing.join(", ")}`] : []), ...(capped ? ["Some channels had more messages than one page"] : [])];
-  const complete = !missing.length && !capped;
-  cov.add(label, listingState({ items: [], complete }, items), items, pages, notes.length ? notes.join("; ") : undefined);
+  return null;
 }
 
-const SCOPES: Array<{ id: string; label: string; run: typeof syncDms }> = [
-  { id: "dms", label: "Direct messages (48 hours)", run: syncDms },
-  { id: "mentions", label: "Mentions of me (48 hours)", run: syncMentions },
-  { id: "channels", label: "Watched channels (48 hours)", run: syncChannels },
-];
-
-function hasEffect(m: SlackMessage, key: string): boolean {
-  return m.metadata?.event_type === EFFECT_EVENT && m.metadata.event_payload?.key === key;
+function syncResults(ctx: AdapterContext, self: string, results: Map<string, StreamResult<SlackItem>>, requested: string[], cov: CoverageTracker, out: Observation[]) {
+  const teamUrl = teamUrlFrom(results);
+  const scopes = ctx.connection.readScopes;
+  if (scopes.includes("dms")) {
+    try {
+      const r = streamOrThrow(results.get("dms"));
+      const latest = new Map<string, SlackItem>();
+      for (const m of r.items.filter((x) => isHuman(x) && x.isDm)) if (!latest.has(m.channel)) latest.set(m.channel, m);
+      for (const m of latest.values()) out.push(observation({ msg: m, kind: "slack_dm", awaiting: m.user !== self, attentionKind: "pending_reply", why: "The latest message in this direct conversation is from someone else.", teamUrl }));
+      // Hits that none of the readers recognise mean the connector's format changed, not that nothing happened.
+      const drift = r.items.length > 0 && !r.items.some((x) => x.isDm) ? ["Search returned messages but none were recognised as direct messages"] : [];
+      cov.add(LABELS.dms, drift.length ? "partial" : stateOf(r, latest.size), latest.size, r.pages, noteFor(r, drift));
+    } catch (e) {
+      recordFailure(cov, LABELS.dms, e);
+    }
+  }
+  if (scopes.includes("mentions")) {
+    try {
+      const r = streamOrThrow(results.get("mentions"));
+      const mine = r.items.filter((m) => isHuman(m) && m.user !== self && m.text.includes(`<@${self}`));
+      for (const m of mine) out.push(observation({ msg: m, kind: "slack_mention", awaiting: true, attentionKind: "mention", why: "Someone @mentioned you in Slack in the last 48 hours.", teamUrl }));
+      // Search matched on my user id; if no hit shows it, the mention format changed and the count is not trustworthy.
+      const drift = r.items.length > 0 && !r.items.some((m) => m.text.includes(`<@${self}`)) ? ["Search returned messages but none showed the mention in a recognised form"] : [];
+      cov.add(LABELS.mentions, drift.length ? "partial" : stateOf(r, mine.length), mine.length, r.pages, noteFor(r, drift));
+    } catch (e) {
+      recordFailure(cov, LABELS.mentions, e);
+    }
+  }
+  if (scopes.includes("channels")) {
+    if (!requested.length) {
+      cov.add(LABELS.channels, "not_configured", 0, 0, "No channels configured to watch");
+      return;
+    }
+    const missing: string[] = [];
+    let items = 0;
+    let pages = 0;
+    let partial = false;
+    for (const channel of requested) {
+      const r = results.get(`channel:${channel}`);
+      if (!r || (r.error && r.pages === 0)) {
+        missing.push(`${channel} (${r?.error?.message ?? "not read"})`);
+        continue;
+      }
+      pages += r.pages;
+      if (!r.complete || r.unreadable) partial = true;
+      for (const m of r.items.filter(isHuman)) {
+        items++;
+        out.push(observation({ msg: m, kind: "slack_channel_message", awaiting: false, attentionKind: null, why: "", teamUrl }));
+      }
+    }
+    const notes = [...(missing.length ? [`Not read: ${missing.join(", ")}`] : []), ...(partial ? ["Some channels had more messages than one page, or unreadable messages"] : [])];
+    const state = missing.length === requested.length ? "error" : missing.length || partial ? "partial" : items ? "complete" : "empty";
+    cov.add(LABELS.channels, state, items, pages, notes.length ? notes.join("; ") : undefined);
+  }
 }
 
 function postTarget(target: Record<string, unknown>): { channel: string; threadTs: string | null } {
   const channel = String(target.channel ?? "");
   const threadTs = target.thread_ts ? String(target.thread_ts) : null;
   if (!CHANNEL_ID.test(channel)) throw new RemoteError("Invalid Slack channel", "error");
-  if (threadTs && !/^\d+\.\d+$/.test(threadTs)) throw new RemoteError("Invalid Slack thread", "error");
+  if (threadTs && !TS.test(threadTs)) throw new RemoteError("Invalid Slack thread", "error");
   return { channel, threadTs };
 }
 
-async function readBack(ctx: AdapterContext, channel: string, threadTs: string | null, ts: string): Promise<SlackMessage | null> {
-  const r = threadTs
-    ? await call<{ messages?: SlackMessage[] }>(ctx, "conversations.replies", { channel, ts: threadTs, oldest: ts, latest: ts, inclusive: true, limit: 2, include_all_metadata: true })
-    : await call<{ messages?: SlackMessage[] }>(ctx, "conversations.history", { channel, latest: ts, inclusive: true, limit: 1, include_all_metadata: true });
-  return (r.messages ?? []).find((m) => m.ts === ts) ?? null;
+async function readRecent(ctx: AdapterContext, channel: string, threadTs: string | null, oldestS: number): Promise<SlackItem[]> {
+  const text = threadTs
+    ? await callOne(ctx, server(ctx), "slack_read_thread", { channel_id: channel, message_ts: threadTs, oldest: String(oldestS), limit: 200, response_format: "detailed" })
+    : await callOne(ctx, server(ctx), "slack_read_channel", { channel_id: channel, oldest: String(oldestS), limit: 100, response_format: "detailed" });
+  const p = parseHistory(text, channel);
+  if (p.cursor) throw new RemoteError("More recent messages than one page; could not check them all", "partial");
+  return p.items;
 }
 
 export const slackAdapter: ConnectorAdapter = {
   kind: "slack",
-  secretNames: ["token"],
+  secretNames: [],
   definition: {
     kind: "slack",
     label: "Slack",
     description: "Direct messages waiting for your reply, @mentions, and optionally chosen channels.",
-    authMethods: [
-      {
-        id: "token",
-        label: "Slack token",
-        fields: [
-          { id: "token", label: "Token", secret: true, placeholder: "xoxp-…", help: "A user token (xoxp-) from your own Slack app is recommended: it can read your DMs and search mentions. Scopes: im:read, im:history, search:read, channels:history, groups:history, users:read; add chat:write only to authorise posting. A bot token (xoxb-) works for channels it is in but cannot search mentions." },
-          { id: "channels", label: "Channels to watch", secret: false, optional: true, placeholder: "C0123ABCD, C0456EFGH", help: "Comma-separated channel IDs (from the channel's About panel)." },
-        ],
-      },
-    ],
+    authMethods: claudeAuthMethods(CLAUDE_SERVERS.slack, [{ id: "channels", label: "Channels to watch", secret: false, optional: true, placeholder: "C0123ABCD, C0456EFGH", help: "Comma-separated channel IDs (from the channel's About panel)." }]),
     scopes: [
       { id: "dms", label: "Direct messages awaiting my reply", default: true },
       { id: "mentions", label: "Messages that @mention me", default: true },
       { id: "channels", label: "Watched channels", default: false },
     ],
     writeActions: [{ id: "slack.post", label: "Post a message or thread reply" }],
-    setupHelp: "Create a Slack app for your workspace, add the user token scopes listed under the token field, install it to the workspace and paste the User OAuth Token. Messages are only posted after you approve each draft.",
-    unavoidableSteps: ["Create a Slack app at api.slack.com/apps, add user token scopes, and install it to your workspace (an admin may need to approve it)."],
+    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.slack)} Messages are only posted after you approve each draft.`,
+    unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.slack),
   },
 
-  async configure(ctx, fields) {
-    const token = fields.token?.trim() ?? "";
-    if (!/^xox[bp]-/.test(token)) throw new RemoteError("Enter a Slack user token (xoxp-…) or bot token (xoxb-…)", "unauthorized");
+  async configure(_ctx, fields) {
     const channels = csvList(fields.channels ?? "");
     const bad = channels.filter((c) => !CHANNEL_ID.test(c));
     if (bad.length) throw new RemoteError(`Not a channel ID: ${bad.join(", ")}`, "not_configured");
-    await ctx.setSecret("token", token);
-    return { channels: channels.join(","), tokenType: token.startsWith("xoxp-") ? "user" : "bot", authMethod: "token" };
+    return configureClaude(fields, CLAUDE_SERVERS.slack, { channels: channels.join(",") });
   },
 
   async test(ctx) {
-    try {
-      const me = await whoAmI(ctx);
-      const account = me.user && me.team ? `${me.user} @ ${me.team}` : (me.user ?? me.userId);
-      return { ok: true, state: "complete", account, message: `Signed in as ${account}` };
-    } catch (e) {
-      const err = asRemoteError(e);
-      return { ok: false, state: err.state, account: null, message: err.message };
-    }
+    return testClaude(ctx, server(ctx), { tool: "slack_read_user_profile", args: { response_format: "detailed" } }, (text) => {
+      const p = parseProfile(text);
+      if (!p.userId) throw new RemoteError("The Slack connector did not report your user id", "error");
+      return { account: p.email ?? p.name ?? p.userId, settings: { userId: p.userId } };
+    });
   },
 
   async sync(ctx): Promise<SyncResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
-    const selected = SCOPES.filter((s) => ctx.connection.readScopes.includes(s.id));
-    if (!selected.length) return { coverage: cov.finish(), observations };
-    let self: Self;
+    const scopes = ctx.connection.readScopes;
+    if (!scopes.some((s) => s in LABELS)) return { coverage: cov.finish(), observations };
+    let self: string;
     try {
-      self = await whoAmI(ctx);
+      self = await selfId(ctx);
     } catch (e) {
-      for (const s of selected) recordFailure(cov, s.label, e);
+      for (const s of scopes.filter((x): x is keyof typeof LABELS => x in LABELS)) recordFailure(cov, LABELS[s], e);
       return { coverage: cov.finish(), observations };
     }
-    for (const s of selected) {
-      try {
-        await s.run(ctx, self, cov, observations);
-      } catch (e) {
-        recordFailure(cov, s.label, e);
-      }
-    }
+    const requested = csvList(stringSetting(ctx.connection.settings, "channels")).filter((c) => CHANNEL_ID.test(c));
+    const streams: Array<Stream<SlackItem>> = [
+      ...(scopes.includes("dms") ? [searchStream(ctx, "dms", LABELS.dms, MAX_DM_PAGES, { filters: "is:dm", channel_types: "im", include_bots: false })] : []),
+      ...(scopes.includes("mentions") ? [searchStream(ctx, "mentions", LABELS.mentions, MAX_MENTION_PAGES, { keywords: [`<@${self}>`], channel_types: "public_channel,private_channel,mpim,im", include_bots: false })] : []),
+      ...(scopes.includes("channels") ? requested.map((c) => channelStream(ctx, c)) : []),
+    ];
+    const results = await paginateStreams(ctx, server(ctx), streams);
+    syncResults(ctx, self, results, requested, cov, observations);
     // A DM that @mentions me appears in both scopes; the first (DM) reading wins.
     const seen = new Set<string>();
     const unique = observations.filter((o) => !seen.has(o.externalId) && !!seen.add(o.externalId));
@@ -352,27 +268,23 @@ export const slackAdapter: ConnectorAdapter = {
     const { channel, threadTs } = postTarget(action.target);
     const text = String(action.payload.text ?? action.payload.body ?? "").trim();
     if (!text) throw new RemoteError("The message is empty", "error");
-    const body = { channel, text, ...(threadTs ? { thread_ts: threadTs } : {}), metadata: { event_type: EFFECT_EVENT, event_payload: { key: action.effectKey } } };
-    const res = await call<{ channel: string; ts: string }>(ctx, "chat.postMessage", body, { post: true, retries: 0 });
-    const msg = await afterWrite(() => readBack(ctx, res.channel ?? channel, threadTs, res.ts));
-    const verified = !!msg && hasEffect(msg, action.effectKey);
-    return { verified, remoteId: res.ts, detail: { channel: res.channel ?? channel, ts: res.ts, threadTs } };
+    const raw = await callOne(ctx, server(ctx), "slack_send_message", { channel_id: channel, message: text, ...(threadTs ? { thread_ts: threadTs } : {}) }, { write: true });
+    const sent = sentTs(raw);
+    if (!sent.ts) return { verified: false, detail: { channel, threadTs, note: "Slack did not report the message timestamp", response: raw.slice(0, 300) } };
+    const self = await afterWrite(() => selfId(ctx));
+    const recent = await afterWrite(() => readRecent(ctx, channel, threadTs, Math.floor(Number(sent.ts)) - 1));
+    const verified = !!recent?.some((m) => m.ts === sent.ts && (!self || m.user === self));
+    return { verified, remoteId: sent.ts, ...(sent.permalink ? { url: sent.permalink } : {}), detail: { channel, ts: sent.ts, threadTs } };
   },
 
   async findEffect(ctx, action) {
     const { channel, threadTs } = postTarget(action.target);
-    const oldest = ((ctx.now().getTime() - 7 * 86_400_000) / 1000).toFixed(6);
-    const method = threadTs ? "conversations.replies" : "conversations.history";
-    const r = await paginate<SlackMessage>(
-      async (cursor) => {
-        const res = await call<{ messages?: SlackMessage[]; has_more?: boolean; response_metadata?: { next_cursor?: string } }>(ctx, method, { channel, ...(threadTs ? { ts: threadTs } : {}), oldest, limit: 200, include_all_metadata: true, cursor: cursor ?? undefined });
-        return { items: res.messages ?? [], next: res.has_more ? cursorOf(res) : null };
-      },
-      { maxPages: 5 },
-    );
-    const found = r.items.find((m) => hasEffect(m, action.effectKey));
-    if (found) return { verified: true, remoteId: found.ts, detail: { channel, ts: found.ts, threadTs, recovered: true } };
-    if (!r.complete) throw new RemoteError("Could not read all recent messages to check for an earlier attempt", "partial");
-    return null;
+    const text = String(action.payload.text ?? action.payload.body ?? "");
+    const self = await selfId(ctx);
+    const fromMs = attemptStartMs(action.since, ctx.now().getTime() - RECOVERY_WINDOW_MS);
+    const recent = await readRecent(ctx, channel, threadTs, Math.floor(fromMs / 1000));
+    // The connector cannot attach message metadata, so an earlier attempt is recognised by author, time and text.
+    const found = recent.find((m) => m.user === self && Number(m.ts) * 1000 >= fromMs && sameText(m.text, text));
+    return found ? { verified: true, remoteId: found.ts, detail: { channel, ts: found.ts, threadTs, recovered: true, matchedBy: "author and text" } } : null;
   },
 };

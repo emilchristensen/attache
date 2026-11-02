@@ -9,6 +9,7 @@ import { ConfigStore } from "./core/config.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
+import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
 import { Scheduler } from "./jobs/scheduler.ts";
@@ -83,6 +84,7 @@ export class App {
       log: this.log,
       memory: this.memory,
       adapters: this.adapters,
+      claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
@@ -236,6 +238,7 @@ export class App {
 
   start() {
     this.conversations.recoverInterrupted();
+    void this.connections.migrateLegacyTransports().catch((e) => this.log.error("connection migration failed", { error: (e as Error).message }));
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {
       try {

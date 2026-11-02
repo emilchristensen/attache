@@ -1,38 +1,43 @@
+/**
+ * Confluence through the Atlassian Rovo MCP server, reached either through the
+ * user's claude.ai connector or Jarvis's own MCP client (atlassian-backend.ts).
+ * Reads are CQL searches; the one write is a footer comment, read back from
+ * the page's footer comments.
+ */
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
-import { RemoteError, afterWrite, paginate } from "./http.ts";
-import { asRemoteError, basicAuth, csvList, listingNote, listingState, normalizeSiteUrl, recordFailure, stringSetting } from "./common.ts";
+import { RemoteError, afterWrite } from "./http.ts";
+import { asRemoteError, attemptStartMs, csvList, listingNote, listingState, recordFailure, sameLooseText, stringSetting } from "./common.ts";
+import {
+  ATLASSIAN_SECRET_NAMES,
+  atlassianAuthMethods,
+  atlassianAuthorizeUrl,
+  atlassianExchangeCode,
+  atlassianScopes,
+  atlassianSetupSteps,
+  configureAtlassian,
+  grantedScopes,
+  isAtlassianAuthorized,
+  siteUrl,
+} from "./atlassian.ts";
+import { adfText, authorId, normalizeText, pick, str } from "./atlassian-shapes.ts";
+import { atlassianBackend, usesClaude } from "./atlassian-backend.ts";
 
-interface SearchResult {
-  content?: {
-    id: string;
-    type?: string;
-    title?: string;
-    version?: { number?: number; by?: { displayName?: string } };
-    space?: { key?: string; name?: string };
-    _links?: { webui?: string };
-  };
-  title?: string;
-  excerpt?: string;
-  url?: string;
-  lastModified?: string;
-}
-
-interface Links {
-  next?: string;
-  base?: string;
-  context?: string;
-}
-
-interface FooterComment {
+export interface ConfluenceHit {
   id: string;
-  body?: { storage?: { value?: string } };
-  _links?: { webui?: string };
+  type: string | null;
+  title: string;
+  space: string | null;
+  spaceName: string | null;
+  version: number | null;
+  by: string | null;
+  webui: string | null;
+  excerpt: string;
+  lastModified: string | null;
 }
 
 const MAX_PAGES = 4;
 const CONTEXT = "/wiki";
-const PROPERTY_KEY = "jarvis-effect";
 const SPACE_KEY = /^[A-Za-z0-9_~-]+$/;
 const MARKER = (key: string) => `<!-- jarvis:effect=${key} -->`;
 
@@ -54,90 +59,59 @@ const SCOPES: Scope[] = [
   },
 ];
 
-/** Site root without the /wiki context, e.g. https://acme.atlassian.net. */
-function siteSetting(ctx: AdapterContext): string {
-  const raw = stringSetting(ctx.connection.settings, "siteUrl");
-  if (!raw) throw new RemoteError("Confluence site URL is not configured", "not_configured");
-  return raw.replace(/\/$/, "");
+/** Accepts the REST search shape ({content: {...}, excerpt}) and a flattened hit. */
+export function normalizeHit(raw: unknown): ConfluenceHit | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const c = (r.content && typeof r.content === "object" ? r.content : r) as Record<string, unknown>;
+  const id = str(c.id);
+  if (!id || !/^\d+$/.test(id)) return null;
+  const version = pick(c, "version", "number") ?? c.version;
+  return {
+    id,
+    type: str(c.type),
+    title: str(c.title) ?? str(r.title) ?? "(untitled)",
+    space: str(pick(c, "space", "key")) ?? str(c.spaceKey),
+    spaceName: str(pick(c, "space", "name")),
+    version: typeof version === "number" ? version : null,
+    by: str(pick(c, "version", "by", "displayName")) ?? str(pick(c, "version", "authorName")) ?? str(pick(c, "author", "displayName")),
+    webui: str(pick(c, "_links", "webui")) ?? str(pick(r, "_links", "webui")) ?? str(r.url) ?? str(c.webUrl),
+    excerpt: str(r.excerpt) ?? str(c.summary) ?? "",
+    // Only real timestamps: some views say "about 2 hours ago", which is neither a date nor stable.
+    lastModified: [r.lastModified, c.lastModified, pick(c, "version", "when"), pick(c, "version", "createdAt")].map(str).find((v) => !!v && /^\d{4}-\d{2}-\d{2}T/.test(v)) ?? null,
+  };
 }
 
-function base(ctx: AdapterContext): string {
-  return ctx.endpoint(siteSetting(ctx)).replace(/\/$/, "");
-}
-
-/**
- * Resolve a `_links.next` value against the site. Confluence returns it
- * relative to `_links.base`, which already includes the /wiki context, so
- * "/rest/api/search?cursor=…" must become "<site>/wiki/rest/…" while v2's
- * "/wiki/api/v2/…" must not gain a second /wiki. Joining a bare
- * "/rest/…" onto the site origin is the classic 404.
- */
-export function resolveNext(site: string, links: Links | undefined): string | null {
-  const next = links?.next;
-  if (!next) return null;
-  if (/^https?:\/\//i.test(next)) {
-    if (next.startsWith(`${site}/`)) return next;
-    const u = new URL(next);
-    return resolveNext(site, { ...links, next: `${u.pathname}${u.search}` });
-  }
-  const context = (links?.context ?? CONTEXT).replace(/\/$/, "");
-  const path = next.startsWith("/") ? next : `/${next}`;
-  if (context && (path === context || path.startsWith(`${context}/`))) return `${site}${path}`;
-  return `${site}${context}${path}`;
-}
-
-async function headers(ctx: AdapterContext): Promise<Record<string, string>> {
-  const token = await ctx.secret("apiToken");
-  const email = stringSetting(ctx.connection.settings, "email");
-  if (!token || !email) throw new RemoteError("No Confluence API token stored", "unauthorized");
-  return { authorization: basicAuth(email, token) };
-}
-
-async function searchCql(ctx: AdapterContext, cql: string) {
-  const h = await headers(ctx);
-  const site = base(ctx);
-  const first = `${site}${CONTEXT}/rest/api/search?${new URLSearchParams({ cql, limit: "50", expand: "content.version,content.space" })}`;
-  return paginate<SearchResult>(
-    async (cursor) => {
-      const res = await ctx.http.request<{ results?: SearchResult[]; _links?: Links }>({ url: cursor ?? first, headers: h });
-      return { items: res.data.results ?? [], next: resolveNext(site, res.data._links) };
-    },
-    { maxPages: MAX_PAGES },
-  );
-}
-
-function pageUrl(ctx: AdapterContext, webui: string | undefined): string | undefined {
+function pageUrl(ctx: AdapterContext, webui: string | null): string | undefined {
   if (!webui) return undefined;
-  return `${siteSetting(ctx)}${CONTEXT}${webui.startsWith("/") ? webui : `/${webui}`}`;
+  if (/^https?:\/\//.test(webui)) return webui;
+  const path = webui.startsWith(CONTEXT) ? webui : `${CONTEXT}${webui.startsWith("/") ? webui : `/${webui}`}`;
+  return `${siteUrl(ctx)}${path}`;
 }
 
-function toObservation(ctx: AdapterContext, r: SearchResult, mention: boolean): Observation | null {
-  const c = r.content;
-  if (!c?.id) return null;
-  const title = c.title ?? r.title ?? "(untitled)";
-  const url = pageUrl(ctx, c._links?.webui);
-  const version = c.version?.number ?? null;
-  const by = c.version?.by?.displayName;
+function toObservation(ctx: AdapterContext, h: ConfluenceHit, mention: boolean): Observation {
+  const url = pageUrl(ctx, h.webui);
   return {
     kind: mention ? "confluence_mention" : "confluence_page",
-    externalId: c.id,
-    title,
+    externalId: h.id,
+    title: h.title,
     ...(url ? { url } : {}),
-    ...(by ? { author: by } : {}),
-    ...(r.lastModified ? { occurredAt: r.lastModified } : {}),
-    data: { contentId: c.id, type: c.type ?? null, space: c.space?.key ?? null, version, excerpt: (r.excerpt ?? "").slice(0, 1000) },
-    fingerprintParts: [title, version],
+    ...(h.by ? { author: h.by } : {}),
+    ...(h.lastModified ? { occurredAt: h.lastModified } : {}),
+    data: { contentId: h.id, type: h.type, space: h.space, version: h.version, excerpt: h.excerpt.slice(0, 1000) },
+    // Version where the view has it; otherwise the excerpt, which changes when the page does (a relative date would not be stable).
+    fingerprintParts: [h.title, h.version ?? h.excerpt],
     ...(mention
       ? {
           attention: {
-            key: `confluence:mention:${c.id}`,
+            key: `confluence:mention:${h.id}`,
             kind: "mention",
-            title: `Mentioned in "${title}"`,
-            summary: `${by ?? "Someone"} mentioned you${c.space?.name ? ` in ${c.space.name}` : ""}.`,
+            title: `Mentioned in "${h.title}"`,
+            summary: `${h.by ?? "Someone"} mentioned you${h.spaceName ? ` in ${h.spaceName}` : ""}.`,
             why: "You are @mentioned on a recently updated Confluence page.",
             ...(url ? { url } : {}),
             priority: 55,
-            draftable: { actionKind: "confluence.comment", target: { pageId: c.id, url: url ?? null }, context: { title, excerpt: (r.excerpt ?? "").slice(0, 2000) } },
+            draftable: { actionKind: "confluence.comment", target: { pageId: h.id, url: url ?? null }, context: { title: h.title, excerpt: h.excerpt.slice(0, 2000) } },
           },
         }
       : {}),
@@ -160,82 +134,73 @@ function pageIdOf(target: Record<string, unknown>): string {
   return id;
 }
 
-async function readProperties(ctx: AdapterContext, commentId: string, h: Record<string, string>) {
-  const site = base(ctx);
-  return paginate<{ key: string; value: unknown }>(
-    async (cursor) => {
-      const res = await ctx.http.request<{ results?: Array<{ key: string; value: unknown }>; _links?: Links }>({ url: cursor ?? `${site}${CONTEXT}/api/v2/footer-comments/${commentId}/properties`, headers: h });
-      return { items: res.data.results ?? [], next: resolveNext(site, res.data._links) };
-    },
-    { maxPages: 5 },
-  );
+function commentBody(c: Record<string, unknown>): string {
+  const b = c.body;
+  if (typeof b === "string") return b;
+  // Whichever representation the view returned: storage HTML, Markdown, a bare value, or ADF.
+  return str(pick(b, "storage", "value")) ?? str(pick(b, "markdown", "value")) ?? str(pick(b, "view", "value")) ?? str(pick(b, "value")) ?? adfText(pick(b, "atlas_doc_format", "value") ?? b);
 }
 
-async function commentHasEffect(ctx: AdapterContext, c: FooterComment, effectKey: string, h: Record<string, string>): Promise<boolean> {
-  if ((c.body?.storage?.value ?? "").includes(MARKER(effectKey))) return true;
-  const props = await readProperties(ctx, c.id, h);
-  if (props.items.some((p) => p.key === PROPERTY_KEY && p.value === effectKey)) return true;
-  if (!props.complete) throw new RemoteError("Could not read all comment properties", "partial");
-  return false;
+function storageText(html: string): string {
+  return normalizeText(html.replace(/<!--[\s\S]*?-->/g, "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
 }
 
-async function tagComment(ctx: AdapterContext, id: string, effectKey: string, h: Record<string, string>): Promise<string | null> {
-  try {
-    await ctx.http.request({ method: "POST", url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments/${id}/properties`, headers: h, body: { key: PROPERTY_KEY, value: effectKey }, retries: 0 });
-    return null;
-  } catch (e) {
-    return asRemoteError(e).message;
-  }
+/** Ours when the storage body kept the effect marker, else my own comment, created after the attempt started, with the same text. */
+function isOurComment(c: Record<string, unknown>, text: string, effectKey: string, selfId: string, fromMs: number): boolean {
+  const body = commentBody(c);
+  if (body.includes(MARKER(effectKey))) return true;
+  const created = Date.parse(str(pick(c, "version", "createdAt")) ?? str(c.created) ?? "");
+  if (Number.isFinite(created) && created < fromMs) return false;
+  return authorId(c) === selfId && sameLooseText(storageText(body), text);
 }
+
+const SPACES_FIELD = { id: "spaces", label: "Spaces to watch", secret: false, optional: true, placeholder: "ENG, OPS", help: "Comma-separated space keys. Leave empty to skip space updates." };
 
 export const confluenceAdapter: ConnectorAdapter = {
   kind: "confluence",
-  secretNames: ["apiToken"],
+  secretNames: ATLASSIAN_SECRET_NAMES,
   definition: {
     kind: "confluence",
     label: "Confluence",
     description: "Pages that mention you, pages you recently worked on, and optionally updates in chosen spaces.",
-    authMethods: [
-      {
-        id: "api-token",
-        label: "Atlassian API token",
-        fields: [
-          { id: "siteUrl", label: "Site URL", secret: false, placeholder: "https://acme.atlassian.net" },
-          { id: "email", label: "Atlassian account email", secret: false, placeholder: "you@company.com" },
-          { id: "apiToken", label: "API token", secret: true, help: "Create one at id.atlassian.com/manage-profile/security/api-tokens. It acts with your own Confluence permissions." },
-          { id: "spaces", label: "Spaces to watch", secret: false, optional: true, placeholder: "ENG, OPS", help: "Comma-separated space keys. Leave empty to skip space updates." },
-        ],
-      },
-    ],
+    authMethods: atlassianAuthMethods("confluence", [SPACES_FIELD]),
     scopes: [
       { id: "mentions", label: "Pages mentioning me", default: true },
       { id: "my_recent", label: "Pages I recently contributed to", default: true },
       { id: "space_updates", label: "Updates in watched spaces", default: false },
     ],
     writeActions: [{ id: "confluence.comment", label: "Add a footer comment to a page" }],
-    setupHelp: "Jarvis reads Confluence with your API token and your own permissions. Comments are only posted after you approve each draft.",
-    unavoidableSteps: ["Create an Atlassian API token at id.atlassian.com/manage-profile/security/api-tokens."],
+    setupHelp: "Jarvis connects to Confluence through the Atlassian Rovo MCP server with your own permissions, read-only unless you authorise commenting. Comments are only posted after you approve each draft.",
+    unavoidableSteps: atlassianSetupSteps(),
   },
 
   async configure(ctx, fields) {
-    const siteUrl = normalizeSiteUrl(fields.siteUrl ?? "", /\/wiki$/);
-    const email = fields.email?.trim() ?? "";
-    const token = fields.apiToken?.trim() ?? "";
-    if (!email.includes("@")) throw new RemoteError("Enter the email address of your Atlassian account", "unauthorized");
-    if (!token) throw new RemoteError("An API token is required", "unauthorized");
     const spaces = csvList(fields.spaces ?? "");
     const bad = spaces.filter((s) => !SPACE_KEY.test(s));
     if (bad.length) throw new RemoteError(`Invalid space key: ${bad.join(", ")}`, "not_configured");
-    await ctx.setSecret("apiToken", token);
-    return { siteUrl, email, spaces: spaces.join(","), authMethod: "api-token" };
+    return configureAtlassian(ctx, fields, { spaces: spaces.join(",") });
+  },
+  oauthScopes: (includeWrite) => atlassianScopes("confluence", includeWrite),
+  isAuthorized: isAtlassianAuthorized,
+
+  async authorizeUrl(ctx, p) {
+    return atlassianAuthorizeUrl(ctx, p);
+  },
+
+  async completeAuthorization(ctx, p) {
+    const { grantedScopes: scope } = await atlassianExchangeCode(ctx, p);
+    return { account: null, settings: { ...ctx.connection.settings, grantedScopes: scope } };
   },
 
   async test(ctx) {
     try {
-      const res = await ctx.http.request<{ type?: string; accountType?: string; displayName?: string; email?: string; accountId?: string }>({ url: `${base(ctx)}${CONTEXT}/rest/api/user/current`, headers: await headers(ctx), retries: 1 });
-      if (res.data.type === "anonymous" || res.data.accountType === "anonymous") return { ok: false, state: "unauthorized", account: null, message: "Confluence treated the request as anonymous; check the email and API token" };
-      const account = res.data.email || res.data.displayName || res.data.accountId || null;
-      return { ok: true, state: "complete", account, message: `Signed in as ${res.data.displayName ?? account ?? "unknown"}` };
+      const who = usesClaude(ctx) ? await ctx.claude.account(ctx.signal) : null;
+      const me = await atlassianBackend(ctx).identify();
+      const resolved = { ...ctx, connection: { ...ctx.connection, settings: { ...ctx.connection.settings, cloudId: me.cloudId } } };
+      const probe = (await atlassianBackend(resolved).searchCql([{ id: "probe", query: "contributor = currentUser() ORDER BY lastmodified DESC" }], { maxPages: 1, pageSize: 1 })).get("probe")!;
+      if (probe.error) throw probe.error;
+      const via = usesClaude(ctx) ? ` through claude.ai${who?.email ? ` (${who.email})` : ""}` : "";
+      return { ok: true, state: "complete", account: me.account, message: `Signed in as ${me.account ?? "unknown"} on ${me.siteName ?? siteUrl(ctx)}${via}`, grantedScopes: grantedScopes(ctx), settings: { cloudId: me.cloudId } };
     } catch (e) {
       const err = asRemoteError(e);
       return { ok: false, state: err.state, account: null, message: err.message };
@@ -247,23 +212,26 @@ export const confluenceAdapter: ConnectorAdapter = {
     const observations: Observation[] = [];
     const seen = new Set<string>();
     const spaces = csvList(stringSetting(ctx.connection.settings, "spaces")).filter((s) => SPACE_KEY.test(s));
-    for (const s of SCOPES) {
-      if (!ctx.connection.readScopes.includes(s.id)) continue;
-      if (s.id === "space_updates" && !spaces.length) {
-        cov.add(s.label, "not_configured", 0, 0, "No spaces configured to watch");
+    const selected = SCOPES.filter((s) => ctx.connection.readScopes.includes(s.id));
+    for (const s of selected.filter((x) => x.id === "space_updates" && !spaces.length)) cov.add(s.label, "not_configured", 0, 0, "No spaces configured to watch");
+    const runnable = selected.filter((s) => !(s.id === "space_updates" && !spaces.length));
+    if (!runnable.length) return { coverage: cov.finish(), observations };
+    const results = await atlassianBackend(ctx).searchCql(runnable.map((s) => ({ id: s.id, query: s.cql(spaces) })), { maxPages: MAX_PAGES });
+    for (const s of runnable) {
+      const r = results.get(s.id)!;
+      if (r.error && r.pages === 0) {
+        recordFailure(cov, s.label, r.error);
         continue;
       }
-      try {
-        const r = await searchCql(ctx, s.cql(spaces));
-        cov.add(s.label, listingState(r), r.items.length, r.pages, listingNote(r, MAX_PAGES));
-        for (const item of r.items) {
-          const obs = toObservation(ctx, item, s.mentions);
-          if (!obs || seen.has(obs.externalId)) continue;
-          seen.add(obs.externalId);
-          observations.push(obs);
-        }
-      } catch (e) {
-        recordFailure(cov, s.label, e);
+      const hits = r.items.map(normalizeHit);
+      const unreadable = hits.filter((h) => !h).length;
+      const valid = hits.filter((h): h is ConfluenceHit => !!h);
+      const extra = [...r.notes, ...(unreadable ? [`${unreadable} result(s) had no readable page id`] : [])];
+      cov.add(s.label, unreadable || r.notes.length ? "partial" : listingState({ items: valid, complete: r.complete }), valid.length, r.pages, listingNote({ complete: r.complete, error: r.error }, MAX_PAGES, extra));
+      for (const hit of valid) {
+        if (seen.has(hit.id)) continue;
+        seen.add(hit.id);
+        observations.push(toObservation(ctx, hit, s.mentions));
       }
     }
     return { coverage: cov.finish(), observations };
@@ -274,33 +242,26 @@ export const confluenceAdapter: ConnectorAdapter = {
     const pageId = pageIdOf(action.target);
     const text = String(action.payload.body ?? "").trim();
     if (!text) throw new RemoteError("The comment is empty", "error");
-    const h = await headers(ctx);
-    const body = { pageId, body: { representation: "storage", value: toStorage(text, action.effectKey) } };
-    const res = await ctx.http.request<FooterComment>({ method: "POST", url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments`, headers: h, body, retries: 0 });
-    const id = String(res.data.id);
-    const propertyError = await tagComment(ctx, id, action.effectKey, h);
-    const check = await afterWrite(() => ctx.http.request<FooterComment>({ url: `${base(ctx)}${CONTEXT}/api/v2/footer-comments/${id}?body-format=storage`, headers: h }));
-    const verified = !!check && String(check.data.id) === id && !!(await afterWrite(() => commentHasEffect(ctx, check.data, action.effectKey, h)));
-    const url = pageUrl(ctx, check?.data._links?.webui ?? res.data._links?.webui);
-    return { verified, remoteId: id, ...(url ? { url } : {}), detail: { pageId, ...(propertyError ? { propertyError } : {}) } };
+    const b = atlassianBackend(ctx);
+    const res = await b.addConfluenceComment(pageId, text, toStorage(text, action.effectKey));
+    const id = str(res?.id) ?? str(res?.commentId) ?? str(pick(res, "comment", "id"));
+    if (!id) throw new RemoteError("Confluence accepted the comment but returned no comment id; it will be looked up before any retry", "error");
+    const check = await afterWrite(() => b.listConfluenceComments(pageId));
+    const found = check?.items.find((c) => String(c.id) === id);
+    const url = pageUrl(ctx, str(pick(found, "_links", "webui")) ?? str(pick(res, "_links", "webui")));
+    return { verified: !!found, remoteId: id, ...(url ? { url } : {}), detail: { pageId } };
   },
 
   async findEffect(ctx, action) {
     const pageId = pageIdOf(action.target);
-    const h = await headers(ctx);
-    const site = base(ctx);
-    const r = await paginate<FooterComment>(
-      async (cursor) => {
-        const res = await ctx.http.request<{ results?: FooterComment[]; _links?: Links }>({ url: cursor ?? `${site}${CONTEXT}/api/v2/pages/${pageId}/footer-comments?body-format=storage&limit=100`, headers: h });
-        return { items: res.data.results ?? [], next: resolveNext(site, res.data._links) };
-      },
-      { maxPages: 10 },
-    );
-    for (const c of r.items) {
-      if (await commentHasEffect(ctx, c, action.effectKey, h)) {
-        const url = pageUrl(ctx, c._links?.webui);
-        return { verified: true, remoteId: String(c.id), ...(url ? { url } : {}), detail: { pageId, recovered: true } };
-      }
+    const text = String(action.payload.body ?? "");
+    const b = atlassianBackend(ctx);
+    const selfId = await b.selfAccountId();
+    const r = await b.listConfluenceComments(pageId);
+    const found = r.items.find((c) => isOurComment(c, text, action.effectKey, selfId, attemptStartMs(action.since, 0)));
+    if (found) {
+      const url = pageUrl(ctx, str(pick(found, "_links", "webui")));
+      return { verified: true, remoteId: String(found.id), ...(url ? { url } : {}), detail: { pageId, recovered: true } };
     }
     if (!r.complete) throw new RemoteError("Could not read all comments to check for an earlier attempt", "partial");
     return null;

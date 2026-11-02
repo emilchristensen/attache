@@ -10,6 +10,7 @@ import { createHttpClient, RemoteError } from "./http.ts";
 import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, SyncResult, TestResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
+import type { ClaudeConnectorRunner } from "./claude/runner.ts";
 import { applyCandidates, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
@@ -25,6 +26,7 @@ export interface ManagerDeps {
   memory: MemoryStore;
   adapters: Map<ConnectionKind, ConnectorAdapter>;
   selfEmail: () => string | null;
+  claude: ClaudeConnectorRunner;
 }
 
 export interface DisconnectEffects {
@@ -84,6 +86,7 @@ export class ConnectionManager {
       now: () => new Date(),
       endpoint: resolveEndpoint,
       selfEmail: this.d.selfEmail(),
+      claude: this.d.claude,
     };
   }
 
@@ -164,17 +167,13 @@ export class ConnectionManager {
       throw e;
     }
     this.d.db.prepare("update connections set settings = ?, read_scopes = ?, status = 'needs_auth', updated_at = ? where id = ?").run(JSON.stringify(settings), JSON.stringify(scopes), nowIso(), id);
-    if (a.authorizeUrl && !(await this.hasCompletedOAuth(id))) {
+    if (a.isAuthorized && !(await a.isAuthorized(this.context(this.record(id)!)))) {
       this.onChange(id);
-      return { status: this.status(this.record(id)!), test: { ok: false, state: "not_configured", account: null, message: "Continue to sign in with the provider." } };
+      return { status: this.status(this.record(id)!), test: { ok: false, state: "not_configured", account: null, message: "Saved. Continue to sign in with the provider." } };
     }
     const test = await this.test(id);
     id = rec.id;
     return { status: this.status(this.record(id)!), test };
-  }
-
-  private async hasCompletedOAuth(id: string): Promise<boolean> {
-    return !!(await this.d.secrets.get(this.secretKey(id, "refresh_token")));
   }
 
   async test(id: string): Promise<TestResult> {
@@ -189,6 +188,7 @@ export class ConnectionManager {
       const err = e as RemoteError;
       result = { ok: false, state: err.state ?? "error", account: null, message: err.message };
     }
+    if (result.ok && result.settings) this.mergeSettings(id, result.settings);
     const now = nowIso();
     const status = result.ok ? "connected" : result.state === "unauthorized" || result.state === "denied" ? "needs_auth" : "error";
     this.d.db
@@ -196,6 +196,12 @@ export class ConnectionManager {
       .run(...([status, result.account, now, ...(result.ok ? [now] : [redact(result.message), now]), now, id] as string[]));
     this.onChange(id);
     return result;
+  }
+
+  /** Merge non-secret settings an adapter learned (a resolved site id, a registered OAuth client). */
+  mergeSettings(id: string, patch: Record<string, unknown>): void {
+    const rec = this.requireRecord(id);
+    this.d.db.prepare("update connections set settings = ?, updated_at = ? where id = ?").run(JSON.stringify({ ...rec.settings, ...patch }), nowIso(), id);
   }
 
   setScopes(id: string, readScopes: string[]): ConnectionStatus {
@@ -250,7 +256,7 @@ export class ConnectionManager {
     const effects = this.disconnectEffects(id);
     // Stop requests already in flight for this connection.
     for (const c of this.inflight.get(id) ?? []) c.abort(new Error("connection disconnected"));
-    for (const n of this.adapter(rec.kind).secretNames.concat(["refresh_token", "access_token", "access_expiry", "clientSecret"])) await this.d.secrets.delete(this.secretKey(id, n));
+    for (const n of this.adapter(rec.kind).secretNames) await this.d.secrets.delete(this.secretKey(id, n));
     this.d.db.prepare("update connections set status = 'disconnected', write_actions = '[]', updated_at = ? where id = ?").run(nowIso(), id);
     const hooks = this.onDisconnect(id, rec.kind);
     if (opts.deleteData) {
@@ -268,6 +274,36 @@ export class ConnectionManager {
     this.d.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), "user", "connection_disconnected", JSON.stringify({ id, deleteData: opts.deleteData, effects }));
     this.onChange(id);
     return { effects, ...hooks, deleted: opts.deleteData };
+  }
+
+  // ---- migration ---------------------------------------------------------------
+
+  /**
+   * Connections made before Jira/Confluence moved to the Atlassian MCP server and Slack/Gmail/Calendar
+   * to the claude.ai connectors: their stored credentials no longer apply. Delete them, keep the
+   * choices (site, channels, scopes, write authority) and ask the user to set the connection up again.
+   * Runs once per connection; reconfiguring replaces the settings.
+   */
+  async migrateLegacyTransports(): Promise<string[]> {
+    const LEGACY_SECRETS = ["token", "apiToken", "clientSecret", "refreshToken", "accessToken", "accessTokenExpiresAt", "refresh_token", "access_token", "access_expiry"];
+    const migrated: string[] = [];
+    for (const rec of this.records()) {
+      if (rec.status === "disconnected" || rec.settings.migratedTransport) continue;
+      const claudeKind = rec.kind === "slack" || rec.kind === "gmail" || rec.kind === "gcal";
+      const atlassianKind = rec.kind === "jira" || rec.kind === "confluence";
+      const legacy = (claudeKind && rec.settings.authMethod !== "claude-ai") || (atlassianKind && rec.settings.transport !== "mcp");
+      if (!legacy) continue;
+      for (const n of LEGACY_SECRETS) await this.d.secrets.delete(this.secretKey(rec.id, n));
+      const how = claudeKind ? "your claude.ai connector through Claude Code" : "the Atlassian Rovo MCP server";
+      const message = `Jarvis now connects to ${rec.label} through ${how}. The old credentials were removed; set this connection up again.`;
+      this.d.db
+        .prepare("update connections set status = 'needs_auth', settings = ?, last_error = ?, last_error_at = ?, updated_at = ? where id = ?")
+        .run(JSON.stringify({ ...rec.settings, migratedTransport: nowIso() }), message, nowIso(), nowIso(), rec.id);
+      this.d.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), "system", "connection_transport_migrated", JSON.stringify({ id: rec.id, kind: rec.kind, from: rec.settings.authMethod ?? null }));
+      this.onChange(rec.id);
+      migrated.push(rec.id);
+    }
+    return migrated;
   }
 
   // ---- sync ------------------------------------------------------------------

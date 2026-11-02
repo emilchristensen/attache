@@ -32,7 +32,10 @@ Setup has five steps and each works without the ones after it.
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
    Every connection starts read-only.
-   Steps that need an account or admin action on the other service (a Slack app, a Google Cloud OAuth client, an Atlassian API token, a GitHub token) are explained on the card before you connect.
+   Slack, Gmail, Google Calendar, Jira and Confluence use your existing claude.ai connectors (Slack, Gmail, Google Calendar and Atlassian Rovo): Claude Code must be installed and signed in on this Mac with your claude.ai work account, and each connector must be connected in claude.ai → Settings → Connectors.
+   For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
+   If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
+   Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
    Under *Coding agents*, connect Claude Code, Codex or Antigravity if you use them (see Agent sessions below).
 4. **Model, voice and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
@@ -169,5 +172,11 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
   Reinstalling repairs the service without touching data.
   Logs: `~/Library/Application Support/Jarvis/state/logs`.
 - *Pairing code expired:* run `jarvis pair --open`.
-- *A connection shows "needs auth":* its token was rejected or expired; open Connections and reconfigure it.
-  Google testing-mode OAuth clients expire refresh tokens after 7 days.
+- *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
+  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
+  Reconnect tests the connection again and says what is still wrong if it fails.
+  Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
+  For an API token, **Reconnect** opens the form so you can enter a new token.
+  If you chose **Sign in with Atlassian** directly, sign in again on the card.
+- *Slack, Gmail or Calendar says Claude Code settings auto-approve its tools:* remove the listed `permissions.allow` rule from `~/.claude/settings.json`.
+  Jarvis approves every connector call itself and will not run while a rule would skip that check.

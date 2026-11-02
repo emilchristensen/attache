@@ -314,6 +314,35 @@ test("memory: capture a decision, correct it, and the next answer changes", asyn
   expect(file.split("## History")[1]).toContain("Keep Nimbus");
 });
 
+test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
+  const setServer = (status: string) =>
+    fetch(`${stack.fixtureUrl}/__control/claude-server`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "claude.ai Slack", status }) });
+  const page = await open("/connections");
+  const slack = page.locator('[data-connection="slack"]');
+  // On the full Connections page an unconfigured card opens straight into its setup form.
+  await expect(slack.getByText("not connected", { exact: true })).toBeVisible();
+  await slack.getByRole("button", { name: "Connect" }).click();
+  await expect(slack.getByText("connected", { exact: true })).toBeVisible();
+
+  // The connector is signed out in claude.ai: the card says so and offers Reconnect, not just Reconfigure.
+  await setServer("needs-auth");
+  await slack.getByRole("button", { name: "Test" }).click();
+  await expect(slack.getByText("needs auth", { exact: true })).toBeVisible();
+  const callout = slack.getByRole("status", { name: "Sign-in needed" });
+  await expect(callout).toContainText("claude.ai → Settings → Connectors");
+
+  // Reconnecting before the sign-in is fixed says what is still wrong.
+  await callout.getByRole("button", { name: "Reconnect" }).click();
+  await expect(page.getByText(/Still not signed in: Slack is not connected in claude.ai/)).toBeVisible();
+  await expect(slack.getByText("needs auth", { exact: true })).toBeVisible();
+
+  await setServer("connected");
+  await callout.getByRole("button", { name: "Reconnect" }).click();
+  await expect(slack.getByText("connected", { exact: true })).toBeVisible();
+  await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
+  await expect(page.getByText("Reconnected")).toBeVisible();
+});
+
 test("no unresolved console errors across journeys", () => {
   expect(consoleErrors).toEqual([]);
 });
