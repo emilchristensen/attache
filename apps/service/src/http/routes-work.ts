@@ -165,8 +165,14 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     return out;
   });
   r.post("/connections/:id/test", async (c) => {
+    const before = app.connections.requireRecord(c.params.id!).status;
     const out = await app.connections.test(c.params.id!);
-    if (app.connections.record(c.params.id!)?.kind === "model") await app.refreshModel();
+    const rec = app.connections.requireRecord(c.params.id!);
+    if (rec.kind === "model") await app.refreshModel();
+    // A connection that just recovered still shows the failed coverage of its last sync: refresh it now.
+    if (out.ok && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
+      app.jobs.create({ kind: "sync", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+    }
     return { test: out, status: app.connections.status(app.connections.requireRecord(c.params.id!)) };
   });
   r.put("/connections/:id/scopes", async (c) => {

@@ -175,6 +175,7 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 - *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
   For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
   Reconnect tests the connection again and says what is still wrong if it fails.
+  Once it succeeds, Jarvis refreshes that source straight away so the card stops showing the failed sync.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
   If you chose **Sign in with Atlassian** directly, sign in again on the card.
