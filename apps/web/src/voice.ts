@@ -62,6 +62,7 @@ class VoiceController {
   private audio: HTMLAudioElement | null = null;
   private speakAbort: AbortController | null = null;
   private recognition: { stop(): void; abort(): void } | null = null;
+  private opening: Promise<void> | null = null;
   get modes() {
     return this.snap.modes;
   }
@@ -98,7 +99,14 @@ class VoiceController {
   }
 
   /** Push-to-talk start. Interrupts any speech in progress. */
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    const opening = this.open();
+    // A release can arrive before the microphone is open; stop() waits for this before deciding.
+    this.opening = opening.catch(() => undefined).finally(() => (this.opening = null));
+    return opening;
+  }
+
+  private async open(): Promise<void> {
     this.interrupt();
     if (this.modes.stt === "browser") return this.startBrowserRecognition();
     try {
@@ -126,6 +134,7 @@ class VoiceController {
 
   /** Push-to-talk release: returns the transcript (empty if nothing was heard). */
   async stop(): Promise<string> {
+    if (this.opening) await this.opening;
     if (this.recognition) {
       this.recognition.stop();
       return "";

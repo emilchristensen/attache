@@ -134,6 +134,25 @@ test("denied microphone shows recovery guidance and typing still works", async (
   }
 });
 
+test("a press released before the microphone opens does not leave recording on", async () => {
+  const b = await chromium.launch({ channel: "chrome", headless: true, args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${wav}`] });
+  try {
+    const page = await pairedPage(b);
+    const ptt = page.getByRole("button", { name: "Hold to talk" });
+    // Release in the same task as the press: getUserMedia cannot have resolved yet.
+    await ptt.evaluate((el) => {
+      const opts = { bubbles: true, pointerId: 1, isPrimary: true };
+      el.dispatchEvent(new PointerEvent("pointerdown", opts));
+      el.dispatchEvent(new PointerEvent("pointerup", opts));
+    });
+    await expect(page.getByText("Hold the button (or Space) while you speak.")).toBeVisible();
+    await page.waitForTimeout(1000);
+    await expect(ptt).toHaveAttribute("aria-pressed", "false");
+  } finally {
+    await b.close();
+  }
+});
+
 test("unavailable speech service has a usable recovery state", async () => {
   // Point recognition at a speech endpoint that is offline.
   await api("POST", "/connections/speech/configure", { method: "openai-compatible", fields: { baseUrl: "http://127.0.0.1:9/v1" } });
