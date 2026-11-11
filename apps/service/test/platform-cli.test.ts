@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
@@ -176,6 +177,40 @@ describe("clearing stored credentials on uninstall", () => {
     expect(JSON.parse(r.stdout)).toEqual({ store: "file", removed: 2 });
     // The file goes once it holds nothing.
     expect(existsSync(join(state, "secrets.json"))).toBe(false);
+  });
+});
+
+describe("what a data-deleting uninstall may remove", () => {
+  const configDb = (state: string, config: unknown) => {
+    const db = new DatabaseSync(join(state, "jarvis.sqlite"));
+    db.exec("create table config (id integer primary key, json text not null)");
+    db.prepare("insert into config (id, json) values (1, ?)").run(JSON.stringify(config));
+    db.close();
+  };
+
+  it("names the data folder and only the entries Jarvis created in it", () => {
+    const state = tempDir("jarvis-owned-state-");
+    const data = tempDir("jarvis-owned-data-");
+    mkdirSync(join(data, ".jarvis"));
+    writeFileSync(join(data, ".jarvis/owned.json"), JSON.stringify({ createdFolder: false, created: ["memory", "README.md", "../outside", "/etc"] }));
+    configDb(state, { dataFolder: data });
+    const r = jarvis(["data-folder", "--state-dir", state]);
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout)).toEqual({ dataFolder: data, createdFolder: false, created: ["memory", "README.md"] });
+  });
+
+  it("names no data folder when the service never chose one", () => {
+    const r = jarvis(["data-folder", "--state-dir", tempDir("jarvis-owned-empty-")]);
+    expect(JSON.parse(r.stdout)).toEqual({ dataFolder: null, createdFolder: false, created: [] });
+  });
+
+  it("fails with the reason when the service database cannot be read, instead of naming no folder", () => {
+    const state = tempDir("jarvis-owned-broken-");
+    writeFileSync(join(state, "jarvis.sqlite"), "not a database");
+    const r = jarvis(["data-folder", "--state-dir", state]);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toMatch(/^jarvis: could not read the data folder from .*jarvis\.sqlite: /);
   });
 });
 

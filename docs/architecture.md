@@ -94,8 +94,9 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
-The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis paths`), so their platform-specific work is the same code the service uses.
+The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis paths`, `jarvis data-folder`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
+`jarvis data-folder` names the data folder and the entries Jarvis created in it, which is all a data-deleting uninstall removes; when the service database cannot be read it fails, and the uninstaller keeps the data folder and says so.
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
 `Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
