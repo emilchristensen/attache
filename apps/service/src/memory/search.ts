@@ -62,6 +62,12 @@ export const RECALL_EXCLUDE = ["evidence/conversations/", "evidence/sessions/tra
 const AREA_WEIGHT: Record<string, number> = { memory: 1.0, import: 0.9, deliverables: 0.7, evidence: 0.75 };
 const SECTION_WEIGHT: Record<string, number> = { state: 1.15, body: 1.0, history: 0.55 };
 const RRF_K = 60;
+/**
+ * Whether search fuses meaning-based results into its ranking. Not yet: the
+ * lists fused below are keyword lists only, so every reader is told results
+ * match keywords only, even once the vectors are built.
+ */
+export const SEARCH_RANKS_BY_MEANING = false;
 
 export function search(db: Db, query: string, opts: SearchOptions = {}): SearchHit[] {
   const terms = queryTerms(query);

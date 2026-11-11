@@ -9,6 +9,9 @@ import { createBackup, restoreBackup } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, search } from "./memory/search.ts";
 import { unverifiedLabel } from "./memory/review-date.ts";
+import { configuredMeaningModel } from "./meaning/model.ts";
+import { meaningNote } from "./meaning/note.ts";
+import { offlineMeaningStatus } from "./meaning/status.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
@@ -106,7 +109,14 @@ async function searchCmd(argv: string[]) {
       review: h.review,
       unverified: h.unverified,
     }));
-    if (argv.includes("--json")) return out(JSON.stringify(hits));
+    // This command reads the keyword index itself, so it says why results match keywords only, as the MCP server and the Dashboard do.
+    const note = meaningNote(offlineMeaningStatus(db, paths.modelsDir, configuredMeaningModel()));
+    if (argv.includes("--json")) {
+      // The JSON stays a list of hits for scripts; the note goes beside it, on stderr.
+      if (note) process.stderr.write(`${note}\n`);
+      return out(JSON.stringify(hits));
+    }
+    if (note) out(note);
     if (!hits.length) return out(`No matches for "${query}".`);
     out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}${h.unverified && h.review ? `  (${unverifiedLabel(h.review)})` : ""}\n    ${h.snippet}`).join("\n"));
   } finally {

@@ -14,8 +14,13 @@ import { z } from "zod";
 export const MeaningState = z.enum(["missing", "downloading", "failed", "building", "ready"]);
 export type MeaningState = z.infer<typeof MeaningState>;
 
+/** How search ranks results now: by keywords only, or by keywords and meaning together. */
+export type MeaningRanking = "keywords" | "meaning";
+
 export interface MeaningStatus {
   state: MeaningState;
+  /** Keywords until the model is ready and search uses its vectors in ranking. */
+  ranking: MeaningRanking;
   model: { name: string; bytes: number };
   /** Bytes received so far, while downloading. */
   download: { received: number; total: number } | null;

@@ -5,6 +5,7 @@ import { VectorBuilder } from "./builder.ts";
 import type { Embedder, LoadEmbedder } from "./embedder.ts";
 import { downloadModel, isInstalled, modelDir, removeModel, type DownloadProgress } from "./model-files.ts";
 import { modelBytes, type MeaningModel } from "./model.ts";
+import { meaningStateOf, rankingOf } from "./status.ts";
 import { vectorCoverage } from "./vectors.ts";
 
 export interface MeaningOptions {
@@ -61,8 +62,10 @@ export class MeaningSearch {
   }
 
   status(): MeaningStatus {
+    const state = this.state();
     return {
-      state: this.state(),
+      state,
+      ranking: rankingOf(state),
       model: { name: this.model.name, bytes: modelBytes(this.model) },
       download: this.download ? { ...this.download.progress } : null,
       vectors: vectorCoverage(this.deps.db, this.model.id),
@@ -71,11 +74,7 @@ export class MeaningSearch {
   }
 
   private state(): MeaningState {
-    if (this.download) return "downloading";
-    if (this.error) return "failed";
-    if (!this.installed) return "missing";
-    const { chunks, embedded } = vectorCoverage(this.deps.db, this.model.id);
-    return embedded < chunks ? "building" : "ready";
+    return meaningStateOf({ downloading: this.download !== null, failed: this.error !== null, installed: this.installed, vectors: vectorCoverage(this.deps.db, this.model.id) });
   }
 
   /** Build vectors for whatever the index holds now, if the model is here. */

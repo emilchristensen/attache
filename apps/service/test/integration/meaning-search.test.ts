@@ -1,14 +1,17 @@
 import { afterEach, beforeAll, afterAll, describe, expect, it } from "vitest";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { callTool, mcpClients } from "./mcp-client.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureMeaningModel, type FixtureModelServer } from "../fixtures/fixture-meaning-model.ts";
 import type { LoadEmbedder } from "../../src/meaning/embedder.ts";
 import { loadOnnxEmbedder } from "../../src/meaning/onnx-embedder.ts";
 
 const SYNTHETIC_BRAIN = join(import.meta.dirname, "../fixtures/recall-brain");
+const MAIN = join(import.meta.dirname, "../../src/main.ts");
 
 let fx: FixtureServer;
 let model: FixtureModelServer;
@@ -208,5 +211,41 @@ describe("a download that goes wrong", () => {
     expect((await svc.post("/memory/meaning/download")).state).toBe("downloading");
     const ready = await meaningState(svc, "ready");
     expect(ready.error).toBeNull();
+  });
+});
+
+describe("once every passage has a vector, while search does not rank by meaning yet", () => {
+  const mcp = mcpClients();
+  afterAll(() => mcp.closeAll());
+
+  it("still says results match keywords only, in the API, the MCP server, the CLI and the model's status", async () => {
+    const svc = await start();
+    await svc.post("/memory/meaning/download");
+    const ready = await meaningState(svc, "ready");
+    expect(ready.ranking).toBe("keywords");
+
+    const api = await svc.get("/memory/search?q=Aarhus%20office");
+    expect(api.meaning).toMatchObject({ state: "ready", ranking: "keywords" });
+
+    const client = await mcp.connect(svc.stateDir);
+    const r = await callTool<{ meaning: { state: string; note: string | null } }>(client, "search", { query: "Aarhus office" });
+    expect(r.data.meaning.note).toMatch(/keywords only.*does not rank by meaning yet/);
+    expect(r.text.split("\n")[0]).toBe(r.data.meaning.note);
+
+    const modelFile = join(mkdtempSync(join(tmpdir(), "jarvis-meaning-model-")), "model.json");
+    writeFileSync(modelFile, JSON.stringify(model.description()));
+    const env = { ...process.env, JARVIS_MEANING_MODEL: modelFile };
+    const text = execFileSync(process.execPath, [MAIN, "search", "Aarhus office", "--state-dir", svc.stateDir], { encoding: "utf8", env });
+    expect(text.split("\n")[0]).toBe(r.data.meaning.note);
+    // The JSON form stays a list of hits for scripts; the note goes to stderr.
+    const json = spawnSync(process.execPath, [MAIN, "search", "Aarhus office", "--state-dir", svc.stateDir, "--json"], { encoding: "utf8", env });
+    expect(Array.isArray(JSON.parse(json.stdout))).toBe(true);
+    expect(json.stderr.trim()).toBe(r.data.meaning.note);
+  });
+
+  it("the CLI says why when the model is not downloaded", async () => {
+    const svc = await start();
+    const out = execFileSync(process.execPath, [MAIN, "search", "Aarhus office", "--state-dir", svc.stateDir], { encoding: "utf8" });
+    expect(out.split("\n")[0]).toMatch(/^Results match keywords only: the meaning model is not downloaded/);
   });
 });

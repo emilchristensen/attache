@@ -264,8 +264,9 @@ After that it runs offline.
 Each chunk stores the text its vector is made from (title, heading and the same text keyword search matches) and that text's SHA-256.
 Vectors live in `chunk_vectors`, keyed by model id and text hash, in the Machine's own SQLite index: they never enter the Brain and do not replicate, and re-chunking a file keeps the vectors of text that did not change.
 A background builder (`meaning/builder.ts`) embeds chunks without a vector in batches of eight whenever the indexer reports a change, then drops vectors no chunk uses.
-`GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress and how many chunks have vectors; search answers on keywords in every state, and the MCP `search` tool starts with a line saying so until vectors are ready.
-Meaning-based results do not yet join the ranking.
+`GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress, how many chunks have vectors and `ranking`, how search ranks results now.
+Meaning-based results do not yet join the ranking (`SEARCH_RANKS_BY_MEANING` in `memory/search.ts`), so `ranking` is `keywords` in every state, `ready` included.
+The MCP `search` tool, `jarvis search` (first line, or stderr with `--json`) and the Dashboard's search say results match keywords only, and why, for as long as `ranking` is `keywords` (`meaning/note.ts`).
 
 Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
 A question set names, per question, the note and the subject of the current fact expected to answer it.
