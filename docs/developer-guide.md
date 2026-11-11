@@ -19,7 +19,7 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
 ## Requirements
 
 - macOS or Linux for lint, typecheck, Vitest and the browser journeys.
-  The install test needs macOS (launchd, Keychain).
+  The install test needs macOS on Apple silicon, or Linux on x86_64 with a systemd user manager.
 - Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
   Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
@@ -64,6 +64,8 @@ Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, 
 | Unit and integration tests | `pnpm test` |
 | Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
 
+A separate job, `install (ubuntu-latest)`, runs the install test (see "Install test" below) and uploads `test-results/install-results.json`.
+
 Every check runs even when an earlier one fails, so a run lists all failures at once.
 On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
 Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
@@ -93,17 +95,35 @@ The owner's real set lives in their Brain; run `jarvis evaluate-recall` against 
 ## Release
 
 ```sh
-node scripts/build-release.mjs --version 0.1.0
+node scripts/build-release.mjs --version 0.1.0                      # for this computer
+node scripts/build-release.mjs --version 0.1.0 --target linux-x64   # macos-arm64 or linux-x64, from any host
 ```
 
 Produces in `release/0.1.0/`:
 
-- `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer (double-click or `sh`).
-- `jarvis-0.1.0-macos-arm64.tar.gz` — the same release as a folder with `install.sh`.
-- `SHA256SUMS`.
+- `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer for macOS (double-click or `sh`).
+- `Jarvis-Installer-0.1.0-linux-x64.sh` — self-extracting one-step installer for Linux (`sh`).
+- `jarvis-0.1.0-<target>.tar.gz` — the same release as a folder with `install.sh`.
+- `SHA256SUMS`, covering every artifact built into the folder.
 
-The build downloads the official Node runtime for the pinned version from nodejs.org, verifies it against `SHASUMS256.txt`, and bundles it.
+Targets are listed in `scripts/release-targets.mjs`.
+The build downloads the official Node runtime of the pinned version for the target from nodejs.org, verifies it against `SHASUMS256.txt`, and bundles it.
+The release carries a `TARGET` file, and `install.sh` refuses to run on any other kind of computer.
 Artifacts are unsigned; notarisation is an external step (see the acceptance report).
+
+## Install test
+
+`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer if they are missing.
+It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder, with its own service name and port.
+It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Jarvis as it was.
+What differs per operating system (where the release installs, how to ask launchd or systemd about the service) is in `scripts/install-test/platform.mjs`.
+The CI job `install (ubuntu-latest)` runs it on Linux.
+A CI job has no login session, so the job turns on lingering for the runner user to get a systemd user manager.
+
+To run it on Linux from a Mac, use an x86_64 container with systemd as its init, an ordinary user with lingering on (`touch /var/lib/systemd/linger/<user>`), and Google Chrome.
+Start it with `--privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run --tmpfs /run/lock`; Ubuntu 22.04 works under emulation, while 24.04's systemd fails to start services there.
+Mask `systemd-binfmt.service` in that image.
+A privileged container shares Docker Desktop's binfmt table, and systemd would otherwise unregister x86_64 emulation for every container until `docker run --privileged --rm tonistiigi/binfmt --install amd64` restores it.
 
 ## Verification
 

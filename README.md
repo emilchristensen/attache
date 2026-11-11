@@ -1,10 +1,12 @@
 # Jarvis
 
-A local-first second brain for your Mac.
+A local-first second brain for macOS and Linux.
 It runs in the browser, keeps your knowledge as Markdown in a folder you choose, answers with cited evidence, watches the sources you connect, and prepares drafts that are sent only after you approve the exact version.
 You can also read and edit the notes in Obsidian or any other Markdown editor.
 
-- **Install:** download `Jarvis-Installer-<version>-macos-arm64.command` from a release and double-click it (or `sh` it). No developer tools needed. See the [user guide](docs/user-guide.md).
+- **Install:** on macOS (Apple silicon), download `Jarvis-Installer-<version>-macos-arm64.command` from a release and double-click it.
+  On Linux (x86_64 with systemd), download `Jarvis-Installer-<version>-linux-x64.sh` and run it with `sh`.
+  No developer tools needed. See the [user guide](docs/user-guide.md).
 - **Build from source:** see the [developer guide](docs/developer-guide.md).
 - **How it works:** [architecture](docs/architecture.md), [what was reused and why](docs/inspection.md).
 - **Status and evidence:** [build status](docs/build-status.md), [acceptance report](docs/acceptance-report.md).

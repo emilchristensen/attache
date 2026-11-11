@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
+import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
 
 const MAIN = join(import.meta.dirname, "../src/main.ts");
 const FAKE_PLATFORM = join(import.meta.dirname, "fixtures/fake-platform.mjs");
@@ -101,7 +102,7 @@ describe("the command-line wrappers the installer puts on PATH", () => {
     // A stand-in release that reports how it was called.
     mkdirSync(join(prefix, "current/bin"), { recursive: true });
     writeFileSync(join(prefix, "current/bin/jarvis"), '#!/bin/sh\necho "state=$JARVIS_STATE_DIR instance=$JARVIS_INSTANCE port=$JARVIS_PORT args=$*"\n', { mode: 0o755 });
-    writeFileSync(join(prefix, "current/uninstall.sh"), 'echo "uninstall prefix=$JARVIS_PREFIX instance=$JARVIS_INSTANCE args=$*"\n');
+    writeFileSync(join(prefix, "current/uninstall.sh"), 'echo "uninstall prefix=$JARVIS_PREFIX state=$JARVIS_STATE_DIR instance=$JARVIS_INSTANCE args=$*"\n');
     const env = { HOME: home, JARVIS_INSTANCE: "wraptest" };
     const installed = jarvis(["wrappers", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7999"], { env });
     expect(installed.stderr).toBe("");
@@ -111,7 +112,7 @@ describe("the command-line wrappers the installer puts on PATH", () => {
     const clean = { PATH: "/usr/bin:/bin", HOME: home };
     expect(execFileSync(join(bin, "jarvis"), ["status", "--json"], { env: clean, encoding: "utf8" })).toBe(`state=${prefix}/state instance=wraptest port=7999 args=status --json\n`);
     expect(execFileSync(join(bin, "jarvis"), ["pair"], { env: { ...clean, JARVIS_PORT: "8001" }, encoding: "utf8" })).toBe(`state=${prefix}/state instance=wraptest port=8001 args=pair\n`);
-    expect(execFileSync(join(bin, "jarvis-uninstall"), ["--delete-data"], { env: clean, encoding: "utf8" })).toBe(`uninstall prefix=${prefix} instance=wraptest args=--delete-data\n`);
+    expect(execFileSync(join(bin, "jarvis-uninstall"), ["--delete-data"], { env: clean, encoding: "utf8" })).toBe(`uninstall prefix=${prefix} state=${prefix}/state instance=wraptest args=--delete-data\n`);
 
     jarvis(["wrappers", "uninstall"], { env });
     expect(existsSync(join(bin, "jarvis")) || existsSync(join(bin, "jarvis-uninstall"))).toBe(false);
@@ -129,12 +130,61 @@ describe("clearing stored credentials on uninstall", () => {
 });
 
 describe("the background service", () => {
-  it("explains that Linux and Windows cannot run it yet, instead of calling macOS tools", () => {
-    for (const platform of ["linux", "win32"]) {
-      const r = jarvis(["start"], { platform });
-      expect(r.stderr).toMatch(/^jarvis: Running Jarvis as a background service is not available on (Linux|Windows) yet\. Run `jarvis serve` to start it in this terminal instead\.\n$/);
+  it("explains that Windows cannot run it yet, instead of calling macOS tools", () => {
+    const r = jarvis(["start"], { platform: "win32" });
+    expect(r.stderr).toBe("jarvis: Running Jarvis as a background service is not available on Windows yet. Run `jarvis serve` to start it in this terminal instead.\n");
+    expect(r.status).toBe(1);
+  });
+
+  describe.skipIf(process.platform === "win32")("on Linux", () => {
+    const linux = (args: string[], env: Record<string, string>, systemctl: { bin: string }) => jarvis(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
+
+    it("is a systemd user service that starts at login, restarts after a crash and runs the bundled runtime through the stable `current` link", () => {
+      const systemctl = fakeSystemctl();
+      const home = tempDir("jarvis-systemd-home-");
+      const instance = `svctest${process.pid}`;
+      const env = { HOME: home, JARVIS_INSTANCE: instance };
+      const unitName = `jarvis-${instance}.service`;
+      const unit = join(home, ".config/systemd/user", unitName);
+      const r = linux(["service", "install", "--prefix", "/opt/Jarvis 100% $Test", "--state-dir", "/opt/Jarvis 100% $Test/state", "--port", "7998"], env, systemctl);
+      expect(r.stderr).toBe("");
+      expect(r.stdout).toBe(`Jarvis background service ${unitName} set up in ${unit}.\n`);
+
+      const text = readFileSync(unit, "utf8");
+      // systemd expands `%` specifiers everywhere and `$` variables in ExecStart, so both are doubled.
+      expect(text).toContain('ExecStart="/opt/Jarvis 100%% $$Test/current/runtime/node" "/opt/Jarvis 100%% $$Test/current/service/jarvis-service.mjs" serve --port 7998\n');
+      expect(text).toContain('Environment="JARVIS_STATE_DIR=/opt/Jarvis 100%% $Test/state"\n');
+      expect(text).toContain(`Environment="JARVIS_INSTANCE=${instance}"\n`);
+      expect(text).toContain('Environment="JARVIS_WEB_DIR=/opt/Jarvis 100%% $Test/current/web"\n');
+      expect(text).toContain(`Environment="HOME=${home}"\n`);
+      expect(text).toContain("StandardError=append:/opt/Jarvis 100%% $Test/state/logs/service.err.log\n");
+      expect(text).toMatch(/\nRestart=always\n/);
+      expect(text).toMatch(/\[Install\]\nWantedBy=default\.target\n/);
+      // Installing enables it for the next login, without starting it yet.
+      expect(systemctl.state()).toEqual({ enabled: [unitName], active: [] });
+      expect(JSON.parse(linux(["service", "status"], env, systemctl).stdout)).toEqual({ name: unitName, definition: unit, loaded: false });
+
+      expect(linux(["start"], env, systemctl).stderr).toBe("");
+      expect(JSON.parse(linux(["service", "status"], env, systemctl).stdout)).toMatchObject({ loaded: true });
+      expect(linux(["stop"], env, systemctl).stderr).toBe("");
+      expect(JSON.parse(linux(["service", "status"], env, systemctl).stdout)).toMatchObject({ loaded: false });
+
+      linux(["start"], env, systemctl);
+      const removed = linux(["service", "uninstall"], env, systemctl);
+      expect(removed.stderr).toBe("");
+      expect(existsSync(unit)).toBe(false);
+      expect(systemctl.state()).toEqual({ enabled: [], active: [] });
+    });
+
+    it("says what to do when there is no systemd user session to register with", () => {
+      const systemctl = fakeSystemctl({ noUserSession: true });
+      const home = tempDir("jarvis-systemd-home-");
+      const r = linux(["service", "install", "--prefix", join(home, "jarvis"), "--state-dir", join(home, "state"), "--port", "7998"], { HOME: home, JARVIS_INSTANCE: "nosession" }, systemctl);
+      expect(r.stderr).toBe(
+        "jarvis: Jarvis runs as a systemd user service, and systemd could not be reached for this user (Failed to connect to bus: No medium found). Run the installer from your own desktop or SSH login, or turn on lingering with `loginctl enable-linger`, then try again.\n",
+      );
       expect(r.status).toBe(1);
-    }
+    });
   });
 
   it.runIf(process.platform === "darwin")("is set up as a LaunchAgent that runs the bundled runtime through the stable `current` link, and removed again", () => {
