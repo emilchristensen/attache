@@ -97,3 +97,6 @@ export const AGENT_INTEGRATIONS: AgentIntegration[] = [claudeCode, codex, antigr
 export type AgentKind = AgentIntegration["kind"];
 export const AGENT_KINDS = AGENT_INTEGRATIONS.map((a) => a.kind);
 export const integrationFor = (kind: string) => AGENT_INTEGRATIONS.find((a) => a.kind === kind) ?? null;
+
+/** How the owner knows a Harness: its integration's label, or the name it gave Jarvis. */
+export const harnessLabel = (kind: string): string => integrationFor(kind)?.label ?? kind;
