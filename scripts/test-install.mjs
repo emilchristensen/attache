@@ -70,10 +70,14 @@ function fingerprint(p) {
   return createHash("sha256").update(content).digest("hex");
 }
 
+// Windows PowerShell's own caches, which it writes on first use in a fresh profile whoever runs it: not Jarvis's files.
+const POWERSHELL_CACHES = join(HOME, "AppData", "Local", "Microsoft", "Windows", "PowerShell");
+
 /** Every file under the clean home folder, with a fingerprint of its content. */
 function homeFiles(dir = HOME, out = new Map()) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
+    if (p === POWERSHELL_CACHES) continue;
     if (e.isDirectory()) homeFiles(p, out);
     else out.set(relative(HOME, p), fingerprint(p));
   }
