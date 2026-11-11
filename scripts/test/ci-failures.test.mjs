@@ -113,7 +113,11 @@ describe("summarizeJob", () => {
         "",
         "      611 |     await second.getByRole(\"button\", { name: \"Join into this folder\" }).click();",
         "    Error Context: test-results/e2e/journeys-replication/error-context.md",
-        "  1 failed",
+        "",
+        "  2) tests/e2e/visual.spec.ts:76:1 › screens ───────────────────────────────────────────────",
+        "",
+        "    Error: The save did not go through",
+        "  2 failed",
         "    tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup ",
         "  19 passed (1.3m)",
         "##[error]Process completed with exit code 1.",
@@ -123,7 +127,10 @@ describe("summarizeJob", () => {
     expect(summarizeJob({ job, log, annotations: [] }).steps).toEqual([
       {
         name: "Browser journeys",
-        failures: [{ test: "tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup", errors: ["Error: ENOENT: no such file or directory, open '/tmp/jarvis-e2e æøå-6RhlNX/Jarvis/memory/self.md'"] }],
+        failures: [
+          { test: "tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup", errors: ["Error: ENOENT: no such file or directory, open '/tmp/jarvis-e2e æøå-6RhlNX/Jarvis/memory/self.md'"] },
+          { test: "tests/e2e/visual.spec.ts:76:1 › screens", errors: ["Error: The save did not go through"] },
+        ],
         output: [],
       },
     ]);

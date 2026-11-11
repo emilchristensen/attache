@@ -30,8 +30,8 @@ function vitestFailures(lines) {
   });
 }
 
-// Playwright's list reporter: `  1) tests/e2e/x.spec.ts:12:1 › title`.
-const PLAYWRIGHT_FAIL = /^\s*\d+\) (\S+:\d+:\d+ › .+?)\s*$/;
+// Playwright's list reporter: `  1) tests/e2e/x.spec.ts:12:1 › title`, padded with a rule when the title is short.
+const PLAYWRIGHT_FAIL = /^\s*\d+\) (\S+:\d+:\d+ › .+?)[\s─]*$/;
 
 function playwrightFailures(lines) {
   return lines.flatMap((line, i) => {
