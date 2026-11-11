@@ -189,7 +189,8 @@ export class BrainRepo {
       if (r.code !== 0) return { kind: "retry", cause: new GitError("failed", "merge", r.stderr).cause };
       return { kind: "merged", changed: this.changedBetween(head, theirs), notices: [] };
     }
-    const r = this.git.runSync(["merge", "--no-ff", "--no-commit", "--quiet", theirs]);
+    // git refuses to start a merge without a committer, and a fresh computer has no git identity.
+    const r = this.git.with(authorEnv(local, at)).runSync(["merge", "--no-ff", "--no-commit", "--quiet", theirs]);
     if (r.code !== 0 && !existsSync(join(this.root, ".git", "MERGE_HEAD"))) return { kind: "retry", cause: new GitError("failed", "merge", r.stderr).cause };
     const resolved = this.resolveConflicts(local, theirs, at);
     if (resolved.kind === "blocked") {
