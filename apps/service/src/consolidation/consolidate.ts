@@ -1,10 +1,9 @@
 import { z } from "zod";
 import type { App } from "../app.ts";
-import { tx } from "../core/db.ts";
 import type { JobContext } from "../jobs/queue.ts";
 import { chunkTurns, renderTurns } from "../agents/transcripts.ts";
 import { complete } from "../models/providers.ts";
-import { listProposals, proposalsFrom, proposeItems, type ProposalOrigin } from "../memory/proposals.ts";
+import type { ProposalOrigin } from "../memory/proposals.ts";
 import { originSource } from "../memory/save.ts";
 import { factDay } from "../memory/review-date.ts";
 import type { SourceRef } from "../memory/store.ts";
@@ -60,12 +59,12 @@ export async function runConsolidation(app: App, ctx: JobContext): Promise<Conso
     return { proposals: 0, skipped: "no model", message: NO_MODEL_MESSAGE };
   }
   const origin: ProposalOrigin = { agent: input.agent, sessionId: input.sessionId, ...(session.cwd ? { cwd: session.cwd } : {}) };
-  const room = CONSOLIDATION_MAX - proposalsFrom(app.memory, CONSOLIDATED_BY, origin).length;
+  const room = CONSOLIDATION_MAX - app.proposals.from(CONSOLIDATED_BY, origin).length;
   if (room <= 0) return { proposals: 0, skipped: `this session already has ${CONSOLIDATION_MAX} Proposals` };
 
   ctx.progress(0.1, "Finding related notes");
   const related = relatedNotes(app.db, app.memory, [...input.topics, session.title]);
-  const pending = listProposals(app.memory, { status: "proposed", limit: 500 }).flatMap((p) => (p.item ? [p.item] : []));
+  const pending = app.proposals.list({ status: "proposed", limit: 500 }).flatMap((p) => (p.item ? [p.item] : []));
   const names = { user: session.userName, assistant: session.agentLabel };
   // Long sessions are read in parts, like the summary, so an early decision is never skipped.
   const parts = chunkTurns(session.turns, MAX_INPUT_CHARS).map((part) => renderTurns(part, names, MAX_INPUT_CHARS));
@@ -89,13 +88,10 @@ export async function runConsolidation(app: App, ctx: JobContext): Promise<Conso
   if (problems.length) app.log.info("Consolidation dropped model output", { agent: input.agent, sessionId: input.sessionId, dropped: problems });
   const ids = await ctx.effect(
     `consolidation:${input.agent}:${input.sessionId}:${input.to}`,
-    async () =>
-      tx(app.db, () =>
-        screened.accepted.map((c) => proposeItems(app.memory, [c.item], { reason: c.reason, source: citation(app, origin, c.evidence), origin, evidence: c.evidence, proposedBy: CONSOLIDATED_BY })[0]!.id),
-      ),
-    // Proposals are recorded in one transaction: either all of this run's are there, or none.
+    async () => screened.accepted.map((c) => app.proposals.proposeItems([c.item], { reason: c.reason, source: citation(app, origin, c.evidence), origin, evidence: c.evidence, proposedBy: CONSOLIDATED_BY })[0]!.id),
+    // After a crash mid-run, the Proposals this run already recorded stand; none is made twice.
     async (since) => {
-      const made = proposalsFrom(app.memory, CONSOLIDATED_BY, origin).filter((p) => p.createdAt >= since);
+      const made = app.proposals.from(CONSOLIDATED_BY, origin).filter((p) => p.createdAt >= since);
       return made.length ? made.map((p) => p.id) : null;
     },
   );

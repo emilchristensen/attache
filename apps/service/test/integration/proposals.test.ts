@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -158,50 +157,5 @@ describe("the briefing", () => {
     const memory = briefing.sections.find((s: any) => s.id === "memory");
     expect(memory.items.map((i: any) => i.title)).toContain('New person "Freya Lund" (Role: Designer; Team: Atlas; 1 event)');
     expect(briefing.counts.proposals).toBe((await svc.get("/memory/proposals")).proposals.length);
-  });
-});
-
-describe("Proposals made before they carried save items", () => {
-  /** A one-fact Proposal as Jarvis stored it before, in the shape the old endpoint wrote. */
-  function legacyProposal(target: string, subject: string, value: string, newDoc: { type: string; title: string } | null): string {
-    const id = randomUUID();
-    svc.app.db
-      .prepare("insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at) values (?,?,?,?,?,?,?,?,?,?,?,?)")
-      .run(id, target, "proposal", subject, null, JSON.stringify({ value, newDoc }), "Mentioned in standup", "slack", "model", "proposed", "2026-11-01T08:00:00.000Z", null);
-    return id;
-  }
-
-  it("lists them as save items and still applies and rejects them", async () => {
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Borealis", facts: [{ subject: "Owner", value: "Ada" }] }] });
-    const fact = legacyProposal("memory/projects/borealis.md", "Owner", "Lars", null);
-    const newNote = legacyProposal("(new person: Lars Holm)", "Role", "Platform lead", { type: "person", title: "Lars Holm" });
-    const rejected = legacyProposal("memory/projects/borealis.md", "Status", "Cancelled", null);
-
-    const listed = (await svc.get("/memory/proposals")).proposals;
-    expect(listed.find((p: any) => p.id === fact).item).toEqual({ action: "update", path: "memory/projects/borealis.md", facts: [{ subject: "Owner", value: "Lars", reason: "Mentioned in standup" }] });
-    expect(listed.find((p: any) => p.id === newNote).item).toEqual({ action: "create", type: "person", title: "Lars Holm", facts: [{ subject: "Role", value: "Platform lead" }] });
-
-    await svc.post(`/memory/proposals/${fact}/apply`);
-    const borealis = read("memory/projects/borealis.md");
-    expect(borealis).toMatch(/\*\*Owner\*\* \(\d{4}-\d{2}-\d{2}\): Lars — source: slack/);
-    expect(borealis.split("## History")[1]).toMatch(/\*\*Owner\*\* was "Ada".*superseded: Mentioned in standup/);
-
-    const applied = await svc.post(`/memory/proposals/${newNote}/apply`);
-    expect(applied.target).toBe("memory/people/lars-holm.md");
-    const lars = read("memory/people/lars-holm.md");
-    expect(lars).toContain("provenance: user-approved");
-    expect(lars).toMatch(/\*\*Role\*\* \(\d{4}-\d{2}-\d{2}\): Platform lead/);
-
-    await svc.post(`/memory/proposals/${rejected}/reject`);
-    expect(read("memory/projects/borealis.md")).not.toContain("Cancelled");
-  });
-
-  it("still cannot change the identity record", async () => {
-    await svc.post("/setup/identity", { name: "Alex", role: "Engineer", confirm: true });
-    const before = read("memory/self.md");
-    const id = legacyProposal("memory/self.md", "Role", "CEO", null);
-    const r = await svc.call("POST", `/memory/proposals/${id}/apply`);
-    expect(r.status).toBe(403);
-    expect(read("memory/self.md")).toBe(before);
   });
 });

@@ -76,6 +76,9 @@ Each Proposal shows the whole change before you decide: the new note or the note
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
+With Replication on, a Proposal made on one Machine shows on every Machine, and the Machine it was made on is named.
+Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
+If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
 **Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, a Proposal you approved, or you) and when.
@@ -302,6 +305,16 @@ Everything already committed stays in the repository and on the other Machines.
 Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
 If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
 A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to.
+
+The inbox replicates with the Brain:
+
+- An item raised on one Machine shows on all of them.
+- Dismissing or snoozing an item on one Machine applies on every Machine.
+- A dismissed item whose source changed reopens everywhere, marked "changed since your decision".
+- When two Machines decided differently on the same item before hearing of each other, the later decision wins.
+- Inbox items live in the Brain's `review/inbox/` folder, one small file per item, and never show up in search.
+
+Proposals replicate the same way, from the Brain's `review/proposals/` folder, which search never reads either.
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.

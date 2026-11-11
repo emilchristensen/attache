@@ -334,12 +334,12 @@ describe("Consolidation with two Machines", () => {
       stop();
     }
     const [p] = await proposalsFrom("s-machine", laptop);
-    expect(p).toMatchObject({ status: "proposed", target: "(new person: Jonas)", item: { action: "create", facts: [{ subject: "Role" }, { subject: "Starts" }] } });
-    // The session's transcript and log reach the Home PC, which makes nothing of them.
+    expect(p).toMatchObject({ status: "proposed", target: "(new person: Jonas)", proposedOn: "Work Laptop", item: { action: "create", facts: [{ subject: "Role" }, { subject: "Starts" }] } });
+    // The session's transcript, log and Proposal reach the Home PC, which does not consolidate the session again.
     await laptop.clock.advance(30_000);
     await pc.clock.advance(60_000);
     await until(() => readdirSync(join(pc.dataDir, "evidence/sessions")).some((f) => f.includes("work-laptop")));
     for (const kind of ["session-distill", "session-consolidate"]) expect(jobsOf(pc, kind, "s-machine")).toEqual([]);
-    expect(await proposalsFrom("s-machine", pc)).toEqual([]);
+    expect((await proposalsFrom("s-machine", pc)).map((q) => ({ id: q.id, proposedOn: q.proposedOn, evidence: q.evidence }))).toEqual([{ id: p!.id, proposedOn: "Work Laptop", evidence: quote }]);
   });
 });

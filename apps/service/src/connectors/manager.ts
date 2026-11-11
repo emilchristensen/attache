@@ -11,7 +11,8 @@ import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, S
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
-import { applyCandidates, toCandidate, type ApplyResult } from "../attention/engine.ts";
+import { toCandidate, type ApplyResult } from "../attention/engine.ts";
+import type { Inbox } from "../attention/inbox.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
@@ -24,6 +25,7 @@ export interface ManagerDeps {
   secrets: SecretStore;
   log: Logger;
   memory: MemoryStore;
+  inbox: Inbox;
   adapters: Map<ConnectionKind, ConnectorAdapter>;
   selfEmail: () => string | null;
   claude: ClaudeConnectorRunner;
@@ -262,15 +264,13 @@ export class ConnectionManager {
     if (opts.deleteData) {
       tx(this.d.db, () => {
         this.d.db.prepare("delete from observations where connection_id = ?").run(id);
-        this.d.db.prepare("delete from attention_items where connection_id = ?").run(id);
         this.d.db.prepare("delete from sync_runs where connection_id = ?").run(id);
         this.d.db.prepare("update actions set status = 'rejected', updated_at = ? where connection_id = ? and status in ('draft','revoked')").run(nowIso(), id);
       });
       if (rec.kind === "vault") this.d.memory.indexer.removeRoot(`import:${id}`);
       this.d.db.prepare("delete from connections where id = ?").run(id);
-    } else {
-      this.d.db.prepare("update attention_items set state = 'resolved', updated_at = ? where connection_id = ? and state in ('open','snoozed')").run(nowIso(), id);
     }
+    this.d.inbox.disconnected(id, opts.deleteData);
     this.d.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), "user", "connection_disconnected", JSON.stringify({ id, deleteData: opts.deleteData, effects }));
     this.onChange(id);
     return { effects, ...hooks, deleted: opts.deleteData };
@@ -345,7 +345,7 @@ export class ConnectionManager {
     if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
       this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or Source refresh cancelled' where id = ?").run(nowIso(), runId);
       if (signal?.aborted) throw new RemoteError("Source refresh cancelled", "error");
-      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [] }, observations: 0 };
+      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0 };
     }
     const attention = this.store(current, result, previous);
     const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
@@ -420,7 +420,7 @@ export class ConnectionManager {
         }
         return c;
       });
-    return applyCandidates(this.d.db, { sourceKind: rec.kind, connectionId: rec.id, coverage: result.coverage, previousCoverage: previous }, candidates);
+    return this.d.inbox.apply({ sourceKind: rec.kind, connectionId: rec.id, coverage: result.coverage, previousCoverage: previous }, candidates);
   }
 
   /** Archive remote observations as evidence Markdown so recall can cite them. */

@@ -11,6 +11,7 @@ import type { MachineIdentity } from "../core/machine.ts";
 import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
 import { factDay } from "./review-date.ts";
+import { REVIEW_STATE_DIR } from "../review-state/files.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -87,6 +88,8 @@ Jarvis keeps your knowledge here as plain Markdown. You can read and edit these 
 - \`evidence/\` is archived evidence: captures, coding-agent sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
+- \`review/\` holds what waits for your decision: the inbox (with its dismiss and snooze decisions) and Proposals, one small JSON file per item, so every Machine shows the same.
+  It is Jarvis's own bookkeeping in JSON and is never searched.
 
 Search indexes are rebuilt from these files, so deleting the index never loses knowledge.
 Service state (jobs, approvals, settings) and credentials live outside this folder.
@@ -152,7 +155,7 @@ export class MemoryStore {
     // Record what Jarvis created, so a data-deleting uninstall never removes files the user already had.
     const owned = join(root, ".jarvis", "owned.json");
     if (!existsSync(owned)) {
-      const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
+      const mine = ["memory", "evidence", "deliverables", REVIEW_STATE_DIR, ".jarvis", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
     this.takeLock(root);
@@ -350,25 +353,24 @@ export class MemoryStore {
     return this.recordChange({ docRelPath: n, change: "create", subject: null, beforeValue: null, afterValue: parseMarkdown(raw, n).title, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
-  // ---- proposals -----------------------------------------------------------------
+  // ---- Proposals kept in the change log before they moved into the Brain -------------
 
-  /** Record a Proposal. What it holds is opaque here; `memory/proposals.ts` gives it meaning. */
-  propose(input: { target: string; subject: string; payload: unknown; reason: string; source: string | null; actor: string }): MemoryChange {
-    return this.recordChange({ docRelPath: input.target, change: "proposal", subject: input.subject, beforeValue: null, afterValue: JSON.stringify(input.payload), reason: input.reason, source: input.source, actor: input.actor, status: "proposed" });
-  }
-
-  listProposals(opts: { status?: string; limit?: number } = {}): MemoryChange[] {
-    const rows = this.db
-      .prepare(`select * from memory_changes where change = 'proposal' ${opts.status ? "and status = ?" : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`)
-      .all(...(opts.status ? [opts.status] : [])) as Array<Record<string, string | null>>;
+  /** Proposals this Machine stored in its change log before Proposals became files in the Brain, oldest first. */
+  legacyProposals(): MemoryChange[] {
+    const rows = this.db.prepare("select rowid as seq, * from memory_changes where change = 'proposal' order by rowid").all() as Array<Record<string, string | number | null>>;
     return rows.map(rowToChange);
   }
 
-  /** Mark a pending Proposal decided; `target` records the note an applied new-note Proposal created. */
-  settleProposal(id: string, status: "applied" | "rejected", target?: string): MemoryChange {
-    const r = this.db.prepare("update memory_changes set status = ?, decided_at = ?, doc_rel_path = coalesce(?, doc_rel_path) where id = ? and change = 'proposal' and status = 'proposed'").run(status, nowIso(), target ?? null, id);
-    if (!r.changes) throw new PolicyError("Proposal not found or already decided", "invalid_path");
-    return this.getChange(id)!;
+  /** Drop change-log Proposals once they are files in the Brain. */
+  forgetLegacyProposals(ids: readonly string[]): void {
+    const del = this.db.prepare("delete from memory_changes where id = ? and change = 'proposal'");
+    for (const id of ids) del.run(id);
+  }
+
+  /** Every change one save or approval made, newest first. */
+  changesInBatch(batchId: string): MemoryChange[] {
+    const rows = this.db.prepare("select rowid as seq, * from memory_changes where batch_id = ? order by rowid desc").all(batchId) as Array<Record<string, string | number | null>>;
+    return rows.map(rowToChange);
   }
 
   getChange(id: string): MemoryChange | null {

@@ -61,6 +61,9 @@ Data folder (user-chosen, Markdown):
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
     wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts)
+  review/                   review state, one JSON file per item, never indexed for recall
+    inbox/                   inbox items with the owner's latest decision
+    proposals/               Proposals with every decision made on them
 ```
 
 Imported folders stay where they are.
@@ -125,6 +128,14 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
 - **Blocked in the inbox** (`replication/blocked-inbox.ts`): whenever the status changes, `App` keeps one attention item, source `replication`, key `replication:blocked`, fingerprinted by the cause, open while the status is blocked and resolved when it is not.
   It is this Machine's own item.
+- **Review state** is what waits for the owner's decision: Proposals (`review/proposals/`) and the inbox (`review/inbox/`).
+  It lives in the Brain's top-level `review/` folder so it replicates, and recall never reads it: the files are JSON, and the indexer skips that folder of the data folder (`memory/indexer.ts`); the layout is in `review-state/files.ts`.
+  Each item is one file of one-line JSON, so a change both Machines made to it is always a conflict that reaches a merge rule rather than a textual merge of JSON.
+  Decisions are only ever added, each with its time (from the `Clock`) and Machine; the latest one stands, a tie broken by Machine id (`review-state/decisions.ts`).
+  The Proposal merge rule (`memory/proposal-merge.ts`) keeps every decision from both sides.
+  Approving writes the change on the Machine where the owner clicked, and the note reaches the others like any change, so a Proposal is applied once.
+  When an approval made on one Machine and a later rejection made on another meet, the rejection stands and the approving Machine undoes what it wrote, as one-click revert would (`memory/proposal-undo.ts`); events stay, because History only grows.
+  The inbox's own rule is `attention/inbox-merge.ts` (see the attention engine below).
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
 - **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
@@ -243,6 +254,14 @@ The attention engine follows these rules:
 - An item is resolved only if its source was fully covered in this and the previous run.
 - A dismissal records the fingerprint it applied to. Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
+- The inbox replicates (`attention/inbox.ts`, `App.inbox`).
+  Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
+  The state is never stored in the file: each Machine works it out the same way (`deriveState` in `attention/inbox-record.ts`): resolved by its source, else snoozed while the snooze runs, else dismissed or done while the evidence is what the owner decided on, else open.
+  The database row is this Machine's copy, plus links that stay local (drafts, briefings).
+  Items about one Machine alone (`localSources`, today its own "Replication is blocked" item) never enter the Brain.
+  Files are one line of JSON, so a file both Machines changed always reaches the merge rule (`attention/inbox-merge.ts`): the newer report of the item and the later decision win, a tie is broken by Machine id, and a deletion wins.
+  Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
+  The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 
@@ -299,7 +318,7 @@ The job reads the redacted turns from the summariser's cache (`AgentSessions.ses
 The reply is untrusted data (`consolidation/reply.ts`, `consolidation/screen.ts`): an entry that is not a valid save item, whose evidence is not quoted from the session, or that fails `checkItems` (the save's validation) is dropped and logged, never repaired.
 Facts the note already holds with the same value, events already in the note, and parts of pending Proposals are removed; an item with nothing left is dropped.
 A session has room for five Proposals from Consolidation in total, counted across every run for it.
-What is left is recorded in one transaction with `proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
+What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
 Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
@@ -342,7 +361,9 @@ A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason 
 `POST /api/v1/memory/proposals` runs the save's validation before recording it, `GET /api/v1/memory/proposals?status=proposed` lists pending ones with the whole item, and `POST /api/v1/memory/proposals/:id/apply|reject` decides one.
 Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
 Rejecting writes nothing.
-Proposals are rows in `memory_changes` with `change = 'proposal'`; rows made before Proposals carried save items (one fact in `{ value, newDoc }`) are read as the equivalent one-fact item, so they still apply and reject.
+Proposals live in the Brain, one file each under `review/proposals/`, so they replicate and can be decided on any Machine (see "Review state" under Replication above).
+The file records the item, the reason, the evidence, the Harness session, the Machine it was made on and every decision made on it; the `proposals` table is only this Machine's index of those files (`memory/proposal-index.ts`), refreshed from `Replication.onPulled` and rebuilt when the data folder is opened.
+Proposals that earlier versions kept as `memory_changes` rows with `change = 'proposal'` are written as files the first time the data folder is opened (`memory/proposal-legacy.ts`), then dropped from the change log; one-fact rows (`{ value, newDoc }`) become the equivalent one-fact item, so they still apply and reject.
 The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID` in the environment the Harness gives the MCP server (`mcp/agent-env.ts`).
 `GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.

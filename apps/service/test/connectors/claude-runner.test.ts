@@ -71,7 +71,9 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
   });
 
   it("a stalled read session is started once more; a stalled write is never repeated", async () => {
-    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 300 });
+    // A stalled session is cut after the session time, so keep it short, but long enough that the
+    // healthy retry (several seconds to start while other suites load the machine) is not cut too.
+    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 8_000 });
     claude.nextModes = ["hang"];
     const out = await quick().run(SLACK, [read("a", "C1")], { signal: signal() });
     expect(out.get("a")!.status).toBe("ok");

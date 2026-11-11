@@ -182,6 +182,31 @@ export const MIGRATIONS: readonly string[] = [
   alter table memory_changes add column before_review text;
   alter table memory_changes add column after_review text;
   `,
+  // The inbox replicates: each item keeps what its source said (with when the source stopped reporting it
+  // and the Machine that ran Source refresh) apart from the owner's latest decision, so the state can be
+  // worked out the same way on every Machine. Items and decisions from before carry over.
+  `
+  alter table attention_items add column resolved_at text;
+  alter table attention_items add column decision text;
+  alter table attention_items add column machine text;
+  update attention_items set decision = (
+    select json_object('decision', d.decision, 'fingerprint', d.fingerprint, 'until', d.until, 'at', d.at, 'actor', d.actor, 'machine', null)
+    from attention_decisions d where d.item_key = attention_items.item_key order by d.id desc limit 1
+  );
+  update attention_items set resolved_at = updated_at
+  where state = 'resolved'
+    and not (decision is not null and json_extract(decision, '$.decision') = 'done' and json_extract(decision, '$.fingerprint') = fingerprint);
+  `,
+  // Proposals live in the Brain (review/proposals/), so they replicate. This table is only this
+  // Machine's index of those files, rebuilt from them; Proposals stored in the change log before
+  // are carried over into files when the data folder is next opened.
+  `
+  create table proposals (
+    id text primary key, rel_path text not null unique, status text not null, created_at text not null,
+    decided_at text, record text not null
+  );
+  create index proposals_status on proposals(status, created_at);
+  `,
 ];
 
 export function openDb(file: string): Db {
