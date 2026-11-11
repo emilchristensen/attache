@@ -1,0 +1,70 @@
+import type { ReplicationStatus } from "@jarvis/contracts";
+import type { Db } from "../core/db.ts";
+
+/** Replication as this Machine has it set up. Local state: never part of the Brain. */
+export interface ReplicationSettings {
+  readonly dataFolder: string;
+  readonly remote: string;
+  readonly enabledAt: string;
+  /** The last change-log entry already described in a commit. */
+  readonly committedSeq: number;
+  readonly status: Exclude<ReplicationStatus, "off">;
+  readonly cause: string | null;
+  readonly checkedAt: string | null;
+  readonly pushedAt: string | null;
+}
+
+interface Row {
+  data_folder: string;
+  remote: string;
+  enabled_at: string;
+  committed_seq: number;
+  status: string;
+  cause: string | null;
+  checked_at: string | null;
+  pushed_at: string | null;
+}
+
+export class ReplicationSettingsStore {
+  private readonly db: Db;
+
+  constructor(db: Db) {
+    this.db = db;
+  }
+
+  get(): ReplicationSettings | null {
+    const r = this.db.prepare("select data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at from replication where id = 1").get() as Row | undefined;
+    if (!r) return null;
+    return Object.freeze({
+      dataFolder: r.data_folder,
+      remote: r.remote,
+      enabledAt: r.enabled_at,
+      committedSeq: Number(r.committed_seq),
+      status: r.status as ReplicationSettings["status"],
+      cause: r.cause,
+      checkedAt: r.checked_at,
+      pushedAt: r.pushed_at,
+    });
+  }
+
+  /** Switch Replication on for `dataFolder`, replacing any earlier setup. */
+  enable(s: Pick<ReplicationSettings, "dataFolder" | "remote" | "enabledAt" | "committedSeq" | "pushedAt">): ReplicationSettings {
+    this.db
+      .prepare(
+        `insert into replication (id, data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at) values (1, ?, ?, ?, ?, 'up_to_date', null, ?, ?)
+         on conflict(id) do update set data_folder = excluded.data_folder, remote = excluded.remote, enabled_at = excluded.enabled_at, committed_seq = excluded.committed_seq,
+           status = excluded.status, cause = null, checked_at = excluded.checked_at, pushed_at = excluded.pushed_at`,
+      )
+      .run(s.dataFolder, s.remote, s.enabledAt, s.committedSeq, s.enabledAt, s.pushedAt);
+    return this.get()!;
+  }
+
+  committed(seq: number): void {
+    this.db.prepare("update replication set committed_seq = max(committed_seq, ?) where id = 1").run(seq);
+  }
+
+  /** Record the outcome of a check. */
+  report(outcome: { status: ReplicationSettings["status"]; cause: string | null; at: string; pushed: boolean }): void {
+    this.db.prepare("update replication set status = ?, cause = ?, checked_at = ?, pushed_at = case when ? then ? else pushed_at end where id = 1").run(outcome.status, outcome.cause, outcome.at, outcome.pushed ? 1 : 0, outcome.at);
+  }
+}

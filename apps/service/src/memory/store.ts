@@ -94,6 +94,8 @@ export interface MemoryStoreOptions {
   locksDir: string;
   /** The Machine this service runs on, read at each write so a rename applies at once. */
   machine: () => MachineIdentity;
+  /** Told after every file the store writes or removes, e.g. so Replication commits it. */
+  onWrite?: (relPath: string) => void;
 }
 
 export class MemoryStore {
@@ -194,6 +196,7 @@ export class MemoryStore {
     writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
     renameSync(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
+    this.opts.onWrite?.(n);
   }
 
   private uniquePath(dir: string, base: string): string {
@@ -319,6 +322,7 @@ export class MemoryStore {
     const raw = this.read(n);
     unlinkSync(resolveInside(this.requireRoot(), n));
     this.indexer.removeFile(this.rootRef!.id, n);
+    this.opts.onWrite?.(n);
     return this.recordChange({ docRelPath: n, change: "delete", subject: null, beforeValue: raw, afterValue: null, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 

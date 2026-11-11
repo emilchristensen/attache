@@ -154,6 +154,13 @@ export const MIGRATIONS: readonly string[] = [
   drop table if exists messages;
   drop table if exists conversations;
   `,
+  // Replication of the Brain through git: local state, never part of the Brain. No row means off.
+  `
+  create table replication (
+    id integer primary key check (id = 1), data_folder text not null, remote text not null, enabled_at text not null,
+    committed_seq integer not null default 0, status text not null, cause text, checked_at text, pushed_at text
+  );
+  `,
 ];
 
 export function openDb(file: string): Db {
