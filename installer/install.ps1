@@ -78,23 +78,37 @@ if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
 # Stop the running service (if any) and wait until it has really stopped.
 $null = NewJarvis 'could not stop the running Jarvis service; nothing was changed' service stop
 
+# Move a folder out of the way. Windows refuses while a program still runs from it; a service that
+# was just stopped can take a moment to exit, so this waits up to 15 seconds before giving up.
+function Move-Aside([string]$Path) {
+  $Aside = "$Path.replaced.$PID"
+  for ($i = 0; ; $i++) {
+    try { Rename-Item -LiteralPath $Path -NewName (Split-Path -Leaf $Aside); return $Aside }
+    catch { if ($i -ge 30) { throw }; Start-Sleep -Milliseconds 500 }
+  }
+}
+
 # Copy this version into place, then point `current` at it.
 $Tmp = Join-Path $Prefix "app\.$Version.installing.$PID"
 if (Test-Path -LiteralPath $Tmp) { Remove-Item -LiteralPath $Tmp -Recurse -Force }
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 foreach ($Part in 'runtime', 'service', 'web', 'bin', 'VERSION', 'uninstall.ps1') { Copy-Item -LiteralPath (Join-Path $Src $Part) -Destination $Tmp -Recurse }
-if ($Link) {
-  # Removes the junction itself, never what it points at.
-  [IO.Directory]::Delete($Current)
-}
+# Reinstalling the same version replaces its folder; nothing else changes until that folder is free.
+$Replaced = $null
 if (Test-Path -LiteralPath $App) {
-  try { Remove-Item -LiteralPath $App -Recurse -Force }
-  catch { Fail "could not replace $App, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and run the installer again." }
+  try { $Replaced = Move-Aside $App }
+  catch {
+    Remove-Item -LiteralPath $Tmp -Recurse -Force
+    Fail "could not replace $App, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and run the installer again."
+  }
 }
+# Removes the junction itself, never what it points at.
+if ($Link) { [IO.Directory]::Delete($Current) }
 Rename-Item -LiteralPath $Tmp -NewName $Version
 New-Item -ItemType Junction -Path $Current -Value $App | Out-Null
 $Switched = Join-Path $Current 'VERSION'
 if (-not (Test-Path -LiteralPath $Switched) -or (Get-Content -Raw -LiteralPath $Switched).Trim() -ne $Version) { Fail "could not switch to version $Version" }
+if ($Replaced) { Remove-Item -LiteralPath $Replaced -Recurse -Force -ErrorAction SilentlyContinue }
 
 # Command-line entry points, and the logon task: starts at logon, restarts on crash, independent of any browser.
 $null = NewJarvis 'could not install the jarvis command' wrappers install --prefix $Prefix --state-dir $State --port $Port

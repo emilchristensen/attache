@@ -81,9 +81,14 @@ $null = Jarvis wrappers uninstall --prefix $Prefix
 # The junction goes first and by itself, so nothing it points at is followed.
 if (Test-Path -LiteralPath $Current) { [IO.Directory]::Delete($Current) }
 $Apps = Join-Path $Prefix 'app'
-if (Test-Path -LiteralPath $Apps) {
+# A service that was just stopped can take a moment to exit; Windows refuses to delete a program that still runs.
+for ($i = 0; Test-Path -LiteralPath $Apps; $i++) {
   try { Remove-Item -LiteralPath $Apps -Recurse -Force }
-  catch { [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and remove the folder."); exit 1 }
+  catch {
+    if ($i -lt 30) { Start-Sleep -Milliseconds 500; continue }
+    [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and remove the folder.")
+    exit 1
+  }
 }
 
 function RemoveIfEmpty([string]$Folder) {
