@@ -27,7 +27,7 @@ Setup has five steps and each works without the ones after it.
    Preview shows exactly what will be created and confirms that existing files are not modified.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
-   Conversation and search are always on.
+   Search is always on.
    Capture, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
@@ -50,9 +50,8 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 
 ## Everyday use
 
-**Home** shows the attention inbox beside a persistent conversation.
-Drag the line between them to resize the conversation, or focus it and use the arrow keys; double-click it to reset.
-Jarvis remembers the width in that browser.
+**Home** shows the attention inbox.
+Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
 - The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
@@ -64,15 +63,11 @@ Jarvis remembers the width in that browser.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Jarvis to write a reply or review comment with the item's context.
 
-**Conversation.**
-Every question first searches your notes.
-Answers cite their sources as `S1`, `S2`…; click a citation to open the file with the cited lines highlighted.
-If nothing relevant is found, the answer says so and is marked unverified.
-Press `/` to jump to the message box and `g` followed by a letter (h, m, d, j, c, s) to switch views.
+Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
 
 **Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
-Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next answer uses the correction.
+Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next search returns the correction.
 **Capture** archives text as evidence and can record a decision in memory linked to that evidence.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
@@ -154,9 +149,29 @@ claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
 
 Other Harnesses take the same command and argument in their MCP server settings.
 
-- **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
-  Like recall, it leaves out raw chat and session transcripts and includes their summaries.
+- **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
+  Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
 - **read** returns a whole note, or only a line range, for a path that search returned.
+- **save** writes facts and events, with the same items as `jarvis save`: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+  Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
+  Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
+  Accept, and the items are written as you, each fact citing the Harness and session it came from.
+  Decline or close the request, and nothing is written; the agent is told so.
+  A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
+  Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
+- **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
+  It writes nothing.
+- Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
+  In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
+  - **save** distills what matters from the last turn: it searches before creating a note, sorts each item into a fact or an event, and saves through Jarvis rather than editing files.
+    Text after the prompt says what to focus on.
+  - **audit** runs the audit, judges each fact against the newer evidence, and shows you every correction before making it through Jarvis.
+    Text after the prompt limits the audit to a topic.
+  - **wrap-up** records the durable points of the current conversation: decisions, facts about people and projects, commitments and stated preferences.
+    Use it where Jarvis cannot capture the conversation itself, such as the Chat tab in Claude Desktop.
+    The agent stores the points with the `wrap_up` tool as one evidence document in `evidence/wrap-ups/`, with the Harness and the date, and with secrets redacted.
+    The points are evidence, not curated memory: search finds them, labelled `evidence`, but none becomes a current fact unless it is saved to a note.
+    When the conversation held nothing durable, nothing is stored and the agent tells you so.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.
@@ -165,7 +180,7 @@ Other Harnesses take the same command and argument in their MCP server settings.
 
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
-There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
+There is no Obsidian plugin; use Jarvis in the browser to search, capture and review attention items.
 
 ## Measuring search
 
@@ -255,9 +270,12 @@ Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
 
+`jarvis paths` prints every one of these locations for the computer it runs on, and `jarvis service status` says whether the background service is loaded.
+
 ## Troubleshooting
 
 - *Jarvis service is not reachable:* run `jarvis status`.
+  `jarvis service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
   Logs: `~/Library/Application Support/Jarvis/state/logs`.
 - *Pairing code expired:* run `jarvis pair --open`.

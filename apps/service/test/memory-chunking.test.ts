@@ -3,9 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { MIGRATIONS, openDb } from "../src/core/db.ts";
 import { MemoryStore } from "../src/memory/store.ts";
-import { documentBlocks, search } from "../src/memory/search.ts";
+import { search } from "../src/memory/search.ts";
 import { splitLong } from "../src/memory/chunker.ts";
-import { MAX_EVIDENCE_CHARS, renderEvidence } from "../src/conversation/service.ts";
 import { tempDir } from "./helpers.ts";
 
 function setup() {
@@ -38,9 +37,6 @@ describe("recall retrieves single facts", () => {
     expect(hit.text).toContain("Quillfeather Energy");
     expect(hit.text).not.toContain("Detail number 1.");
     expect(hit.snippet).toContain("Quillfeather");
-    // The whole fact reaches the model: nothing is cut off by the evidence size limit.
-    expect(hit.text.length).toBeLessThan(MAX_EVIDENCE_CHARS);
-    expect(renderEvidence([hit], null)).toContain("Quillfeather Energy");
   });
 
   it("keeps a fact's source in the cited text but does not match queries on it", () => {
@@ -109,19 +105,6 @@ describe("splitting long text", () => {
     expect(splitLong("one\n\ntwo", 1)).toEqual([{ text: "one\n\ntwo", startLine: 1, endLine: 3 }]);
     const fence = ["```", ...Array.from({ length: 40 }, (_, i) => `- yaml item ${i} ${"x".repeat(30)}`), "```"].join("\n");
     expect(splitLong(fence, 1)).toHaveLength(1);
-  });
-});
-
-describe("a note opened as conversation context", () => {
-  it("is passed as whole sections, current state first, not as its first few facts", () => {
-    const { db, store } = setup();
-    const { relPath } = store.createMemory({ type: "project", title: "Juniper", state: Array.from({ length: 12 }, (_, i) => ({ subject: `Fact ${i + 1}`, value: `value ${i + 1}` })), notes: "Free text about Juniper." }, "user");
-    const blocks = documentBlocks(db, "data", relPath);
-    expect(blocks.map((b) => b.section)).toEqual(["state", "body", "history"]);
-    expect(blocks[0]!.text).toContain("value 1");
-    expect(blocks[0]!.text).toContain("value 12");
-    expect(blocks[0]!.endLine - blocks[0]!.startLine).toBe(11);
-    expect(blocks[1]!.text).toContain("Free text about Juniper.");
   });
 });
 

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,9 @@ import { deepEqual, fullToolName, preApprovingRules } from "../../src/connectors
 import { createLogger } from "../../src/core/log.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { mountClaude, onTool, useFakeClaude, jsonAnswer, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let claude: ClaudeFixture;

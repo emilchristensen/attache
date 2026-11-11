@@ -35,17 +35,6 @@ export const FEATURES: FeatureDefinition[] = [
     jobKinds: ["reindex"],
   },
   {
-    id: "conversation",
-    label: "Conversation",
-    description: "A persistent chat. Every answer retrieves evidence from your notes and cites it.",
-    core: true,
-    defaultEnabled: true,
-    requiresFeatures: ["recall"],
-    connections: [{ kinds: ["model"], label: "A model for written answers", required: false, missingEffect: "Without a model, Jarvis replies with the evidence it found instead of a written answer." }],
-    schedules: [],
-    jobKinds: [],
-  },
-  {
     id: "capture",
     label: "Capture and memory",
     description: "Import a Markdown folder, capture notes and source-linked decisions, and correct what Jarvis remembers.",
@@ -193,7 +182,7 @@ export function computeStatus(
     if (!eff[f.id]) return { ...base, readiness: "disabled" as ReadinessState, reason: null };
     const missingFeatures = f.requiresFeatures.filter((d) => !eff[d]);
     if (missingFeatures.length) return { ...base, readiness: "needs_setup" as ReadinessState, reason: `Turn on ${missingFeatures.map((m) => featureDef(m).label).join(", ")}.` };
-    if ((f.id === "recall" || f.id === "capture" || f.id === "conversation" || f.id === "sessions") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
+    if ((f.id === "recall" || f.id === "capture" || f.id === "sessions") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
     let readiness: ReadinessState = "ready";
     let reason: string | null = null;
     for (const c of f.connections) {

@@ -228,7 +228,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
   return (
     <section className="stack">
       <h1>Choose what Jarvis does</h1>
-      <p className="muted">Conversation and search are the core and work with just your notes. Everything else is optional, and you can change it later in Settings.</p>
+      <p className="muted">Search is the core and works with just your notes. Everything else is optional, and you can change it later in Settings.</p>
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && <FeatureList caps={caps.data} onChanged={caps.reload} />}
@@ -283,7 +283,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
     <section className="stack">
       <h1>Model and schedules</h1>
       <h2>Model</h2>
-      <p className="muted small">A model writes answers, briefings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
+      <p className="muted small">A model summarises agent sessions and writes briefings, research findings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
       {card("model")}
       {attentionOn && (
         <>

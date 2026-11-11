@@ -1,5 +1,17 @@
 import { execFile, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { redact } from "../core/log.ts";
+import { platformLocations, toolCandidates } from "../platform/locations.ts";
+
+/**
+ * The git to run: `JARVIS_GIT_BIN`, else the first one in the usual install
+ * folders (a service started at login often lacks the owner's PATH), else
+ * whatever `git` the PATH finds.
+ */
+export function gitBinary(): string {
+  if (process.env.JARVIS_GIT_BIN) return process.env.JARVIS_GIT_BIN;
+  return toolCandidates(platformLocations(), "git").find((p) => existsSync(p)) ?? "git";
+}
 
 /** Why a git command failed, in the terms Replication reports. */
 export type GitFailure = "offline" | "unauthorized" | "rejected" | "failed";
@@ -77,7 +89,7 @@ export class Git {
   private readonly bin: string;
   private readonly opts: GitOptions;
 
-  constructor(opts: GitOptions, bin = process.env.JARVIS_GIT_BIN || "git") {
+  constructor(opts: GitOptions, bin = gitBinary()) {
     this.opts = opts;
     this.bin = bin;
   }
@@ -138,7 +150,7 @@ export class Git {
 }
 
 /** Whether git can be run at all on this Machine. */
-export function gitVersion(bin = process.env.JARVIS_GIT_BIN || "git"): string | null {
+export function gitVersion(bin = gitBinary()): string | null {
   const r = spawnSync(bin, ["--version"], { encoding: "utf8", windowsHide: true });
   return r.status === 0 ? r.stdout.trim() : null;
 }

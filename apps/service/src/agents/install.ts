@@ -1,16 +1,16 @@
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { defaultStateDir } from "../core/paths.ts";
+import { platformLocations } from "../platform/locations.ts";
 import { HooksFileError, ourHooks, replaceFile, ourNamedHooks, readSettings, sameHooks, withNamedHooks, withOurHooks, withoutNamedHooks, withoutOurHooks, writeSettings, type HookSpec } from "./hooks-config.ts";
 import type { AgentIntegration } from "./integrations.ts";
 import { AgentSkills } from "./skills.ts";
 
 /** Home directory whose agent settings Jarvis edits. Tests point this at a temporary folder. */
 export function agentHome(): string {
-  return process.env.JARVIS_AGENT_HOME || process.env.HOME || homedir();
+  return process.env.JARVIS_AGENT_HOME || platformLocations().home;
 }
 
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;

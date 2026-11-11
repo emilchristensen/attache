@@ -7,7 +7,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // ---------------------------------------------------------------------------
 // Features and connections
 
-export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "sessions"]);
+export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
 export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
@@ -223,8 +223,11 @@ export const CorrectionInput = z.object({
   reason: z.string().min(1).max(1000),
 });
 
-const SaveFact = z.object({ subject: z.string().trim().min(1).max(100), value: z.string().trim().min(1).max(5000) });
-const SaveEvent = z.string().trim().min(1).max(2000);
+const SaveFact = z.object({
+  subject: z.string().trim().min(1).max(100).describe("What the fact is about, e.g. Status or Role. One current value per subject."),
+  value: z.string().trim().min(1).max(5000).describe("The current value."),
+});
+const SaveEvent = z.string().trim().min(1).max(2000).describe("Something that happened, appended to the note's History.");
 
 /**
  * One change to one note: a new note with its facts, or an update to an existing
@@ -236,14 +239,17 @@ export const MemorySaveItem = z.discriminatedUnion("action", [
     type: z.enum(["person", "project", "decision", "note"]),
     title: z.string().trim().min(1).max(200),
     facts: z.array(SaveFact).min(1).max(50),
-    notes: z.string().max(20_000).optional(),
+    notes: z.string().max(20_000).optional().describe("Free prose for the note's body."),
     events: z.array(SaveEvent).max(20).optional(),
     tags: z.array(z.string().max(50)).max(20).optional(),
   }),
   z.object({
     action: z.literal("update"),
-    path: z.string().trim().min(1).max(500),
-    facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
+    path: z.string().trim().min(1).max(500).describe("The note's path in the Brain, e.g. memory/projects/orion.md."),
+    facts: z
+      .array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000).describe("Why the value changed, kept in History beside the old value.") }))
+      .max(50)
+      .optional(),
     events: z.array(SaveEvent).max(20).optional(),
   }),
 ]);
@@ -270,6 +276,41 @@ export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 export interface MemorySaveResult {
   saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
 }
+
+/** What a save would change, checked against the Brain without writing: one entry per item, in order. */
+export interface MemorySaveCheckResult {
+  items: Array<{ action: "create"; title: string; relPath: null } | { action: "update"; title: string; /** The note the update changes. */ relPath: string }>;
+}
+
+/** A save the owner could not confirm, stored as one Proposal per item for review in the Dashboard. */
+export const MemorySaveProposalInput = MemorySaveInput.extend({
+  /** Why the save waits for review, shown beside each Proposal. */
+  reason: z.string().trim().min(1).max(1000),
+});
+export type MemorySaveProposalInput = z.infer<typeof MemorySaveProposalInput>;
+
+export interface MemorySaveProposalResult {
+  proposals: ProposalView[];
+}
+
+export const WRAP_UP_POINTS_MAX = 30;
+
+/**
+ * The durable points of one Harness conversation, distilled by its agent with
+ * the wrap-up prompt. Stored as evidence, never as curated memory. No points
+ * means the conversation held nothing durable, and nothing is stored.
+ */
+export const WrapUpInput = z.object({
+  /** The Harness the conversation happened in. */
+  harness: z.object({ id: z.string().trim().min(1).max(40), label: z.string().trim().min(1).max(80) }),
+  /** A short name for the conversation. */
+  title: z.string().trim().min(1).max(200).optional(),
+  /** One self-contained sentence each. */
+  points: z.array(z.string().trim().min(1).max(2000)).max(WRAP_UP_POINTS_MAX),
+});
+export type WrapUpInput = z.infer<typeof WrapUpInput>;
+
+export type WrapUpResult = { stored: true; relPath: string; title: string; date: string; points: number } | { stored: false; reason: string };
 
 /** Suggest one save item for the owner to apply or reject in the Dashboard. */
 export const ProposalInput = z.object({
@@ -408,28 +449,6 @@ export interface RecallEvaluationReport {
   misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
   /** Questions that cannot be scored, because their note or fact is not in the Brain. */
   invalid: Array<RecallQuestion & { problem: string }>;
-}
-
-// ---------------------------------------------------------------------------
-// Conversation
-
-export const ChatInput = z.object({
-  conversationId: z.string().nullable().optional(),
-  text: z.string().min(1).max(20_000),
-  context: z.object({ relPath: z.string().optional(), root: z.string().optional(), absPath: z.string().max(4096).optional(), title: z.string().max(300).optional(), selection: z.string().max(20_000).optional() }).optional(),
-});
-
-export interface MessageView {
-  id: string;
-  conversationId: string;
-  role: "user" | "assistant";
-  content: string;
-  status: "streaming" | "complete" | "error" | "cancelled";
-  citations: Citation[];
-  retrieval: { query: string; hits: number; supported: boolean; mode: "model" | "retrieval-only" } | null;
-  error: string | null;
-  model: string | null;
-  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
