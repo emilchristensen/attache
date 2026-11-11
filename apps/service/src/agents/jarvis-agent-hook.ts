@@ -3,14 +3,17 @@
  *
  *   node jarvis-agent-hook.mjs <agent> <session-start|pre-compact|session-end> --state-dir <dir>
  *
- * session-start prints the memory context the service last prepared.
+ * session-start prints the session context the service last prepared: the
+ * project's, when the session's folder is one of its repositories, otherwise
+ * the global one.
  * pre-compact and session-end copy the transcript into the spool for the
  * service to ingest. It never talks to the network, never waits on the
  * service, and always exits 0: a broken hook must never break a session.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPTURE_EVENTS, contextFile, spoolCapture, type HookEvent } from "./spool.ts";
+import { CAPTURE_EVENTS, spoolCapture, type HookEvent } from "./spool.ts";
+import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
 
 const MAX_INPUT_BYTES = 1_000_000;
@@ -35,7 +38,8 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (env.CLAUDE_INVOKED_BY || env.JARVIS_AGENT_HOOK_DISABLED) return "";
   const input = profile.parse(readStdin());
   if (event === "session-start") {
-    const file = contextFile(stateDir);
+    // The session's own folder decides which project's context it gets; the hook never asks the service.
+    const file = contextFileFor(stateDir, input.cwd ?? process.cwd());
     return existsSync(file) ? profile.sessionStartOutput(readFileSync(file, "utf8")) : "";
   }
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
