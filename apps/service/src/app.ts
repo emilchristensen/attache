@@ -189,6 +189,7 @@ export class App {
       adapters: this.adapters,
       claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
+      isReader: () => this.reader.isReader(),
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });

@@ -345,7 +345,7 @@ The attention engine follows these rules:
   A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
-  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
+  They are raised only on the Reader (`ManagerDeps.isReader`): a data-folder refresh the owner starts by hand on another Machine still observes every such fact, so it leaves the Reader's items as they are, but raises none of its own.
 - Gmail read state is derived from `labelIds`, never inferred.
   A thread whose last message is from the user is never awaiting reply.
   All-day events are detected from their midnight-to-midnight shape.

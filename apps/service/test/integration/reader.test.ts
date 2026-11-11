@@ -106,6 +106,10 @@ describe("the Reader's Source refresh", () => {
 
     expect(runSchedules(pc)).toEqual([]);
     expect(await reviewItems(pc)).toEqual([]);
+    // A data-folder refresh the owner starts by hand on the PC reads the folder, but raises no Review-date item there.
+    const manual = await pc.post("/connections/vault-data/refresh");
+    await waitForJobs(pc, [manual.job.id]);
+    expect(await reviewItems(pc)).toEqual([]);
 
     const sync = tickAllDue(mac).find((r) => r.id === "attention:source-refresh")!;
     await waitForJobs(mac, [sync.jobId!]);

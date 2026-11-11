@@ -11,7 +11,7 @@ import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, R
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
-import { toCandidate, type ApplyResult } from "../attention/engine.ts";
+import { recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import type { Inbox } from "../attention/inbox.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
@@ -35,6 +35,8 @@ export interface ManagerDeps {
   adapters: Map<ConnectionKind, ConnectorAdapter>;
   selfEmail: () => string | null;
   claude: ClaudeConnectorRunner;
+  /** Whether this Machine is the Reader, which alone raises inbox items for facts past their Review date. */
+  isReader: () => boolean;
 }
 
 export interface DisconnectEffects {
@@ -398,11 +400,19 @@ export class ConnectionManager {
 
   /**
    * Inbox items for facts past their Review date, read from the Brain as part of the data folder's Source refresh.
-   * The spec runs them only on the Reader: gate the data folder's whole refresh, never this list alone,
-   * because an item whose fact is no longer observed is resolved.
+   * Only the Reader raises them. Another Machine still observes every such fact, so a refresh it starts by hand
+   * leaves the items the Reader raised as they are (an item whose fact is no longer observed is resolved),
+   * but it raises none of its own: a fact without an item yet is observed without one.
    */
   private factReviews(root: IndexRoot, docs: readonly string[], now: Date) {
-    return scanFactReviews(root.path, docs, now);
+    const found = scanFactReviews(root.path, docs, now);
+    if (this.d.isReader()) return found;
+    const withoutNewItems = (o: Observation): Observation => {
+      if (!o.attention || recordByKey(this.d.db, o.attention.key)) return o;
+      const { attention: _raisedOnlyByTheReader, ...observed } = o;
+      return observed;
+    };
+    return { ...found, observations: found.observations.map(withoutNewItems) };
   }
 
   private store(rec: ConnectionRecord, result: RefreshResult, previous: Coverage | null): ApplyResult {
