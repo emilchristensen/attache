@@ -75,6 +75,10 @@ Each memory note has a *Current state* with one dated entry per subject.
 Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next answer uses the correction.
 **Capture** archives text as evidence and can record a decision in memory linked to that evidence.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
+Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
+**Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
+If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
+A Proposal can never change your identity record.
 
 **Drafts** shows each draft with its context and evidence.
 Editing creates a new version and cancels any earlier approval.

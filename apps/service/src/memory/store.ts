@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Db, nowIso, json } from "../core/db.ts";
+import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
@@ -202,7 +202,7 @@ export class MemoryStore {
   // ---- memory notes ----------------------------------------------------------
 
   createMemory(
-    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[] },
+    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[]; events?: string[] },
     actor: WriteActor,
     opts: { approvedProposal?: boolean } = {},
   ): { relPath: string } {
@@ -223,10 +223,17 @@ export class MemoryStore {
       title: input.title,
       state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? today(), value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)), `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
+      history: [
+        ...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)),
+        `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`,
+        ...(input.events ?? []).map(eventLine),
+      ],
     });
     this.writeFile(rel, doc, actor, opts);
-    this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+    tx(this.db, () => {
+      this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+      for (const e of input.events ?? []) this.recordChange({ docRelPath: rel, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" });
+    });
     return { relPath: rel };
   }
 
@@ -235,30 +242,40 @@ export class MemoryStore {
    * date and source; the index is updated immediately so the next answer sees it.
    */
   correct(rel: string, input: { subject: string; value: string; reason: string; source?: SourceRef }, actor: WriteActor, opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {}): MemoryChange {
+    const { subject, value, reason, source } = input;
+    return this.update(rel, { facts: [{ subject, value, reason }], events: [], ...(source ? { source } : {}) }, actor, opts)[0]!;
+  }
+
+  /**
+   * Correct several facts and append several events to one note in a single
+   * write, so either every part lands or none does. Each superseded value
+   * moves to History with its date and source.
+   */
+  update(
+    rel: string,
+    input: { facts: Array<{ subject: string; value: string; reason: string }>; events: string[]; source?: SourceRef },
+    actor: WriteActor,
+    opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {},
+  ): MemoryChange[] {
     const n = normalizeRel(rel);
-    const raw = this.read(n);
     const sourceLabel = input.source ? formatSource(input.source) : actor === "user" ? "user correction" : undefined;
-    const { text, previous } = applyStateCorrection(raw, { subject: input.subject, date: today(), value: input.value, source: sourceLabel }, input.reason || "corrected");
-    const withUpdated = bumpFrontmatter(text, { updated: today() });
-    this.writeFile(n, withUpdated, actor, opts);
-    return this.recordChange({
-      docRelPath: n,
-      change: "correct",
-      subject: input.subject,
-      beforeValue: previous?.value ?? null,
-      afterValue: input.value,
-      reason: input.reason,
-      source: sourceLabel ?? null,
-      actor,
-      status: "applied",
-    });
+    let text = this.read(n);
+    const corrections: Array<{ subject: string; before: string | null; value: string; reason: string }> = [];
+    for (const f of input.facts) {
+      const out = applyStateCorrection(text, { subject: f.subject, date: today(), value: f.value, source: sourceLabel }, f.reason || "corrected");
+      text = out.text;
+      corrections.push({ subject: f.subject, before: out.previous?.value ?? null, value: f.value, reason: f.reason });
+    }
+    for (const e of input.events) text = appendHistory(text, eventLine(e));
+    this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: today() }) : text, actor, opts);
+    return tx(this.db, () => [
+      ...corrections.map((c) => this.recordChange({ docRelPath: n, change: "correct", subject: c.subject, beforeValue: c.before, afterValue: c.value, reason: c.reason, source: sourceLabel ?? null, actor, status: "applied" })),
+      ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" })),
+    ]);
   }
 
   appendEvent(rel: string, text: string, actor: WriteActor): void {
-    const n = normalizeRel(rel);
-    const raw = this.read(n);
-    this.writeFile(n, appendHistory(raw, `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`), actor);
-    this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: text, reason: null, source: null, actor, status: "applied" });
+    this.update(rel, { facts: [], events: [text] }, actor);
   }
 
   /** Edit a note's free-text body (Notes section) as the user. */
@@ -283,37 +300,22 @@ export class MemoryStore {
 
   // ---- proposals -----------------------------------------------------------------
 
-  propose(input: { docRelPath: string | null; subject: string; value: string; reason: string; source: string; actor: WriteActor; newDoc?: { type: MemoryType; title: string } }): MemoryChange {
-    return this.recordChange({
-      docRelPath: input.docRelPath ?? `(new ${input.newDoc?.type ?? "note"}: ${input.newDoc?.title ?? input.subject})`,
-      change: "proposal",
-      subject: input.subject,
-      beforeValue: null,
-      afterValue: JSON.stringify({ value: input.value, newDoc: input.newDoc ?? null }),
-      reason: input.reason,
-      source: input.source,
-      actor: input.actor,
-      status: "proposed",
-    });
+  /** Record a Proposal. What it holds is opaque here; `memory/proposals.ts` gives it meaning. */
+  propose(input: { target: string; subject: string; payload: unknown; reason: string; source: string | null; actor: string }): MemoryChange {
+    return this.recordChange({ docRelPath: input.target, change: "proposal", subject: input.subject, beforeValue: null, afterValue: JSON.stringify(input.payload), reason: input.reason, source: input.source, actor: input.actor, status: "proposed" });
   }
 
-  decideProposal(id: string, decision: "apply" | "reject"): MemoryChange {
-    const row = this.db.prepare("select * from memory_changes where id = ? and status = 'proposed'").get(id) as Record<string, string> | undefined;
-    if (!row) throw new PolicyError("Proposal not found or already decided", "invalid_path");
-    if (decision === "reject") {
-      this.db.prepare("update memory_changes set status = 'rejected', decided_at = ? where id = ?").run(nowIso(), id);
-      return this.getChange(id)!;
-    }
-    const payload = json<{ value: string; newDoc: { type: MemoryType; title: string } | null }>(row.after_value, { value: "", newDoc: null });
-    const source: SourceRef = { kind: "user", ref: row.source ?? "proposal", observedAt: row.created_at!, label: row.source ?? undefined };
-    if (payload.newDoc) {
-      const { relPath } = this.createMemory({ type: payload.newDoc.type, title: payload.newDoc.title, state: [{ subject: row.subject!, value: payload.value }], sources: [source], provenance: "user-approved" }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ?, doc_rel_path = ? where id = ?").run(nowIso(), relPath, id);
-    } else {
-      if (isProtected(row.doc_rel_path!)) throw new PolicyError("Proposals cannot change protected records", "protected");
-      this.correct(row.doc_rel_path!, { subject: row.subject!, value: payload.value, reason: row.reason ?? "approved proposal", source }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ? where id = ?").run(nowIso(), id);
-    }
+  listProposals(opts: { status?: string; limit?: number } = {}): MemoryChange[] {
+    const rows = this.db
+      .prepare(`select * from memory_changes where change = 'proposal' ${opts.status ? "and status = ?" : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`)
+      .all(...(opts.status ? [opts.status] : [])) as Array<Record<string, string | null>>;
+    return rows.map(rowToChange);
+  }
+
+  /** Mark a pending Proposal decided; `target` records the note an applied new-note Proposal created. */
+  settleProposal(id: string, status: "applied" | "rejected", target?: string): MemoryChange {
+    const r = this.db.prepare("update memory_changes set status = ?, decided_at = ?, doc_rel_path = coalesce(?, doc_rel_path) where id = ? and change = 'proposal' and status = 'proposed'").run(status, nowIso(), target ?? null, id);
+    if (!r.changes) throw new PolicyError("Proposal not found or already decided", "invalid_path");
     return this.getChange(id)!;
   }
 
@@ -522,6 +524,11 @@ export function formatSource(s: SourceRef): string {
 
 function sourceToYaml(s: SourceRef): Record<string, unknown> {
   return { kind: s.kind, ref: s.ref, ...(s.root ? { root: s.root } : {}), ...(s.lines ? { lines: s.lines } : {}), ...(s.url ? { url: s.url } : {}), observed_at: s.observedAt, ...(s.label ? { label: s.label } : {}) };
+}
+
+/** A History line for an event that happened today. */
+function eventLine(text: string): string {
+  return `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`;
 }
 
 function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {

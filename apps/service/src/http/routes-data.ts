@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, ProposalInput, type FeatureId } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -12,7 +12,10 @@ import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
 import { saveToMemory } from "../memory/save.ts";
+import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
+
+const PROPOSAL_STATUSES = ["proposed", "applied", "rejected"];
 
 export function requireFeature(app: App, id: FeatureId) {
   if (!app.featureEnabled(id)) throw new HttpError(409, "feature_disabled", `${app.featureLabel(id)} is turned off. Turn it on in Settings.`, { feature: id });
@@ -179,16 +182,23 @@ export function registerDataRoutes(r: Router, app: App) {
     return app.memory.describe(input.relPath);
   });
   r.get("/memory/changes", (c) => app.memory.listChanges({ ...(c.query("status") ? { status: c.query("status")! } : {}), limit: Number(c.query("limit") ?? 100) }));
+  r.get("/memory/proposals", (c) => {
+    const status = c.query("status") ?? "proposed";
+    if (!PROPOSAL_STATUSES.includes(status)) throw new HttpError(400, "invalid_request", `status must be one of ${PROPOSAL_STATUSES.join(", ")}`);
+    return { proposals: listProposals(app.memory, { status, limit: Number(c.query("limit") ?? 100) }) };
+  });
   r.post("/memory/proposals", async (c) => {
     requireFeature(app, "capture");
-    const input = await c.body(z.object({ relPath: z.string().nullable(), subject: z.string().min(1).max(100), value: z.string().min(1).max(5000), reason: z.string().min(1).max(1000), source: z.string().max(500), newDoc: z.object({ type: z.enum(["person", "project", "decision", "note"]), title: z.string().min(1).max(200) }).optional() }));
-    return app.memory.propose({ docRelPath: input.relPath, subject: input.subject, value: input.value, reason: input.reason, source: input.source, actor: "model", ...(input.newDoc ? { newDoc: input.newDoc } : {}) });
+    const input = await c.body(ProposalInput);
+    const out = proposeItem(app.memory, input, "model");
+    app.bus.emit("event", { type: "memory.changed" });
+    return out;
   });
   r.post("/memory/proposals/:id/:decision", (c) => {
     requireFeature(app, "capture");
     const d = c.params.decision;
     if (d !== "apply" && d !== "reject") throw new HttpError(400, "invalid_request", "decision must be apply or reject");
-    const out = app.memory.decideProposal(c.params.id!, d);
+    const out = decideProposal(app.memory, c.params.id!, d);
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });

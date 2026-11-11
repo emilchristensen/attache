@@ -1,5 +1,5 @@
 import { test, expect, type Page, type ConsoleMessage, type BrowserContext } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
@@ -320,6 +320,57 @@ test("memory: capture a decision, correct it, and the next answer changes", asyn
   await expect(answer).toContainText("Postmark");
   const file = readFileSync(join(stack.dataDir, "memory/decisions/vendor-sync.md"), "utf8");
   expect(file.split("## History")[1]).toContain("Keep Nimbus");
+});
+
+test("memory: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
+  const page = await open("/memory");
+  // Proposals arrive from outside the Dashboard; post them with the browser's own session.
+  const propose = (body: unknown) =>
+    page.evaluate(async (b) => {
+      const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(b) });
+      if (!res.ok) throw new Error(`propose failed: ${res.status} ${await res.text()}`);
+      return (await res.json()) as { id: string };
+    }, body);
+  const update = await propose({
+    item: {
+      action: "update",
+      path: "memory/decisions/vendor-sync.md",
+      facts: [
+        { subject: "Decision", value: "Use Postmark from January 2027", reason: "Contract signed" },
+        { subject: "Owner", value: "Procurement", reason: "Named in the contract" },
+      ],
+      events: ["Postmark contract signed"],
+    },
+    reason: "Vendor review session",
+    source: { kind: "agent-session", ref: "claude-code/sess-e2e", label: "Claude Code session in jarvis" },
+  });
+  const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
+
+  const review = page.getByRole("region", { name: /Memory changes to review/ });
+  const card = review.locator(`[data-proposal="${update.id}"]`);
+  await expect(card.getByText("Update memory/decisions/vendor-sync.md")).toBeVisible();
+  await expect(card.locator('[data-part="fact"]')).toHaveText([/Decision: Use Postmark from January 2027 \(Contract signed\)/, /Owner: Procurement \(Named in the contract\)/]);
+  await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
+  await expect(card).toContainText("Why: Vendor review session");
+  await expect(card).toContainText("Source: Claude Code session in jarvis");
+  const newNote = review.locator(`[data-proposal="${create.id}"]`);
+  await expect(newNote.getByText("New person: Lena Berg")).toBeVisible();
+  await expect(newNote.locator('[data-part="tags"]')).toContainText("vendor");
+
+  await card.getByRole("button", { name: "Apply" }).click();
+  await expect(card).toHaveCount(0);
+  await newNote.getByRole("button", { name: "Reject" }).click();
+  await expect(review).toHaveCount(0);
+
+  const file = readFileSync(join(stack.dataDir, "memory/decisions/vendor-sync.md"), "utf8");
+  const [current, history] = file.split("## History");
+  expect(current).toContain("Use Postmark from January 2027");
+  expect(current).toContain("**Owner**");
+  expect(history).toContain('**Decision** was "Switch to Postmark for 2027"');
+  expect(history).toContain("Postmark contract signed");
+  expect(existsSync(join(stack.dataDir, "memory/people/lena-berg.md"))).toBe(false);
+  await page.goto(`${stack.url}/memory?path=${encodeURIComponent("memory/decisions/vendor-sync.md")}&tab=decision`);
+  await expect(page.locator('[data-subject="Decision"]')).toContainText("Use Postmark from January 2027");
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
