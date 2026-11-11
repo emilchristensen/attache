@@ -117,6 +117,27 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
 Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks and skills.
 Uninstalling Jarvis removes them too.
 
+## The Brain in any Harness (MCP)
+
+Any Harness that speaks MCP, including ones without a shell such as Claude Desktop, can reach your Brain through Jarvis's MCP server.
+The Harness starts it as a local process with the command `jarvis mcp`; there is no URL and no token to copy.
+The server pairs with the running service the way the command line does and keeps its token in Jarvis's state folder, never in the Harness's configuration.
+
+For now, add it to your Harness by hand, for example in Claude Code:
+
+```sh
+claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
+```
+
+Other Harnesses take the same command and argument in their MCP server settings.
+
+- **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
+  Like recall, it leaves out raw chat and session transcripts and includes their summaries.
+- **read** returns a whole note, or only a line range, for a path that search returned.
+- When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
+- If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
+  The tools work as soon as Jarvis runs, without restarting the Harness.
+
 ## Voice
 
 Voice is optional and push-to-talk only; the microphone is never on otherwise.
@@ -161,7 +182,7 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 | Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
 | Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
