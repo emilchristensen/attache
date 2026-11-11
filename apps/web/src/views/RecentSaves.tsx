@@ -40,6 +40,7 @@ function What({ c }: { c: RecentChangeView }) {
           ) : (
             <span className="muted">(removed)</span>
           )}
+          {c.newValue !== null && c.newReview && <span className="small muted">review after {c.newReview}</span>}
         </span>
       );
   }

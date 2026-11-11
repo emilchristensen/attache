@@ -11,7 +11,7 @@ const SAVE_EXAMPLE = [
   "```json",
   '{ "items": [',
   '  { "action": "create", "type": "decision", "title": "…", "facts": [{ "subject": "Decision", "value": "…" }], "notes": "Why, and what was rejected", "events": ["…"] },',
-  '  { "action": "update", "path": "memory/projects/….md", "facts": [{ "subject": "Status", "value": "…", "reason": "what changed" }], "events": ["…"] }',
+  '  { "action": "update", "path": "memory/projects/….md", "facts": [{ "subject": "Status", "value": "…", "reason": "what changed", "review": "2026-12-15" }], "events": ["…"] }',
   "] }",
   "```",
 ].join("\n");
@@ -53,6 +53,10 @@ Three precise items beat ten vague ones.
   It goes in \`facts\` as a subject and value; saving replaces the subject's old value and Jarvis moves the old one to History.
 - An **event** is something that happened (a meeting, a slip, a fix that shipped).
   It goes in \`events\` and is appended to History, never replacing anything.
+
+A fact you expect to change, such as a status, a plan or a deadline, can carry a Review date: \`review\`, a day (YYYY-MM-DD) after today, after which it should be checked again.
+Past that day Jarvis keeps the fact but shows it as unverified.
+Leave it out for facts that stay true, such as a repository's name; a correction without one clears the old Review date.
 
 Write every value so it makes sense months from now without this conversation.
 Name the project, the person and the system, use absolute dates (YYYY-MM-DD), and never write "this", "today" or "the bug".

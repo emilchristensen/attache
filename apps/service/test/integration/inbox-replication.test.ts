@@ -153,4 +153,24 @@ describe("The inbox replicates", () => {
     const hits = (await pc.get(`/memory/search?q=${encodeURIComponent("venue booking notes")}`)).hits as Array<{ relPath: string }>;
     expect(hits.map((h) => h.relPath)).not.toContain("review/inbox/notes.md");
   });
+
+  it("keeps an item about one Machine's own Replication on that Machine", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    const note = join(mac.dataDir, "memory/notes/deploy.md");
+    writeFileSync(note, `# Deploy\n\nToken: ${["ghp", "Q7f2Lk9Xw3Rt8Vb1Nm4Pz6Hc0Jd5Gs2Ya8Ue"].join("_")}\n`);
+    await mac.clock.advance(CHECK);
+    expect((await mac.get("/replication")).status).toBe("blocked");
+    expect((await mac.get("/attention")).items.map((i: Item) => i.title)).toContain("Replication is blocked");
+    // What the service does when it starts again: open the data folder, bringing inbox and Brain together.
+    mac.app.openDataFolder(mac.dataDir);
+
+    writeFileSync(note, "# Deploy\n\nToken: kept in the password manager\n");
+    await mac.clock.advance(CHECK);
+    expect((await mac.get("/replication")).status).toBe("up_to_date");
+    await pc.clock.advance(CHECK);
+    const onPc = (await pc.get("/attention?state=open,dismissed,snoozed,resolved")).items as Item[];
+    expect(onPc.map((i) => i.title)).not.toContain("Replication is blocked");
+    expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).not.toMatch(/review\/inbox\/replication/);
+  });
 });

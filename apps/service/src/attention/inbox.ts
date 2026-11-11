@@ -29,13 +29,15 @@ export interface InboxDeps {
   onWrite: () => void;
   /** Items changed in a way the Dashboard should show. */
   onChange: () => void;
+  /** Sources whose items are about this Machine alone, such as its own Replication status: they never enter the Brain. */
+  localSources: readonly string[];
 }
 
 /**
  * The owner's inbox. Each Machine keeps its items in its database, and every
  * item with the owner's latest decision is also a file in the Brain
  * (`review/inbox/`), so the inbox replicates. Files another Machine changed
- * are taken in through `pulled`.
+ * are taken in through `pulled`. Items from local sources stay on this Machine.
  */
 export class Inbox {
   private readonly d: InboxDeps;
@@ -77,7 +79,7 @@ export class Inbox {
       onDisk.add(rec.key);
       if (takeRecord(this.d.db, rec, this.d.ctx.now())) changed = true;
     }
-    this.write(allRecords(this.d.db).filter((r) => !onDisk.has(r.key)).map((r) => r.key));
+    this.write(this.replicated(allRecords(this.d.db)).filter((r) => !onDisk.has(r.key)).map((r) => r.key));
     if (changed) this.d.onChange();
   }
 
@@ -88,7 +90,7 @@ export class Inbox {
     if (!root || !mine.length) return;
     const now = this.d.ctx.now();
     let changed = false;
-    const keysByPath = new Map(allRecords(this.d.db).map((r) => [reviewPath("inbox", r.key), r.key]));
+    const keysByPath = new Map(this.replicated(allRecords(this.d.db)).map((r) => [reviewPath("inbox", r.key), r.key]));
     for (const rel of mine) {
       const rec = this.read(root, rel);
       if (rec) {
@@ -101,12 +103,21 @@ export class Inbox {
     if (changed) this.d.onChange();
   }
 
+  private isLocal(rec: InboxRecord): boolean {
+    return this.d.localSources.includes(rec.item.sourceKind);
+  }
+
+  private replicated(records: readonly InboxRecord[]): InboxRecord[] {
+    return records.filter((r) => !this.isLocal(r));
+  }
+
+  /** The record in a file of the Brain's inbox, or null when it is missing, unreadable or about another Machine alone. */
   private read(root: string, rel: string): InboxRecord | null {
     const value = readReviewFile(root, rel);
     if (value === null) return null;
     const rec = parseInboxRecord(value);
-    if (!rec || reviewPath("inbox", rec.key) !== rel) {
-      this.d.log.warn("ignored an inbox file Jarvis cannot read", { path: rel });
+    if (!rec || reviewPath("inbox", rec.key) !== rel || this.isLocal(rec)) {
+      this.d.log.warn("ignored an inbox file Jarvis cannot take in", { path: rel });
       return null;
     }
     return rec;
@@ -119,6 +130,7 @@ export class Inbox {
     for (const key of new Set(keys)) {
       const rel = reviewPath("inbox", key);
       const rec = recordByKey(this.d.db, key);
+      if (rec && this.isLocal(rec)) continue;
       try {
         if (rec) writeReviewFile(root, rel, rec);
         else removeReviewFile(root, rel);

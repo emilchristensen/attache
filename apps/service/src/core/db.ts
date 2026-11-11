@@ -177,6 +177,11 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
   // The inbox replicates: each item keeps what its source said (with when the source stopped reporting it
   // and the Machine that ran Source refresh) apart from the owner's latest decision, so the state can be
   // worked out the same way on every Machine. Items and decisions from before carry over.

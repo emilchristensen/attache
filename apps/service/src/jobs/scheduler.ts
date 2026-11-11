@@ -5,6 +5,8 @@ import { FEATURES, isEnabled } from "../capabilities/registry.ts";
 
 export interface ScheduleRow {
   id: string;
+  /** What the schedule does, in the owner's words (from the capability registry). */
+  label: string;
   capability: string;
   jobKind: string;
   everyMinutes: number | null;
@@ -22,6 +24,12 @@ export function nextDaily(from: Date, hhmm: string): Date {
   d.setHours(h, m, 0, 0);
   if (d.getTime() <= from.getTime()) d.setDate(d.getDate() + 1);
   return d;
+}
+
+/** A schedule row's id is `<feature>:<schedule>`; its label comes from the registry entry that defines it. */
+function scheduleLabel(capability: string, id: string): string {
+  const own = id.slice(capability.length + 1);
+  return FEATURES.find((f) => f.id === capability)?.schedules.find((s) => s.id === own)?.label ?? id;
 }
 
 /**
@@ -80,6 +88,7 @@ export class Scheduler {
   list(): ScheduleRow[] {
     return (this.db.prepare("select * from schedules order by id").all() as Array<Record<string, unknown>>).map((r) => ({
       id: String(r.id),
+      label: scheduleLabel(String(r.capability), String(r.id)),
       capability: String(r.capability),
       jobKind: String(r.job_kind),
       everyMinutes: r.every_minutes === null ? null : Number(r.every_minutes),
