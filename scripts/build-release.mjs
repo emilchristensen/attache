@@ -9,7 +9,7 @@
  *   release/<version>/Jarvis-Installer-<version>-windows-x64.cmd       one-step installer (Windows)
  *   release/<version>/SHA256SUMS                         every artifact in the folder
  *
- * The Node.js runtime is bundled (Node 24 LTS, which has SQLite FTS5 built in),
+ * The Node.js runtime is bundled (BUNDLED_NODE_VERSION in release-targets.mjs; Node 24 LTS has SQLite FTS5 built in),
  * so end users need no developer tools. macOS and Linux build every target;
  * Windows builds its own.
  * Usage: node scripts/build-release.mjs [--version x.y.z] [--target macos-arm64|linux-x64|windows-x64]
@@ -21,7 +21,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { releaseLauncher } from "../apps/service/src/platform/wrapper.ts";
 import { posixInstallerHeader, windowsInstallerHeader, WINDOWS_INSTALL_CMD } from "./release-installers.mjs";
-import { chooseTarget, hostTarget, releaseArchive, RELEASE_TARGETS } from "./release-targets.mjs";
+import { BUNDLED_NODE_VERSION, chooseTarget, hostTarget, releaseArchive, RELEASE_TARGETS } from "./release-targets.mjs";
 import { zipFolder } from "./zip.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -30,7 +30,7 @@ const VERSION = arg("version") ?? process.env.JARVIS_VERSION ?? JSON.parse(readF
 const TARGET = chooseTarget(arg("target"));
 const T = RELEASE_TARGETS[TARGET];
 const WINDOWS = T.os === "windows";
-const NODE_VERSION = (readFileSync(join(ROOT, ".node-version"), "utf8").trim() || "24.18.0").replace(/^v/, "");
+const NODE_VERSION = BUNDLED_NODE_VERSION;
 const OUT = join(ROOT, "release", VERSION);
 const STAGE = join(OUT, `.stage-${TARGET}`, `jarvis-${VERSION}`);
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit", ...opts });
