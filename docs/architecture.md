@@ -119,6 +119,14 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
 - **Never rewrites history.** Bringing in other Machines' changes is a fast-forward or a merge commit; `Git` refuses `rebase`, `pull`, `reset --hard` and any forced or deleting push before running git.
 - **Merging.** A file both sides changed goes to the merge rules (`MergeRule` in `seams.ts`); a file no rule settles aborts the merge and reads as blocked with its path, so no conflict marker is ever left in a file.
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them.
+- **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/`.
+  It takes each version apart (`parts.ts`): frontmatter, Current State entries (with their indented lines), History items, and the prose, which keeps one placeholder line where the facts and the History items were.
+  Facts merge by subject (`facts.ts`): a subject one side changed takes that change, a change wins over a removal, and when both changed it the newer date wins, a tie going to the Machine whose id sorts last; the losing value becomes a `superseded` History line naming both Machines, dated with the winner's date.
+  History is unioned (`history.ts`): the shared start stays, what each side added is interleaved by date, every item once.
+  Frontmatter merges field by field (`frontmatter.ts`): a field one side changed takes that change; when both did, `created` keeps the earliest, `updated` the latest, lists keep every item, anything else comes from the note updated last.
+  Prose goes to a `ProseMerge` (`prose.ts`); the default takes prose only one side changed and otherwise leaves the note to block.
+  Both sides are put in an order that does not depend on which Machine merges (`sides.ts`) and nothing depends on the time of the merge, so two Machines merging the same versions write the same note.
+  Two notes with the same type and title share a path, so they arrive with no common version and merge as one note.
 - **Commits** are authored by the Machine (name, and `<machine id>@machine.jarvis.invalid`), with the clock's time.
   The message names each changed file and what the change log says happened to it (`created "Orion migration"`, `corrected Status`, `added an event`), or `added`/`edited`/`deleted` for files the change log does not know (hand edits, evidence), and ends with a `Jarvis-Machine: <name> (<id>)` trailer.
 - **Seams** (`replication/seams.ts`, listed in `defaultSeams()`): `mergeRules`, `commitGuards` (run on the staged files before every commit, merge commits included; a refusal stops the commit and the push), `remoteGuards` (run at setup, join and before every push), and `credentials` (`-c` settings and environment for commands that reach the remote, so a token never sits in the remote's address).
@@ -137,6 +145,7 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
   When an approval made on one Machine and a later rejection made on another meet, the rejection stands and the approving Machine undoes what it wrote, as one-click revert would (`memory/proposal-undo.ts`); events stay, because History only grows.
   The inbox's own rule is `attention/inbox-merge.ts` (see the attention engine below).
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
+  `MemoryStore` dates facts, History lines and files by the same clock (`MemoryStoreOptions.now`, `MemoryStore.today()`).
 - **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
 

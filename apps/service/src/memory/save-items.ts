@@ -3,7 +3,6 @@ import { HttpError } from "../http/router.ts";
 import { slugify } from "./markdown.ts";
 import { isProtected, normalizeRel } from "./policy.ts";
 import { isRepositorySubject, parseRepositoryList } from "./repositories.ts";
-import { factDay } from "./review-date.ts";
 import { formatSource, type ChangeMeta, type MemoryStore, type SourceRef } from "./store.ts";
 
 type CreateItem = Extract<MemorySaveItem, { action: "create" }>;
@@ -74,8 +73,7 @@ function uniqueSubjects(facts: ReadonlyArray<{ subject: string }>, where: string
 }
 
 /** A saved fact is dated today, and its Review date must come after its own date. */
-function reviewDatesAfterToday(facts: ReadonlyArray<{ subject: string; review?: string | undefined }>, where: string) {
-  const today = factDay();
+function reviewDatesAfterToday(today: string, facts: ReadonlyArray<{ subject: string; review?: string | undefined }>, where: string) {
   for (const f of facts) {
     if (f.review && f.review <= today)
       throw new HttpError(400, "invalid_request", `${where} gives "${f.subject}" the Review date ${f.review}, which is not after today (${today}). A Review date is the day after which the fact should be checked again, so it must come after the fact's own date.`);
@@ -85,7 +83,7 @@ function reviewDatesAfterToday(facts: ReadonlyArray<{ subject: string; review?: 
 /** A new note must not duplicate one Jarvis already has: the same type and title is an update, not a second note. */
 function checkCreate(memory: MemoryStore, item: CreateItem): CheckedItem {
   uniqueSubjects(item.facts, `"${item.title}"`);
-  reviewDatesAfterToday(item.facts, `"${item.title}"`);
+  reviewDatesAfterToday(memory.today(), item.facts, `"${item.title}"`);
   if (item.type === "project") checkRepositories(item.facts, `"${item.title}"`);
   const slug = slugify(item.title);
   const twin = memory.listDocuments({ area: "memory", root: "data", docType: item.type, limit: 2000 }).find((d) => slugify(d.title) === slug);
@@ -100,7 +98,7 @@ function checkUpdate(memory: MemoryStore, item: UpdateItem): CheckedItem {
   if (!memory.exists(relPath)) throw new HttpError(404, "not_found", `${relPath} does not exist. Search for the note, or create a new one.`);
   if (!item.facts?.length && !item.events?.length) throw new HttpError(400, "invalid_request", `The update to ${relPath} has no facts or events.`);
   uniqueSubjects(item.facts ?? [], relPath);
-  reviewDatesAfterToday(item.facts ?? [], relPath);
+  reviewDatesAfterToday(memory.today(), item.facts ?? [], relPath);
   const note = memory.describe(relPath);
   // The note's type as the index reads it: its frontmatter, else its folder.
   const type = typeof note.frontmatter.type === "string" ? note.frontmatter.type : relPath.split("/")[1]?.replace(/s$/, "");

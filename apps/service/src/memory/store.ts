@@ -95,8 +95,6 @@ Search indexes are rebuilt from these files, so deleting the index never loses k
 Service state (jobs, approvals, settings) and credentials live outside this folder.
 `;
 
-const today = () => factDay();
-
 export interface MemoryStoreOptions {
   /** Install name; a live service of another instance on the same folder is refused. */
   instance: string;
@@ -106,6 +104,8 @@ export interface MemoryStoreOptions {
   machine: () => MachineIdentity;
   /** Told after every file the store writes or removes, e.g. so Replication commits it. */
   onWrite?: (relPath: string) => void;
+  /** The time the store dates facts, History lines and files by; the system clock unless given. */
+  now?: () => Date;
 }
 
 export class MemoryStore {
@@ -121,6 +121,11 @@ export class MemoryStore {
     this.root = root;
     this.opts = opts;
     this.indexer = new Indexer(db);
+  }
+
+  /** Today's day (`YYYY-MM-DD`) by the store's clock: the date a new fact or History line gets. */
+  today(): string {
+    return factDay(this.opts.now?.() ?? new Date());
   }
 
   get dataRoot(): string | null {
@@ -248,18 +253,18 @@ export class MemoryStore {
         type: input.type,
         title: input.title,
         provenance: input.provenance ?? (actor === "user" ? "user-stated" : "inferred"),
-        created: today(),
-        updated: today(),
+        created: this.today(),
+        updated: this.today(),
         ...(input.tags?.length ? { tags: input.tags } : {}),
         sources: (input.sources ?? []).map(sourceToYaml),
       },
       title: input.title,
-      state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? today(), review: s.review, value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
+      state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? this.today(), review: s.review, value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
       ...(input.notes ? { notes: input.notes } : {}),
       history: [
         ...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)),
-        `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`,
-        ...(input.events ?? []).map(eventLine),
+        `- ${this.today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`,
+        ...(input.events ?? []).map((e) => eventLine(this.today(), e)),
       ],
     });
     this.writeFile(rel, doc, actor, opts);
@@ -302,12 +307,12 @@ export class MemoryStore {
     let text = this.read(n);
     const corrections: Array<{ subject: string; before: string | null; beforeReview: string | null; value: string; review: string | null; reason: string }> = [];
     for (const f of input.facts) {
-      const out = applyStateCorrection(text, { subject: f.subject, date: today(), review: f.review, value: f.value, source: sourceLabel }, f.reason || "corrected");
+      const out = applyStateCorrection(text, { subject: f.subject, date: this.today(), review: f.review, value: f.value, source: sourceLabel }, f.reason || "corrected");
       text = out.text;
       corrections.push({ subject: f.subject, before: out.previous?.value ?? null, beforeReview: out.previous?.review ?? null, value: f.value, review: f.review ?? null, reason: f.reason });
     }
-    for (const e of input.events) text = appendHistory(text, eventLine(e));
-    this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: today() }) : text, actor, opts);
+    for (const e of input.events) text = appendHistory(text, eventLine(this.today(), e));
+    this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: this.today() }) : text, actor, opts);
     return tx(this.db, () => [
       ...corrections.map((c) => this.recordChange({ docRelPath: n, change: "correct", subject: c.subject, beforeValue: c.before, afterValue: c.value, beforeReview: c.beforeReview, afterReview: c.review, reason: c.reason, source: sourceLabel ?? null, actor, status: "applied" }, meta)),
       ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" }, meta)),
@@ -324,9 +329,9 @@ export class MemoryStore {
    */
   removeFact(rel: string, input: { subject: string; reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
     const n = normalizeRel(rel);
-    const { text, removed } = removeStateEntry(this.read(n), { subject: input.subject, date: today() }, input.reason);
+    const { text, removed } = removeStateEntry(this.read(n), { subject: input.subject, date: this.today() }, input.reason);
     if (!removed) throw new PolicyError(`${n} has no current “${input.subject}”`, "invalid_path");
-    this.writeFile(n, bumpFrontmatter(text, { updated: today() }), actor);
+    this.writeFile(n, bumpFrontmatter(text, { updated: this.today() }), actor);
     return this.recordChange({ docRelPath: n, change: "correct", subject: removed.subject, beforeValue: removed.value, afterValue: null, beforeReview: removed.review ?? null, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
@@ -404,7 +409,7 @@ export class MemoryStore {
 
   capture(input: { text: string; title?: string; source: SourceRef; tags?: string[] }, actor: WriteActor = "user"): { relPath: string } {
     const title = input.title?.trim() || firstWords(input.text);
-    const rel = this.uniquePath("evidence/captures", `${today()}-${slugify(title)}`);
+    const rel = this.uniquePath("evidence/captures", `${this.today()}-${slugify(title)}`);
     const fm = { id: randomUUID(), type: "capture", title, captured_at: nowIso(), provenance: "captured", source: sourceToYaml(input.source), ...(input.tags?.length ? { tags: input.tags } : {}) };
     const quoted = input.text
       .trim()
@@ -453,7 +458,7 @@ export class MemoryStore {
   }
 
   writeDeliverable(kind: "briefings" | "research" | "drafts", title: string, body: string, meta: Record<string, unknown> = {}): { relPath: string } {
-    const rel = this.uniquePath(`deliverables/${kind}`, `${today()}-${slugify(title)}`);
+    const rel = this.uniquePath(`deliverables/${kind}`, `${this.today()}-${slugify(title)}`);
     const fm = { id: randomUUID(), type: kind.replace(/s$/, ""), title, generated_at: nowIso(), provenance: "generated", ...meta };
     this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body.trim()}\n`, "service");
     return { relPath: rel };
@@ -485,8 +490,8 @@ export class MemoryStore {
   /** Daily evidence snapshot of what a connector observed, so recall can cite it. */
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
     const machine = this.opts.machine();
-    const rel = connectorSnapshotPath(kind, today(), machine);
-    const title = `${label} on ${today()} (${machine.name})`;
+    const rel = connectorSnapshotPath(kind, this.today(), machine);
+    const title = `${label} on ${this.today()} (${machine.name})`;
     const fm = { type: "connector-snapshot", title, source: kind, machine: machine.name, machine_id: machine.id, observed_at: nowIso(), provenance: "connector" };
     const body = lines.length ? lines.join("\n") : "_The last Source refresh returned no items._";
     this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
@@ -500,7 +505,7 @@ export class MemoryStore {
    */
   recordWrapUp(input: { harness: { id: string; label: string }; title: string; points: string[] }): { relPath: string; title: string; date: string } {
     const machine = this.opts.machine();
-    const date = today();
+    const date = this.today();
     // Redacted before it names the file: the write redacts only the content.
     const title = redact(oneLine(input.title));
     const planned = wrapUpPath(date, title, machine);
@@ -516,15 +521,15 @@ export class MemoryStore {
   writeIdentity(input: { name: string; email?: string; role?: string; notes?: string }, confirmed: boolean): { relPath: string } {
     const rel = "memory/self.md";
     const doc = renderMemoryDoc({
-      frontmatter: { id: "self", type: "person", title: input.name, provenance: "user-stated", protected: true, updated: today() },
+      frontmatter: { id: "self", type: "person", title: input.name, provenance: "user-stated", protected: true, updated: this.today() },
       title: input.name,
       state: [
-        { subject: "Name", date: today(), value: input.name },
-        ...(input.email ? [{ subject: "Email", date: today(), value: input.email }] : []),
-        ...(input.role ? [{ subject: "Role", date: today(), value: input.role }] : []),
+        { subject: "Name", date: this.today(), value: input.name },
+        ...(input.email ? [{ subject: "Email", date: this.today(), value: input.email }] : []),
+        ...(input.role ? [{ subject: "Role", date: this.today(), value: input.role }] : []),
       ],
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [`- ${today()} — identity set from Settings`],
+      history: [`- ${this.today()} — identity set from Settings`],
     });
     this.writeFile(rel, doc, "user", { confirmedProtected: confirmed });
     return { relPath: rel };
@@ -590,8 +595,8 @@ function sourceToYaml(s: SourceRef): Record<string, unknown> {
 }
 
 /** A History line for an event that happened today. */
-function eventLine(text: string): string {
-  return `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`;
+function eventLine(day: string, text: string): string {
+  return `- ${day} — ${text.replace(/\s*\n\s*/g, " ")}`;
 }
 
 function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {
