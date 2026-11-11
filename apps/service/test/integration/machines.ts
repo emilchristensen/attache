@@ -1,8 +1,13 @@
+import { vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { renameSync } from "node:fs";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 import { startTestService, testFolder, type TestService } from "./harness.ts";
+
+// A test with several Machines runs git dozens of times, one process after another; on Windows each
+// start is slow, and a whole multi-Machine test took over 30 s while the suite ran in parallel there.
+vi.setConfig({ testTimeout: 120_000 });
 
 /** One Machine in a multi-Machine test: a whole service with its own state, Brain copy and clock. */
 export interface TestMachine extends TestService {
