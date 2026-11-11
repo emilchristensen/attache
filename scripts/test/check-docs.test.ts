@@ -56,7 +56,6 @@ describe("avoided glossary terms", () => {
       { term: "sync", preferred: ["Replication", "Source refresh"] },
       { term: "backup", preferred: ["Replication"] },
       { term: "poll", preferred: ["Source refresh"] },
-      { term: "agent", preferred: ["Harness"] },
       { term: "coding agent", preferred: ["Harness"] },
       { term: "auto-save", preferred: ["Harness"] },
     ]);
