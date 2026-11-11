@@ -38,7 +38,7 @@ describe("A03 onboarding and persistence", () => {
     expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     expect(cfg.features).toMatchObject({ sessions: false, drafts: false, attention: true });
     // Search works before any model is connected.
-    await again.post("/memory/capture", { text: "The espresso machine needs descaling every Friday.", source: { kind: "user", ref: "t" } });
+    await again.post("/memory/save", { items: [{ action: "create", type: "note", title: "Espresso machine", facts: [{ subject: "Upkeep", value: "Needs descaling every Friday" }] }] });
     expect((await again.get("/memory/search?q=espresso descaling")).hits.length).toBeGreaterThan(0);
   });
 });
@@ -125,7 +125,7 @@ describe("A13 security boundaries", () => {
     expect((await raw("/health", { headers: { origin: "https://evil.example" } })).status).toBe(403);
     // The Obsidian plugin is gone, so its app origin is refused like any other.
     expect((await raw("/health", { headers: { origin: "app://obsidian.md" } })).status).toBe(403);
-    const noCsrf = await raw("/memory/capture", { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify({ text: "x", source: { kind: "user", ref: "x" } }) });
+    const noCsrf = await raw("/memory/save", { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify({ items: [{ action: "create", type: "note", title: "x", facts: [{ subject: "x", value: "x" }] }] }) });
     expect(noCsrf.status).toBe(403);
     // Host header rebinding (raw HTTP so the header is not normalised).
     const http = await import("node:http");
@@ -141,7 +141,7 @@ describe("A13 security boundaries", () => {
     expect(trav.status).toBe(400);
     // Protected identity cannot be written through memory endpoints.
     await svc.post("/setup/identity", { name: "Test User", email: "t@example.com", confirm: true });
-    const prot = await svc.call("POST", "/memory/correct", { relPath: "memory/self.md", subject: "Name", value: "Mallory", reason: "x" });
+    const prot = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Name", value: "Mallory", reason: "x" }] }] });
     expect(prot.status).toBe(403);
     expect(readFileSync(join(svc.dataDir, "memory/self.md"), "utf8")).not.toContain("Mallory");
   });

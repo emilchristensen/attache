@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { App } from "../../src/app.ts";
+import { App, type AppOptions } from "../../src/app.ts";
 import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
 import type { Clock } from "../../src/replication/clock.ts";
@@ -44,12 +44,13 @@ export interface TestServiceOptions {
   features?: Record<string, boolean>;
   /** Drives Replication's timers; the real clock when left out. */
   clock?: Clock;
+  meaning?: AppOptions["meaning"];
 }
 
 export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? testFolder("state");
   const dataDir = opts.dataDir ?? join(testFolder("data"), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}) });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `jarvis serve` writes, so the CLI finds this service.

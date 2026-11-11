@@ -156,6 +156,28 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
     expect(await until(() => sessionStart(atlas).includes("### This session's project: Atlas"))).toBe(true);
   });
 
+  it("marks facts past their Review date as unverified, in the project's facts and in the index", async () => {
+    const dir = repo("atlas-review", { origin: "git@gitlab.example.com:platform/atlas.git" });
+    const note = join(svc.dataDir, "memory/projects/atlas.md");
+    const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    writeFileSync(
+      note,
+      readFileSync(note, "utf8")
+        .replace(/^- \*\*Status\*\* \(([\d-]+)\): Discovery/m, "- **Status** ($1, review 2026-01-15): Discovery")
+        .replace(/^(- \*\*Repositories\*\* \([\d-]+)\)/m, `$1, review ${inAMonth})`),
+    );
+    const ctx = await until(() => {
+      const c = sessionStart(dir);
+      return c.includes("unverified") && c;
+    });
+    const lines = ctx.split("\n");
+    // The project's own facts: the overdue one is marked, the one not yet due is not.
+    expect(lines.find((l) => l.startsWith("- **Status**"))).toMatch(/Discovery \(unverified: Review date 2026-01-15 passed\)$/);
+    expect(lines.find((l) => l.startsWith("- **Repositories**"))).not.toContain("unverified");
+    // The index shows Atlas's first fact, the overdue Status, as unverified too.
+    expect(lines.find((l) => l.startsWith("- Atlas:"))).toBe("- Atlas: Discovery (unverified: Review date 2026-01-15 passed)");
+  });
+
   it("the hook makes no network call and works while the service is stopped", async () => {
     await svc.stop();
     stopped = true;

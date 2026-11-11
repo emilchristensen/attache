@@ -167,6 +167,21 @@ export const MIGRATIONS: readonly string[] = [
   create table harness_settings (harness text primary key, auto_accept integer not null default 0, updated_at text not null);
   alter table memory_changes add column auto_accepted integer not null default 0;
   `,
+  // Meaning-based search, local to this Machine: the text each chunk's vector is made from, and the
+  // vectors, keyed by model and that text's hash so text that did not change keeps its vector when its
+  // file is re-chunked. Forget every file's fingerprint so the next scan fills in the new columns.
+  `
+  alter table chunks add column embed_text text;
+  alter table chunks add column embed_hash text;
+  create index chunks_embed on chunks(embed_hash);
+  create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
+  update documents set hash = '', mtime_ms = -1;
+  `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
 ];
 
 export function openDb(file: string): Db {

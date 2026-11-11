@@ -10,7 +10,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -182,30 +182,6 @@ export const SourceRefInput = z.object({
   label: z.string().max(200).optional(),
 });
 
-export const CaptureInput = z.object({
-  text: z.string().min(1).max(100_000),
-  title: z.string().max(200).optional(),
-  source: SourceRefInput,
-  decision: z.object({ title: z.string().min(1).max(200), decision: z.string().min(1).max(5000), project: z.string().max(200).optional() }).optional(),
-  tags: z.array(z.string().max(50)).max(20).optional(),
-});
-
-export const MemoryCreateInput = z.object({
-  type: z.enum(["person", "project", "decision", "note"]),
-  title: z.string().min(1).max(200),
-  /** A migrated entry keeps the date it was true and its own source line; new entries default to today. */
-  state: z
-    .array(z.object({ subject: z.string().min(1).max(100), value: z.string().min(1).max(5000), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), source: SourceRefInput.optional() }))
-    .max(80),
-  notes: z.string().max(100_000).optional(),
-  sources: z.array(SourceRefInput).max(40).optional(),
-  /** History carried over from an earlier system, oldest first; Jarvis appends its own creation entry. */
-  history: z.array(z.string().min(1).max(2000)).max(300).optional(),
-  /** "migrated": distilled from another notes system and reviewed by the user before writing. */
-  provenance: z.enum(["user-stated", "migrated"]).optional(),
-  tags: z.array(z.string().min(1).max(50)).max(20).optional(),
-});
-
 /** Copy a Markdown folder verbatim into evidence/archive/<label>/ so it outlives the original. */
 export const ArchiveInput = z.object({
   path: z.string().min(1),
@@ -216,16 +192,19 @@ export const ArchiveInput = z.object({
   origin: z.string().min(1).max(500).optional(),
 });
 
-export const CorrectionInput = z.object({
-  relPath: z.string().min(1),
-  subject: z.string().min(1).max(100),
-  value: z.string().min(1).max(5000),
-  reason: z.string().min(1).max(1000),
-});
+/** A calendar day written YYYY-MM-DD, as the Brain dates facts. */
+export const CalendarDay = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "must be a day written YYYY-MM-DD")
+  .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d), "must be a real calendar day");
 
 const SaveFact = z.object({
   subject: z.string().trim().min(1).max(100).describe("What the fact is about, e.g. Status or Role. One current value per subject."),
   value: z.string().trim().min(1).max(5000).describe("The current value."),
+  review: CalendarDay.optional().describe(
+    "Optional Review date, YYYY-MM-DD and after today: the day after which this fact should be checked again. Set it for a fact you expect to change, such as a status, a plan or a deadline. Past it the fact stays in the Brain, shown as unverified. Without one, a correction clears the old Review date.",
+  ),
 });
 const SaveEvent = z.string().trim().min(1).max(2000).describe("Something that happened, appended to the note's History.");
 
@@ -256,12 +235,12 @@ export const MemorySaveItem = z.discriminatedUnion("action", [
 export type MemorySaveItem = z.infer<typeof MemorySaveItem>;
 
 /**
- * What the user asked a coding agent to save (`jarvis save`). State goes into
+ * What the owner asked a Harness to save (the MCP `save` tool). State goes into
  * `facts` (one current value per subject, replacing the old one), events into
  * `events` (appended to History). Validated as a whole before anything is written.
  */
 export const MemorySaveInput = z.object({
-  /** The coding-agent session the items were distilled from. */
+  /** The Harness session the items were distilled from. */
   origin: z
     .object({
       agent: z.string().trim().min(1).max(40),
@@ -370,6 +349,9 @@ export interface RecentChangeView {
   subject: string | null;
   oldValue: string | null;
   newValue: string | null;
+  /** For a fact: its Review date before and after the change, null when it had none. */
+  oldReview: string | null;
+  newReview: string | null;
   source: {
     /** Harness integration kind, e.g. `claude-code`. */
     harness: string | null;
@@ -395,6 +377,8 @@ export interface MemoryAuditEntry {
   subject: string;
   value: string;
   date: string;
+  /** The day after which the fact should be checked again; null when none is set. */
+  review: string | null;
   ageDays: number;
   source: string | null;
   line: number;
@@ -470,6 +454,31 @@ export interface RecallEvaluationReport {
   misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
   /** Questions that cannot be scored, because their note or fact is not in the Brain. */
   invalid: Array<RecallQuestion & { problem: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Meaning-based search
+
+/**
+ * Where this Machine's meaning-based search stands. Search answers on keywords
+ * in every state; vectors are only complete in `ready`.
+ * - `missing`: the model is not downloaded.
+ * - `downloading`: the owner started the download and it is running.
+ * - `failed`: the download, or loading the downloaded model, failed; `error` says why.
+ * - `building`: the model is here and vectors are being built for chunks that lack one.
+ * - `ready`: every chunk in this Machine's index has a vector.
+ */
+export const MeaningState = z.enum(["missing", "downloading", "failed", "building", "ready"]);
+export type MeaningState = z.infer<typeof MeaningState>;
+
+export interface MeaningStatus {
+  state: MeaningState;
+  model: { name: string; bytes: number };
+  /** Bytes received so far, while downloading. */
+  download: { received: number; total: number } | null;
+  /** Chunks in this Machine's index, and how many of them have a vector. */
+  vectors: { chunks: number; embedded: number };
+  error: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ const jarvisCli = (args, extraEnv = {}) => execFileSync(join(HOME, ".local/bin/j
 const label = `dev.jarvis.${INSTANCE}`;
 // The user's own Claude Code settings, with a hook of their own, from before Jarvis existed.
 const CLAUDE_SETTINGS = join(HOME, ".claude/settings.json");
+const CLAUDE_JSON = join(HOME, ".claude.json");
 const CLAUDE_BEFORE = JSON.stringify({ model: "opus", hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }] } }, null, 2);
 const agentLoaded = () => {
   try {
@@ -89,6 +90,26 @@ function brainFingerprint() {
   };
 }
 
+/**
+ * Start the MCP server a Harness configuration names, exactly as the Harness does (its command and
+ * arguments, a clean environment plus the Harness's session variables), call `save`, and accept
+ * the confirmation as the owner would. Returns the save's outcome.
+ */
+async function mcpSave(entry, items, sessionEnv) {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+  const { ElicitRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
+  const client = new Client({ name: "claude-code", version: "1.0.0" }, { capabilities: { elicitation: { form: {} } } });
+  client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: {} }));
+  await client.connect(new StdioClientTransport({ command: entry.command, args: entry.args, env: { ...cleanEnv, ...sessionEnv }, cwd: HOME, stderr: "pipe" }));
+  try {
+    const r = await client.callTool({ name: "save", arguments: { items } });
+    return r.isError ? r.content.map((c) => c.text).join(" ") : r.structuredContent.outcome;
+  } finally {
+    await client.close();
+  }
+}
+
 /** Run the command Jarvis registered for a Claude Code hook event, as Claude Code does: a login shell, JSON on stdin. */
 function runClaudeHook(event, input) {
   const s = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
@@ -129,9 +150,11 @@ async function main() {
   await http("POST", "/setup/data-folder", { path: DATA }, token);
   await http("PUT", "/features", { changes: { drafts: false }, cascade: true }, token);
   await http("PATCH", "/config", { schedules: { syncEveryMinutes: 55 } }, token);
-  await http("POST", "/memory/capture", { text: "The Helios budget review is on Thursday.", title: "Helios", source: { kind: "user", ref: "install-test" }, decision: { title: "Helios budget", decision: "Cap Helios at 40k" } }, token);
+  await http("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
   await http("POST", "/setup/complete", {}, token);
   check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  const meaning = await http("GET", "/memory/meaning", undefined, token);
+  check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
   const hookCmds = JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")).hooks);
   check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && hookCmds.includes(`${PREFIX}/current/runtime/node`) && hookCmds.includes(`${PREFIX}/current/service/jarvis-agent-hook.mjs`) && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
@@ -151,6 +174,16 @@ async function main() {
   const oldSpeechModel = join(STATE, "models", "ggml-base.en.bin");
   mkdirSync(dirname(oldSpeechModel), { recursive: true });
   writeFileSync(oldSpeechModel, "whisper model left by voice");
+  // Save and audit skills an earlier version installed, and skills that are not this install's.
+  const skillsDir = join(HOME, ".claude/skills");
+  const plantSkill = (name, marker) => {
+    mkdirSync(join(skillsDir, name), { recursive: true });
+    writeFileSync(join(skillsDir, name, "SKILL.md"), `---\nname: ${name}\n---\n`);
+    if (marker) writeFileSync(join(skillsDir, name, ".jarvis-skill.json"), JSON.stringify(marker));
+  };
+  plantSkill("jarvis-save", { managedBy: "jarvis", stateDir: STATE, agents: ["claude-code"] });
+  plantSkill("jarvis-audit", { managedBy: "jarvis", stateDir: STATE, agents: ["claude-code"] });
+  plantSkill("my-own-skill", null);
   sh(artifact(TO));
   const h2 = await http("GET", "/health");
   token = await pairToken();
@@ -162,6 +195,8 @@ async function main() {
   check("A02", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
   check("A14", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
   check("A02", "upgrade removes the speech model voice downloaded", !existsSync(oldSpeechModel));
+  const skillsLeft = readdirSync(skillsDir).sort();
+  check("A02", "upgrade removes the save and audit skills Jarvis installed, and leaves other skills", JSON.stringify(skillsLeft) === JSON.stringify(["my-own-skill"]), skillsLeft.join(", "));
 
   // --- A02: the hooks keep working across the upgrade and save a real session ---
   const hookTest = await http("POST", "/connections/claude-code/test", {}, token);
@@ -177,21 +212,29 @@ async function main() {
   }
   check("A02", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
 
-  // --- the user-invoked save and audit skills run the installed CLI, with no jarvis on PATH ---
-  const skillsDir = join(HOME, ".claude/skills");
-  const saveSkill = existsSync(skillsDir) ? readdirSync(skillsDir).find((d) => d.endsWith("-save")) : undefined;
-  const saveMd = saveSkill ? readFileSync(join(skillsDir, saveSkill, "SKILL.md"), "utf8") : "";
-  const saveLine = saveMd.split("\n").find((l) => / save <<'JSON'$/.test(l))?.trim() ?? "";
-  check("A02", "connecting Claude Code adds user-only save and audit skills that call the stable `current` CLI", saveMd.includes("disable-model-invocation: true") && existsSync(join(skillsDir, saveSkill.replace(/-save$/, "-audit"), "SKILL.md")) && saveLine.includes(`${PREFIX}/current/service/jarvis-service.mjs`) && !saveMd.includes(`/app/${FROM}/`), saveSkill ?? "no skill");
-  const skillItems = { items: [{ action: "create", type: "decision", title: "Skills call the installed CLI", facts: [{ subject: "Decision", value: "The save skill runs the bundled node and service, so it needs nothing on PATH" }] }] };
-  let skillOut = "";
+  // --- the MCP server Jarvis registered runs the installed CLI, with no jarvis on PATH, and saves what the owner confirms ---
+  const mcpEntry = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers?.jarvis;
+  // Node reports its own path with symlinks resolved, so the temporary home's /var may show as /private/var.
+  const viaCurrent = (p, rest) => typeof p === "string" && p.endsWith(`${PREFIX}/current/${rest}`) && !p.includes("/app/");
+  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, "runtime/node") && viaCurrent(mcpEntry.args[0], "service/jarvis-service.mjs") && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
+  const mcpItems = [{ action: "create", type: "decision", title: "The MCP server runs the installed CLI", facts: [{ subject: "Decision", value: "Harnesses start the bundled node and service, so the server needs nothing on PATH" }] }];
+  let mcpOutcome = "";
   try {
-    skillOut = execFileSync("/bin/sh", ["-c", `${saveLine}\n${JSON.stringify(skillItems)}\nJSON\n`], { env: { ...cleanEnv, CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "inst-1" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    mcpOutcome = await mcpSave(mcpEntry, mcpItems, { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "inst-1" });
   } catch (e) {
-    skillOut = String(e.stderr ?? e.message);
+    mcpOutcome = String(e.message);
   }
-  const savedNote = join(DATA, "memory/decisions/skills-call-the-installed-cli.md");
-  check("A02", "the save skill's command writes curated memory citing the session", existsSync(savedNote) && readFileSync(savedNote, "utf8").includes("agent-session: evidence/sessions/transcripts/claude-code/"), skillOut.trim());
+  const savedNote = join(DATA, "memory/decisions/the-mcp-server-runs-the-installed-cli.md");
+  check("A02", "a save through the registered MCP server, confirmed in the Harness, writes curated memory citing the session", mcpOutcome === "saved" && existsSync(savedNote) && readFileSync(savedNote, "utf8").includes("agent-session: evidence/sessions/transcripts/claude-code/"), mcpOutcome);
+  const saveCmd = (() => {
+    try {
+      jarvisCli(["save"]);
+      return "ran";
+    } catch (e) {
+      return String(e.stderr ?? e.message);
+    }
+  })();
+  check("A02", "the command line has no save command", saveCmd.includes("Unknown command save"), saveCmd.trim());
 
   // --- service control from the command line ---
   jarvisCli(["stop"]);
@@ -247,7 +290,8 @@ async function main() {
   check("A14", "uninstall stops and removes the service", healthGone && !agentLoaded() && !existsSync(join(PREFIX, "app")));
   check("A14", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
   check("A14", "uninstall removes exactly the hooks Jarvis added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
-  check("A14", "uninstall removes the skills Jarvis added", !existsSync(skillsDir) || readdirSync(skillsDir).length === 0, existsSync(skillsDir) ? readdirSync(skillsDir).join(", ") : "");
+  const mcpAfterUninstall = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers;
+  check("A14", "uninstall removes the MCP server Jarvis added to Claude Code", mcpAfterUninstall === undefined, JSON.stringify(mcpAfterUninstall));
   sh(artifact(TO));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;

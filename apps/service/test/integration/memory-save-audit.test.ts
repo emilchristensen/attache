@@ -29,7 +29,7 @@ function cli(args: string[], input = "", env: Record<string, string> = {}): Prom
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/notes", { type: "project", title: "Orion migration", state: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }] });
+  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
@@ -100,18 +100,20 @@ describe("saving from a coding agent", () => {
 describe("auditing memory", () => {
   it("flags stale, unsourced and missing-source facts, and points at newer evidence", async () => {
     // A fact dated long ago, from a capture that has since been deleted.
-    await svc.post("/memory/notes", { type: "project", title: "Helios budget", state: [{ subject: "Budget", value: "40k EUR" }] });
+    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Helios budget", facts: [{ subject: "Budget", value: "40k EUR" }] }] });
     const rel = "memory/projects/helios-budget.md";
     const file = join(svc.dataDir, rel);
     writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\): 40k EUR/, "**Budget** (2026-01-05): 40k EUR — source: (capture: evidence/captures/2026-01-05-gone.md, observed 2026-01-05)"));
     svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, rel);
     // Newer evidence that disagrees.
-    const cap = await svc.post("/memory/capture", { text: "Helios budget was cut to 25k EUR at the steering meeting.", title: "Helios steering", source: { kind: "user", ref: "meeting" } });
+    const captured = "evidence/captures/helios-steering.md";
+    writeFileSync(join(svc.dataDir, captured), `---\ntype: capture\ntitle: Helios steering\ncaptured_at: ${new Date().toISOString()}\n---\n# Helios steering\n\n> Helios budget was cut to 25k EUR at the steering meeting.\n`);
+    svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, captured);
     const audit = await svc.get(`/memory/audit?staleDays=60`);
     const helios = audit.findings.find((f: any) => f.relPath === rel);
     expect(helios.entries[0]).toMatchObject({ subject: "Budget", value: "40k EUR", date: "2026-01-05" });
     expect(helios.entries[0].flags).toEqual(expect.arrayContaining(["stale", "missing-source"]));
-    expect(helios.entries[0].newerEvidence.map((e: any) => e.relPath)).toContain(cap.capture.relPath);
+    expect(helios.entries[0].newerEvidence.map((e: any) => e.relPath)).toContain(captured);
     // Notes created without a source are unsupported, not contradicted.
     const orion = audit.findings.find((f: any) => f.relPath === "memory/projects/orion-migration.md");
     expect(orion.entries.find((e: any) => e.subject === "Owner").flags).toEqual(["unsourced"]);
@@ -166,42 +168,43 @@ describe("auditing memory", () => {
   });
 });
 
-describe("the jarvis save and audit commands", () => {
-  it("save pairs itself on first use, reads JSON from stdin and detects the agent session", async () => {
-    const items = { items: [{ action: "create", type: "note", title: "Pairing the CLI", facts: [{ subject: "How", value: "The CLI pairs itself and keeps its token in the state folder" }] }] };
-    const r = await cli(["save"], JSON.stringify(items), { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "cli-sess" });
+describe("the terminal commands", () => {
+  it("has no save command, because a save is confirmed in a Harness", async () => {
+    const r = await cli(["save"], JSON.stringify({ items: [{ action: "create", type: "note", title: "From a shell", facts: [{ subject: "How", value: "x" }] }] }));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("Unknown command save");
+    expect(r.stderr).not.toMatch(/Commands: .*\bsave\b/);
+    expect(existsSync(join(svc.dataDir, "memory/notes/from-a-shell.md"))).toBe(false);
+  });
+
+  it("search finds curated memory from a terminal", async () => {
+    const r = await cli(["search", "Orion cutover", "--json"]);
+    expect(r.status).toBe(0);
+    expect((JSON.parse(r.stdout) as Array<{ file: string }>).some((h) => h.file === join(svc.dataDir, "memory/projects/orion-migration.md"))).toBe(true);
+  });
+
+  it("audit pairs itself on first use and keeps its token in the state folder", async () => {
+    const r = await cli(["audit", "--json"]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("Created Pairing the CLI (1 fact, 0 events)");
-    expect(r.stdout).toContain(join(svc.dataDir, "memory/notes/pairing-the-cli.md"));
-    expect(readFileSync(join(svc.dataDir, "memory/notes/pairing-the-cli.md"), "utf8")).toContain("ref: claude-code/cli-sess");
-    const token = join(svc.stateDir, "cli-token");
-    expect(accessOutsideOwner(token)).toEqual([]);
+    expect(accessOutsideOwner(join(svc.stateDir, "cli-token"))).toEqual([]);
     const clients = svc.app.db.prepare("select name, kind from clients where revoked_at is null").all() as Array<{ name: string; kind: string }>;
     expect(clients).toContainEqual({ name: "Jarvis CLI", kind: "cli" });
   });
 
-  it("save re-pairs when its token was revoked", async () => {
+  it("audit re-pairs when its token was revoked", async () => {
     svc.app.db.prepare("update clients set revoked_at = ? where name = 'Jarvis CLI'").run(new Date().toISOString());
-    const r = await cli(["save", "--json"], JSON.stringify({ items: [{ action: "update", path: "memory/notes/pairing-the-cli.md", events: ["Token revoked and re-paired"] }] }));
+    const r = await cli(["audit", "--json"]);
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout).saved[0]).toMatchObject({ action: "updated", events: 1 });
+    expect(JSON.parse(r.stdout).findings.length).toBeGreaterThan(0);
   });
 
-  it("save explains invalid input before contacting the service", async () => {
-    const bad = await cli(["save"], JSON.stringify({ items: [{ action: "create", type: "idea", title: "x", facts: [] }] }));
-    expect(bad.status).toBe(1);
-    expect(bad.stderr).toContain("do not match what Jarvis saves");
-    expect((await cli(["save"], "not json")).stderr).toContain("not valid JSON");
-    expect((await cli(["save"], "")).stderr).toContain("Nothing to save");
-  });
-
-  it("save says how to start Jarvis when it is not running", async () => {
+  it("audit says how to start Jarvis when it is not running", async () => {
     const rt = join(svc.stateDir, "runtime.json");
     const saved = readFileSync(rt, "utf8");
     writeFileSync(rt, JSON.stringify({ ...JSON.parse(saved), pid: 999_999 }));
     try {
-      const r = await cli(["save"], JSON.stringify({ items: [{ action: "update", path: "memory/notes/pairing-the-cli.md", events: ["x"] }] }));
+      const r = await cli(["audit"]);
       expect(r.status).toBe(1);
       expect(r.stderr).toContain("jarvis start");
     } finally {
