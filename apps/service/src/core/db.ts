@@ -154,6 +154,11 @@ export const MIGRATIONS: readonly string[] = [
   drop table if exists messages;
   drop table if exists conversations;
   `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
 ];
 
 export function openDb(file: string): Db {

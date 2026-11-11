@@ -10,6 +10,7 @@ import { registerPrompts } from "./prompts.ts";
 import { registerSaveTool } from "./save-tool.ts";
 import type { ServerContext } from "./harness.ts";
 import { registerWrapUpTool } from "./wrap-up-tool.ts";
+import { unverifiedLabel } from "../memory/review-date.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -27,17 +28,30 @@ const PassageShape = z.object({
   heading: z.string().nullable(),
   title: z.string(),
   text: z.string(),
+  review: z.string().nullable().describe("A current fact's Review date (YYYY-MM-DD): the day after which it should be checked again."),
+  unverified: z.boolean().describe("True for a current fact past its Review date: check it before relying on it."),
 });
 
-const NoteShape = { path: z.string(), title: z.string(), startLine: z.number().int(), endLine: z.number().int(), totalLines: z.number().int(), text: z.string() };
+const NoteShape = {
+  path: z.string(),
+  title: z.string(),
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+  totalLines: z.number().int(),
+  text: z.string(),
+  unverified: z.array(z.object({ subject: z.string(), review: z.string(), line: z.number().int() })).describe("Current facts in the returned lines that are past their Review date."),
+};
 
 function renderPassages(query: string, passages: Passage[]): string {
   if (!passages.length) return `No passages in the Brain match "${query}".`;
-  return passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
+  return passages
+    .map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}${p.unverified && p.review ? ` · ${unverifiedLabel(p.review)}` : ""}\n${p.text.replace(/^/gm, "    ")}`)
+    .join("\n\n");
 }
 
 function renderNote(n: NoteText): string {
-  return `${n.path} · ${n.title} · lines ${n.startLine}-${n.endLine} of ${n.totalLines}\n\n${n.text}`;
+  const unverified = n.unverified.length ? `\nUnverified (past their Review date): ${n.unverified.map((u) => `${u.subject} (review ${u.review}, line ${u.line})`).join("; ")}` : "";
+  return `${n.path} · ${n.title} · lines ${n.startLine}-${n.endLine} of ${n.totalLines}${unverified}\n\n${n.text}`;
 }
 
 /** The MCP server a Harness talks to, over any transport. */
@@ -47,7 +61,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
     "search",
     {
       title: "Search the Brain",
-      description: "Search the owner's Brain by words. Returns passages with their path, line range, area, section kind (current state, history or body) and note title. Only passages from area `memory` state current facts; `evidence` records what was observed or said, such as session logs and wrap-ups. Old chat archives and raw session transcripts are left out; session summaries are included.",
+      description: "Search the owner's Brain by words. Returns passages with their path, line range, area, section kind (current state, history or body) and note title. A current fact past its Review date is marked unverified: it may no longer be true, so check it before relying on it. Only passages from area `memory` state current facts; `evidence` records what was observed or said, such as session logs and wrap-ups. Old chat archives and raw session transcripts are left out; session summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
       outputSchema: { passages: z.array(PassageShape) },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -65,7 +79,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
     "read",
     {
       title: "Read a note",
-      description: "Read a note from the Brain, whole or only a line range. Pass a path exactly as `search` returned it; line numbers are 1-based and inclusive.",
+      description: "Read a note from the Brain, whole or only a line range. Pass a path exactly as `search` returned it; line numbers are 1-based and inclusive. Current facts past their Review date are listed as unverified.",
       inputSchema: {
         path: z.string().trim().min(1).max(1000).describe("The note's path from a search result, e.g. memory/projects/orion.md."),
         startLine: z.number().int().min(1).optional().describe("First line to return (default 1)."),

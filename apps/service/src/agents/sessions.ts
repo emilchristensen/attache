@@ -333,7 +333,7 @@ export class AgentSessions {
       const state = parseStateEntries(this.app.memory.read(relPath));
       const repositories = listedRepositories(state);
       if (!repositories.length) return [];
-      const project = { title, path: join(this.app.memory.dataRoot!, relPath), state: state.map(({ subject, date, value }) => ({ subject, date, value })) };
+      const project = { title, path: join(this.app.memory.dataRoot!, relPath), state: state.map(({ subject, date, review, value }) => ({ subject, date, ...(review ? { review } : {}), value })) };
       return [{ slug: projectSlug(relPath), repositories, text: buildSessionContext({ ...base, project }) }];
     } catch (e) {
       this.app.log.warn("could not build a project's session context", { relPath, error: (e as Error).message });
@@ -341,11 +341,11 @@ export class AgentSessions {
     }
   }
 
-  /** A note's first current fact, so the index says what each note is about. */
-  private gist(relPath: string): { gist?: string } {
+  /** A note's first current fact, so the index says what each note is about, with its Review date. */
+  private gist(relPath: string): { gist?: string; gistReview?: string } {
     try {
       const first = parseStateEntries(this.app.memory.read(relPath))[0];
-      return first ? { gist: first.value.replace(/\s+/g, " ").trim() } : {};
+      return first ? { gist: first.value.replace(/\s+/g, " ").trim(), ...(first.review ? { gistReview: first.review } : {}) } : {};
     } catch {
       return {};
     }

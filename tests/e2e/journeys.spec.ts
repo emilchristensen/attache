@@ -1,5 +1,5 @@
 import { test, expect, type Page, type ConsoleMessage, type BrowserContext } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -401,6 +401,27 @@ test("recent saves: each save shows its Harness and session, and one click rever
   expect(existsSync(join(stack.dataDir, "memory/notes/quasar-pricing-idea.md"))).toBe(false);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Quasar");
   await expect(page.getByText("No matches")).toBeVisible();
+});
+
+test("review dates: a fact shows its Review date, and one past it is marked unverified", async () => {
+  const rel = "memory/projects/helix-rollout.md";
+  const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  harnessSave(stack, [{ action: "create", type: "project", title: "Helix rollout", facts: [{ subject: "Status", value: "Helix pilot in two stores", review: inAMonth }, { subject: "Budget", value: "Helix budget is 40k EUR" }] }], { agent: "claude-code", session: "sess-e2e-review" });
+  // An edit by hand: the budget was due for review long ago.
+  const file = join(stack.dataDir, rel);
+  writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Budget** (2026-01-10, review 2026-02-01)"));
+
+  const page = await open(`/memory?path=${encodeURIComponent(rel)}&tab=project`);
+  const status = page.locator('[data-subject="Status"]');
+  const budget = page.locator('[data-subject="Budget"]');
+  await expect(status).toContainText(`review after ${inAMonth}`);
+  await expect(status).not.toContainText("unverified");
+  await expect(budget).toContainText("unverified");
+  await expect(budget).toContainText("review was due 2026-02-01");
+
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Helix budget");
+  const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
+  await expect(hit).toContainText("unverified");
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
