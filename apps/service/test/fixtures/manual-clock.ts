@@ -36,6 +36,14 @@ export class ManualClock implements Clock {
     this.timers = this.timers.filter((t) => t.id !== (handle as unknown as number));
   }
 
+  /**
+   * Move time forward by `ms` without running timers, as when a Machine was
+   * asleep: what fell due runs at the next `advance`, once.
+   */
+  skip(ms: number): void {
+    this.time += ms;
+  }
+
   /** Move time forward by `ms`, running every timer that falls due on the way. */
   async advance(ms: number): Promise<void> {
     const end = this.time + ms;

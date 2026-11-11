@@ -5,6 +5,8 @@
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
 
+import { noteMergeRule } from "./note-merge/rule.ts";
+
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
   /** Null when a commit does not say (made outside Jarvis). */
@@ -89,5 +91,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [noteMergeRule()], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

@@ -93,8 +93,8 @@ export class App {
     this.machine = new MachineStore(this.db);
     this.machine.get();
     this.autoAccept = new AutoAcceptStore(this.db);
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.clock = opts.clock ?? systemClock;
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite(), now: () => this.clock.now() });
     this.replication = new Replication({
       db: this.db,
       log: this.log,
