@@ -200,7 +200,12 @@ Ingest parses each agent's transcript format down to user and assistant text, dr
 That job asks the model for durable decisions and lessons, appends one entry per session (or per continuation) to the day's session log, and records how many turns are summarised so a compaction followed by the end adds only new turns.
 Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
 
-At session start the hook prints `state/agents/session-context.md`, which the service rewrites when memory changes: identity, an index of memory titles, the last two session logs, and the `jarvis search` command for deeper recall from the agent's shell.
+At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
+The global context, `state/agents/session-context.md`, holds identity, an index of memory titles, the last two session logs, and the `jarvis search` command for deeper recall from the agent's shell.
+A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
+For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the global context with that project's current state first, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
+The hook reads the remotes of the session's folder from the repository's own git config, following a worktree's `gitdir` and `commondir` (`agents/git-remotes.ts`), runs no `git` process, and prints the first matching project's file, or the global one.
+A save that sets a project's `Repositories` fact to anything that is not a list of repositories is refused.
 Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Jarvis's own model calls run with `--setting-sources ""`, so neither recurses.
 Turning the feature off disconnects every agent; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first.

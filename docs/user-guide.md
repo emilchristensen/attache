@@ -99,6 +99,10 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  A session started inside one of a project's repositories also gets that project's current state first.
+  A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
+  The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
+  Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/jarvis-memory.md`.
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
