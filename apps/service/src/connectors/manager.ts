@@ -17,7 +17,7 @@ import { scanDeadlines } from "./vault.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
 
-export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"];
+export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"];
 
 /** Where a connection's secret lives in the secret store. Replication's credential helper reads the GitHub token by it. */
 export function connectionSecretKey(connectionId: string, name: string): string {
@@ -348,9 +348,9 @@ export class ConnectionManager {
     // A disconnect during the sync wins: store nothing and do not revive the connection.
     const current = this.record(id);
     if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
-      this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or sync cancelled' where id = ?").run(nowIso(), runId);
-      if (signal?.aborted) throw new RemoteError("Sync cancelled", "error");
-      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the sync" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [] }, observations: 0 };
+      this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or Source refresh cancelled' where id = ?").run(nowIso(), runId);
+      if (signal?.aborted) throw new RemoteError("Source refresh cancelled", "error");
+      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [] }, observations: 0 };
     }
     const attention = this.store(current, result, previous);
     const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
@@ -367,7 +367,7 @@ export class ConnectionManager {
 
   private async syncRemote(rec: ConnectionRecord, signal?: AbortSignal): Promise<SyncResult> {
     const a = this.adapter(rec.kind);
-    if (!a.sync) throw new RemoteError(`${a.definition.label} has nothing to sync`, "not_configured");
+    if (!a.sync) throw new RemoteError(`${a.definition.label} has nothing to refresh`, "not_configured");
     return a.sync(this.context(rec, signal));
   }
 

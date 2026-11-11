@@ -45,9 +45,10 @@ export function chunkSection(section: Section): { kind: SectionKind; chunks: Chu
 }
 
 /**
- * One piece per current fact, cited at its own line. The fact's source is
- * provenance, not content: it stays in the cited text but is not searchable,
- * so a query never matches a fact because of the file it was imported from.
+ * One piece per current fact, cited at its own line. The fact's source and
+ * Review date are provenance, not content: they stay in the cited text but are
+ * not searchable, so a query never matches a fact because of the file it was
+ * imported from or the day it is due for review.
  * Lines that are not facts (prose a person typed under the heading) are kept as ordinary pieces.
  */
 function splitState(text: string, firstLine: number): Chunk[] {
@@ -71,7 +72,7 @@ function splitState(text: string, firstLine: number): Chunk[] {
     if (entry) {
       flushFact();
       flushLoose();
-      fact = { lines: [line], start: lineNo, search: formatStateEntry({ ...entry, source: undefined }), subject: entry.subject };
+      fact = { lines: [line], start: lineNo, search: formatStateEntry({ ...entry, source: undefined, review: undefined }), subject: entry.subject };
     } else if (fact && /^\s+\S/.test(line)) {
       // Indented lines under a fact (sub-bullets added by hand) belong to it.
       fact.lines.push(line);
