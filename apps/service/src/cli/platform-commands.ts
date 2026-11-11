@@ -6,6 +6,7 @@ import { currentOs } from "../platform/os.ts";
 import { platformLocations, type PlatformLocations } from "../platform/locations.ts";
 import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } from "../platform/harness-locations.ts";
 import { serviceManagerFor } from "../platform/service-manager/index.ts";
+import { superviseService } from "../platform/service-manager/supervisor.ts";
 import { clearSecrets, createSecretStore } from "../platform/secret-store/index.ts";
 import { notifierFor } from "../platform/notifier/index.ts";
 import { commandWrappers, type WrapperSpec } from "../platform/wrapper.ts";
@@ -22,18 +23,57 @@ export interface PlatformCliIo {
   defaultPort: number;
 }
 
-const instance = () => process.env.JARVIS_INSTANCE ?? "default";
+/** Instance names go into service names, task names and wrappers, so they keep to letters, digits, `.`, `_` and `-`. */
+const INSTANCE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function instance(): string {
+  const name = process.env.JARVIS_INSTANCE ?? "default";
+  if (!INSTANCE_NAME.test(name)) throw new Error(`JARVIS_INSTANCE must be letters, digits, ".", "_" or "-", not ${JSON.stringify(name)}`);
+  return name;
+}
+
+/** A TCP port from the command line; 0 (any free port) only where `anyPort` allows it. */
+function portNumber(value: string | undefined, anyPort: boolean): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < (anyPort ? 0 : 1) || port > 65535) throw new Error(`--port must be a TCP port number, not ${value}`);
+  return port;
+}
 
 /** Install prefix, state folder and port from the flags, falling back to this platform's defaults. */
 function installSpec(io: PlatformCliIo, loc: PlatformLocations): WrapperSpec {
   const installPrefix = io.arg("prefix") ?? loc.installPrefix;
-  const port = Number(io.arg("port") ?? process.env.JARVIS_PORT ?? io.defaultPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error(`--port must be a TCP port number, not ${io.arg("port")}`);
+  const port = portNumber(io.arg("port") ?? process.env.JARVIS_PORT ?? String(io.defaultPort), false);
   return { installPrefix, stateDir: io.arg("state-dir") ?? process.env.JARVIS_STATE_DIR ?? loc.stateDir, instance: instance(), port };
 }
 
-/** `jarvis start|stop` and `jarvis service install|start|stop|uninstall|status`. */
+const RUN_USAGE = "Usage: jarvis service run --port <n> --state-dir <path> --instance <name> --home <path> [--local-app-data <path>] [--app-data <path>]";
+
+/** `jarvis service run`, what the Windows logon task starts: keeps `jarvis serve` running until it is stopped. */
+function runSupervised(io: PlatformCliIo): Promise<void> {
+  const need = (name: string) => {
+    const value = io.arg(name);
+    if (!value) throw new Error(RUN_USAGE);
+    return value;
+  };
+  const script = process.argv[1];
+  if (!script) throw new Error("jarvis service run cannot tell which script it runs from");
+  process.env.JARVIS_INSTANCE = need("instance");
+  const localAppData = io.arg("local-app-data");
+  const appData = io.arg("app-data");
+  return superviseService({
+    script,
+    port: portNumber(need("port"), true),
+    stateDir: need("state-dir"),
+    instance: instance(),
+    home: need("home"),
+    ...(localAppData ? { localAppData } : {}),
+    ...(appData ? { appData } : {}),
+  });
+}
+
+/** `jarvis start|stop` and `jarvis service install|start|stop|uninstall|status|run`. */
 export async function serviceCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
+  if (sub === "run") return runSupervised(io);
   const loc = platformLocations();
   const manager = serviceManagerFor(loc, instance());
   switch (sub) {

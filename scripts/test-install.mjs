@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
  * Installation, upgrade, backup/restore and uninstall checks (A02, A14) against
- * the built release artifacts for this computer (macOS on Apple silicon or
- * Linux on x86_64), in a clean temporary profile (fresh HOME, a minimal PATH
- * with no developer tools, its own service name and port).
+ * release artifacts built for this computer (macOS on Apple silicon, Linux or
+ * Windows on x86_64), in a clean temporary profile (fresh home folder whose
+ * name has a space and the letters æøå, a minimal PATH with no developer
+ * tools, its own service name and port).
  * Writes test-results/install-results.json. Usage:
  *   node scripts/test-install.mjs [--from 0.1.0 --to 0.1.1] [--port 7690]
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { installTestPlatform } from "./install-test/platform.mjs";
@@ -20,11 +21,14 @@ const FROM = arg("from", "0.1.0");
 const TO = arg("to", "0.1.1");
 const PORT = Number(arg("port", "7690"));
 const INSTANCE = `installtest${process.pid}`;
-const HOME = mkdtempSync(join(tmpdir(), "jarvis-clean-home-"));
+// The real path, as the installed service reports its own (no /var symlink on macOS, no 8.3 short names on Windows).
+const HOME = realpathSync.native(mkdtempSync(join(tmpdir(), "jarvis clean home æøå-")));
 const P = installTestPlatform(HOME, INSTANCE);
 const PREFIX = P.prefix;
 const STATE = P.state;
-const DATA = join(HOME, "Documents/Jarvis");
+const DATA = join(HOME, "Documents", "Jarvis");
+const NODE = P.runtime(PREFIX);
+const SERVICE = join(PREFIX, "current", "service", "jarvis-service.mjs");
 const results = [];
 const check = (id, name, ok, detail = "") => {
   results.push({ id, name, ok: !!ok, detail });
@@ -32,9 +36,12 @@ const check = (id, name, ok, detail = "") => {
   if (!ok) process.exitCode = 1;
 };
 const artifact = (v) => P.artifact(ROOT, v);
-const cleanEnv = { HOME, PATH: "/usr/bin:/bin:/usr/sbin:/sbin", JARVIS_PORT: String(PORT), JARVIS_INSTANCE: INSTANCE, JARVIS_NO_OPEN: "1", TMPDIR: tmpdir(), USER: process.env.USER ?? "" };
-const sh = (file, args = [], env = cleanEnv) => execFileSync("/bin/sh", [file, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-const jarvisCli = (args, extraEnv = {}) => execFileSync(join(P.binDir, "jarvis"), args, { env: { ...cleanEnv, ...extraEnv }, encoding: "utf8" });
+const cleanEnv = P.cleanEnv({ JARVIS_PORT: String(PORT), JARVIS_INSTANCE: INSTANCE, JARVIS_NO_OPEN: "1", TMPDIR: tmpdir(), USER: process.env.USER ?? "" });
+/** Run an installer or command-line wrapper as the owner would from a terminal. */
+const sh = (file, args = [], env = cleanEnv) => P.runScript(file, args, env);
+const jarvisCli = (args, extraEnv = {}) => P.runScript(P.command(P.binDir, "jarvis"), args, { ...cleanEnv, ...extraEnv });
+/** The installed release's own runtime and service, without a wrapper in between. */
+const installed = (args, env = cleanEnv) => execFileSync(NODE, [SERVICE, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The user's own Claude Code settings, with a hook of their own, from before Jarvis existed.
 const CLAUDE_SETTINGS = join(HOME, ".claude/settings.json");
@@ -121,15 +128,16 @@ async function mcpSave(entry, items, sessionEnv) {
   }
 }
 
-/** Run the command Jarvis registered for a Claude Code hook event, as Claude Code does: a login shell, JSON on stdin. */
+/** Run the command Jarvis registered for a Claude Code hook event, as Claude Code does: through its shell, JSON on stdin. */
 function runClaudeHook(event, input) {
   const s = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"));
   const cmd = s.hooks[event].flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook")).command;
-  return execFileSync("/bin/sh", ["-lc", cmd], { input: JSON.stringify(input), env: cleanEnv, encoding: "utf8" });
+  return P.runHook(cmd, JSON.stringify(input), cleanEnv);
 }
 
 async function main() {
-  for (const v of [FROM, TO]) if (!existsSync(artifact(v))) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target], { stdio: "inherit" });
+  // Always from the current source: a release left over from an earlier build would test old code.
+  for (const v of [FROM, TO]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target], { stdio: "inherit" });
   const machineBefore = P.machineFingerprint();
   console.log(`Clean profile HOME=${HOME} service=${P.serviceName} port=${PORT}`);
   for (const [path, text] of Object.entries(OWNER_FILES)) {
@@ -154,9 +162,9 @@ async function main() {
   const setupVisible = await page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
   check("A02", "the pairing URL opens first-run setup in the browser", setupVisible);
   await browser.close();
-  check("A02", `service runs under the user's ${P.os === "macos" ? "launchd session" : "systemd user manager"}`, P.loaded(), P.serviceName);
-  check("A02", "service starts at login", P.startsAtLogin(), P.definition);
-  check("A02", "bundled runtime used (no system Node needed)", readFileSync(P.definition, "utf8").includes(`${PREFIX}/current/runtime/node`));
+  check("A02", `service runs under the user's ${P.serviceKind}`, P.loaded(), P.serviceName);
+  check("A02", "service starts at login", P.startsAtLogin(), P.definition ?? P.serviceName);
+  check("A02", "bundled runtime used (no system Node needed)", P.runsBundledRuntime(PREFIX));
 
   // Configure a notes-only workspace with some data, in a data folder that already holds the owner's notes.
   let token = await pairToken();
@@ -170,7 +178,8 @@ async function main() {
   check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
   const hookCmds = JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")).hooks);
-  check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && hookCmds.includes(`${PREFIX}/current/runtime/node`) && hookCmds.includes(`${PREFIX}/current/service/jarvis-agent-hook.mjs`) && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
+  const inCommand = (...parts) => hookCmds.includes(P.commandPath(join(PREFIX, ...parts)));
+  check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && inCommand("current", "runtime", "node") && inCommand("current", "service", "jarvis-agent-hook.mjs") && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
   const cfgBefore = (await http("GET", "/config", null, token)).body.config;
 
   // --- A02: the service manager brings the service back after a crash ---
@@ -236,9 +245,8 @@ async function main() {
 
   // --- the MCP server Jarvis registered runs the installed CLI, with no jarvis on PATH, and saves what the owner confirms ---
   const mcpEntry = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers?.jarvis;
-  // Node reports its own path with symlinks resolved, so the temporary home's /var may show as /private/var.
-  const viaCurrent = (p, rest) => typeof p === "string" && p.endsWith(`${PREFIX}/current/${rest}`) && !p.includes("/app/");
-  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, "runtime/node") && viaCurrent(mcpEntry.args[0], "service/jarvis-service.mjs") && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
+  const viaCurrent = (p, expected) => p === expected && !/[\\/]app[\\/]/.test(p);
+  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, NODE) && viaCurrent(mcpEntry.args[0], SERVICE) && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
   const mcpItems = [{ action: "create", type: "decision", title: "The MCP server runs the installed CLI", facts: [{ subject: "Decision", value: "Harnesses start the bundled node and service, so the server needs nothing on PATH" }] }];
   let mcpOutcome = "";
   try {
@@ -270,16 +278,16 @@ async function main() {
   check("A14", "backup archive created", existsSync(backup.path) && backup.bytes > 0 && backup.manifest.credentialsIncluded === false, backup.path);
   const freshState = mkdtempSync(join(tmpdir(), "jarvis-restored-state-"));
   const freshData = join(mkdtempSync(join(tmpdir(), "jarvis-restored-data-")), "Jarvis");
-  const restored = JSON.parse(execFileSync(join(PREFIX, "current/bin/jarvis"), ["restore", backup.path, "--state-dir", freshState, "--data-folder", freshData], { env: { ...cleanEnv, JARVIS_STATE_DIR: freshState, JARVIS_CREDENTIAL_STORE: "file" }, encoding: "utf8" }));
+  const restored = JSON.parse(installed(["restore", backup.path, "--state-dir", freshState, "--data-folder", freshData], { ...cleanEnv, JARVIS_STATE_DIR: freshState, JARVIS_CREDENTIAL_STORE: "file" }));
   const restorePort = PORT + 1;
-  const svc = spawn(join(PREFIX, "current/bin/jarvis"), ["serve", "--state-dir", freshState, "--port", String(restorePort)], { env: { ...cleanEnv, JARVIS_STATE_DIR: freshState, JARVIS_WEB_DIR: join(PREFIX, "current/web"), JARVIS_CREDENTIAL_STORE: "file", JARVIS_INSTANCE: `${INSTANCE}r` }, stdio: "ignore" });
+  const svc = spawn(NODE, [SERVICE, "serve", "--state-dir", freshState, "--port", String(restorePort)], { env: { ...cleanEnv, JARVIS_STATE_DIR: freshState, JARVIS_WEB_DIR: join(PREFIX, "current", "web"), JARVIS_CREDENTIAL_STORE: "file", JARVIS_INSTANCE: `${INSTANCE}r` }, stdio: "ignore" });
   let restoredOk = false;
   try {
     for (let i = 0; i < 120 && !restoredOk; i++) {
       await sleep(250);
       restoredOk = await fetch(`http://127.0.0.1:${restorePort}/api/v1/health`).then((r) => r.ok, () => false);
     }
-    const code = JSON.parse(execFileSync(join(PREFIX, "current/bin/jarvis"), ["pair", "--state-dir", freshState, "--json"], { env: { ...cleanEnv, JARVIS_PORT: String(restorePort) }, encoding: "utf8" })).code;
+    const code = JSON.parse(installed(["pair", "--state-dir", freshState, "--json"], { ...cleanEnv, JARVIS_PORT: String(restorePort) })).code;
     const tok = (await (await fetch(`http://127.0.0.1:${restorePort}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "cli" }) })).json()).token;
     const get = async (p) => (await fetch(`http://127.0.0.1:${restorePort}/api/v1${p}`, { headers: { authorization: `Bearer ${tok}` } })).json();
     const rcfg = (await get("/config")).config;
@@ -287,7 +295,7 @@ async function main() {
     check("A14", "restore into a fresh profile brings back config and data", restoredOk && rcfg.setupCompleted && rcfg.schedules.syncEveryMinutes === 55 && rcfg.dataFolder === freshData && rhits.some((h) => h.text.includes("Cap Helios at 40k")), `dataFolder=${restored.dataFolder}`);
     const again = (() => {
       try {
-        execFileSync(join(PREFIX, "current/bin/jarvis"), ["restore", backup.path, "--state-dir", freshState], { env: cleanEnv, stdio: "pipe" });
+        installed(["restore", backup.path, "--state-dir", freshState]);
         return false;
       } catch {
         return true;
@@ -302,7 +310,7 @@ async function main() {
   }
 
   // --- A14: uninstall keeps data; reinstall picks it up; delete-data removes everything ---
-  sh(join(P.binDir, "jarvis-uninstall"));
+  sh(P.command(P.binDir, "jarvis-uninstall"));
   const healthGone = await http("GET", "/health").then(() => false, () => true);
   check("A14", "uninstall stops and removes the service", healthGone && !P.loaded() && !P.known() && !existsSync(join(PREFIX, "app")));
   check("A14", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
@@ -313,7 +321,7 @@ async function main() {
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
   check("A14", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
-  sh(join(P.binDir, "jarvis-uninstall"), ["--delete-data", "--yes"]);
+  sh(P.command(P.binDir, "jarvis-uninstall"), ["--delete-data", "--yes"]);
   const remaining = existsSync(DATA) ? readdirSync(DATA).sort() : [];
   check("A14", "uninstall --delete-data removes service state and only what Jarvis created in the data folder", !existsSync(STATE) && !P.loaded() && JSON.stringify(remaining) === JSON.stringify(["Existing note.md", "README.md"]), `left: ${remaining.join(", ")}`);
   const homeAfter = homeFiles();

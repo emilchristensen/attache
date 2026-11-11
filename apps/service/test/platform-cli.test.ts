@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { execFileSync, execSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
@@ -126,29 +126,45 @@ describe("the command-line wrappers the installer puts on PATH", () => {
     expect(existsSync(join(bin, "jarvis")) || existsSync(join(bin, "jarvis-uninstall"))).toBe(false);
   });
 
-  it.runIf(process.platform === "win32")("pin `jarvis.cmd` to the install and let `jarvis-uninstall.cmd` run the installed PowerShell uninstaller", () => {
-    // cmd.exe reads a batch file in the console code page, so non-ASCII letters in these paths are left to the Windows installer (#38).
-    const home = tempDir("jarvis-wrapper-home-");
-    const prefix = join(home, "Jarvis Install");
-    // A stand-in release that reports how it was called.
+  it.runIf(process.platform === "win32")("pin `jarvis.cmd` to the install and let `jarvis-uninstall.cmd` run the installed PowerShell uninstaller, in a folder named with æøå", () => {
+    const home = tempDir("jarvis-wrapper-home æøå-");
+    const prefix = join(home, "AppData", "Local", "Jarvis");
+    const bin = join(prefix, "bin");
+    // A stand-in release that records how it was called. It reports through a UTF-8 file, because
+    // cmd.exe and PowerShell write to a pipe in the console's code page.
+    const reports = join(home, "reports.jsonl");
+    const reporter = join(prefix, "current", "report.cjs");
     mkdirSync(join(prefix, "current", "bin"), { recursive: true });
-    writeFileSync(join(prefix, "current", "bin", "jarvis.cmd"), "@echo state=%JARVIS_STATE_DIR% instance=%JARVIS_INSTANCE% port=%JARVIS_PORT% args=%*\r\n");
-    writeFileSync(join(prefix, "current", "uninstall.ps1"), 'Write-Output "uninstall prefix=$env:JARVIS_PREFIX instance=$env:JARVIS_INSTANCE args=$args"\r\n');
+    writeFileSync(reporter, `const e = process.env; require("node:fs").appendFileSync(${JSON.stringify(reports)}, JSON.stringify({ state: e.JARVIS_STATE_DIR, prefix: e.JARVIS_PREFIX, instance: e.JARVIS_INSTANCE, port: e.JARVIS_PORT, args: process.argv.slice(2) }) + "\\n");\n`);
+    writeFileSync(join(prefix, "current", "bin", "jarvis.cmd"), `@"${process.execPath}" "%~dp0..\\report.cjs" %*\r\n`);
+    writeFileSync(join(prefix, "current", "uninstall.ps1"), `& '${process.execPath}' (Join-Path $PSScriptRoot 'report.cjs') uninstall @args\r\nRemove-Item -LiteralPath (Join-Path $PSScriptRoot '..\\bin\\jarvis-uninstall.cmd')\r\nexit 3\r\n`);
     const env = { USERPROFILE: home, LOCALAPPDATA: join(home, "AppData", "Local"), JARVIS_INSTANCE: "wraptest" };
     const installed = jarvis(["wrappers", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7999"], { env });
     expect(installed.stderr).toBe("");
-    const bin = join(home, "AppData", "Local", "Jarvis", "bin");
     expect(JSON.parse(installed.stdout)).toEqual([join(bin, "jarvis.cmd"), join(bin, "jarvis-uninstall.cmd")]);
+    const files = [join(bin, "jarvis.cmd"), join(bin, "jarvis-uninstall.cmd")];
+    for (const f of files) expect(readFileSync(f, "utf8")).toMatch(/^[\x20-\x7e\r\n]*$/);
 
     // Run as a terminal does, through cmd.exe, with none of Jarvis's variables set.
     const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("JARVIS_")));
-    const run = (file: string, args: string, extra: Record<string, string> = {}) => execSync(`"${file}" ${args}`, { env: { ...clean, ...extra }, encoding: "utf8" });
-    expect(run(join(bin, "jarvis.cmd"), "status --json")).toBe(`state=${join(prefix, "state")} instance=wraptest port=7999 args=status --json\r\n`);
-    expect(run(join(bin, "jarvis.cmd"), "pair", { JARVIS_PORT: "8001" })).toBe(`state=${join(prefix, "state")} instance=wraptest port=8001 args=pair\r\n`);
-    expect(run(join(bin, "jarvis-uninstall.cmd"), "--delete-data")).toBe(`uninstall prefix=${prefix} instance=wraptest args=--delete-data\r\n`);
+    const run = (file: string, args: string, extra: Record<string, string> = {}) => spawnSync(`"${file}" ${args}`, { env: { ...clean, ...extra }, encoding: "utf8", shell: true });
+    const lastReport = () => JSON.parse(readFileSync(reports, "utf8").trim().split("\n").at(-1)!);
+    expect(run(files[0]!, "status --json").status).toBe(0);
+    expect(lastReport()).toEqual({ state: join(prefix, "state"), instance: "wraptest", port: "7999", args: ["status", "--json"] });
+    run(files[0]!, "pair", { JARVIS_PORT: "8001" });
+    expect(lastReport()).toMatchObject({ state: join(prefix, "state"), port: "8001", args: ["pair"] });
 
-    jarvis(["wrappers", "uninstall"], { env });
-    expect(existsSync(join(bin, "jarvis.cmd")) || existsSync(join(bin, "jarvis-uninstall.cmd"))).toBe(false);
+    // The uninstaller removes the wrapper that started it; its exit status still comes through.
+    const uninstall = run(files[1]!, "--delete-data");
+    // The batch file's own variables end with it, so the install, its state folder and instance go as options.
+    const { args } = lastReport();
+    expect(args).toEqual(["uninstall", "--prefix", expect.any(String), "--state-dir", expect.any(String), "--instance", "wraptest", "--delete-data"]);
+    expect([resolve(args[2]), resolve(args[4])]).toEqual([prefix, join(prefix, "state")]);
+    expect(uninstall.stderr).toBe("");
+    expect(uninstall.status).toBe(3);
+
+    jarvis(["wrappers", "uninstall", "--prefix", prefix], { env });
+    expect(files.some((f) => existsSync(f))).toBe(false);
   });
 });
 
@@ -164,12 +180,6 @@ describe("clearing stored credentials on uninstall", () => {
 });
 
 describe("the background service", () => {
-  it("explains that Windows cannot run it yet, instead of calling macOS tools", () => {
-    const r = jarvis(["start"], { platform: "win32" });
-    expect(r.stderr).toBe("jarvis: Running Jarvis as a background service is not available on Windows yet. Run `jarvis serve` to start it in this terminal instead.\n");
-    expect(r.status).toBe(1);
-  });
-
   describe.skipIf(process.platform === "win32")("on Linux", () => {
     const linux = (args: string[], env: Record<string, string>, systemctl: { bin: string }) => jarvis(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
 

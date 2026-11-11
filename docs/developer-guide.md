@@ -121,29 +121,37 @@ The owner's real set lives in their Brain; run `jarvis evaluate-recall` against 
 ## Release
 
 ```sh
-node scripts/build-release.mjs --version 0.1.0                      # for this computer
-node scripts/build-release.mjs --version 0.1.0 --target linux-x64   # macos-arm64 or linux-x64, from any host
+node scripts/build-release.mjs --version 0.1.0                        # for this computer
+node scripts/build-release.mjs --version 0.1.0 --target windows-x64   # macos-arm64, linux-x64 or windows-x64
 ```
 
+macOS and Linux build every target; Windows builds only its own, because a Windows file system cannot mark the macOS and Linux programs executable.
 Produces in `release/0.1.0/`:
 
 - `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer for macOS (double-click or `sh`).
 - `Jarvis-Installer-0.1.0-linux-x64.sh` — self-extracting one-step installer for Linux (`sh`).
-- `jarvis-0.1.0-<target>.tar.gz` — the same release as a folder with `install.sh`.
+- `Jarvis-Installer-0.1.0-windows-x64.cmd` — self-extracting one-step installer for Windows (double-click).
+  Its plain-ASCII batch header hands a PowerShell script (as `-EncodedCommand`) the zip's byte offset; the script copies the zip out, unpacks it with .NET and runs `install.ps1`.
+- `jarvis-0.1.0-<target>.tar.gz` (macOS, Linux) or `jarvis-0.1.0-windows-x64.zip` — the same release as a folder with `install.sh`, or `install.cmd` and `install.ps1`.
+  `scripts/zip.mjs` writes the zip, so no host needs a zip tool.
 - `SHA256SUMS`, covering every artifact built into the folder.
 
-Targets are listed in `scripts/release-targets.mjs`.
-The build downloads the official Node runtime of the pinned version for the target from nodejs.org, verifies it against `SHASUMS256.txt`, and bundles it.
-The release carries a `TARGET` file, and `install.sh` refuses to run on any other kind of computer.
+Targets are listed in `scripts/release-targets.mjs`, the one-step installers' headers in `scripts/release-installers.mjs`.
+The build downloads the official Node runtime of the pinned version for the target from nodejs.org (the tarball for macOS and Linux, `win-x64/node.exe` for Windows), verifies it against `SHASUMS256.txt`, and bundles it.
+The release carries a `TARGET` file, and `install.sh` and `install.ps1` refuse to run on any other kind of computer.
+The Windows installer and uninstaller (`installer/install.ps1`, `installer/uninstall.ps1`) are plain ASCII, because Windows PowerShell reads a script without a byte order mark in the legacy code page.
+They switch versions with a directory junction (`current`), which needs no administrator rights, unlike a symbolic link.
 Artifacts are unsigned; notarisation is an external step (see the acceptance report).
 
 ## Install test
 
-`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer if they are missing.
-It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder, with its own service name and port.
+`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source.
+It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
 It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Jarvis as it was.
-What differs per operating system (where the release installs, how to ask launchd or systemd about the service) is in `scripts/install-test/platform.mjs`.
-The CI job `install (ubuntu-latest)` runs it on Linux.
+What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
+The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
+On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.
+The GitHub runner's account is an administrator, so the test cannot show that registering the logon task needs no administrator rights; that is checked by hand on the owner's Windows machine.
 A CI job has no login session, so the job turns on lingering for the runner user to get a systemd user manager.
 
 To run it on Linux from a Mac, use an x86_64 container with systemd as its init, an ordinary user with lingering on (`touch /var/lib/systemd/linger/<user>`), and Google Chrome.

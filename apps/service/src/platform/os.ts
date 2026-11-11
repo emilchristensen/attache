@@ -24,14 +24,3 @@ const LABELS: Readonly<Record<Os, string>> = { macos: "macOS", linux: "Linux", w
 
 /** The name the owner knows the operating system by, for messages. */
 export const osLabel = (os: Os): string => LABELS[os];
-
-/**
- * Thrown when a platform module has no implementation for this operating
- * system yet. Linux and Windows gain theirs in later releases.
- */
-export class NotYetOnPlatformError extends Error {
-  constructor(what: string, os: Os, instead: string) {
-    super(`${what} is not available on ${osLabel(os)} yet. ${instead}`);
-    this.name = "NotYetOnPlatformError";
-  }
-}
