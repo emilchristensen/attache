@@ -347,6 +347,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
     },
     reason: "Vendor review session",
     source: { kind: "agent-session", ref: "claude-code/sess-e2e", label: "Claude Code session in jarvis" },
+    evidence: "Procurement signed the Postmark contract this morning.",
   });
   const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
 
@@ -355,6 +356,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   await expect(card.getByText("Update memory/decisions/vendor-sync.md")).toBeVisible();
   await expect(card.locator('[data-part="fact"]')).toHaveText([/Decision: Use Postmark from January 2027 \(Contract signed\)/, /Owner: Procurement \(Named in the contract\)/]);
   await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
+  await expect(card.locator("[data-evidence]")).toHaveText(/Evidence\s*Procurement signed the Postmark contract this morning\./);
   await expect(card).toContainText("Why: Vendor review session");
   await expect(card).toContainText("Source: Claude Code session in jarvis");
   const newNote = review.locator(`[data-proposal="${create.id}"]`);

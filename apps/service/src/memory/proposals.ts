@@ -9,11 +9,12 @@ import { formatSource, type MemoryChange, type MemoryStore, type SourceRef } fro
 /** The Harness session a Proposal came from, when a Harness made it. */
 export type ProposalOrigin = NonNullable<MemorySaveInput["origin"]>;
 
-/** What a Proposal stores: one whole save item, the evidence it cites, and the Harness session it came from. */
+/** What a Proposal stores: one whole save item, the evidence it cites (and the words it quotes from it), and the Harness session it came from. */
 interface ProposalPayload {
   item: MemorySaveItem;
   source: SourceRef | null;
   origin: ProposalOrigin | null;
+  evidence?: string;
 }
 
 /** Who suggests a set of items, why, and from which evidence. */
@@ -21,6 +22,8 @@ export interface ProposalMeta {
   reason: string;
   source: SourceRef | null;
   origin?: ProposalOrigin | null;
+  /** The words in the evidence the change rests on, quoted from it. */
+  evidence?: string | null;
   proposedBy: string;
 }
 
@@ -36,7 +39,7 @@ interface LegacyPayload {
  * when it is made rather than when the owner clicks Apply.
  */
 export function proposeItem(memory: MemoryStore, input: ProposalInput, proposedBy: string): ProposalView {
-  return proposeItems(memory, [input.item], { reason: input.reason, source: input.source ?? null, proposedBy })[0]!;
+  return proposeItems(memory, [input.item], { reason: input.reason, source: input.source ?? null, evidence: input.evidence ?? null, proposedBy })[0]!;
 }
 
 /**
@@ -49,7 +52,7 @@ export function proposeItems(memory: MemoryStore, items: readonly MemorySaveItem
   checkItems(memory, items);
   const origin = meta.origin ?? null;
   return items.map((item) => {
-    const payload: ProposalPayload = { item, source: meta.source, origin };
+    const payload: ProposalPayload = { item, source: meta.source, origin, ...(meta.evidence ? { evidence: meta.evidence } : {}) };
     return toView(memory.propose({ target: targetOf(item), subject: summarize(item), payload, reason: meta.reason, source: meta.source ? formatSource(meta.source) : null, actor: meta.proposedBy }));
   });
 }
@@ -78,6 +81,18 @@ export function decideProposal(memory: MemoryStore, id: string, decision: "apply
   return toView(memory.settleProposal(id, "applied", written.relPath));
 }
 
+/** The Proposals, whatever their status, that `proposedBy` made from one Harness session, newest first. */
+export function proposalsFrom(memory: MemoryStore, proposedBy: string, origin: Pick<ProposalOrigin, "agent" | "sessionId">): ProposalView[] {
+  return memory
+    .listProposals({ limit: 500 })
+    .filter((row) => {
+      if (row.actor !== proposedBy) return false;
+      const from = readPayload(row)?.origin;
+      return from?.agent === origin.agent && (from.sessionId ?? "") === (origin.sessionId ?? "");
+    })
+    .map(toView);
+}
+
 function requireBrain(memory: MemoryStore) {
   if (!memory.dataRoot) throw new HttpError(409, "needs_data_folder", "Choose a data folder first.");
 }
@@ -90,6 +105,7 @@ function toView(row: MemoryChange): ProposalView {
     target: row.docRelPath,
     reason: row.reason,
     source: row.source,
+    evidence: readPayload(row)?.evidence ?? null,
     proposedBy: row.actor,
     createdAt: row.createdAt,
     decidedAt: row.decidedAt,
@@ -118,7 +134,8 @@ function readPayload(row: StoredProposal): ProposalPayload | null {
     const source = stored.source == null ? null : SourceRefInput.safeParse(stored.source);
     if (!item.success || (source && !source.success)) return null;
     const origin = MemorySaveInput.shape.origin.safeParse(stored.origin ?? undefined);
-    return { item: item.data, source: source?.data ?? null, origin: (origin.success ? origin.data : undefined) ?? null };
+    const evidence = typeof stored.evidence === "string" && stored.evidence.trim() ? { evidence: stored.evidence } : {};
+    return { item: item.data, source: source?.data ?? null, origin: (origin.success ? origin.data : undefined) ?? null, ...evidence };
   }
   return readLegacy(row, stored as LegacyPayload);
 }
