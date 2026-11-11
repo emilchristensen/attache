@@ -2,16 +2,9 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { MemorySaveInput, type MemorySaveProposalResult, type MemorySaveResult } from "@jarvis/contracts";
-import { harnessLabel } from "../agents/integrations.ts";
 import type { BrainAccess } from "./brain.ts";
 import { askOwner, confirmationMessage } from "./confirmation.ts";
-import { saveOrigin } from "./harness.ts";
-
-/** Where the server runs: the environment and folder its Harness started it with. */
-export interface ServerContext {
-  env: NodeJS.ProcessEnv;
-  cwd: string;
-}
+import { harnessSession, saveOrigin, type ServerContext } from "./harness.ts";
 
 const SavedShape = z.object({ action: z.enum(["created", "updated"]), path: z.string(), title: z.string(), facts: z.number().int(), events: z.number().int() });
 const ProposedShape = z.object({ id: z.string(), target: z.string() });
@@ -38,9 +31,10 @@ export function registerSaveTool(server: McpServer, brain: BrainAccess, context:
     },
     async ({ items }, extra) => {
       try {
-        const origin = saveOrigin(context.env, server.server.getClientVersion(), context.cwd);
+        const caller = harnessSession(context.env, server.server.getClientVersion());
+        const origin = saveOrigin(caller, context.cwd);
         const check = await brain.checkSave(items);
-        const harness = harnessLabel(origin.agent);
+        const harness = caller.harness.label;
         const answer = await askOwner(server.server, confirmationMessage(harness, items, check), extra.requestId);
         if (answer === "unsupported") return proposed(await brain.propose({ origin, items, reason: `${harness} asked to save this but cannot ask you to confirm, so it waits for your review.` }));
         if (answer !== "accept") return declined(answer);

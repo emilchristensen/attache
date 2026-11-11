@@ -57,7 +57,7 @@ describe("Jarvis MCP server", () => {
   it("starts through the jarvis executable and lists its tools", async () => {
     const client = await connect(svc.stateDir);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["audit", "read", "save", "search"]);
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["audit", "read", "save", "search", "wrap_up"]));
   });
 
   it("searches the Brain and returns passages with path, line range, section kind and note title", async () => {

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
@@ -8,7 +8,7 @@ import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteAct
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
 import type { MachineIdentity } from "../core/machine.ts";
-import { connectorSnapshotPath, sessionLogPath } from "./evidence-paths.ts";
+import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
@@ -498,6 +498,25 @@ export class MemoryStore {
     return { relPath: rel };
   }
 
+  /**
+   * The durable points of one Harness conversation, as its agent summed them
+   * up. Evidence, not curated memory: the points sit in the body, never under
+   * Current State, so recall never offers one as a current fact.
+   */
+  recordWrapUp(input: { harness: { id: string; label: string }; title: string; points: string[] }): { relPath: string; title: string; date: string } {
+    const machine = this.opts.machine();
+    const date = today();
+    // Redacted before it names the file: the write redacts only the content.
+    const title = redact(oneLine(input.title));
+    const planned = wrapUpPath(date, title, machine);
+    const rel = this.uniquePath(dirname(planned), basename(planned, ".md"));
+    const fm = { id: randomUUID(), type: "wrap-up", title, date, harness: input.harness.id, harness_label: input.harness.label, machine: machine.name, machine_id: machine.id, recorded_at: nowIso(), provenance: "harness-wrap-up" };
+    const intro = `Evidence: the durable points of a conversation in ${input.harness.label} on ${date}, as its agent summed them up with the wrap-up prompt.\nThey are not curated memory: none is a current fact until it is saved to a note.`;
+    const points = input.points.map((p) => `- ${oneLine(p)}`).join("\n");
+    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${intro}\n\n## Points\n\n${points}\n`, "service");
+    return { relPath: rel, title, date };
+  }
+
   /** Protected identity record; only an explicit user settings action writes it. */
   writeIdentity(input: { name: string; email?: string; role?: string; notes?: string }, confirmed: boolean): { relPath: string } {
     const rel = "memory/self.md";
@@ -553,6 +572,11 @@ export class MemoryStore {
     if (!existsSync(abs)) return [];
     return readdirSync(abs).filter((f) => f.endsWith(".md"));
   }
+}
+
+/** Text that must stay on one line of Markdown, so it can never open a heading or a section of its own. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function firstWords(text: string): string {

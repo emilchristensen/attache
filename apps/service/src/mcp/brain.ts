@@ -1,4 +1,4 @@
-import type { Config, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@jarvis/contracts";
+import type { Config, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 import { auditView, type AuditView, type PathOf } from "../memory/audit-view.ts";
@@ -9,6 +9,12 @@ export interface Passage {
   path: string;
   startLine: number;
   endLine: number;
+  /**
+   * What kind of document holds it: `memory` (curated notes), `evidence`
+   * (captures, session logs, wrap-ups, snapshots), `deliverables` or `import`.
+   * Only `memory` passages state current facts.
+   */
+  area: string;
   section: "state" | "history" | "body";
   heading: string | null;
   title: string;
@@ -48,6 +54,8 @@ export interface BrainAccess {
   save(input: MemorySaveInput): Promise<MemorySaveResult>;
   /** Store a save the owner could not confirm as Proposals. */
   propose(input: MemorySaveProposalInput): Promise<MemorySaveProposalResult>;
+  /** Store a conversation's durable points as evidence; no points stores nothing. */
+  wrapUp(input: WrapUpInput): Promise<WrapUpResult>;
 }
 
 interface RawHit {
@@ -55,6 +63,7 @@ interface RawHit {
   relPath: string;
   startLine: number;
   endLine: number;
+  area: string;
   section: Passage["section"];
   heading: string | null;
   title: string;
@@ -80,6 +89,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         path: pathOf(h.root, h.relPath),
         startLine: h.startLine,
         endLine: h.endLine,
+        area: h.area,
         section: h.section,
         heading: h.heading,
         title: h.title,
@@ -107,6 +117,9 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
     checkSave: async (items) => client().post<MemorySaveCheckResult>("/memory/save/check", { items }),
     save: async (input) => client().post<MemorySaveResult>("/memory/save", input),
     propose: async (input) => client().post<MemorySaveProposalResult>("/memory/save/proposals", input),
+    async wrapUp(input) {
+      return client().post<WrapUpResult>("/memory/wrap-up", input);
+    },
   };
 }
 
