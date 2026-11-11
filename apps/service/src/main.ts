@@ -12,6 +12,8 @@ import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, saveCommand, type CliIo } from "./cli/memory-commands.ts";
+import { runMcpServer } from "./mcp/server.ts";
+import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
 
 export const DEFAULT_PORT = 7427;
 
@@ -147,6 +149,10 @@ async function main() {
       return saveCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "audit":
       return auditCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
+    case "mcp":
+      return runMcpServer(resolvePaths(arg("state-dir", argv)), VERSION);
+    case "evaluate-recall":
+      return evaluateRecallCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":
     case "start": {
       // Controls the LaunchAgent the installer created (macOS).
@@ -176,7 +182,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, agent-hooks, backup, restore, version`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, mcp, agent-hooks, backup, restore, version`);
   }
 }
 

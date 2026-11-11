@@ -7,23 +7,23 @@ Developer setup is separate from end-user installation: users run the installer 
 | Path | What |
 | --- | --- |
 | `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
-| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, speech, HTTP API |
+| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
-| `tests/e2e` | Playwright journeys (Chrome, voice, visual captures) |
+| `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
-Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `speech/`, `http/`.
+Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
 
 ## Requirements
 
 - macOS or Linux for lint, typecheck, Vitest and the browser journeys.
-  The install test and the voice tests need macOS (launchd, Keychain, `say`).
+  The install test needs macOS (launchd, Keychain).
 - Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
-- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
+- Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
 
 ```sh
 pnpm install
@@ -43,9 +43,10 @@ node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --ope
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_WHISPER_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value).
 
 Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, `~/.agents`, `~/.codex`, `~/.gemini`).
+Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
 `jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
 
@@ -65,7 +66,6 @@ Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, 
 Every check runs even when an earlier one fails, so a run lists all failures at once.
 On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
 Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
-The voice journeys skip on CI because the runners have no `whisper-cli`.
 
 To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.18.0-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
@@ -80,6 +80,14 @@ The claude.ai connectors are reached through the Claude Code CLI, which tests re
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
+
+## Recall evaluation
+
+A change to search ships only when it improves recall evaluation.
+`apps/service/test/fixtures/recall-brain/` is a synthetic Brain with its own question set in `evaluation/recall-questions.json`, mixing exact lookups (ticket numbers, repository names), paraphrases and Danish questions.
+`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` and fails if it drops below the recorded baseline (`BASELINE`: first result 16 of 22, first three 18 of 22, keyword search only).
+When a change improves the score, raise the baseline in the same commit.
+The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare.
 
 ## Release
 
@@ -99,12 +107,12 @@ Artifacts are unsigned; notarisation is an external step (see the acceptance rep
 ## Verification
 
 ```sh
-node scripts/verify-release.mjs           # everything: checks, builds, e2e, voice, install/upgrade/restore/uninstall, live read-only
+node scripts/verify-release.mjs           # everything: checks, builds, e2e, install/upgrade/restore/uninstall, live read-only
 node scripts/verify-release.mjs --quick   # lint, typecheck, builds, Vitest only
 ```
 
 Results: `test-results/verification-summary.md` (acceptance table) and `test-results/verification-report.json`.
-Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/voice.spec.ts`.
+Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/journeys.spec.ts`.
 
 ## Rules for changes
 

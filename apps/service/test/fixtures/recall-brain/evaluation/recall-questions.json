@@ -1,0 +1,26 @@
+{
+  "questions": [
+    { "question": "When is the Orion cutover?", "note": "memory/projects/orion-migration.md", "fact": "Status" },
+    { "question": "Which ticket tracks Orion?", "note": "memory/projects/orion-migration.md", "fact": "Ticket" },
+    { "question": "ORION-412", "note": "memory/projects/orion-migration.md", "fact": "Ticket" },
+    { "question": "northwind/orion-infra", "note": "memory/projects/orion-migration.md", "fact": "Repository" },
+    { "question": "Who owns the Orion migration?", "note": "memory/projects/orion-migration.md", "fact": "Owner" },
+    { "question": "How much money was approved for the cloud bill?", "note": "memory/projects/orion-migration.md", "fact": "Budget" },
+    { "question": "Who does Ada Okafor report to?", "note": "memory/people/ada-okafor.md", "fact": "Manager" },
+    { "question": "Who is on call for billing?", "note": "memory/people/ada-okafor.md", "fact": "On-call" },
+    { "question": "How does Mia like to get design reviews?", "note": "memory/people/mia-jensen.md", "fact": "Review preference" },
+    { "question": "Which days is Mia in Aarhus?", "note": "memory/people/mia-jensen.md", "fact": "Location" },
+    { "question": "When is Mia's birthday?", "note": "memory/people/mia-jensen.md", "fact": "Birthday" },
+    { "question": "Why did we pick Postgres over DynamoDB?", "note": "memory/decisions/postgres-for-orders.md", "fact": "Reason" },
+    { "question": "Which database do orders run on?", "note": "memory/decisions/postgres-for-orders.md", "fact": "Decision" },
+    { "question": "Where is the new website hosted?", "note": "memory/projects/website-relaunch.md", "fact": "Hosting" },
+    { "question": "When does the website go live?", "note": "memory/projects/website-relaunch.md", "fact": "Status" },
+    { "question": "What do we use for web statistics?", "note": "memory/projects/website-relaunch.md", "fact": "Analytics" },
+    { "question": "What time is standup?", "note": "memory/notes/team-rituals.md", "fact": "Standup" },
+    { "question": "How often do we hold retros?", "note": "memory/notes/team-rituals.md", "fact": "Retrospective" },
+    { "question": "Who buys lunch on Fridays?", "note": "memory/notes/team-rituals.md", "fact": "Friday lunch" },
+    { "question": "Hvornår holder vi morgenmøde?", "note": "memory/notes/team-rituals.md", "fact": "Standup" },
+    { "question": "Hvad arbejder Mia Jensen med?", "note": "memory/people/mia-jensen.md", "fact": "Role" },
+    { "question": "Hvornår flytter vi ordresystemet til skyen?", "note": "memory/projects/orion-migration.md", "fact": "Status" }
+  ]
+}

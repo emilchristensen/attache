@@ -23,12 +23,12 @@ describe("A03 onboarding and persistence", () => {
     const early = await svc.call("POST", "/setup/complete");
     expect(early.body.error.code).toBe("needs_data_folder");
     await svc.post("/setup/data-folder", { path: svc.dataDir });
-    await svc.put("/features", { changes: { voice: true, drafts: false }, cascade: true });
+    await svc.put("/features", { changes: { sessions: false, drafts: false }, cascade: true });
     await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     const done = await svc.post("/setup/complete");
     expect(done.config.setupCompleted).toBe(true);
     const statuses = Object.fromEntries(done.features.map((f: any) => [f.id, f.readiness]));
-    expect(statuses).toMatchObject({ recall: "ready", conversation: "partial", capture: "ready", attention: "ready", drafts: "disabled", voice: "needs_setup" });
+    expect(statuses).toMatchObject({ recall: "ready", conversation: "partial", capture: "ready", attention: "ready", drafts: "disabled", sessions: "disabled" });
     const stateDir = svc.stateDir;
     const dataDir = svc.dataDir;
     await svc.stop();
@@ -36,7 +36,7 @@ describe("A03 onboarding and persistence", () => {
     running.push(again);
     const cfg = await again.get("/config");
     expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
-    expect(cfg.features).toMatchObject({ voice: true, drafts: false, attention: true });
+    expect(cfg.features).toMatchObject({ sessions: false, drafts: false, attention: true });
     // Search works before any model is connected.
     await again.post("/memory/capture", { text: "The espresso machine needs descaling every Friday.", source: { kind: "user", ref: "t" } });
     expect((await again.get("/memory/search?q=espresso descaling")).hits.length).toBeGreaterThan(0);

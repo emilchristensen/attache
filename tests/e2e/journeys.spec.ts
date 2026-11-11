@@ -1,7 +1,7 @@
 import { test, expect, type Page, type ConsoleMessage, type BrowserContext } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildAll, startStack, type Stack } from "./stack.ts";
+import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 let shared: BrowserContext;
@@ -56,10 +56,15 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Use this folder" }).click();
 
   await expect(page.getByRole("heading", { name: "Choose what Jarvis does" })).toBeVisible();
-  // Keyboard: toggle voice with Space, then check the dependency explanation for Background work.
-  await page.getByRole("checkbox", { name: /^Voice/ }).focus();
+  // Voice is not a feature any more.
+  await expect(page.getByRole("checkbox", { name: /^Voice/ })).toHaveCount(0);
+  // Keyboard: toggle drafts off and on with Space, then check the dependency explanation for Background work.
+  const drafts = page.getByRole("checkbox", { name: /^Drafts and approvals/ });
+  await drafts.focus();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("checkbox", { name: /^Voice/ })).toBeChecked();
+  await expect(drafts).not.toBeChecked();
+  await page.keyboard.press("Space");
+  await expect(drafts).toBeChecked();
   await page.getByRole("checkbox", { name: /^Background work/ }).click();
   await expect(page.getByRole("alert")).toContainText("Attention and briefings needs Background work");
   await page.getByRole("button", { name: "Cancel" }).click();
@@ -91,7 +96,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await expect(codex.getByText("not connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "Model, voice and schedules" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Model and schedules" })).toBeVisible();
   const model = page.locator('[data-connection="model"]');
   await model.getByRole("button", { name: "Set up" }).click();
   await model.getByRole("combobox", { name: "How to connect" }).selectOption("openai-compatible");
@@ -103,13 +108,16 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Check and finish" })).toBeVisible();
-  await expect(page.locator('[data-feature-status="voice"]')).toContainText("needs setup");
+  await expect(page.locator('[data-feature-status="drafts"]')).toContainText("ready");
   await expect(page.locator('[data-feature-status="attention"]')).toContainText("ready");
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
   await expect(page.getByText("Needs your attention")).toBeVisible();
   await expect(page.getByText(/Overdue: Review rollback runbook/)).toBeVisible();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
+  // No microphone control or speech hint anywhere on the Dashboard.
+  await expect(page.getByRole("button", { name: /talk|microphone|speaking/i })).toHaveCount(0);
+  await expect(page.getByText(/stops speech/)).toHaveCount(0);
 });
 
 test("chat: streaming grounded answer, citation opens the exact evidence lines, keyboard", async () => {
@@ -255,6 +263,20 @@ test("feature switches: turning attention off changes the product and the backen
   await expect(page.getByText(/attention:sync: next/)).toBeVisible();
 });
 
+test("this Machine: named after its hostname, renamed in Settings, and the name is kept", async () => {
+  const page = await open("/settings");
+  const card = page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) });
+  const name = card.getByRole("textbox", { name: "Name" });
+  await expect(name).not.toHaveValue("");
+  const id = await card.locator(".mono").textContent();
+  await name.fill("Home PC");
+  await card.getByRole("button", { name: "Rename" }).click();
+  await expect(page.getByText("Machine renamed")).toBeVisible();
+  await page.reload();
+  await expect(card.getByRole("textbox", { name: "Name" })).toHaveValue("Home PC");
+  await expect(card.locator(".mono")).toHaveText(id!);
+});
+
 test("reconnection: service restart shows a banner, then recovers state", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
@@ -312,6 +334,103 @@ test("memory: capture a decision, correct it, and the next answer changes", asyn
   await expect(answer).toContainText("Postmark");
   const file = readFileSync(join(stack.dataDir, "memory/decisions/vendor-sync.md"), "utf8");
   expect(file.split("## History")[1]).toContain("Keep Nimbus");
+});
+
+test("memory: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
+  const page = await open("/memory");
+  // Proposals arrive from outside the Dashboard; post them with the browser's own session.
+  const propose = (body: unknown) =>
+    page.evaluate(async (b) => {
+      const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(b) });
+      if (!res.ok) throw new Error(`propose failed: ${res.status} ${await res.text()}`);
+      return (await res.json()) as { id: string };
+    }, body);
+  const update = await propose({
+    item: {
+      action: "update",
+      path: "memory/decisions/vendor-sync.md",
+      facts: [
+        { subject: "Decision", value: "Use Postmark from January 2027", reason: "Contract signed" },
+        { subject: "Owner", value: "Procurement", reason: "Named in the contract" },
+      ],
+      events: ["Postmark contract signed"],
+    },
+    reason: "Vendor review session",
+    source: { kind: "agent-session", ref: "claude-code/sess-e2e", label: "Claude Code session in jarvis" },
+  });
+  const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
+
+  const review = page.getByRole("region", { name: /Memory changes to review/ });
+  const card = review.locator(`[data-proposal="${update.id}"]`);
+  await expect(card.getByText("Update memory/decisions/vendor-sync.md")).toBeVisible();
+  await expect(card.locator('[data-part="fact"]')).toHaveText([/Decision: Use Postmark from January 2027 \(Contract signed\)/, /Owner: Procurement \(Named in the contract\)/]);
+  await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
+  await expect(card).toContainText("Why: Vendor review session");
+  await expect(card).toContainText("Source: Claude Code session in jarvis");
+  const newNote = review.locator(`[data-proposal="${create.id}"]`);
+  await expect(newNote.getByText("New person: Lena Berg")).toBeVisible();
+  await expect(newNote.locator('[data-part="tags"]')).toContainText("vendor");
+
+  await card.getByRole("button", { name: "Apply" }).click();
+  await expect(card).toHaveCount(0);
+  await newNote.getByRole("button", { name: "Reject" }).click();
+  await expect(review).toHaveCount(0);
+
+  const file = readFileSync(join(stack.dataDir, "memory/decisions/vendor-sync.md"), "utf8");
+  const [current, history] = file.split("## History");
+  expect(current).toContain("Use Postmark from January 2027");
+  expect(current).toContain("**Owner**");
+  expect(history).toContain('**Decision** was "Switch to Postmark for 2027"');
+  expect(history).toContain("Postmark contract signed");
+  expect(existsSync(join(stack.dataDir, "memory/people/lena-berg.md"))).toBe(false);
+  await page.goto(`${stack.url}/memory?path=${encodeURIComponent("memory/decisions/vendor-sync.md")}&tab=decision`);
+  await expect(page.locator('[data-subject="Decision"]')).toContainText("Use Postmark from January 2027");
+});
+
+test("recent saves: each save shows its Harness and session, and one click reverts it", async () => {
+  const save = (items: unknown[], agent: string, session: string) => harnessSave(stack, items, { agent, session });
+  const atlas = "memory/projects/atlas-launch.md";
+  save([{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "14 October" }, { subject: "Owner", value: "Ada" }] }], "claude-code", "sess-e2e-1");
+  save([{ action: "update", path: atlas, facts: [{ subject: "Launch date", value: "21 October", reason: "vendor slip" }, { subject: "Owner", value: "Grace", reason: "handover" }] }], "claude-code", "sess-e2e-2");
+  save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
+  save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
+
+  const page = await open("/memory");
+  const recent = page.getByRole("region", { name: "Recent saves" });
+  const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
+  await expect(recent).toBeVisible();
+  // The newest few show first; the rest are one click away.
+  await expect(recent.getByRole("listitem")).toHaveCount(4);
+  await recent.getByRole("button", { name: /Show all \d+/ }).click();
+  const launchId = await row("21 October").getAttribute("data-change");
+  const launch = recent.locator(`[data-change="${launchId}"]`);
+  await expect(launch).toContainText("Launch date");
+  await expect(launch.locator("del")).toHaveText("14 October");
+  await expect(launch).toContainText("Claude Code, session sess-e2e-2");
+  await expect(launch.locator("time")).toBeVisible();
+
+  // A change a later change overwrote cannot be reverted, and the Dashboard says why.
+  const grace = row(/→\s*Grace/);
+  await expect(grace).toContainText("A later change overwrote “Owner”. Revert that change first.");
+  await expect(grace.getByRole("button", { name: "Revert" })).toHaveCount(0);
+
+  await launch.getByRole("button", { name: "Revert" }).click();
+  await expect(page.getByText("Reverted. The revert is listed as a change of its own.")).toBeVisible();
+  const revert = recent.getByRole("listitem").first();
+  await expect(revert).toContainText("revert");
+  await expect(revert).toContainText("Revert in the Dashboard");
+  await expect(revert.locator("ins")).toHaveText("14 October");
+  await expect(launch).toContainText("reverted");
+  const note = readFileSync(join(stack.dataDir, atlas), "utf8");
+  expect(note).toMatch(/- \*\*Launch date\*\* \(\d{4}-\d{2}-\d{2}\): 14 October/);
+  expect(note.split("## History")[1]).toMatch(/was "14 October"[\s\S]*was "21 October"/);
+
+  // Reverting a created note removes it from the Brain and from search.
+  await row("Created the note").filter({ hasText: "Quasar pricing idea" }).getByRole("button", { name: "Revert" }).click();
+  await expect(row("Removed the note").filter({ hasText: "Quasar pricing idea" })).toBeVisible();
+  expect(existsSync(join(stack.dataDir, "memory/notes/quasar-pricing-idea.md"))).toBe(false);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Quasar");
+  await expect(page.getByText("No matches")).toBeVisible();
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {

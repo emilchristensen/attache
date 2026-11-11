@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import { z } from "zod";
-import { ConfigPatch, FeatureId } from "@jarvis/contracts";
+import { ConfigPatch, FeatureId, MachineRename } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -85,6 +85,13 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return { config: next, revision: app.config.revision() };
   });
 
+  r.get("/machine", () => app.machine.get());
+  r.patch("/machine", async (c) => {
+    const next = app.machine.rename(await c.body(MachineRename));
+    app.bus.emit("event", { type: "config.changed" });
+    return next;
+  });
+
   r.get("/capabilities", () => ({
     features: app.featureStatuses(),
     connections: app.connections.statuses(),
@@ -151,6 +158,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return {
       version: VERSION,
       instance: app.instance,
+      machine: app.machine.get(),
       startedAt: app.startedAt,
       pid: process.pid,
       node: process.version,

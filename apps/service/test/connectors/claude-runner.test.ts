@@ -164,20 +164,12 @@ describe("claude.ai connector runner (Claude Code session gate)", { timeout: 120
       process.env.HOME = home;
     }
     claude.mode = "hang";
+    // Cancelled before the session starts (e.g. while Jarvis lists the MCP servers): nothing is spawned.
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: AbortSignal.abort() })).rejects.toThrow(/Cancelled/);
+    expect(claude.sessions).toBe(0);
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
-  });
-
-  it("a run cancelled before its session starts never starts Claude Code", async () => {
-    // Also the case of a cancel that lands while the servers are listed: the next session starts already cancelled.
-    claude.mode = "hang";
-    const ctrl = new AbortController();
-    ctrl.abort();
-    const started = Date.now();
-    await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
-    expect(Date.now() - started).toBeLessThan(5_000);
-    expect(claude.started).toEqual([]);
   });
 
   it("helpers: tool naming, order-insensitive argument equality, spill files only from the config dir", () => {

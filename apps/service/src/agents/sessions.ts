@@ -6,12 +6,15 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { parseStateEntries, splitFrontmatter } from "../memory/markdown.ts";
+import { sessionLogDate } from "../memory/evidence-paths.ts";
 import { AgentHooks, stablePath } from "./install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
 import { redact } from "../core/log.ts";
-import { buildSessionContext } from "./context.ts";
+import { buildSessionContext, type ContextInput } from "./context.ts";
+import { projectSlug, removeContextFiles, writeContextFiles, type ProjectContext } from "./context-files.ts";
+import { listedRepositories } from "../memory/repositories.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
 
 interface SessionRow {
@@ -286,31 +289,25 @@ export class AgentSessions {
 
   // ---- session-start context ---------------------------------------------------
 
-  /** Keep the context file the session-start hook prints in step with memory; remove it while the feature is off. */
+  /** Keep the context files the session-start hook prints in step with the Brain; remove them while the feature is off. */
   refreshContext() {
-    const file = contextFile(this.stateDir);
     if (!this.enabled()) {
-      rmSync(file, { force: true });
+      removeContextFiles(this.stateDir);
       return;
     }
     const cfg = this.app.config.get();
-    const text = buildSessionContext({
+    const notes = this.app.memory.listDocuments({ area: "memory", root: "data", limit: 400 }).filter((d) => d.relPath !== "memory/self.md" && d.title);
+    const base: ContextInput = {
       now: new Date(),
       dataFolder: cfg.dataFolder!,
       identity: cfg.identity ? { name: cfg.identity.name, ...(cfg.identity.email ? { email: cfg.identity.email } : {}) } : null,
-      memory: this.app.memory
-        .listDocuments({ area: "memory", root: "data", limit: 400 })
-        .filter((d) => d.relPath !== "memory/self.md" && d.title)
-        .map((d) => ({ type: d.docType ?? "note", title: d.title, ...this.gist(d.relPath) })),
+      memory: notes.map((d) => ({ type: d.docType ?? "note", title: d.title, ...this.gist(d.relPath) })),
       recentLogs: this.recentLogs(2),
       searchCommand: this.searchCommand(),
-    });
-    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    if (!existsSync(file) || readFileSync(file, "utf8") !== text) {
-      const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
-      writeFileSync(tmp, text, { mode: 0o600 });
-      renameSync(tmp, file);
-    }
+    };
+    const text = buildSessionContext(base);
+    const projects = notes.filter((d) => d.docType === "project").flatMap((d) => this.projectContext(base, d));
+    writeContextFiles(this.stateDir, text, projects);
     for (const a of AGENT_INTEGRATIONS) {
       if (this.app.connections.record(a.kind)?.status !== "connected") continue;
       try {
@@ -330,6 +327,20 @@ export class AgentSessions {
     return existsSync(file) ? readFileSync(file, "utf8") : "## Jarvis memory\n\nNothing is remembered yet.\n";
   }
 
+  /** The context for sessions in a project's repositories; none when the project lists no repository. */
+  private projectContext(base: ContextInput, { relPath, title }: { relPath: string; title: string }): ProjectContext[] {
+    try {
+      const state = parseStateEntries(this.app.memory.read(relPath));
+      const repositories = listedRepositories(state);
+      if (!repositories.length) return [];
+      const project = { title, path: join(this.app.memory.dataRoot!, relPath), state: state.map(({ subject, date, value }) => ({ subject, date, value })) };
+      return [{ slug: projectSlug(relPath), repositories, text: buildSessionContext({ ...base, project }) }];
+    } catch (e) {
+      this.app.log.warn("could not build a project's session context", { relPath, error: (e as Error).message });
+      return [];
+    }
+  }
+
   /** A note's first current fact, so the index says what each note is about. */
   private gist(relPath: string): { gist?: string } {
     try {
@@ -340,16 +351,22 @@ export class AgentSessions {
     }
   }
 
+  /** The session logs of the latest `days` days, every Machine's file for a day read as one. */
   private recentLogs(days: number): Array<{ date: string; body: string }> {
     const root = this.app.memory.dataRoot;
     const dir = root ? join(root, "evidence", "sessions") : null;
     if (!dir || !existsSync(dir)) return [];
-    return readdirSync(dir)
-      .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+    const byDate = new Map<string, string[]>();
+    for (const f of readdirSync(dir).sort()) {
+      const date = sessionLogDate(f);
+      if (date) byDate.set(date, [...(byDate.get(date) ?? []), f]);
+    }
+    const body = (f: string) => splitFrontmatter(readFileSync(join(dir, f), "utf8")).body.replace(/^# .*\n/, "").trim();
+    return [...byDate.keys()]
       .sort()
       .reverse()
       .slice(0, days)
-      .map((f) => ({ date: f.slice(0, 10), body: splitFrontmatter(readFileSync(join(dir, f), "utf8")).body.replace(/^# .*\n/, "") }));
+      .map((date) => ({ date, body: byDate.get(date)!.map(body).join("\n\n") }));
   }
 
   /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */

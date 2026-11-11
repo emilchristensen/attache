@@ -21,7 +21,6 @@ export interface Ctx {
   params: Record<string, string>;
   client: ClientIdentity | null;
   body<T>(schema: ZodType<T>): Promise<T>;
-  raw(limitBytes: number): Promise<Buffer>;
   query(name: string): string | null;
 }
 
@@ -96,7 +95,6 @@ export function makeCtx(req: IncomingMessage, res: ServerResponse, url: URL, par
     url,
     params,
     client,
-    raw,
     query: (n) => {
       const v = url.searchParams.get(n);
       // Numeric paging parameters must be positive integers; anything else falls back to defaults.

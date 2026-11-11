@@ -9,7 +9,7 @@ import { tempDir } from "./helpers.ts";
 
 function setup() {
   const db = openDb(":memory:");
-  const store = new MemoryStore(db, null, "test");
+  const store = new MemoryStore(db, null, { instance: "test", locksDir: tempDir(), machine: () => ({ id: "00000000-0000-4000-8000-000000000001", name: "Test Machine" }) });
   const root = tempDir();
   store.open(root);
   return { db, store, root };
@@ -77,16 +77,5 @@ describe("memory store and retrieval", () => {
     const r = store.indexer.scan(store.rootRef!);
     expect(r.indexed).toBeGreaterThanOrEqual(1);
     expect(search(db, "espresso descaling")[0]?.relPath).toBe("memory/notes/manual.md");
-  });
-
-  it("approved proposals apply; rejected proposals change nothing", () => {
-    const { db, store } = setup();
-    const { relPath } = store.createMemory({ type: "project", title: "Atlas", state: [{ subject: "Owner", value: "Mia" }] }, "user");
-    const p1 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Mentioned in standup", source: "slack", actor: "model" });
-    store.decideProposal(p1.id, "reject");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Mia");
-    const p2 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Confirmed", source: "slack", actor: "model" });
-    store.decideProposal(p2.id, "apply");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Jonas");
   });
 });

@@ -79,17 +79,24 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
     expect(r.observations.find((o) => o.data.channel === "D02")!.attention).toMatchObject({ kind: "pending_reply", title: "Reply to Person U0BOB in Slack" });
   });
 
-  it("pagination: follows the search cursor; stops at the window edge; a page cap is partial", async () => {
-    const many = Array.from({ length: 45 }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.5 + i * 0.1, `m${i}`));
-    searchable(many, []);
+  // Every page is a Claude Code session (a process spawn), so each pagination case is its own test to stay well inside the timeout.
+  const dms = (n: number) => Array.from({ length: n }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.5 + i * 0.1, `m${i}`));
+
+  it("pagination: follows the search cursor", async () => {
+    searchable(dms(45), []);
     const r = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
     expect(r.coverage).toMatchObject({ state: "complete", items: 45 });
     expect(calls("slack_search_public_and_private")).toHaveLength(3);
-    claude.calls.length = 0;
-    searchable([...many.slice(0, 5), msg("D999", "U0MIA", 60, "too old")], [], 3);
+  });
+
+  it("pagination: stops at the window edge", async () => {
+    searchable([...dms(5), msg("D999", "U0MIA", 60, "too old")], [], 3);
     const edge = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
     expect(edge.observations.map((o) => o.data.channel)).not.toContain("D999");
     expect(edge.coverage.state).toBe("complete");
+  });
+
+  it("pagination: a page cap is partial", async () => {
     searchable(Array.from({ length: 300 }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.1 + i * 0.01, `x${i}`)), [], 20);
     const capped = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
     expect(capped.coverage.scopes[0]).toMatchObject({ state: "partial", items: 200, pages: 10, note: "Stopped after 10 pages" });

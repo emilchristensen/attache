@@ -7,10 +7,10 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // ---------------------------------------------------------------------------
 // Features and connections
 
-export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "voice", "sessions"]);
+export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech", "claude-code", "codex", "antigravity"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -94,15 +94,6 @@ export const ModelSettings = z.object({
   baseUrl: z.string().default(""),
 });
 
-export const SpeechSettings = z.object({
-  stt: z.enum(["none", "whisper-local", "openai-compatible", "browser"]).default("none"),
-  tts: z.enum(["none", "macos-say", "openai-compatible", "browser"]).default("none"),
-  voice: z.string().default(""),
-  baseUrl: z.string().default(""),
-  sttModel: z.string().default(""),
-  ttsModel: z.string().default(""),
-});
-
 export const Config = z.object({
   schemaVersion: z.literal(1).default(1),
   setupCompleted: z.boolean().default(false),
@@ -123,6 +114,21 @@ export const ConfigPatch = z.object({
   notifications: Notifications.partial().optional(),
 });
 export type ConfigPatch = z.infer<typeof ConfigPatch>;
+
+/** The computer this service runs on. The id never changes; the owner can rename it. */
+export const MACHINE_NAME_MAX = 64;
+export const MachineView = z.object({ id: z.string(), name: z.string() });
+export type MachineView = z.infer<typeof MachineView>;
+
+export const MachineRename = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the Machine a name")
+    .max(MACHINE_NAME_MAX, `Keep the Machine's name to ${MACHINE_NAME_MAX} characters`)
+    .refine((n) => !/\p{Cc}/u.test(n), "A Machine's name cannot hold control characters"),
+});
+export type MachineRename = z.infer<typeof MachineRename>;
 
 // ---------------------------------------------------------------------------
 // Memory
@@ -197,6 +203,29 @@ const SaveFact = z.object({ subject: z.string().trim().min(1).max(100), value: z
 const SaveEvent = z.string().trim().min(1).max(2000);
 
 /**
+ * One change to one note: a new note with its facts, or an update to an existing
+ * note. A save carries several; a Proposal carries exactly one.
+ */
+export const MemorySaveItem = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("create"),
+    type: z.enum(["person", "project", "decision", "note"]),
+    title: z.string().trim().min(1).max(200),
+    facts: z.array(SaveFact).min(1).max(50),
+    notes: z.string().max(20_000).optional(),
+    events: z.array(SaveEvent).max(20).optional(),
+    tags: z.array(z.string().max(50)).max(20).optional(),
+  }),
+  z.object({
+    action: z.literal("update"),
+    path: z.string().trim().min(1).max(500),
+    facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
+    events: z.array(SaveEvent).max(20).optional(),
+  }),
+]);
+export type MemorySaveItem = z.infer<typeof MemorySaveItem>;
+
+/**
  * What the user asked a coding agent to save (`jarvis save`). State goes into
  * `facts` (one current value per subject, replacing the old one), events into
  * `events` (appended to History). Validated as a whole before anything is written.
@@ -210,33 +239,70 @@ export const MemorySaveInput = z.object({
       cwd: z.string().max(2000).optional(),
     })
     .optional(),
-  items: z
-    .array(
-      z.discriminatedUnion("action", [
-        z.object({
-          action: z.literal("create"),
-          type: z.enum(["person", "project", "decision", "note"]),
-          title: z.string().trim().min(1).max(200),
-          facts: z.array(SaveFact).min(1).max(50),
-          notes: z.string().max(20_000).optional(),
-          events: z.array(SaveEvent).max(20).optional(),
-          tags: z.array(z.string().max(50)).max(20).optional(),
-        }),
-        z.object({
-          action: z.literal("update"),
-          path: z.string().trim().min(1).max(500),
-          facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
-          events: z.array(SaveEvent).max(20).optional(),
-        }),
-      ]),
-    )
-    .min(1)
-    .max(20),
+  items: z.array(MemorySaveItem).min(1).max(20),
 });
 export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
 export interface MemorySaveResult {
   saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
+}
+
+/** Suggest one save item for the owner to apply or reject in the Dashboard. */
+export const ProposalInput = z.object({
+  item: MemorySaveItem,
+  /** Why the change is suggested, shown beside it in the review list. */
+  reason: z.string().trim().min(1).max(1000),
+  /** The evidence the suggestion came from. */
+  source: SourceRefInput.optional(),
+});
+export type ProposalInput = z.infer<typeof ProposalInput>;
+
+export interface ProposalView {
+  id: string;
+  status: "proposed" | "applied" | "rejected";
+  /** The whole change; null when a stored Proposal can no longer be read, so it can only be rejected. */
+  item: MemorySaveItem | null;
+  /** The note it changes, the note it created once applied, or "(new <type>: <title>)" before that. */
+  target: string;
+  reason: string | null;
+  /** The cited evidence, formatted as in the note. */
+  source: string | null;
+  proposedBy: string;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+/**
+ * One change to the Brain in the recent-saves list. `create` and `delete` are
+ * whole notes, `correct` is one fact (a `null` value means the subject had or
+ * has no value), `append` is an event or a prose edit.
+ */
+export interface RecentChangeView {
+  id: string;
+  relPath: string;
+  /** The note's title, also for a note that no longer exists. */
+  title: string;
+  kind: "create" | "correct" | "append" | "delete";
+  subject: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  source: {
+    /** Harness integration kind, e.g. `claude-code`. */
+    harness: string | null;
+    harnessLabel: string | null;
+    sessionId: string | null;
+    /** What to show: the Harness and session, or who else made the change. */
+    label: string;
+  };
+  at: string;
+  /** The change this one reverted, and the change that reverted this one. */
+  revertOf: string | null;
+  revertedBy: string | null;
+  revert: { allowed: true; reason: null } | { allowed: false; reason: string };
+}
+
+export interface RecentChangesResult {
+  changes: RecentChangeView[];
 }
 
 export interface MemoryAuditEntry {
@@ -266,13 +332,67 @@ export interface MemoryAuditReport {
 }
 
 // ---------------------------------------------------------------------------
+// Recall evaluation
+
+/** One question and the fact expected to answer it: a note in the Brain and the subject of one of its current facts. */
+export const RecallQuestion = z.object({
+  question: z.string().trim().min(1).max(500),
+  /** The note's path inside the Brain, e.g. `memory/projects/orion-migration.md`. */
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .transform((p) => p.replace(/^(\.\/)+/, ""))
+    .refine((p) => p.endsWith(".md") && !p.startsWith("/") && !p.split("/").includes(".."), "must be a Markdown file's path inside the Brain"),
+  /** The subject of the current fact, as written between `**` in the note. */
+  fact: z.string().trim().min(1).max(100),
+});
+export type RecallQuestion = z.infer<typeof RecallQuestion>;
+
+export const RecallQuestionSet = z.object({ questions: z.array(RecallQuestion).min(1).max(1000) });
+export type RecallQuestionSet = z.infer<typeof RecallQuestionSet>;
+
+/** Score a supplied question set, or, without one, the set kept in the Brain. */
+export const RecallEvaluationInput = z.object({ set: RecallQuestionSet.optional() });
+export type RecallEvaluationInput = z.infer<typeof RecallEvaluationInput>;
+
+export interface RecallEvaluationHit {
+  root: string;
+  relPath: string;
+  title: string;
+  /** The fact this hit is, when it is one. */
+  fact: string | null;
+  startLine: number;
+  endLine: number;
+  snippet: string;
+}
+
+export interface RecallEvaluationReport {
+  generatedAt: string;
+  /** Where the questions came from: the Brain's own set (its path inside the Brain) or the caller. */
+  set: { source: "brain"; path: string } | { source: "supplied" };
+  /** Questions scored. Questions whose expected fact is not in the Brain are listed under `invalid` instead. */
+  questions: number;
+  /** How many questions have the expected fact as the first result. */
+  top1: number;
+  /** How many questions have the expected fact in the first three results. */
+  top3: number;
+  top1Rate: number;
+  top3Rate: number;
+  /** Every scored question whose expected fact is not the first result, with the first three results. */
+  misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
+  /** Questions that cannot be scored, because their note or fact is not in the Brain. */
+  invalid: Array<RecallQuestion & { problem: string }>;
+}
+
+// ---------------------------------------------------------------------------
 // Conversation
 
 export const ChatInput = z.object({
   conversationId: z.string().nullable().optional(),
   text: z.string().min(1).max(20_000),
   context: z.object({ relPath: z.string().optional(), root: z.string().optional(), absPath: z.string().max(4096).optional(), title: z.string().max(300).optional(), selection: z.string().max(20_000).optional() }).optional(),
-  voice: z.boolean().optional(),
 });
 
 export interface MessageView {

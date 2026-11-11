@@ -1,18 +1,23 @@
 import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
-import { search } from "../memory/search.ts";
+import { RECALL_EXCLUDE, search } from "../memory/search.ts";
 import { decide, getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
 import { saveToMemory } from "../memory/save.ts";
+import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
+import { recentChanges } from "../memory/recent-changes.ts";
+import { revertChange } from "../memory/revert.ts";
+
+const PROPOSAL_STATUSES = ["proposed", "applied", "rejected"];
 
 export function requireFeature(app: App, id: FeatureId) {
   if (!app.featureEnabled(id)) throw new HttpError(409, "feature_disabled", `${app.featureLabel(id)} is turned off. Turn it on in Settings.`, { feature: id });
@@ -53,6 +58,15 @@ export function resolveAbsolute(app: App, absPath: string): { root: string; relP
   return null;
 }
 
+/** The note a document request names: a root and a path inside it, or an absolute path inside the Brain or another indexed folder. */
+function documentTarget(app: App, root: string | null | undefined, path: string | null | undefined): { root: string; rel: string } {
+  if (!path) throw new HttpError(400, "invalid_request", "path is required");
+  if (root || !isAbsolute(path)) return { root: root ?? "data", rel: path };
+  const found = resolveAbsolute(app, path);
+  if (!found) throw new HttpError(404, "not_found", `${path} is not in the Brain or another folder Jarvis indexes.`);
+  return { root: found.root, rel: found.relPath };
+}
+
 export function registerDataRoutes(r: Router, app: App) {
   // ---- memory ------------------------------------------------------------------
   r.get("/memory/search", (c) => {
@@ -60,7 +74,9 @@ export function registerDataRoutes(r: Router, app: App) {
     const q = c.query("q") ?? "";
     const area = c.query("area");
     const type = c.query("type");
-    return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}) }) };
+    // `recall=1` searches the way recall does: raw conversations and session transcripts stay out, their summaries stay in.
+    const recall = c.query("recall") === "1";
+    return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
   });
   r.get("/memory/documents", (c) => {
     requireFeature(app, "recall");
@@ -68,9 +84,7 @@ export function registerDataRoutes(r: Router, app: App) {
   });
   r.get("/memory/document", (c) => {
     requireFeature(app, "recall");
-    const root = c.query("root") ?? "data";
-    const rel = c.query("path");
-    if (!rel) throw new HttpError(400, "invalid_request", "path is required");
+    const { root, rel } = documentTarget(app, c.query("root"), c.query("path"));
     const base = rootPath(app, root);
     const abs = resolveInside(base, rel);
     if (!existsSync(abs)) throw new HttpError(404, "not_found", `${rel} no longer exists. The index will drop it on the next refresh.`);
@@ -169,17 +183,38 @@ export function registerDataRoutes(r: Router, app: App) {
     app.bus.emit("event", { type: "memory.changed" });
     return app.memory.describe(input.relPath);
   });
+  r.get("/memory/recent-changes", (c): RecentChangesResult => {
+    requireFeature(app, "recall");
+    requireData(app);
+    const limit = Number(c.query("limit") ?? 50);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "invalid_request", "limit must be a whole number between 1 and 200");
+    return { changes: recentChanges(app.db, app.memory, limit) };
+  });
+  r.post("/memory/changes/:id/revert", (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const change = revertChange(app.memory, c.params.id!);
+    app.bus.emit("event", { type: "memory.changed" });
+    return { change: recentChanges(app.db, app.memory, 1).find((v) => v.id === change.id) ?? null };
+  });
   r.get("/memory/changes", (c) => app.memory.listChanges({ ...(c.query("status") ? { status: c.query("status")! } : {}), limit: Number(c.query("limit") ?? 100) }));
+  r.get("/memory/proposals", (c) => {
+    const status = c.query("status") ?? "proposed";
+    if (!PROPOSAL_STATUSES.includes(status)) throw new HttpError(400, "invalid_request", `status must be one of ${PROPOSAL_STATUSES.join(", ")}`);
+    return { proposals: listProposals(app.memory, { status, limit: Number(c.query("limit") ?? 100) }) };
+  });
   r.post("/memory/proposals", async (c) => {
     requireFeature(app, "capture");
-    const input = await c.body(z.object({ relPath: z.string().nullable(), subject: z.string().min(1).max(100), value: z.string().min(1).max(5000), reason: z.string().min(1).max(1000), source: z.string().max(500), newDoc: z.object({ type: z.enum(["person", "project", "decision", "note"]), title: z.string().min(1).max(200) }).optional() }));
-    return app.memory.propose({ docRelPath: input.relPath, subject: input.subject, value: input.value, reason: input.reason, source: input.source, actor: "model", ...(input.newDoc ? { newDoc: input.newDoc } : {}) });
+    const input = await c.body(ProposalInput);
+    const out = proposeItem(app.memory, input, "model");
+    app.bus.emit("event", { type: "memory.changed" });
+    return out;
   });
   r.post("/memory/proposals/:id/:decision", (c) => {
     requireFeature(app, "capture");
     const d = c.params.decision;
     if (d !== "apply" && d !== "reject") throw new HttpError(400, "invalid_request", "decision must be apply or reject");
-    const out = app.memory.decideProposal(c.params.id!, d);
+    const out = decideProposal(app.memory, c.params.id!, d);
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });

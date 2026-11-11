@@ -5,7 +5,7 @@ import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 
-const STEPS = ["Data folder", "Features", "Connections", "Model, voice and schedules", "Test and finish"];
+const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
 interface Caps {
   features: FeatureStatus[];
@@ -40,7 +40,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
   return (
     <main className="setup">
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" data-state="idle" aria-hidden /> Jarvis setup
+        <span className="orb" aria-hidden /> Jarvis setup
       </div>
       <nav aria-label="Setup progress">
         <ol className="steps">
@@ -271,7 +271,6 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
   const [sched, setSched] = useState(config.schedules);
   const [notify, setNotify] = useState(config.notifications.desktop);
   const { run } = useAction();
-  const voiceOn = caps.data?.features.find((f) => f.id === "voice")?.enabled;
   const attentionOn = caps.data?.features.find((f) => f.id === "attention")?.enabled;
   const card = (k: string) => {
     const st = caps.data?.connections.find((c) => c.kind === k);
@@ -282,19 +281,10 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
   const save = () => run("save", async () => { await patch("/config", { schedules: sched, notifications: { desktop: notify } }); onNext(); });
   return (
     <section className="stack">
-      <h1>Model, voice and schedules</h1>
+      <h1>Model and schedules</h1>
       <h2>Model</h2>
       <p className="muted small">A model writes answers, briefings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
       {card("model")}
-      {voiceOn ? (
-        <>
-          <h2>Voice</h2>
-          <VoiceModelHelper />
-          {card("speech")}
-        </>
-      ) : (
-        <p className="small muted">Voice is off. Turn it on in the Features step to set up speech.</p>
-      )}
       {attentionOn && (
         <>
           <h2>Schedules</h2>
@@ -324,37 +314,6 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
       </p>
       <Nav onBack={onBack} onNext={save} />
     </section>
-  );
-}
-
-function VoiceModelHelper() {
-  const st = useResource<{ environment: { whisperBin: string | null; whisperModel: string | null; download: { state: string; received: number; total: number; error: string | null }; say: boolean } }>("/voice/status", ["speech.download"]);
-  const { run } = useAction();
-  useEffect(() => {
-    if (st.data?.environment.download.state !== "downloading") return;
-    const t = setInterval(st.reload, 1500);
-    return () => clearInterval(t);
-  }, [st.data?.environment.download.state, st.reload]);
-  const env = st.data?.environment;
-  if (!env) return null;
-  const d = env.download;
-  return (
-    <div className="card small stack-sm">
-      <div className="row">
-        <span>Local recognition (whisper.cpp):</span>
-        {env.whisperBin ? <StatusPill state="ready" label="installed" /> : <StatusPill state="needs_setup" label="not installed" />}
-        {!env.whisperBin && <span className="muted">Install once with <code>brew install whisper-cpp</code>, then test again.</span>}
-      </div>
-      <div className="row">
-        <span>Recognition model (148 MB):</span>
-        {env.whisperModel ? <StatusPill state="ready" label="downloaded" /> : d.state === "downloading" ? <StatusPill state="running" label={`downloading ${Math.round((d.received / d.total) * 100)}%`} /> : <button className="small" onClick={() => run("dl", () => post("/voice/model/download").then(st.reload))}>Download</button>}
-        {d.state === "failed" && <span className="error-text">Download failed: {d.error}</span>}
-      </div>
-      <div className="row">
-        <span>macOS voice:</span>
-        {env.say ? <StatusPill state="ready" label="available" /> : <StatusPill state="unavailable" label="not available" />}
-      </div>
-    </div>
   );
 }
 

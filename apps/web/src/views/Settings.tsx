@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus } from "@jarvis/contracts";
+import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@jarvis/contracts";
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
@@ -84,6 +84,44 @@ function Identity({ config, onSaved }: { config: Config; onSaved: () => void }) 
           Save identity
         </button>
       </div>
+    </div>
+  );
+}
+
+function ThisMachine() {
+  const machine = useResource<MachineView>("/machine", ["config.changed"]);
+  const [name, setName] = useState("");
+  const { busy, run } = useAction();
+  useEffect(() => setName(machine.data?.name ?? ""), [machine.data?.name]);
+  const changed = !!machine.data && name.trim() !== machine.data.name;
+  return (
+    <div className="card stack">
+      <h3>This Machine</h3>
+      <p className="small muted">Session logs and connector snapshots written here carry this name, so you can tell which computer they came from.</p>
+      {machine.loading && !machine.data && <Loading lines={1} />}
+      <ErrorState error={machine.error} retry={machine.reload} />
+      {machine.data && (
+        <form
+          className="stack-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (changed) void run("machine", () => patch("/machine", { name }).then(machine.reload), "Machine renamed");
+          }}
+        >
+          <label className="field">
+            Name
+            <input value={name} onChange={(e) => setName(e.target.value)} data-machine-name />
+          </label>
+          <p className="small muted">
+            Id <span className="mono">{machine.data.id}</span>
+          </p>
+          <div>
+            <button type="submit" disabled={!changed || !name.trim() || busy !== null}>
+              Rename
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -176,6 +214,7 @@ export function SettingsView() {
             <Identity config={cfg.data.config} onSaved={cfg.reload} />
           </>
         )}
+        <ThisMachine />
         <Clients />
         <Backups />
         <div className="card stack-sm">
