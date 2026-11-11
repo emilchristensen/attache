@@ -81,18 +81,19 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
-| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | logon task (not yet) |
+| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | Task Scheduler logon task `Jarvis-<instance>` (`Jarvis` by default) |
 | `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | owner-only file until Credential Manager arrives |
 | `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | none yet |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
-| `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
+| `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | plain-ASCII `.cmd` in the install's `bin` folder, finding the install from its own folder (`%~dp0`), because cmd.exe reads batch files in the console's code page |
+| `powershell.ts` | `runPowerShell`: a script run as `-EncodedCommand`, its inputs in environment variables, a failure as one line on stderr | | | Windows PowerShell 5.1 |
 | `shell-command.ts` | `shellPath`: a path quoted for the command lines a Harness runs (hooks, the search command in the session context) | single quotes | single quotes | double quotes and forward slashes, which Git Bash (Claude Code) and cmd.exe (Codex) read alike |
 | `launch.ts` | `launchTool`: how to start a tool found on disk without a shell; a Node script runs with Jarvis's Node | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
-The installer and uninstaller are thin shell scripts that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
+The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
@@ -100,6 +101,13 @@ The Linux service is a systemd user unit in `~/.config/systemd/user`.
 Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Jarvis wrote it to (an `XDG_CONFIG_HOME` the login does not share).
 `systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Jarvis tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
 The service's output goes to `service.out.log` and `service.err.log` in the state folder's `logs`, as launchd's does on macOS.
+
+The Windows service is a Task Scheduler task with a logon trigger for the owner's own account, running as the owner with limited rights (`InteractiveToken`, so it can reach the owner's Credential Manager and desktop), and needs no administrator rights to register.
+A task cannot set environment variables, and Task Scheduler does not restart a program that exits, so the task runs `jarvis service run` (`platform/service-manager/supervisor.ts`).
+It starts `jarvis serve` with the environment launchd and systemd units set (home folder, application data folders, state folder, instance, web folder), appends its output to `service.out.log` and `service.err.log`, and starts it again after a crash, 2 seconds later at first and backing off to a minute while it keeps failing.
+The service holds an IPC channel to its supervisor and shuts down cleanly when the channel closes, so it never outlives the task.
+The task starts the bundled runtime through `conhost.exe --headless`, because a console program started by a task would otherwise open a window on the owner's desktop.
+The service manager drives the task through Windows PowerShell's ScheduledTasks cmdlets, whose task states are the same in every display language.
 
 ### Machine identity and per-Machine evidence
 

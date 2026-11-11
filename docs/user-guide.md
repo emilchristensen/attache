@@ -1,6 +1,6 @@
 # Jarvis user guide
 
-Jarvis is a local second brain that runs on your computer, on macOS or Linux.
+Jarvis is a local second brain that runs on your computer, on macOS, Linux or Windows.
 It keeps your knowledge as Markdown in a folder you choose, answers questions with cited evidence, watches the sources you connect, and prepares drafts that are only sent after you approve them.
 
 ## Install
@@ -38,10 +38,30 @@ To keep it running without a login, for example on a home server, run `loginctl 
 If the installer says systemd could not be reached for your user, you are in a session without a systemd user manager (for example after `su` to another user); log in as yourself, or turn on lingering as above.
 `systemctl --user status jarvis` shows the service, and `journalctl --user -u jarvis` shows what systemd did with it.
 
+### On Windows
+
+Requirements: Windows 10 or 11 on x86_64 (64-bit Intel or AMD).
+You do not need administrator rights.
+
+1. Download `Jarvis-Installer-<version>-windows-x64.cmd` from the release.
+2. Double-click it.
+   Windows may say it protected your PC, because the release is not signed; choose **More info** → **Run anyway**.
+   Instead of the one-step installer you can also unpack `jarvis-<version>-windows-x64.zip` and double-click `install.cmd` in it.
+3. The installer copies Jarvis to `%LOCALAPPDATA%\Jarvis` and keeps its state in `%LOCALAPPDATA%\Jarvis\state`.
+   It registers the task `Jarvis` in Task Scheduler, which starts Jarvis when you log on, without a window, and starts it again if it crashes.
+   The installer then opens `http://127.0.0.1:7427` in your browser with a one-time pairing code, and its window waits for a key so you can read what it did.
+4. The command line goes to `%LOCALAPPDATA%\Jarvis\bin` as `jarvis.cmd` and `jarvis-uninstall.cmd`.
+   The installer does not change your `PATH`; add that folder to it (Settings → System → About → Advanced system settings → Environment Variables), or run `%LOCALAPPDATA%\Jarvis\bin\jarvis`.
+
+The service stops when you log off, and starts again at your next logon.
+Task Scheduler → Task Scheduler Library → `Jarvis` shows the task, and its output goes to `logs` in the state folder.
+Claude Code runs Jarvis's hooks through Git Bash, as it runs every hook on Windows, and Codex through cmd.exe; both work with the paths Jarvis writes, including a user folder with letters such as æ, ø and å.
+
 ### Repair and upgrade
 
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
+On Windows, repairing the version you already run replaces its files, so close the coding agents that have Jarvis's MCP server open first; the installer says so if one still holds them.
 Harness hooks and the MCP server run Jarvis through a stable `current` link, so they keep working across upgrades.
 Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
@@ -321,7 +341,7 @@ The next time Jarvis starts with a Secret Service reachable, it moves the creden
   Credentials stay in your Keychain (on Linux, the Secret Service) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
-- **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
+- **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
   Files you had before Jarvis are left alone, including notes already in the data folder you chose: only what Jarvis created there is removed.
 
@@ -465,18 +485,18 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 
 ## Where things live
 
-| What | macOS | Linux |
-| --- | --- | --- |
-| Your knowledge (Markdown) | The data folder you chose | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` |
-| Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder |
-| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` |
-| Credentials | macOS Keychain, service `dev.jarvis.default` | Secret Service, service `dev.jarvis.default`; `secrets.json` in the service state folder, readable only by you, when none is reachable (see [Credentials on Linux](#credentials-on-linux)) |
-| App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` |
-| Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` |
-| Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` |
-| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added) | the same |
-| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` |
+| What | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Your knowledge (Markdown) | The data folder you chose | The data folder you chose | The data folder you chose |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` | `%LOCALAPPDATA%\Jarvis\state` |
+| Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder | `models` in the service state folder |
+| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` | `%LOCALAPPDATA%\Jarvis\locks` |
+| Credentials | macOS Keychain, service `dev.jarvis.default` | Secret Service, service `dev.jarvis.default`; `secrets.json` in the service state folder, readable only by you, when none is reachable (see [Credentials on Linux](#credentials-on-linux)) | `secrets.json` in the service state folder |
+| App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` | `%LOCALAPPDATA%\Jarvis\current` |
+| Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `%LOCALAPPDATA%\Jarvis\bin\jarvis.cmd`, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall.cmd` |
+| Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` | the task `Jarvis` in Task Scheduler |
+| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added) | the same | the same, under `%USERPROFILE%` |
+| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` | the same, under `%USERPROFILE%`, with Claude Desktop's in `%APPDATA%\Claude\claude_desktop_config.json` |
 
 The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup` and `restore`.
 `jarvis agent-hooks status` lists the hooks and MCP servers Jarvis added to your Harnesses.
@@ -488,7 +508,7 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
 - *Jarvis service is not reachable:* run `jarvis status`.
   `jarvis service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
-  Logs: `logs` in the service state folder (`~/Library/Application Support/Jarvis/state/logs` on macOS, `~/.local/state/jarvis/logs` on Linux).
+  Logs: `logs` in the service state folder (`~/Library/Application Support/Jarvis/state/logs` on macOS, `~/.local/state/jarvis/logs` on Linux, `%LOCALAPPDATA%\Jarvis\state\logs` on Windows).
 - *Pairing code expired:* run `jarvis pair --open`.
 - *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
   For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
