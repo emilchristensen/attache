@@ -5,6 +5,7 @@ import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
+import { ReaderLine } from "./ReaderLine.tsx";
 
 interface Briefing {
   id: string;
@@ -296,7 +297,8 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
         Sources
         <Link to="/connections">manage</Link>
       </div>
-      {conns.data ? <Coverage connections={conns.data} /> : <Loading lines={2} />}
+      <ReaderLine />
+      {conns.data ?<Coverage connections={conns.data} /> : <Loading lines={2} />}
       {failed.length > 0 && (
         <div className="state partial small" style={{ marginTop: 10 }} role="status">
           <strong style={{ color: "var(--warn)" }}>Incomplete coverage</strong>

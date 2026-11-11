@@ -57,7 +57,9 @@ Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain
 - The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
   **Away summary** covers the last three days.
-- **Sources** shows each source's last successful refresh and whether its last Source refresh was complete, partial or failed.
+- **Sources** names the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
+  Without Replication this Machine is its own Reader.
+  Below it, each source shows its last successful refresh and whether its last Source refresh was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.
 - Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
@@ -290,6 +292,12 @@ Everything below is in the Dashboard under **Settings → Replication**, and in 
   Rename this Machine under **This Machine**; the others show the new name after their next check.
   Tick **Standby** to let this Machine take over as Reader when the Reader goes silent, and choose the **Preferred Reader**, the Machine that should run Source refresh and briefings whenever it is online.
   Both are recorded in the Brain, in `machines/`, so every Machine reads the same; when two Machines choose differently at the same time, the later choice wins.
+- **The Reader:** the list marks the Reader, the one Machine that runs scheduled Source refresh, briefings and the inbox items for facts past their Review date, so no source is read twice.
+  The Machine that switched Replication on starts as the Reader; the Preferred Reader takes the role at its next check once you choose it, and whenever it comes back online.
+  The other Machines read nothing on a schedule, and show the Reader's latest Source refresh on Home.
+  A Source refresh you start yourself with **Refresh now** still runs on the Machine you are on.
+  The Reader says it is still there every 10 minutes through the repository, without adding to the Brain's history.
+  A Reader that could not reach the repository for 30 minutes, because it was asleep or offline, shows as silent and reads nothing on a schedule until it is back; then it catches up once.
 - **Switch off** stops replicating from this Machine (`jarvis replication off`).
   The Brain stays in the data folder with its history, saves carry on locally, and the other Machines keep their copies.
   Set Replication up again with the same repository to pick up where it left off: this Machine's changes from while it was off are sent, and the others' are merged in.

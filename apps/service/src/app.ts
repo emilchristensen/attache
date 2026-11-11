@@ -19,7 +19,7 @@ import { ConnectionManager } from "./connectors/manager.ts";
 import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
-import { Scheduler } from "./jobs/scheduler.ts";
+import { LATER, Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
 import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
@@ -35,6 +35,8 @@ import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
 import { REPLICATION_SOURCE, syncBlockedItem } from "./replication/blocked-inbox.ts";
+import { Reader } from "./reader/reader.ts";
+import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -70,6 +72,8 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  /** Which Machine runs scheduled Source refresh, briefings and Review-date inbox items. */
+  readonly reader: Reader;
   /** The owner's inbox, kept in the Brain so it replicates. */
   readonly inbox: Inbox;
   /** Proposals, kept in the Brain so they replicate. */
@@ -112,6 +116,16 @@ export class App {
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
+      lastSourceRefresh: () => lastSourceRefresh(this.db),
+      onLeaseChange: () => this.bus.emit("event", { type: "reader.changed" }),
+    });
+    this.reader = new Reader({
+      clock: this.clock,
+      machine: () => this.machine.get(),
+      replicated: () => this.replication.view().status !== "off",
+      lease: () => this.replication.readerLease(),
+      machineName: (id) => this.replication.recordedName(id),
+      lastRefreshAt: () => lastSourceRefresh(this.db),
     });
     this.inbox = new Inbox({
       db: this.db,
@@ -152,7 +166,10 @@ export class App {
   }
 
   private wire() {
-    this.jobs.events.on("event", (ev) => this.bus.emit("event", { type: "job.event", event: ev }));
+    this.jobs.events.on("event", (ev) => {
+      this.bus.emit("event", { type: "job.event", event: ev });
+      if (ev.type === "succeeded") this.jobSucceeded(ev.jobId);
+    });
     this.connections.onChange = (id) => {
       this.cachedModel = null;
       this.bus.emit("event", { type: "connections.changed", id });
@@ -186,6 +203,12 @@ export class App {
     };
     this.actions.authority = (a) => this.actionAuthority(a.kind, a.connectionId);
     this.scheduler.enqueue = (row, reason) => {
+      if (row.jobKind === "sync" || row.jobKind === "briefing") {
+        // Only the Reader reads on a schedule. A Reader whose lease lapsed while asleep or offline waits for its renewal, then catches up.
+        const role = this.reader.role();
+        if (role === "lapsed") return LATER;
+        if (role === "other") return null;
+      }
       if (row.jobKind === "sync") return this.jobs.create({ kind: "sync", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
@@ -308,6 +331,16 @@ export class App {
   private replicationChanged() {
     if (syncBlockedItem(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
     this.bus.emit("event", { type: "replication.changed" });
+    // Switching Replication on or off changes who the Reader is.
+    this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */
+  private jobSucceeded(jobId: string) {
+    const job = this.jobs.get(jobId);
+    if (!job || !isFullRefresh(job)) return;
+    this.replication.noteSourceRefresh();
+    this.bus.emit("event", { type: "reader.changed" });
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */

@@ -633,6 +633,14 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await checkNow(card);
     await expect(card.getByText("up to date", { exact: true })).toBeVisible();
     await expect(problem).toHaveCount(0);
+
+    // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
+    await expect(card.locator('[data-machine="Home PC"] .pill', { hasText: /^Reader$/ })).toBeVisible();
+    await second.goto(`${other.url}/`);
+    const readerLine = second.locator(".reader-line");
+    await expect(readerLine).toHaveAttribute("data-reader", "other");
+    await expect(readerLine).toContainText("Home PC runs Source refresh and briefings.");
+    await expect(readerLine).toContainText("Last Source refresh");
   } finally {
     await otherCtx.close();
     await other.stop();
@@ -646,6 +654,10 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
   await expect(card.getByRole("button", { name: "Set up Replication" })).toBeVisible();
   expect(readFileSync(join(stack.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
   expect(existsSync(join(stack.dataDir, ".git"))).toBe(true);
+  // Without Replication this Machine is its own Reader again.
+  await page.goto(`${stack.url}/`);
+  await expect(page.locator(".reader-line")).toHaveAttribute("data-reader", "alone");
+  await expect(page.locator(".reader-line")).toContainText("This Machine runs Source refresh and briefings.");
 });
 
 test("wording: no view says sync for reading sources; a source offers Refresh now", async () => {

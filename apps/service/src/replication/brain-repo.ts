@@ -8,6 +8,11 @@ import type { GuardVerdict, MachineRef, MergeNotice, MergeOutcome as MergedFile,
 export const BRANCH = "main";
 export const REMOTE = "origin";
 const TRACKING = `refs/remotes/${REMOTE}/${BRANCH}`;
+/**
+ * The remote's `refs/jarvis/*` (the Reader lease), fetched with the Brain. A
+ * glob, so a remote without them is no error. They are never part of the Brain's history.
+ */
+export const JARVIS_REFS_FETCH = `+refs/jarvis/*:refs/remotes/${REMOTE}/jarvis/*`;
 const MACHINE_EMAIL_DOMAIN = "machine.jarvis.invalid";
 
 export type CommitOutcome = { kind: "nothing" } | { kind: "committed"; staged: StagedEntry[] } | { kind: "refused"; verdict: Exclude<GuardVerdict, { ok: true }> };
@@ -131,7 +136,7 @@ export class BrainRepo {
   }
 
   async fetch(remote: string): Promise<void> {
-    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`]);
+    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, JARVIS_REFS_FETCH]);
   }
 
   /** Push this Machine's commits. Only ever a fast-forward: a rejection means another Machine pushed first. */
