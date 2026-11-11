@@ -124,9 +124,10 @@ For GitHub itself, `apps/service/test/fixtures/github-git-server.ts` serves git'
 
 A change to search ships only when it improves recall evaluation.
 `apps/service/test/fixtures/recall-brain/` is a synthetic Brain with its own question set in `evaluation/recall-questions.json`, mixing exact lookups (ticket numbers, repository names), paraphrases and Danish questions.
-`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` and fails if it drops below the recorded baseline (`BASELINE`: first result 16 of 22, first three 18 of 22, keyword search only).
+`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` twice and fails if either drops below its recorded baseline: keyword search only (`BASELINE`: first result 16 of 22, first three 18 of 22), and with meaning-based search on the fixture meaning model (`MEANING_BASELINE`: first result 19 of 22, first three 20 of 22).
+The fixture model knows only the concept words listed in `fixture-meaning-model.ts`; add one there when a synthetic question needs it.
 When a change improves the score, raise the baseline in the same commit.
-The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare.
+The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare, with meaning-based search ready both times (the report's first lines say how search ranked).
 
 ## Release
 

@@ -198,7 +198,8 @@ describe("Windows notifications", () => {
       const desktop = windowsDesktop({ FAKE_TOAST_SETTING: "DisabledForUser" });
       const svc = await serve(newStateDir(), desktop.env);
       expect((await svc.api("GET", "/status")).version).toBeTruthy();
-      await expect.poll(() => svc.log()).toContain("desktop notifications are off");
+      // The start-up check runs a (fake) PowerShell, which can take seconds on a loaded machine; poll's default 1 s is too short.
+      await expect.poll(() => svc.log(), { timeout: 30_000 }).toContain("desktop notifications are off");
       expect(svc.log()).toContain("notifications are turned off for this Windows user");
     },
     SLOW,

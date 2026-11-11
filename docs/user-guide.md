@@ -228,7 +228,7 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
   A fact past its Review date is marked unverified.
-  While search does not rank by meaning on this Machine, the answer starts with a line saying the passages match keywords only, and why.
+  Once meaning-based search is ready on this Machine, passages are found by meaning as well as by keywords; until then the answer starts with a line saying the passages match keywords only, and why.
 - **read** returns a whole note, or only a line range, for a path that search returned, and names the facts in it that are past their Review date.
 - **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
   A fact can carry a Review date (see below).
@@ -292,12 +292,14 @@ There is no Obsidian plugin; use the Dashboard in the browser to search, review 
 ## Meaning-based search
 
 Meaning-based search finds notes by what they mean, so a question in other words, or in Danish, finds an English note.
-Search does not rank by meaning yet: this release downloads the model and builds the vectors, and results still match keywords only.
+Names, ticket numbers and repository names still match exactly, because keyword matches keep their place in the ranking.
 It uses a small multilingual model (multilingual-e5-small, about 135 MB) that runs on each Machine, without a network and without sending your notes anywhere.
 Jarvis does not ship the model: download it once per Machine in **Settings → Meaning-based search**.
 The card shows the model's state: not downloaded, downloading, building, ready or failed.
 After the download Jarvis builds a vector for every passage it has indexed, in the background, and keeps them current as files change.
 Search keeps working on keywords the whole time, and results in the Dashboard, in a Harness and from `jarvis search` say they match keywords only, and why.
+Once every passage has a vector, the card says search ranks by meaning and keywords, and the keywords-only line goes away.
+While a changed note's new passages are embedded, search falls back to keywords for those few seconds.
 If the download fails, the card says why and offers to download again.
 The model lives in the service state folder and its vectors in this Machine's index, never in your Brain, so they are not replicated; each Machine builds its own.
 
@@ -312,6 +314,7 @@ Each question names the note and the current fact that should answer it:
 
 `note` is the note's path inside the Brain and `fact` is the subject written in bold in its Current State.
 The report says how often the expected fact is the first result and how often it is in the first three, and lists every question that missed with the first three results search returned instead.
+It also says whether search ranked by meaning and keywords or by keywords only, so compare scores measured the same way.
 A question whose note or fact is no longer in the Brain is not scored; the report lists it with the reason so you can correct the set.
 Use `--set <file>` to score another set and `--json` for the full report.
 Jarvis must be running, because the command scores the search the service runs.

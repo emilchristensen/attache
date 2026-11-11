@@ -12,8 +12,9 @@ export function registerRecallRoutes(r: Router, app: App) {
     const dataRoot = app.memory.dataRoot;
     if (!dataRoot) throw new HttpError(409, "needs_data_folder", "Choose a data folder first.");
     const input = await c.body(RecallEvaluationInput);
+    const meaning = { ranking: app.meaning.status().ranking, nearest: (q: string, n: number) => app.meaning.nearest(q, n) };
     return input.set
-      ? evaluateRecall(app.db, dataRoot, input.set, { source: "supplied" })
-      : evaluateRecall(app.db, dataRoot, loadBrainQuestionSet(dataRoot), { source: "brain", path: RECALL_SET_PATH });
+      ? evaluateRecall(app.db, dataRoot, input.set, { source: "supplied" }, meaning)
+      : evaluateRecall(app.db, dataRoot, loadBrainQuestionSet(dataRoot), { source: "brain", path: RECALL_SET_PATH }, meaning);
   });
 }

@@ -47,3 +47,8 @@ export function pruneVectors(db: Db, modelId: string): number {
 export function encodeVector(v: Float32Array): Uint8Array {
   return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
 }
+
+/** The inverse of `encodeVector`: a copy, since a blob's bytes need not be aligned for a `Float32Array`. */
+export function decodeVector(blob: Uint8Array): Float32Array {
+  return new Float32Array(blob.slice().buffer);
+}

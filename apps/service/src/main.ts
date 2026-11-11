@@ -7,11 +7,13 @@ import { resolvePaths } from "./core/paths.ts";
 import { openDb } from "./core/db.ts";
 import { createBackup, restoreBackup } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
-import { RECALL_EXCLUDE, search } from "./memory/search.ts";
+import { RECALL_EXCLUDE, searchByMeaning } from "./memory/search.ts";
 import { unverifiedLabel } from "./memory/review-date.ts";
 import { configuredMeaningModel } from "./meaning/model.ts";
 import { meaningNote } from "./meaning/note.ts";
-import { offlineMeaningStatus } from "./meaning/status.ts";
+import { MeaningSearch } from "./meaning/service.ts";
+import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
+import { createLogger } from "./core/log.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
@@ -97,10 +99,13 @@ async function searchCmd(argv: string[]) {
   if (!query) throw new Error('Usage: jarvis search "your query" [--limit 8] [--json]');
   const paths = resolvePaths(arg("state-dir", argv));
   const db = openDb(paths.dbFile);
+  // Ranks by meaning with the model and vectors this Machine already has; it never downloads or builds them.
+  const meaning = new MeaningSearch({ db, modelsDir: paths.modelsDir, log: createLogger(null, { quiet: true }), emit: () => {} }, { model: configuredMeaningModel(), loadEmbedder: loadOnnxEmbedder });
   try {
     const dataFolder = new ConfigStore(db).get().dataFolder;
     const roots = new Map((db.prepare("select id, settings from connections where kind = 'vault'").all() as Array<{ id: string; settings: string }>).map((r) => [`import:${r.id}`, String((JSON.parse(r.settings) as { path?: string }).path ?? "")]));
-    const hits = search(db, query, { limit: Math.min(Number(arg("limit", argv) ?? 8), 30), excludePrefixes: RECALL_EXCLUDE }).map((h) => ({
+    const found = await searchByMeaning(db, query, (q, n) => meaning.nearest(q, n), { limit: Math.min(Number(arg("limit", argv) ?? 8), 30), excludePrefixes: RECALL_EXCLUDE });
+    const hits = found.map((h) => ({
       // An absolute path in this operating system's own form, which a Harness can open as it is.
       file: join(h.root === "data" && dataFolder ? dataFolder : (roots.get(h.root) ?? h.root), ...h.relPath.split("/")),
       lines: [h.startLine, h.endLine],
@@ -109,8 +114,8 @@ async function searchCmd(argv: string[]) {
       review: h.review,
       unverified: h.unverified,
     }));
-    // This command reads the keyword index itself, so it says why results match keywords only, as the MCP server and the Dashboard do.
-    const note = meaningNote(offlineMeaningStatus(db, paths.modelsDir, configuredMeaningModel()));
+    // This command searches the index itself, so it says why results match keywords only, as the MCP server and the Dashboard do.
+    const note = meaningNote(meaning.status());
     if (argv.includes("--json")) {
       // The JSON stays a list of hits for scripts; the note goes beside it, on stderr.
       if (note) process.stderr.write(`${note}\n`);
@@ -120,6 +125,7 @@ async function searchCmd(argv: string[]) {
     if (!hits.length) return out(`No matches for "${query}".`);
     out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}${h.unverified && h.review ? `  (${unverifiedLabel(h.review)})` : ""}\n    ${h.snippet}`).join("\n"));
   } finally {
+    await meaning.stop();
     db.close();
   }
 }

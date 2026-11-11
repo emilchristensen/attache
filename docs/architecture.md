@@ -269,13 +269,19 @@ Each chunk stores the text its vector is made from (title, heading and the same 
 Vectors live in `chunk_vectors`, keyed by model id and text hash, in the Machine's own SQLite index: they never enter the Brain and do not replicate, and re-chunking a file keeps the vectors of text that did not change.
 A background builder (`meaning/builder.ts`) embeds chunks without a vector in batches of eight whenever the indexer reports a change, then drops vectors no chunk uses.
 `GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress, how many chunks have vectors and `ranking`, how search ranks results now.
-Meaning-based results do not yet join the ranking (`SEARCH_RANKS_BY_MEANING` in `memory/search.ts`), so `ranking` is `keywords` in every state, `ready` included.
+`ranking` is `meaning` in `ready` and `keywords` in every other state.
+Search fuses ranked lists with reciprocal rank fusion (`memory/search.ts`): two keyword lists from SQLite FTS5 (every term present, and any term as a prefix) and, once `ranking` is `meaning`, a third list of the chunks nearest the question by meaning.
+`MeaningSearch.nearest` embeds the question with the model's query prefix and compares it with every chunk's vector (`meaning/nearest.ts`; vectors are unit length, so the dot product is the cosine), keeping chunks that point toward the question.
+In any other state it returns no list, so search answers on keywords alone; a model that fails while embedding a question is reported as `failed` and that search answers on keywords.
+The fused score is weighted as before (area, section, status and the share of query terms present), so exact keyword matches keep their place.
+`searchByMeaning` is what the HTTP search route (and through it the MCP `search` tool and the Dashboard), `jarvis search` and recall evaluation call; `jarvis search` loads the model itself when the vectors are ready, and never downloads it or builds vectors.
+Other internal searches (briefings, audits, Consolidation, research jobs) stay on keywords.
 The MCP `search` tool, `jarvis search` (first line, or stderr with `--json`) and the Dashboard's search say results match keywords only, and why, for as long as `ranking` is `keywords` (`meaning/note.ts`).
 
 Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
 A question set names, per question, the note and the subject of the current fact expected to answer it.
 Each question runs through the same search a Harness gets (8 results, raw archives excluded), and a result counts only when it is that fact's own chunk.
-The report gives how often the expected fact is first and how often it is in the first three, every question not answered first with the first three results, and, unscored, every question whose note or fact is not in the Brain.
+The report gives how often the expected fact is first and how often it is in the first three, how search ranked (`ranking`), every question not answered first with the first three results, and, unscored, every question whose note or fact is not in the Brain.
 The owner's set lives in the Brain at `evaluation/recall-questions.json`, as JSON so the indexer never reads it; a synthetic Brain with its own set lives in `apps/service/test/fixtures/recall-brain/` and runs with the test suite.
 
 Jarvis holds no conversation of its own (ADR 0003): a Harness asks the Brain through search and read.

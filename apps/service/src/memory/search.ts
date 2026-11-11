@@ -34,7 +34,16 @@ export interface SearchOptions {
   relativeCutoff?: number;
   /** Most hits one document may take while other documents still have hits to show. Defaults to half of `limit`. */
   maxPerDocument?: number;
+  /** Chunk ids nearest the question by meaning, best first: fused with the two keyword lists as a third. */
+  meaning?: readonly number[];
 }
+
+/**
+ * Finds the chunks nearest a question by meaning, best first; empty while
+ * search ranks by keywords alone. Like the keyword lists, it ranks every
+ * chunk in the index, and search drops what it leaves out after fusion.
+ */
+export type NearestChunks = (query: string, limit: number) => Promise<number[]>;
 
 const STOPWORDS = new Set(
   (
@@ -62,19 +71,22 @@ export const RECALL_EXCLUDE = ["evidence/conversations/", "evidence/sessions/tra
 const AREA_WEIGHT: Record<string, number> = { memory: 1.0, import: 0.9, deliverables: 0.7, evidence: 0.75 };
 const SECTION_WEIGHT: Record<string, number> = { state: 1.15, body: 1.0, history: 0.55 };
 const RRF_K = 60;
-/**
- * Whether search fuses meaning-based results into its ranking. Not yet: the
- * lists fused below are keyword lists only, so every reader is told results
- * match keywords only, even once the vectors are built.
- */
-export const SEARCH_RANKS_BY_MEANING = false;
+
+/** How deep each ranked list goes before fusion. */
+const candidatesFor = (limit: number) => Math.max(limit * 6, 60);
+
+/** Search, with the chunks nearest the question by meaning as a third list. */
+export async function searchByMeaning(db: Db, query: string, nearest: NearestChunks, opts: Omit<SearchOptions, "meaning"> = {}): Promise<SearchHit[]> {
+  if (!queryTerms(query).length) return [];
+  return search(db, query, { ...opts, meaning: await nearest(query, candidatesFor(opts.limit ?? 8)) });
+}
 
 export function search(db: Db, query: string, opts: SearchOptions = {}): SearchHit[] {
   const terms = queryTerms(query);
   if (!terms.length) return [];
   const limit = opts.limit ?? 8;
-  const candidates = Math.max(limit * 6, 60);
-  const lists: Array<Array<{ id: number; bm: number }>> = [];
+  const candidates = candidatesFor(limit);
+  const lists: Array<ReadonlyArray<{ id: number }>> = [];
   const run = (match: string) => {
     try {
       return db
@@ -87,6 +99,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
   // All terms present (precise), any term as prefix (recall).
   if (terms.length > 1) lists.push(run(terms.map(quote).join(" AND ")));
   lists.push(run(terms.map((t) => `${quote(t)}*`).join(" OR ")));
+  if (opts.meaning?.length) lists.push(opts.meaning.slice(0, candidates).map((id) => ({ id })));
 
   const fused = new Map<number, number>();
   for (const list of lists) {

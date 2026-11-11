@@ -57,6 +57,7 @@ export function renderRecallEvaluation(r: RecallEvaluationReport): string {
   const from = r.set.source === "brain" ? `the Brain's set (${r.set.path})` : "the supplied set";
   const lines = [
     `Recall evaluation: ${r.questions} questions from ${from}`,
+    r.ranking === "meaning" ? "Ranked by keywords and meaning" : "Ranked by keywords only: meaning-based search is not ready on this Machine",
     `First result: ${r.top1} of ${r.questions} (${percent(r.top1Rate)})`,
     `In the first three: ${r.top3} of ${r.questions} (${percent(r.top3Rate)})`,
   ];

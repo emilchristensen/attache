@@ -47,8 +47,7 @@ function Detail({ s }: { s: MeaningStatus }) {
     case "ready":
       return (
         <p className="small muted">
-          Every passage in this Machine's index has a vector ({chunks}).{" "}
-          {s.ranking === "meaning" ? "Search ranks by meaning and keywords." : "Search does not rank by meaning yet, so results still match keywords only."}
+          Every passage in this Machine's index has a vector ({chunks}). Search ranks by meaning and keywords.
         </p>
       );
   }
