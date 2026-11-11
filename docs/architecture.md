@@ -150,7 +150,9 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
   Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
   The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
-  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  `MergeNotice`s become inbox items through `Inbox.apply` on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`; a source of its own, because the blocked item's refresh resolves every other `replication` item).
+  They replicate through `review/inbox/` like any item, so every Machine shows them.
+  Their key never holds the merge's time: a per-path notice is keyed by kind and path, any other by kind, path and its `version` (for a deleted-and-changed note, a hash of the note it kept), so two Machines that merge the same thing raise one item.
   A notice is one item per merge, unless it is `perPath`: then it is one item per file while it stays open, and a later merge raises it again only after it resolved.
   Items are resolved only by the owner, except the kinds listed in `SETTLED_BY_EDIT`: whenever the index changes (a save, an editor, a pull), `settleMergeNotices` reads their file and resolves the ones the owner has settled.
 - **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.

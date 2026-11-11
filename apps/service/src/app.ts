@@ -39,7 +39,7 @@ import type { GitHubAccess } from "./replication/github.ts";
 import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
 import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
-import { brainFileReader, MERGE_NOTICE_SOURCE, raiseMergeNotices, SETTLED_BY_EDIT, settleMergeNotices } from "./replication/merge-notice-inbox.ts";
+import { brainFileReader, raiseMergeNotices, SETTLED_BY_EDIT, settledMergeNotices } from "./replication/merge-notice-inbox.ts";
 import { CaptureArrivals } from "./consolidation/arrivals.ts";
 import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
@@ -153,8 +153,8 @@ export class App {
       dataRoot: () => this.memory.dataRoot,
       onWrite: () => this.replication.noteWrite(),
       onChange: () => this.bus.emit("event", { type: "attention.changed" }),
-      // Replication's own items stay on this Machine: its status, and the notices of merges it made (raised once, where the merge ran).
-      localSources: [REPLICATION_SOURCE, MERGE_NOTICE_SOURCE],
+      // This Machine's own Replication status stays here; the notices of merges replicate like any item.
+      localSources: [REPLICATION_SOURCE],
     });
     this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.captures = new CaptureArrivals({ db: this.db, log: this.log, clock: this.clock, dataRoot: () => this.memory.dataRoot, arrived: (rel) => queueCaptureConsolidation(this, rel) });
@@ -167,7 +167,7 @@ export class App {
       if (paths.some((p) => p.startsWith("deliverables/briefings/"))) this.bus.emit("event", { type: "briefing.created" });
     });
     this.replication.onMergeNotice((notices) => {
-      if (raiseMergeNotices(this.db, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
+      if (raiseMergeNotices(this.inbox, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
     });
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
@@ -405,8 +405,7 @@ export class App {
     const root = this.memory.dataRoot;
     if (!root) return;
     try {
-      const ctx = { now: () => this.clock.now().toISOString(), machine: () => this.machine.get() };
-      if (settleMergeNotices(this.db, SETTLED_BY_EDIT, brainFileReader(root), ctx).length) this.bus.emit("event", { type: "attention.changed" });
+      if (this.inbox.resolve(settledMergeNotices(this.db, SETTLED_BY_EDIT, brainFileReader(root))).length) this.bus.emit("event", { type: "attention.changed" });
     } catch (e) {
       this.log.error("could not check the notes merges kept in two versions", { error: (e as Error).message });
     }

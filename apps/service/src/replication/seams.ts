@@ -51,6 +51,12 @@ export interface MergeNotice {
    * a file that the owner settles by editing it.
    */
   perPath?: boolean;
+  /**
+   * What the notice is about besides its path, such as a hash of the note it
+   * kept, so two Machines that merge the same thing raise one inbox item. A
+   * notice that is not `perPath` without one is told apart by its message.
+   */
+  version?: string;
 }
 
 export interface MergeOutcome {

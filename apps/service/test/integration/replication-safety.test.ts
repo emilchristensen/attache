@@ -122,15 +122,14 @@ describe("A note deleted on one Machine and changed on another", () => {
     await pc.clock.advance(60_000);
     expect(await inbox(pc)).toHaveLength(2);
 
-    // They are about the merge PC made, so they stay on PC: not in the Brain's replicated inbox, even after PC reopens its data folder.
+    // They replicate like any inbox item, so the Mac shows the same two, also after PC reopens its data folder.
     const reopened = await world.restart(pc);
     await reopened.clock.advance(60_000);
     await mac.clock.advance(60_000);
     expect(await inbox(reopened)).toHaveLength(2);
-    expect(await inbox(mac)).toHaveLength(0);
+    expect((await inbox(mac)).map((i) => i.title).sort()).toEqual(items.map((i) => i.title).sort());
     const inboxDir = join(reopened.dataDir, "review/inbox");
-    const files = existsSync(inboxDir) ? readdirSync(inboxDir).map((f) => readFileSync(join(inboxDir, f), "utf8")) : [];
-    expect(files.filter((f) => f.includes("replication_merge"))).toEqual([]);
+    expect(readdirSync(inboxDir).map((f) => readFileSync(join(inboxDir, f), "utf8")).filter((f) => f.includes("replication_merge"))).toHaveLength(2);
   });
 });
 

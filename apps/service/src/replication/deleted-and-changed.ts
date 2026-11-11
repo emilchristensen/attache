@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { parseMarkdown } from "../memory/markdown.ts";
 import type { MergeInput, MergeOutcome, MergeRule } from "./seams.ts";
@@ -36,6 +37,7 @@ export const deletedAndChangedRule: MergeRule = {
           kind: DELETED_AND_CHANGED,
           message: `"${title}" was deleted on ${deletedOn} and changed on ${changedOn} before either Machine saw the other's change. Jarvis kept the changed note on every Machine; delete it again if it should go.`,
           title: `Kept "${title}": deleted on one Machine, changed on another`,
+          version: createHash("sha256").update(kept).digest("hex").slice(0, 16),
         },
       ],
     };

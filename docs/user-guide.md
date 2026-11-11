@@ -442,11 +442,10 @@ What happens on its own:
   The frontmatter merges field by field: the earliest `created`, the latest `updated`, lists such as `tags` and `sources` keep every item.
 - Two notes with the same type and title, created on two Machines, become one note with the facts and History of both.
 - A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
-  One inbox item, on the Machine that brought the two changes together, names the note and both Machines; delete the note again if it should go.
-  Unlike other inbox items, it stays on that Machine.
+  One inbox item, which every Machine shows, names the note and both Machines; delete the note again if it should go.
 - The free text of a note, such as its Notes section, merges line by line: when the two Machines changed different lines, both changes are kept.
   When both changed the same lines, the note keeps both versions, each under a heading such as `### Version from Mac`, and Replication carries on with every other file.
-  One inbox item, on the Machine that brought the two versions together, names the note.
+  One inbox item, which every Machine shows, names the note.
   Keep the version you want and delete the other with its heading, in an editor on any Machine; the item then resolves by itself.
   A note that gets two versions again later raises the item again.
 - Any other file both Machines changed in the same place, outside the notes and Jarvis' own review files, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
