@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServicePaths } from "../core/paths.ts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
+import { registerAuditTool } from "./audit-tool.ts";
+import { failure } from "./failure.ts";
+import { registerPrompts } from "./prompts.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -24,10 +26,6 @@ const PassageShape = z.object({
 });
 
 const NoteShape = { path: z.string(), title: z.string(), startLine: z.number().int(), endLine: z.number().int(), totalLines: z.number().int(), text: z.string() };
-
-function failure(e: unknown): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: (e as Error).message }] };
-}
 
 function renderPassages(query: string, passages: Passage[]): string {
   if (!passages.length) return `No passages in the Brain match "${query}".`;
@@ -81,6 +79,8 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       }
     },
   );
+  registerAuditTool(server, brain);
+  registerPrompts(server);
   return server;
 }
 
