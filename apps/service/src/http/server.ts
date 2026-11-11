@@ -106,7 +106,7 @@ export async function startServer(app: App, opts: { port: number; host?: string 
         if (req.method === "GET" && web && serveStatic(web, url.pathname, res)) return;
         if (req.method === "GET" && !web) {
           res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-          res.end("Jarvis service is running, but the web client is not installed.");
+          res.end("Jarvis service is running, but the Dashboard is not installed.");
           return;
         }
         send(res, 404, { error: { code: "not_found", message: "Not found" } });
