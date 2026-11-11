@@ -9,7 +9,7 @@ const session = { kind: "agent-session", ref: "claude-code/sess-7", observedAt: 
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/notes", { type: "project", title: "Atlas rollout", state: [{ subject: "Status", value: "Pilot in Copenhagen" }, { subject: "Owner", value: "Mia" }] });
+  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }, { subject: "Owner", value: "Mia" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
@@ -135,7 +135,7 @@ describe("deciding a Proposal", () => {
     expect(coffee).not.toContain("Bought in March");
     expect(existsSync(join(svc.dataDir, "memory/notes/coffee-machine-2.md"))).toBe(false);
 
-    await svc.post("/memory/notes", { type: "note", title: "Short lived", state: [{ subject: "A", value: "1" }] });
+    await svc.post("/memory/save", { items: [{ action: "create", type: "note", title: "Short lived", facts: [{ subject: "A", value: "1" }] }] });
     const update = await svc.post("/memory/proposals", { item: { action: "update", path: "memory/notes/short-lived.md", facts: [{ subject: "A", value: "2", reason: "x" }], events: ["y"] }, reason: "Cleanup" });
     rmSync(join(svc.dataDir, "memory/notes/short-lived.md"));
     const gone = await svc.call("POST", `/memory/proposals/${update.id}/apply`);

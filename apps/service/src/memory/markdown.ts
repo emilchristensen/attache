@@ -33,6 +33,8 @@ export interface Section {
 export interface StateEntry {
   subject: string;
   date: string;
+  /** The day after which the fact should be checked again, when one is set. */
+  review?: string;
   value: string;
   source?: string;
   line: number;
@@ -93,12 +95,17 @@ export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdow
   return { frontmatter, body, bodyStartLine, title: fmTitle || h1 || fallbackTitle, sections };
 }
 
-const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})\): (.*?)(?: — source: (.+))?$/;
+/**
+ * `- **Subject** (date[, review date]): value[ — source: …]`. Jarvis writes
+ * `(2026-11-10, review 2026-11-13)`; a hand edit may vary the spacing, the
+ * case of "review" or add a colon after it, and still reads the same.
+ */
+const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})(?:\s*,\s*[Rr]eview:?\s*(\d{4}-\d{2}-\d{2}))?\s*\): (.*?)(?: — source: (.+))?$/;
 
-/** One `- **Subject** (date): value — source: …` line, or null when the line is not a state entry. */
+/** One `- **Subject** (date[, review date]): value — source: …` line, or null when the line is not a state entry. */
 export function parseStateLine(line: string): Omit<StateEntry, "line"> | null {
   const m = STATE_RE.exec(line);
-  return m ? { subject: m[1]!, date: m[2]!, value: m[3]!, ...(m[4] ? { source: m[4] } : {}) } : null;
+  return m ? { subject: m[1]!, date: m[2]!, ...(m[3] ? { review: m[3] } : {}), value: m[4]!, ...(m[5] ? { source: m[5] } : {}) } : null;
 }
 
 export function parseStateEntries(raw: string): StateEntry[] {
@@ -116,15 +123,24 @@ export function parseStateEntries(raw: string): StateEntry[] {
   return out;
 }
 
-export function formatStateEntry(e: { subject: string; date: string; value: string; source?: string | undefined }): string {
+/** What a current-state entry holds, as the writer takes it. */
+export interface StateEntryInput {
+  subject: string;
+  date: string;
+  review?: string | undefined;
+  value: string;
+  source?: string | undefined;
+}
+
+export function formatStateEntry(e: StateEntryInput): string {
   const value = e.value.replace(/\s*\n\s*/g, " ").trim();
-  return `- **${e.subject.replace(/\*\*/g, "")}** (${e.date}): ${value}${e.source ? ` — source: ${e.source}` : ""}`;
+  return `- **${e.subject.replace(/\*\*/g, "")}** (${e.date}${e.review ? `, review ${e.review}` : ""}): ${value}${e.source ? ` — source: ${e.source}` : ""}`;
 }
 
 export interface MemoryDocInput {
   frontmatter: Record<string, unknown>;
   title: string;
-  state: Array<{ subject: string; date: string; value: string; source?: string | undefined }>;
+  state: StateEntryInput[];
   notes?: string;
   history?: string[];
 }
@@ -143,11 +159,13 @@ export function renderMemoryDoc(doc: MemoryDocInput): string {
 
 /**
  * Replace (or add) one subject's state entry and append the superseded value to
- * History. Returns the new file text and the prior entry, if any.
+ * History. The new entry carries only the Review date it is given, so a date
+ * set for the old value never follows the new one. Returns the new file text
+ * and the prior entry, if any.
  */
 export function applyStateCorrection(
   raw: string,
-  entry: { subject: string; date: string; value: string; source?: string | undefined },
+  entry: StateEntryInput,
   reason: string,
 ): { text: string; previous: StateEntry | null } {
   const lines = raw.split("\n");
@@ -192,7 +210,7 @@ export function removeStateEntry(raw: string, entry: { subject: string; date: st
 }
 
 function formerValueLine(date: string, former: StateEntry, outcome: "superseded" | "removed", reason: string): string {
-  return `- ${date} — **${former.subject}** was "${former.value}" (dated ${former.date}${former.source ? `, source: ${former.source}` : ""}); ${outcome}: ${reason.replace(/\s*\n\s*/g, " ")}`;
+  return `- ${date} — **${former.subject}** was "${former.value}" (dated ${former.date}${former.review ? `, review ${former.review}` : ""}${former.source ? `, source: ${former.source}` : ""}); ${outcome}: ${reason.replace(/\s*\n\s*/g, " ")}`;
 }
 
 export function appendHistory(raw: string, line: string): string {

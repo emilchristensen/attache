@@ -49,7 +49,7 @@ function checkFact(store: MemoryStore, change: MemoryChange, later: MemoryChange
   if (later.some((c) => c.change === "correct" && c.subject?.toLowerCase() === subject)) return refuse(`A later change overwrote “${change.subject}”. Revert that change first.`);
   if (!store.exists(change.docRelPath)) return refuse("The note no longer exists.");
   const current = parseStateEntries(store.read(change.docRelPath)).find((e) => e.subject.toLowerCase() === subject);
-  const unchanged = change.afterValue === null ? !current : current !== undefined && sameText(current.value, change.afterValue);
+  const unchanged = change.afterValue === null ? !current : current !== undefined && sameText(current.value, change.afterValue) && (current.review ?? null) === change.afterReview;
   return unchanged ? ALLOWED : refuse(`“${change.subject}” was edited outside Jarvis after this change.`);
 }
 
@@ -82,7 +82,7 @@ const DASHBOARD_REVERT: RevertReason = {
 
 /**
  * Undo one change as the owner's own Dashboard action: a fact gets its previous
- * value back as a correction (so History shows both steps), a created note is
+ * value and Review date back as a correction (so History shows both steps), a created note is
  * removed from the Brain and search, and a removed note comes back as it was.
  * The undo is recorded as a change of its own.
  */
@@ -96,7 +96,7 @@ export function revertChange(store: MemoryStore, id: string, why: RevertReason =
   switch (change.change) {
     case "correct":
       if (change.beforeValue === null) return store.removeFact(change.docRelPath, { subject: change.subject!, reason }, "user", meta);
-      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, reason, source: { kind: "user", ref: "dashboard", label: why.label, observedAt: new Date().toISOString() } }, "user", {}, meta);
+      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, review: change.beforeReview, reason, source: { kind: "user", ref: "dashboard", label: why.label, observedAt: new Date().toISOString() } }, "user", {}, meta);
     case "create":
       return store.deleteMemory(change.docRelPath, { reason }, "user", meta);
     case "delete":

@@ -177,6 +177,11 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
   // Proposals live in the Brain (review/proposals/), so they replicate. This table is only this
   // Machine's index of those files, rebuilt from them; Proposals stored in the change log before
   // are carried over into files when the data folder is next opened.

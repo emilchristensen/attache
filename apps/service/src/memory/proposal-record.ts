@@ -84,7 +84,7 @@ export function toProposalView(record: ProposalRecord): ProposalView {
 export function proposalHeadline(record: Pick<ProposalRecord, "item">): string {
   const item = proposalItem(record);
   if (!item) return "A Proposal that can no longer be read";
-  const facts = (item.facts ?? []).map((f) => `${f.subject}: ${f.value}`);
+  const facts = (item.facts ?? []).map((f) => `${f.subject}: ${f.value}${f.review ? ` (review after ${f.review})` : ""}`);
   const events = item.events?.length ?? 0;
   const parts = [...facts, ...(events ? [`${events} event${events === 1 ? "" : "s"}`] : [])].join("; ");
   const line = item.action === "create" ? `New ${item.type} "${item.title}" (${parts})` : parts;
