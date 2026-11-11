@@ -1,5 +1,6 @@
 import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { credentialScan } from "./credential-scan.ts";
+import { machineRecordRule } from "./machine-record-rule.ts";
 
 /**
  * Where later rules plug into Replication without changing the loop:
@@ -98,5 +99,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [inboxMergeRule, proposalMergeRule], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [machineRecordRule, inboxMergeRule, proposalMergeRule], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

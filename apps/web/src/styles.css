@@ -308,6 +308,9 @@ button.ghost {
 button.ghost:hover:not(:disabled) {
   background: var(--raised);
 }
+button.ghost.danger {
+  color: var(--danger);
+}
 button.small {
   padding: 3px 9px;
   font-size: 12.5px;
@@ -1260,4 +1263,79 @@ label.field select {
 .recent-change-why {
   font-size: 12px;
   color: var(--warn);
+}
+
+/* ---- replication ------------------------------------------------------- */
+
+.replication-facts {
+  margin: 0;
+}
+.replication-problem {
+  padding: 12px 14px;
+  gap: 6px;
+}
+.replication-problem .replication-cause {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.replication-problem b {
+  font-weight: 600;
+  color: var(--text);
+}
+.replication-off-confirm {
+  padding: 12px 14px;
+  flex: 1 1 100%;
+}
+.replication-off-confirm .mono {
+  overflow-wrap: anywhere;
+}
+.card h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-top: 6px;
+}
+.machine-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.machine-row {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.machine-row + .machine-row {
+  border-top: 1px solid var(--border);
+}
+.machine-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.machine-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  margin-right: 2px;
+}
+.machine-standby {
+  margin-top: 4px;
+}
+.preferred-reader select {
+  max-width: 360px;
+}
+.join-brain summary {
+  cursor: pointer;
+  list-style-position: outside;
+  margin-left: 16px;
+}
+.join-brain summary::marker {
+  color: var(--muted);
+}
+.join-brain-body {
+  margin-top: 12px;
 }

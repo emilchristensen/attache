@@ -218,6 +218,13 @@ export class BrainRepo {
     this.git.okSync(["add", "--", path]);
   }
 
+  /** When the Machine with `id` last authored a commit in this copy's history; null when it never has. */
+  lastChangeBy(id: string): string | null {
+    if (!this.revParse("HEAD")) return null;
+    const at = this.git.okSync(["log", "-1", "--format=%aI", "--fixed-strings", `--author=<${id}@${MACHINE_EMAIL_DOMAIN}>`, "HEAD"]).trim();
+    return at ? new Date(at).toISOString() : null;
+  }
+
   private lastAuthor(ref: string, path: string): MachineRef {
     const [name = "another Machine", email = ""] = this.git.okSync(["log", "-1", "--format=%an%x00%ae", ref, "--", path]).trim().split("\0");
     return machineOfAuthor(name, email);

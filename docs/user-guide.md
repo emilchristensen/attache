@@ -266,15 +266,27 @@ Replication keeps the Brain the same on every Machine you run Jarvis on, through
 It is off until you switch it on; a Brain on one Machine works exactly as before.
 Each Machine needs git installed.
 
-- **Switch it on** on the Machine that has your Brain: `jarvis replication setup owner/jarvis-brain`.
+Everything below is in the Dashboard under **Settings → Replication**, and in the terminal as `jarvis replication`.
+
+- **Switch it on** on the Machine that has your Brain: choose **Start with this Brain**, name the repository and select **Set up Replication** (or `jarvis replication setup owner/jarvis-brain`).
   Name an empty repository: `owner/name` on GitHub, an `https://` or `ssh://` address, or a folder path.
   Jarvis makes the data folder a git repository, commits everything in it and pushes it.
   A repository that already holds a Brain is refused, so two Brains are never mixed.
-- **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
+- **Join** from another Machine.
+  On a new Machine, open **Already use Jarvis on another Machine?** on the first setup screen, name the repository and select **Join into this folder**.
+  On a Machine that is already set up, choose **Join another Machine** in Settings and name an empty folder for the Brain (or `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`).
   The folder must be empty or not exist yet.
   Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
-- **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
-  `jarvis replication check` replicates now instead of waiting for the next check.
+- **Status:** the card says off, up to date, offline, unauthorized or blocked, when this Machine was last up to date, and when it last checked and last sent changes.
+  When it is not up to date, the card shows the cause and what to do.
+  **Check now** replicates straight away instead of waiting for the next check (`jarvis replication status` and `jarvis replication check` in the terminal).
+- **Machines:** the card lists every Machine that shares the Brain, with when each last changed it.
+  Rename this Machine under **This Machine**; the others show the new name after their next check.
+  Tick **Standby** to let this Machine take over as Reader when the Reader goes silent, and choose the **Preferred Reader**, the Machine that should run Source refresh and briefings whenever it is online.
+  Both are recorded in the Brain, in `machines/`, so every Machine reads the same; when two Machines choose differently at the same time, the later choice wins.
+- **Switch off** stops replicating from this Machine (`jarvis replication off`).
+  The Brain stays in the data folder with its history, saves carry on locally, and the other Machines keep their copies.
+  Set Replication up again with the same repository to pick up where it left off: this Machine's changes from while it was off are sent, and the others' are merged in.
 
 What happens on its own:
 
