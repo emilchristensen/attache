@@ -40,6 +40,8 @@ import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
 import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
 import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
+import { CaptureArrivals } from "./consolidation/arrivals.ts";
+import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
 import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 
@@ -84,6 +86,8 @@ export class App {
   readonly inbox: Inbox;
   /** Proposals, kept in the Brain so they replicate. */
   readonly proposals: Proposals;
+  /** Meeting captures that arrive in the Brain on this Machine, each consolidated once. */
+  readonly captures: CaptureArrivals;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -114,7 +118,7 @@ export class App {
     this.machine.get();
     this.autoAccept = new AutoAcceptStore(this.db);
     this.clock = opts.clock ?? systemClock;
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite(), now: () => this.clock.now() });
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
     this.replication = new Replication({
       db: this.db,
       log: this.log,
@@ -149,6 +153,9 @@ export class App {
       localSources: [REPLICATION_SOURCE, MERGE_NOTICE_SOURCE],
     });
     this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
+    this.captures = new CaptureArrivals({ db: this.db, log: this.log, clock: this.clock, dataRoot: () => this.memory.dataRoot, arrived: (rel) => queueCaptureConsolidation(this, rel) });
+    // First, so a capture another Machine sent is recorded as theirs before anything looks for new captures.
+    this.replication.onPulled((paths) => this.captures.pulled(paths));
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.replication.onPulled((paths) => this.inbox.pulled(paths));
     this.replication.onMergeNotice((notices) => {
@@ -309,8 +316,17 @@ export class App {
 
   // ---- lifecycle -----------------------------------------------------------------
 
-  /** Open the configured data folder and make sure it is registered as the builtin vault source. */
-  openDataFolder(path: string): { created: string[] } {
+  /** Jarvis wrote a file in the data folder: Replication commits it, and a meeting capture is consolidated. */
+  private wrote(rel: string) {
+    this.replication.noteWrite();
+    this.captures.written(rel);
+  }
+
+  /**
+   * Open the configured data folder and make sure it is registered as the builtin vault source.
+   * `adopt` is for a folder the owner just chose or joined: the meeting captures already in it are not consolidated.
+   */
+  openDataFolder(path: string, opts: { adopt?: boolean } = {}): { created: string[] } {
     const r = this.memory.open(path);
     const existing = this.connections.record("vault-data");
     const now = nowIso();
@@ -323,9 +339,11 @@ export class App {
     this.memory.indexer.scan(root);
     this.inbox.reconcile();
     this.proposals.open();
+    this.captures.opened({ adopt: opts.adopt ?? false });
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
       onChange: () => {
+        this.captures.check();
         this.replication.noteOutsideEdit();
         this.bus.emit("event", { type: "memory.changed" });
       },
@@ -336,7 +354,7 @@ export class App {
 
   /** Make `path` this Machine's data folder: open it, index it and remember it. */
   useDataFolder(path: string): { created: string[] } {
-    const r = this.openDataFolder(path);
+    const r = this.openDataFolder(path, { adopt: true });
     this.config.patch({ dataFolder: path });
     this.bus.emit("event", { type: "config.changed" });
     return r;
