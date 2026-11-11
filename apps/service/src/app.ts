@@ -22,7 +22,7 @@ import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
 import { LATER, Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
-import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
+import { FEATURES, SOURCE_KINDS, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
@@ -55,6 +55,8 @@ export interface AppOptions {
   clock?: Clock;
   /** The meaning model and how to load it; by default the configured model on ONNX Runtime. */
   meaning?: Partial<MeaningOptions>;
+  /** Lease commits per generation of the Reader lease; tests make it small to see the history stay bounded. */
+  leaseGenerationCommits?: number;
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
@@ -132,7 +134,9 @@ export class App {
       // Loaded when needed: the backup module imports this one.
       backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
       lastSourceRefresh: () => lastSourceRefresh(this.db),
+      sourcesConnected: () => this.connections.records().some((r) => SOURCE_KINDS.includes(r.kind) && !r.settings.builtin && r.status === "connected"),
       onLeaseChange: () => this.bus.emit("event", { type: "reader.changed" }),
+      ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}),
     });
     this.reader = new Reader({
       clock: this.clock,

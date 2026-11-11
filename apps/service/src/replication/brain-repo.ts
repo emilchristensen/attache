@@ -163,8 +163,9 @@ export class BrainRepo {
     return Number(this.git.okSync(["rev-list", "--count", range]).trim());
   }
 
+  /** Fetch the Brain and the remote's `refs/jarvis/*`; refs the remote no longer has, such as a retired lease generation, are dropped here too. */
   async fetch(remote: string): Promise<void> {
-    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, JARVIS_REFS_FETCH]);
+    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", "--prune", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, JARVIS_REFS_FETCH]);
   }
 
   /** Push this Machine's commits. Only ever a fast-forward: a rejection means another Machine pushed first. */

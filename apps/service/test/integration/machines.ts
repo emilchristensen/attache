@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { execFileSync } from "node:child_process";
-import { renameSync } from "node:fs";
+import { mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 import { startTestService, testFolder, type TestService } from "./harness.ts";
@@ -24,6 +25,12 @@ export interface TestRemote {
   goOnline(): void;
   /** `git` run inside the bare repository, for checking what was pushed. */
   git(...args: string[]): string;
+  /**
+   * Hold every push to the Reader lease until `count` of them have arrived,
+   * then let them all go at once, so that Machines that decided at the same
+   * moment also write at the same moment. Returns how many arrived.
+   */
+  holdLeaseWrites(count: number): { arrived(): number; stop(): void };
 }
 
 export interface TestWorld {
@@ -49,18 +56,46 @@ export function createRemote(): TestRemote {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env: gitEnv, encoding: "utf8", stdio: "pipe" }).trim();
   git("init", "--bare", "--quiet", "-b", "main", url);
   git("-C", url, "config", "receive.denyNonFastForwards", "true");
-  git("-C", url, "config", "receive.denyDeletes", "true");
+  // Deleting the Brain's branch is refused; Jarvis deletes nothing but a retired Reader lease generation.
+  git("-C", url, "config", "receive.denyDeleteCurrent", "refuse");
   return {
     url,
     goOffline: () => renameSync(url, offline),
     goOnline: () => renameSync(offline, url),
     git: (...args: string[]) => execFileSync("git", ["-C", url, ...args], { env: gitEnv, encoding: "utf8", stdio: "pipe" }).trim(),
+    holdLeaseWrites: (count) => holdLeaseWrites(url, count),
   };
 }
 
-async function startMachine(name: string, opts: { setup: boolean }): Promise<TestMachine> {
+/** How long a held lease write waits for the others before it goes on alone (the test then fails on `arrived`). */
+const HOLD_LIMIT_S = 15;
+
+function holdLeaseWrites(repo: string, count: number): { arrived(): number; stop(): void } {
+  const gate = mkdtempSync(join(tmpdir(), "jarvis-it-gate-"));
+  const hook = join(repo, "hooks", "pre-receive");
+  const polls = HOLD_LIMIT_S * 20;
+  const script = [
+    "#!/bin/sh",
+    `gate='${gate}'`,
+    "lease=no",
+    'while read old new ref; do case "$ref" in refs/jarvis/*) lease=yes ;; esac; done',
+    '[ "$lease" = yes ] || exit 0',
+    ': > "$gate/$$"',
+    "polls=0",
+    `while [ "$(ls "$gate" | wc -l)" -lt ${count} ] && [ "$polls" -lt ${polls} ]; do sleep 0.05; polls=$((polls + 1)); done`,
+    "exit 0",
+    "",
+  ].join("\n");
+  writeFileSync(hook, script, { mode: 0o755 });
+  return {
+    arrived: () => readdirSync(gate).length,
+    stop: () => rmSync(hook, { force: true }),
+  };
+}
+
+async function startMachine(name: string, opts: { setup: boolean } & WorldOptions): Promise<TestMachine> {
   const clock = new ManualClock();
-  const svc = await startTestService({ clock, setup: opts.setup });
+  const svc = await startTestService({ clock, setup: opts.setup, leaseGenerationCommits: opts.leaseGenerationCommits });
   await svc.call("PATCH", "/machine", { name });
   return Object.assign(svc, { name, clock });
 }
@@ -69,12 +104,17 @@ async function startMachine(name: string, opts: { setup: boolean }): Promise<Tes
  * Several Machines sharing one remote. The first sets Replication up with its
  * Brain; the others join it into an empty data folder, as the owner would.
  */
-export async function startMachines(names: string[]): Promise<TestWorld> {
+export interface WorldOptions {
+  /** See `TestServiceOptions.leaseGenerationCommits`. */
+  leaseGenerationCommits?: number;
+}
+
+export async function startMachines(names: string[], world: WorldOptions = {}): Promise<TestWorld> {
   const remote = createRemote();
   const machines: TestMachine[] = [];
   const addMachine = async (name: string, opts: { join?: boolean } = {}) => {
     const joining = opts.join !== false && machines.length > 0;
-    const m = await startMachine(name, { setup: !joining });
+    const m = await startMachine(name, { setup: !joining, ...world });
     machines.push(m);
     if (!joining && machines.length === 1 && opts.join !== false) await m.post("/replication/setup", { remote: remote.url });
     if (joining) {
@@ -89,7 +129,7 @@ export async function startMachines(names: string[]): Promise<TestWorld> {
     if (i < 0) throw new Error(`${machine.name} is not part of this world`);
     await machine.stop();
     const clock = new ManualClock(machine.clock.now().getTime());
-    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir });
+    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir, leaseGenerationCommits: world.leaseGenerationCommits });
     const again = Object.assign(svc, { name: machine.name, clock });
     machines.splice(i, 1, again);
     return again;

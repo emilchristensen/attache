@@ -17,10 +17,14 @@ export interface ReaderLeaseDeps {
   credentials: GitCredentials;
   /** The Preferred Reader recorded in the Brain at `root`. */
   preferredReader: (root: string) => string | null;
+  /** Whether this Machine may take a silent Reader's place: marked standby in the Brain at `root`, with its sources connected. */
+  standIn: (root: string) => boolean;
   /** This Machine's last Source refresh of every source. */
   lastRefreshAt: () => string | null;
   /** The lease as this Machine knows it changed. */
   onChange: () => void;
+  /** Lease commits per generation before the lease moves to the next one; `LEASE_GENERATION_COMMITS` by default. */
+  generationCommits?: number;
 }
 
 /**
@@ -52,9 +56,9 @@ export class ReaderLease {
       this.remember(root, stored?.record ?? null);
       const me = this.deps.machine();
       const now = this.deps.clock.now();
-      const next = leaseToWrite(stored?.record ?? null, { me: { id: me.id, name: me.name }, preferredReader: this.deps.preferredReader(root), now, lastRefreshAt: this.deps.lastRefreshAt() });
+      const next = leaseToWrite(stored?.record ?? null, { me: { id: me.id, name: me.name }, preferredReader: this.deps.preferredReader(root), standIn: this.deps.standIn(root), now, lastRefreshAt: this.deps.lastRefreshAt() });
       if (!next) return;
-      if (await ref.write(remote, next, stored?.tip ?? null, authorEnv(me, now))) {
+      if (await ref.write(remote, next, stored, authorEnv(me, now))) {
         this.remember(root, next);
         return;
       }
@@ -77,6 +81,6 @@ export class ReaderLease {
   }
 
   private ref(root: string): LeaseRef {
-    return new LeaseRef(new Git({ cwd: root }), this.deps.credentials);
+    return new LeaseRef(new Git({ cwd: root }), this.deps.credentials, this.deps.generationCommits);
   }
 }

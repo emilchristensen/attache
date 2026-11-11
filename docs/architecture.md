@@ -60,7 +60,7 @@ Data folder (user-chosen, Markdown):
     sessions/                coding-agent session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
     wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
-  deliverables/             generated work products (briefings, research, drafts)
+  deliverables/             generated work products (briefings, research, drafts), one file each, named with the day and the Machine
   review/                   review state, one JSON file per item, never indexed for recall
     inbox/                   inbox items with the owner's latest decision
     proposals/               Proposals with every decision made on them
@@ -130,7 +130,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   Failures set the status (offline, unauthorized, blocked) and never reach a save.
 - **Writes pause while git changes the folder.** Commit and merge run synchronously (`BrainRepo`, `Git.runSync`), so no save can land halfway through them; only fetch, push and clone wait on the network asynchronously.
   At the start of every check, what a crash left behind is undone: git lock files older than the service's start (`index.lock`, `HEAD.lock`, `ORIG_HEAD.lock`, the branch and tracking ref locks) are removed, then a merge in progress (`MERGE_HEAD`) is aborted, the files it had touched are re-indexed, and the check merges again.
-- **Never rewrites history.** Bringing in other Machines' changes is a fast-forward or a merge commit; `Git` refuses `rebase`, `pull`, `reset --hard` and any forced or deleting push before running git.
+- **Never rewrites history.** Bringing in other Machines' changes is a fast-forward or a merge commit; `Git` refuses `rebase`, `pull`, `reset --hard` and any forced or deleting push before running git; the one deletion it lets through is a retired Reader lease generation.
 - **Merging.** A file both sides changed goes to the merge rules (`MergeRule` in `seams.ts`); a file no rule settles aborts the merge and reads as blocked with its path, so no conflict marker is ever left in a file.
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
   Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
@@ -165,14 +165,17 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   They are JSON, so search never indexes them, and they replicate like any file.
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
   `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
-  Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
+  The Reader lease reads this Machine's standby flag and the Preferred Reader straight from these records (`MachineRecords`).
 - **The Reader** (`reader/`, `replication/reader-lease.ts`, `replication/lease-ref.ts`): exactly one Machine runs scheduled Source refresh, briefings and with them the Review-date inbox items.
   With Replication off, the Machine is its own Reader and nothing changes.
-  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the ref `refs/jarvis/reader` in the Brain's repository, never on a branch.
-  Each write is a commit with an empty tree whose message holds the record, made on top of the previous one, so the ref only moves forward: the push is a compare-and-swap, and a rejected push means another Machine wrote first, so the Machine fetches and decides again.
-  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*`.
-  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); otherwise the lease is left alone.
+  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the refs `refs/jarvis/reader-lease/<generation>` in the Brain's repository, never on a branch; the newest generation holds the lease.
+  Each write is a commit with an empty tree whose message holds the record, made on top of the previous one, so a generation's ref only moves forward: the push is a compare-and-swap, and a rejected push means another Machine wrote first, so the Machine fetches and decides again.
+  A ref that only moves forward keeps every commit, so after 144 commits (about a day of heartbeats) the next write moves the lease to a new generation in one `--atomic` push: a last commit on the current generation saying so (a forward move, so a concurrent write still loses the race), the first commit of the next generation (a commit with no parent), and the deletion of the generation before the current one.
+  At most two generations exist, so the lease's history stays bounded; no push is ever forced, and the only deletion Replication pushes is a retired lease generation (`assertNoRewrite`).
+  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*` and drops the generations the remote no longer has (`--prune`).
+  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it, so it takes the role back when it returns; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); a standby Machine takes a lease that lapsed if it has a source connected besides the data folder (the standby flag from its record in the Brain, the sources from `App`, `ReplicationDeps.sourcesConnected`); otherwise the lease is left alone.
   A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
+  A Machine that lost the lease hears so at its next check, so around a handover two Machines may both refresh for up to a minute: inbox items are files keyed by item (`review/inbox/`), so both Machines' writes meet as one file and the inbox merge rule keeps one, and deliverables such as briefings carry the Machine in their file name (`deliverableName`), so two briefings never collide.
   The scheduler enqueues scheduled `sync` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
   A Source refresh the owner starts by hand runs on the Machine they are on.
   `GET /reader` (and `/status`) returns the Reader as this Machine last heard it, whether it is silent, and `lastRefreshAt`, the last finished Source refresh of every source (an all-sources `sync` job or a briefing), which the holder carries in the lease to the other Machines; `reader.changed` tells the Dashboard.

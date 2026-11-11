@@ -2,20 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
-
-const CHECK = 60_000;
-const AFTER_WRITE = 30_000;
-/** Far enough ahead that every schedule is due. */
-const TOMORROW = () => new Date(Date.now() + 86_400_000);
-
-interface ReaderView {
-  machine: { id: string; name: string } | null;
-  thisMachine: boolean;
-  replicated: boolean;
-  heartbeatAt: string | null;
-  silent: boolean;
-  lastRefreshAt: string | null;
-}
+import { AFTER_WRITE, CHECK, idOf, readerOn, runSchedules, tickAllDue, waitForJobs, waitUntilIdle } from "./reader-helpers.ts";
 
 let world: TestWorld | null = null;
 
@@ -23,38 +10,6 @@ afterEach(async () => {
   await world?.stop();
   world = null;
 });
-
-const readerOn = (m: TestMachine) => m.get<ReaderView>("/reader");
-const idOf = async (m: TestMachine) => ((await m.get("/machine")) as { id: string }).id;
-
-/** Every schedule falls due on `m`; returns the kinds of job it started. */
-function runSchedules(m: TestMachine): string[] {
-  return m.app.scheduler
-    .tick(TOMORROW())
-    .filter((r) => r.jobId !== null)
-    .map((r) => r.id);
-}
-
-/** Waits until `m` runs no job, e.g. the first Source refresh that finishing setup starts. */
-async function waitUntilIdle(m: TestMachine) {
-  for (;;) {
-    const jobs = (await m.get("/jobs")) as Array<{ id: string; status: string }>;
-    const busy = jobs.find((j) => j.status === "queued" || j.status === "running");
-    if (!busy) return;
-    await m.waitJob(busy.id);
-  }
-}
-
-/** Waits for the jobs to succeed; returns when each finished. */
-async function waitForJobs(m: TestMachine, ids: string[]): Promise<string[]> {
-  const out: string[] = [];
-  for (const id of ids) {
-    const { job } = await m.waitJob(id);
-    expect(job.status).toBe("succeeded");
-    out.push(job.finishedAt);
-  }
-  return out;
-}
 
 describe("two Machines sharing a Brain", () => {
   it("run scheduled Source refresh and briefings only on the Reader, which every Machine names the same", async () => {
@@ -102,7 +57,7 @@ describe("the Reader's Source refresh", () => {
     const [mac, pc] = world.machines as [TestMachine, TestMachine];
     await waitUntilIdle(mac);
     // The scheduled Source refresh and briefing both refresh every source; the later one counts.
-    const ran = mac.app.scheduler.tick(TOMORROW());
+    const ran = tickAllDue(mac);
     const finishedAt = (await waitForJobs(mac, ran.map((r) => r.jobId!))).sort().at(-1);
     expect((await readerOn(mac)).lastRefreshAt).toBe(finishedAt);
     // The Reader tells the others at its next check, which a finished Source refresh starts at once.
@@ -136,7 +91,7 @@ describe("the Reader's Source refresh", () => {
     expect(runSchedules(pc)).toEqual([]);
     expect(await reviewItems(pc)).toEqual([]);
 
-    const sync = mac.app.scheduler.tick(TOMORROW()).find((r) => r.id === "attention:sync")!;
+    const sync = tickAllDue(mac).find((r) => r.id === "attention:sync")!;
     await waitForJobs(mac, [sync.jobId!]);
     expect((await reviewItems(mac)).map((i) => i.title)).toEqual(["Review date passed: “Budget” in Orion rollout"]);
     await mac.clock.advance(AFTER_WRITE);
@@ -158,9 +113,30 @@ describe("the Reader lease", () => {
     const renewed = (await readerOn(mac)).heartbeatAt!;
     expect(Date.parse(renewed) - Date.parse(first)).toBeGreaterThanOrEqual(20 * 60_000);
     // The lease lives on a ref of its own, never on a branch, so a clone of the Brain does not carry it.
-    expect(world.remote.git("for-each-ref", "--format=%(refname)")).toBe(["refs/heads/main", "refs/jarvis/reader"].join("\n"));
+    expect(world.remote.git("for-each-ref", "--format=%(refname)")).toBe(["refs/heads/main", "refs/jarvis/reader-lease/1"].join("\n"));
     await pc.clock.advance(CHECK);
     expect((await readerOn(pc)).heartbeatAt).toBe(renewed);
+  });
+
+  it("keeps a bounded history however long the Reader renews it, without rewriting the Brain", async () => {
+    // Two renewals per generation stand in for the day's worth a real lease keeps.
+    world = await startMachines(["Work Mac", "Home PC"], { leaseGenerationCommits: 2 });
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await pc.clock.advance(AFTER_WRITE);
+    await mac.clock.advance(CHECK);
+    const brain = world.remote.git("rev-parse", "main");
+    for (let renewal = 0; renewal < 8; renewal++) await mac.clock.advance(10 * 60_000);
+
+    const leaseRefs = world.remote.git("for-each-ref", "--format=%(refname)", "refs/jarvis").split("\n");
+    expect(leaseRefs.length).toBeLessThanOrEqual(2);
+    // The lease moved on from its first generation, which is gone from the remote.
+    expect(leaseRefs).not.toContain("refs/jarvis/reader-lease/1");
+    expect(Number(world.remote.git("rev-list", "--count", "--glob=refs/jarvis/*"))).toBeLessThanOrEqual(2 * (2 + 1));
+    expect(world.remote.git("rev-parse", "main")).toBe(brain);
+    // Every Machine still reads the current lease.
+    await pc.clock.advance(CHECK);
+    expect((await readerOn(pc)).heartbeatAt).toBe((await readerOn(mac)).heartbeatAt);
+    expect(Date.parse((await readerOn(pc)).heartbeatAt!)).toBeGreaterThan(mac.clock.now().getTime() - 10 * 60_000);
   });
 
   it("lapses while the Reader cannot reach the repository, and the Reader catches up once it renews", async () => {
@@ -186,7 +162,7 @@ describe("a Machine without Replication", () => {
     expect(before).toMatchObject({ machine: { id: await idOf(lone), name: "Lone" }, thisMachine: true, replicated: false, heartbeatAt: null, silent: false });
 
     await waitUntilIdle(lone);
-    const ran = lone.app.scheduler.tick(TOMORROW());
+    const ran = tickAllDue(lone);
     expect(ran.map((r) => r.id).sort()).toEqual(["attention:briefing", "attention:sync"]);
     expect(ran.every((r) => r.jobId !== null)).toBe(true);
     const finished = await waitForJobs(lone, ran.map((r) => r.jobId!));

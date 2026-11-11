@@ -8,7 +8,7 @@ import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteAct
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
 import type { MachineIdentity } from "../core/machine.ts";
-import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
+import { connectorSnapshotPath, deliverableName, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
 import { replaceWith } from "../platform/replace-file.ts";
 import { factDay } from "./review-date.ts";
@@ -464,7 +464,7 @@ export class MemoryStore {
   }
 
   writeDeliverable(kind: "briefings" | "research" | "drafts", title: string, body: string, meta: Record<string, unknown> = {}): { relPath: string } {
-    const rel = this.uniquePath(`deliverables/${kind}`, `${this.today()}-${slugify(title)}`);
+    const rel = this.uniquePath(`deliverables/${kind}`, deliverableName(this.today(), title, this.opts.machine()));
     const fm = { id: randomUUID(), type: kind.replace(/s$/, ""), title, generated_at: nowIso(), provenance: "generated", ...meta };
     this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body.trim()}\n`, "service");
     return { relPath: rel };
