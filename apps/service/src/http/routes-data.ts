@@ -10,6 +10,7 @@ import { readFileSync, existsSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
+import { isPastReview } from "../memory/review-date.ts";
 import { json } from "../core/db.ts";
 import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
 import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
@@ -101,7 +102,7 @@ export function registerDataRoutes(r: Router, app: App) {
       raw,
       title: parsed.title,
       frontmatter: parsed.frontmatter,
-      state: parseStateEntries(raw),
+      state: parseStateEntries(raw).map((e) => ({ ...e, unverified: isPastReview(e.review) })),
       area: doc?.area ?? (root === "data" ? rel.split("/")[0] : "import"),
       docType: doc?.docType ?? null,
       indexedAt: doc?.indexedAt ?? null,

@@ -19,6 +19,8 @@ interface Hit {
   startLine: number;
   endLine: number;
   snippet: string;
+  review: string | null;
+  unverified: boolean;
 }
 interface DocListItem {
   id: string;
@@ -33,9 +35,30 @@ interface DocListItem {
 interface StateEntry {
   subject: string;
   date: string;
+  /** The day after which the fact should be checked again. */
+  review?: string;
+  /** Past its Review date: kept, but to be checked before relying on it. */
+  unverified: boolean;
   value: string;
   source?: string;
   line: number;
+}
+
+/** A fact's Review date, and a warning once it has passed. */
+function ReviewDate({ entry }: { entry: StateEntry }) {
+  if (!entry.review) return null;
+  if (!entry.unverified)
+    return (
+      <span className="small muted" data-review={entry.review} title="The day after which this fact should be checked again">
+        review after {entry.review}
+      </span>
+    );
+  return (
+    <span className="row" data-review={entry.review} title={`Its Review date ${entry.review} has passed. Check it, then save the current value with a new Review date.`}>
+      <StatusPill state="partial" label="unverified" />
+      <span className="small">review was due {entry.review}</span>
+    </span>
+  );
 }
 interface Doc {
   root: string;
@@ -113,10 +136,11 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
         <div className="card stack-sm">
           <h3>Current state</h3>
           {d.state.map((s) => (
-            <div key={s.subject} className="stack-sm" style={{ borderTop: "1px solid var(--border)", paddingTop: 8 }} data-subject={s.subject}>
+            <div key={s.subject} className="stack-sm" style={{ borderTop: "1px solid var(--border)", paddingTop: 8 }} data-subject={s.subject} data-unverified={s.unverified || undefined}>
               <div className="row">
                 <strong style={{ minWidth: 110 }}>{s.subject}</strong>
                 <span style={{ flex: 1 }}>{s.value}</span>
+                <ReviewDate entry={s} />
                 <span className="small muted">{s.date}</span>
                 {d.editable && editing !== s.subject && (
                   <button className="small" onClick={() => setEditing(s.subject)}>
@@ -304,7 +328,10 @@ export function MemoryView() {
                 {results.data?.hits.map((h) => (
                   <button key={h.chunkId} className="list-item" onClick={() => (h.root === "data" && h.relPath.startsWith("memory/") ? select(h.root, h.relPath) : open({ root: h.root, relPath: h.relPath, lines: [h.startLine, h.endLine], title: h.title }))}>
                     <div className="stack-sm" style={{ minWidth: 0 }}>
-                      <strong>{h.title}</strong>
+                      <span className="row">
+                        <strong>{h.title}</strong>
+                        {h.unverified && <StatusPill state="partial" label="unverified" />}
+                      </span>
                       <span className="small muted">{h.snippet}</span>
                       <span className="small mono muted">
                         {h.relPath}:{h.startLine} · {h.area}

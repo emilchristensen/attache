@@ -177,6 +177,11 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
 ];
 
 export function openDb(file: string): Db {

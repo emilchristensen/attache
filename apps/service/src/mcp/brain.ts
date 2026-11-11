@@ -3,6 +3,7 @@ import { meaningNote } from "../meaning/note.ts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 import { auditView, type AuditView, type PathOf } from "../memory/audit-view.ts";
+import type { StateEntry } from "../memory/markdown.ts";
 
 /** One search result as a Harness sees it: where it is, what kind of section, and the passage itself. */
 export interface Passage {
@@ -20,6 +21,17 @@ export interface Passage {
   heading: string | null;
   title: string;
   text: string;
+  /** A current fact's Review date, when the passage is a fact that has one. */
+  review: string | null;
+  /** A current fact past its Review date: still in the Brain, but to be checked before relying on it. */
+  unverified: boolean;
+}
+
+/** A current fact past its Review date, at its line in the note. */
+export interface UnverifiedFact {
+  subject: string;
+  review: string;
+  line: number;
 }
 
 /** Passages found, and whether they match by keywords only because meaning-based search is not ready on this Machine. */
@@ -35,6 +47,8 @@ export interface NoteText {
   endLine: number;
   totalLines: number;
   text: string;
+  /** The current facts within the lines returned that are past their Review date. */
+  unverified: UnverifiedFact[];
 }
 
 export interface LineRange {
@@ -75,6 +89,8 @@ interface RawHit {
   heading: string | null;
   title: string;
   text: string;
+  review: string | null;
+  unverified: boolean;
 }
 
 /** A read that asks for lines the note does not have. */
@@ -101,12 +117,16 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         heading: h.heading,
         title: h.title,
         text: h.text,
+        review: h.review,
+        unverified: h.unverified,
       }));
       return { passages, meaning: { state: meaning.state, note: meaningNote(meaning) } };
     },
     async read(path, range) {
-      const doc = await client().get<{ raw: string; title: string }>(`/memory/document?path=${encodeURIComponent(path)}`);
-      return sliceLines(path, doc.title, doc.raw, range);
+      const doc = await client().get<{ raw: string; title: string; state: Array<StateEntry & { unverified: boolean }> }>(`/memory/document?path=${encodeURIComponent(path)}`);
+      const note = sliceLines(path, doc.title, doc.raw, range);
+      const unverified = doc.state.filter((e) => e.unverified && e.review && e.line >= note.startLine && e.line <= note.endLine).map((e) => ({ subject: e.subject, review: e.review!, line: e.line }));
+      return { ...note, unverified };
     },
     async overview() {
       const c = client();
@@ -142,7 +162,7 @@ async function brainPaths(c: ServiceClient, used: string[]): Promise<PathOf> {
 }
 
 /** The whole note, or the inclusive 1-based line range asked for, clamped to the note's end. */
-export function sliceLines(path: string, title: string, raw: string, range: LineRange): NoteText {
+export function sliceLines(path: string, title: string, raw: string, range: LineRange): Omit<NoteText, "unverified"> {
   const lines = raw.replace(/\r?\n$/, "").split(/\r?\n/);
   const totalLines = lines.length;
   const startLine = range.startLine ?? 1;

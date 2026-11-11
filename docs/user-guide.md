@@ -146,9 +146,11 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
+  A fact past its Review date is marked unverified.
   While meaning-based search is not ready on this Machine, the answer starts with a line saying the passages match keywords only, and why.
-- **read** returns a whole note, or only a line range, for a path that search returned.
+- **read** returns a whole note, or only a line range, for a path that search returned, and names the facts in it that are past their Review date.
 - **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+  A fact can carry a Review date (see below).
   Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
   Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
   Accept, and the items are written as you, each fact citing the Harness and session it came from.
@@ -162,7 +164,7 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
   Disconnecting a Harness switches its auto-accept off.
   An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
   Your identity record is never changed this way.
-- **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
+- **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
   In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
@@ -178,6 +180,18 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.
+
+## Review dates
+
+A fact you expect to change, such as a status, a plan or a deadline, can carry a Review date: the day after which it should be checked again.
+In the note it sits beside the fact's own date, for example `- **Status** (2026-11-10, review 2026-11-13): Beta opens to customers`.
+An agent sets it when it saves a fact, and a Proposal can carry one per fact; it must come after the fact's own date.
+You can also add or change one by hand in your editor, and Jarvis reads it.
+Facts that stay true, such as a repository's name, need none, and Jarvis never adds Review dates in bulk.
+
+Past its Review date a fact stays in your Brain, marked unverified: in the Dashboard, in search results, in what a Harness reads, and in the context a new agent session starts with.
+To clear the mark, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
 
 ## Editing notes in Obsidian
 
