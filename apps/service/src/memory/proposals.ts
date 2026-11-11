@@ -8,6 +8,7 @@ import type { Clock } from "../replication/clock.ts";
 import { latestDecision, type ReviewMachine } from "../review-state/decisions.ts";
 import { isReviewPath, listReviewFiles, readReviewFile, removeReviewFile, writeReviewFile } from "../review-state/files.ts";
 import { normalizeRel } from "./policy.ts";
+import { assertStillCurrent, correctionsOf } from "./proposal-corrections.ts";
 import { ProposalIndex } from "./proposal-index.ts";
 import { legacyProposalRecord } from "./proposal-legacy.ts";
 import { parseProposalRecord, proposalItem, proposalPath, PROPOSALS_KIND, proposalSource, proposalStatus, toProposalView, type ProposalDecision, type ProposalRecord } from "./proposal-record.ts";
@@ -62,9 +63,9 @@ export class Proposals {
   /** One Proposal per item. The items are checked together, like one save: one invalid item refuses them all. */
   proposeItems(items: readonly MemorySaveItem[], meta: ProposalMeta): ProposalView[] {
     const root = this.requireBrain();
-    checkItems(this.deps.memory, items);
+    const steps = checkItems(this.deps.memory, items);
     const createdAt = this.deps.clock.now().toISOString();
-    const records = items.map((item): ProposalRecord => ({
+    const records = items.map((item, i): ProposalRecord => ({
       version: 1,
       id: randomUUID(),
       createdAt,
@@ -77,6 +78,7 @@ export class Proposals {
       sourceText: meta.source ? formatSource(meta.source) : null,
       origin: meta.origin ?? null,
       evidence: meta.evidence ?? null,
+      corrections: correctionsOf(this.deps.memory, steps[i]!),
       item,
       decisions: [],
     }));
@@ -107,6 +109,14 @@ export class Proposals {
       .map(toProposalView);
   }
 
+  /** The Proposals, whatever their status, that `proposedBy` made from one file of the Brain, such as a meeting capture, newest first. */
+  citing(proposedBy: string, kind: SourceRef["kind"], ref: string): ProposalView[] {
+    return this.index
+      .list({ limit: 500 })
+      .filter((r) => r.proposedBy === proposedBy && !r.origin && r.source?.kind === kind && r.source.ref === ref)
+      .map(toProposalView);
+  }
+
   /**
    * Apply or reject a pending Proposal. Applying checks the item again, because
    * the Brain may have changed since it was proposed, then writes it as one
@@ -127,6 +137,7 @@ export class Proposals {
       const item = proposalItem(record);
       if (!item) throw new HttpError(409, "unreadable_proposal", "This Proposal can no longer be read, so it cannot be applied. Reject it instead.");
       const [step] = checkItems(this.deps.memory, [item]);
+      if (step!.action === "update") assertStillCurrent(this.deps.memory, step!.relPath, record.corrections);
       // Its own batch id, as a save has, so the changes it makes show and revert as one, citing the Harness session it came from.
       const batch = randomUUID();
       const meta = { harness: record.origin?.agent ?? null, sessionId: record.origin?.sessionId || null, batchId: batch };

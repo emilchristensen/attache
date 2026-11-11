@@ -151,6 +151,10 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
 - **Consolidation:** when the session log entry holds something durable, Jarvis reads the session again, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*.
   Each names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
   A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+  When a session states a different value for a fact a note already holds, the Proposal is a correction: it shows the current value struck through beside the new one, with the reason and the evidence.
+  Applying it moves the old value to the note's *History* with that reason.
+  A session that only mentions or repeats a fact proposes nothing for it.
+  If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
   Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
   It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
 - **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
@@ -169,6 +173,22 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
 
 Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Jarvis's MCP server; Claude Desktop stays connected.
 Uninstalling Jarvis removes them all.
+
+## Meeting captures
+
+A meeting capture is a Markdown file in your data folder's `evidence/captures/` folder whose frontmatter `tags` include `meeting` or `meeting-transcript`, for example the notes and transcript of a meeting that an export routine writes there.
+When a new one arrives, Jarvis reads it, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*, the same way it does for a Harness session.
+This needs a model connection; without one, the capture is kept and no Proposals are made from it.
+
+- Each Proposal names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
+- A capture yields at most five Proposals, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+- A capture is read once.
+  Editing it afterwards, or restarting Jarvis, does not read it again.
+  A capture written while Jarvis was stopped is read when Jarvis starts.
+- The captures already in a data folder when you choose it, or when a Machine joins your Brain, are not read: only captures that arrive afterwards are.
+- With Replication on, a capture is read on the Machine where it arrived; the Machines that receive it do not read it again.
+- Snapshots that Source refresh writes from Slack, mail, Jira and your calendar (`evidence/connectors/`) are never read this way, and neither are captures without a meeting tag.
+- The Proposals always wait for your click.
 
 ## The Brain in any Harness (MCP)
 
@@ -378,7 +398,12 @@ What happens on its own:
 - A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
   One inbox item, on the Machine that brought the two changes together, names the note and both Machines; delete the note again if it should go.
   Unlike other inbox items, it stays on that Machine.
-- Until the prose merge arrives, a note whose free text both Machines changed differently, or any other file both changed in the same place, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+- The free text of a note, such as its Notes section, merges line by line: when the two Machines changed different lines, both changes are kept.
+  When both changed the same lines, the note keeps both versions, each under a heading such as `### Version from Mac`, and Replication carries on with every other file.
+  One inbox item, on the Machine that brought the two versions together, names the note.
+  Keep the version you want and delete the other with its heading, in an editor on any Machine; the item then resolves by itself.
+  A note that gets two versions again later raises the item again.
+- Any other file both Machines changed in the same place, outside the notes and Jarvis' own review files, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
 - While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
   While it is unauthorized, the item asks you to reconnect GitHub instead.
   It resolves by itself once Replication is up to date again.

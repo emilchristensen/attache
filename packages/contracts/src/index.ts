@@ -371,6 +371,17 @@ export const ProposalInput = z.object({
 });
 export type ProposalInput = z.infer<typeof ProposalInput>;
 
+/**
+ * A current fact a Proposal gives a different value: the value it replaces, as
+ * the note held it when the Proposal was made, and the value it sets.
+ * Applying it moves the old value to the note's History with the reason.
+ */
+export interface ProposalCorrection {
+  subject: string;
+  was: { value: string; date: string; review: string | null };
+  value: string;
+}
+
 export interface ProposalView {
   id: string;
   status: "proposed" | "applied" | "rejected";
@@ -383,6 +394,8 @@ export interface ProposalView {
   source: string | null;
   /** The words in the evidence the Proposal rests on, quoted from it; null when none were quoted. */
   evidence: string | null;
+  /** The current facts it gives a different value; empty when it corrects none. */
+  corrections: ProposalCorrection[];
   proposedBy: string;
   createdAt: string;
   decidedAt: string | null;
@@ -571,7 +584,7 @@ export const AttentionDecision = z.object({
 // ---------------------------------------------------------------------------
 // Jobs
 
-export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate"]);
+export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate", "capture-consolidate"]);
 export type JobKind = z.infer<typeof JobKind>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";

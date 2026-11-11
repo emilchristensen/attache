@@ -38,6 +38,7 @@ export function legacyProposalRecord(row: MemoryChange, machine: ReviewMachine):
     origin: payload.origin,
     // Change-log Proposals never quoted their evidence.
     evidence: null,
+    corrections: [],
     item: payload.item,
     decisions: decided
       ? [{ id: `carried-over-${row.id}`, at: row.decidedAt ?? row.createdAt, machine, decision: row.status as "applied" | "rejected", path: row.status === "applied" ? row.docRelPath : null, batch: null }]

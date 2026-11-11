@@ -212,6 +212,16 @@ export const MIGRATIONS: readonly string[] = [
   alter table replication add column up_to_date_at text;
   update replication set up_to_date_at = checked_at where status = 'up_to_date';
   `,
+  // Consolidation from meeting captures: which captures of a data folder this Machine has seen, and
+  // since when it watches the folder for new ones. Local state, never part of the Brain: a capture is
+  // consolidated on the Machine where it arrived, and one that came from another Machine is only seen.
+  `
+  create table capture_watch (data_folder text primary key, since text not null);
+  create table capture_arrivals (
+    data_folder text not null, rel_path text not null, arrival text not null, seen_at text not null,
+    primary key (data_folder, rel_path)
+  ) without rowid;
+  `,
 ];
 
 export function openDb(file: string): Db {

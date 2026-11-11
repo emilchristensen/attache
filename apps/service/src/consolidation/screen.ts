@@ -10,6 +10,16 @@ type UpdateItem = Extract<MemorySaveItem, { action: "update" }>;
 
 /** Text compared as the owner would read it: case and spacing do not make two things different. */
 const norm = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+/**
+ * A fact value as the owner would read it: emphasis, quotes around it and a
+ * closing full stop do not make it a different value, so a value the model
+ * merely writes back differently is never proposed as a change.
+ */
+const plainValue = (value: string) =>
+  norm(value.replace(/[*_`]+/g, " "))
+    .replace(/^["“”‘’']+|["“”‘’']+$/gu, "")
+    .replace(/[.!;:,]+$/, "")
+    .trim();
 
 /**
  * Keep only the candidates worth the owner's click, at most `limit` of them:
@@ -63,14 +73,14 @@ function newPartsOnly(memory: MemoryStore, relPath: string, item: UpdateItem, se
   const body = norm(note.raw);
   const unchanged = (f: { subject: string; value: string; review?: string | undefined }) => {
     const current = note.state.find((e) => e.subject.toLowerCase() === f.subject.toLowerCase());
-    return !!current && norm(current.value) === norm(f.value) && (!f.review || f.review === current.review);
+    return !!current && plainValue(current.value) === plainValue(f.value) && (!f.review || f.review === current.review);
   };
   const facts = (item.facts ?? []).filter((f) => !unchanged(f) && !seen.has(factKey(relPath, f)));
   const events = (item.events ?? []).filter((e) => !body.includes(norm(e)) && !seen.has(eventKey(relPath, e)));
   return { action: "update", path: relPath, ...(facts.length ? { facts } : {}), ...(events.length ? { events } : {}) };
 }
 
-const factKey = (relPath: string, f: { subject: string; value: string }) => `fact|${relPath}|${f.subject.toLowerCase()}|${norm(f.value)}`;
+const factKey = (relPath: string, f: { subject: string; value: string }) => `fact|${relPath}|${f.subject.toLowerCase()}|${plainValue(f.value)}`;
 const eventKey = (relPath: string, text: string) => `event|${relPath}|${norm(text)}`;
 
 /** What a change consists of, one key per part, so a repeat of any part can be recognised. */

@@ -12,6 +12,7 @@ import { deletedAndChangedRule } from "./deleted-and-changed.ts";
 import { githubCredentials } from "./github-credentials.ts";
 import { machineRecordRule } from "./machine-record-rule.ts";
 import { NO_GITHUB, type GitHubAccess } from "./github.ts";
+import { keepBothVersions } from "./note-merge/prose-versions.ts";
 import { noteMergeRule } from "./note-merge/rule.ts";
 import { PrivateRemoteGuard } from "./private-remote.ts";
 
@@ -44,6 +45,12 @@ export interface MergeNotice {
   message: string;
   /** A short headline for the inbox item; a generic one naming the path when left out. */
   title?: string;
+  /**
+   * One inbox item for the path while it stays open, however many merges raise
+   * the notice, instead of one item per merge. For notices about the state of
+   * a file that the owner settles by editing it.
+   */
+  perPath?: boolean;
 }
 
 export interface MergeOutcome {
@@ -126,10 +133,12 @@ export function mergeByRules(rules: readonly MergeRule[], input: MergeInput): Me
  *    deletion loses (#35).
  * 3. Review state (`review/inbox/`, then `review/proposals/`, JSON): latest
  *    decision wins; a deletion wins over a change there.
- * 4. Notes both sides changed (`memory/**.md`): facts, History and frontmatter merge (#26).
+ * 4. Notes both sides changed (`memory/**.md`): facts, History and frontmatter
+ *    merge (#26), prose by a three-way line merge that keeps both versions of
+ *    lines both sides changed (#27).
  */
 function mergeRules(): readonly MergeRule[] {
-  return [deletedAndChangedRule, machineRecordRule, inboxMergeRule, proposalMergeRule, noteMergeRule()];
+  return [deletedAndChangedRule, machineRecordRule, inboxMergeRule, proposalMergeRule, noteMergeRule({ prose: keepBothVersions })];
 }
 
 /** What the service hands the seams that need more than the files. */
