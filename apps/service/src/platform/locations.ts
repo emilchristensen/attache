@@ -77,11 +77,16 @@ function linux(env: Env): PlatformLocations {
   };
 }
 
+/** The owner's local and roaming application data folders on Windows. */
+export function windowsAppData(env: Env): { localAppData: string; appData: string } {
+  const home = homeFor("windows", env);
+  return { localAppData: env.LOCALAPPDATA || win32.join(home, "AppData", "Local"), appData: env.APPDATA || win32.join(home, "AppData", "Roaming") };
+}
+
 function windows(env: Env): PlatformLocations {
   const home = homeFor("windows", env);
   const { join } = win32;
-  const localAppData = env.LOCALAPPDATA || join(home, "AppData", "Local");
-  const appData = env.APPDATA || join(home, "AppData", "Roaming");
+  const { localAppData, appData } = windowsAppData(env);
   const installPrefix = join(localAppData, "Jarvis");
   return {
     os: "windows",

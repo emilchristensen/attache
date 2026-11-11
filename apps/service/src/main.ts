@@ -51,6 +51,11 @@ async function serve(argv: string[]) {
   };
   process.on("SIGTERM", () => void stop("SIGTERM"));
   process.on("SIGINT", () => void stop("SIGINT"));
+  // Under the Windows logon task's supervisor (`jarvis service run`): stop when it closes the channel or dies.
+  if (process.channel) {
+    process.channel.unref();
+    process.on("disconnect", () => void stop("supervisor gone"));
+  }
 }
 
 async function pair(argv: string[]) {

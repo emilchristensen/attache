@@ -1,3 +1,4 @@
+import { win32 } from "node:path";
 import { pathFor, type PlatformLocations } from "./locations.ts";
 import type { Os } from "./os.ts";
 
@@ -24,6 +25,52 @@ function cmdValue(s: string): string {
   return s;
 }
 
+/** cmd.exe reads a batch file in the console's code page, never UTF-8, so a wrapper holds ASCII only. */
+const ASCII_ONLY = /^[\x20-\x7e]*$/;
+
+/**
+ * A path as a Windows wrapper in `binDir` writes it: relative to the
+ * wrapper's own folder (`%~dp0`), so letters outside ASCII in the part it
+ * shares with the install (an owner named Søren) never appear in the file;
+ * else in full, which must then be ASCII.
+ */
+function fromWrapperFolder(binDir: string, target: string): string {
+  cmdValue(target);
+  const relative = win32.relative(binDir, target);
+  const text = win32.isAbsolute(relative) ? relative : `%~dp0${relative}`;
+  if (!ASCII_ONLY.test(text)) throw new Error(`Jarvis cannot pin ${target} in its Windows command wrappers: cmd.exe misreads letters outside ASCII in batch files. Keep the state folder inside the install folder, or choose a path with ASCII letters only.`);
+  return text;
+}
+
+/** A batch line setting `name` to the full, normalised form of `path` (which may be relative to `%~dp0`). */
+const setFullPath = (name: string, path: string) => `for %%p in ("${path}") do set "${name}=%%~fp"`;
+
+/**
+ * `jarvis.cmd` and `jarvis-uninstall.cmd` in the install's own `bin` folder.
+ * They are plain ASCII and find the install from their own folder, so they
+ * work whatever letters the owner's name or the install path has.
+ */
+function windowsWrappers(spec: WrapperSpec): WrapperFile[] {
+  const binDir = win32.join(spec.installPrefix, "bin");
+  const at = (path: string) => fromWrapperFolder(binDir, path);
+  const instance = cmdValue(spec.instance);
+  const current = win32.join(spec.installPrefix, "current");
+  const powershell = "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+  return [
+    {
+      path: win32.join(binDir, "jarvis.cmd"),
+      text: ["@echo off", "setlocal", `if not defined JARVIS_STATE_DIR ${setFullPath("JARVIS_STATE_DIR", at(spec.stateDir))}`, `if not defined JARVIS_INSTANCE set "JARVIS_INSTANCE=${instance}"`, `if not defined JARVIS_PORT set "JARVIS_PORT=${spec.port}"`, `"${at(win32.join(current, "bin", "jarvis.cmd"))}" %*`, ""].join("\r\n"),
+      mode: 0o755,
+    },
+    {
+      path: win32.join(binDir, "jarvis-uninstall.cmd"),
+      // The uninstaller removes this very file; ending on the same line keeps cmd.exe from reading it again afterwards.
+      text: ["@echo off", "setlocal", setFullPath("JARVIS_PREFIX", at(spec.installPrefix)), setFullPath("JARVIS_STATE_DIR", at(spec.stateDir)), `set "JARVIS_INSTANCE=${instance}"`, `"${powershell}" -NoProfile -ExecutionPolicy Bypass -File "%JARVIS_PREFIX%\\current\\uninstall.ps1" %* & exit /b`, ""].join("\r\n"),
+      mode: 0o755,
+    },
+  ];
+}
+
 /**
  * The launcher inside a release (`bin/jarvis`): runs the bundled runtime on
  * the bundled service, wherever the release was unpacked. Path relative to
@@ -35,30 +82,17 @@ export function releaseLauncher(os: Os): WrapperFile {
 }
 
 /**
- * The command-line entry points the installer puts on the owner's PATH:
+ * The command-line entry points the installer puts on the owner's PATH
+ * (on Windows, in the install's own `bin` folder):
  * `jarvis`, pinned to this install's state folder, instance and port unless
  * the environment says otherwise, and `jarvis-uninstall`, pinned to the
  * install and its state folder. Both go through
  * the stable `current` link so they survive upgrades.
  */
 export function commandWrappers(loc: PlatformLocations, spec: WrapperSpec): WrapperFile[] {
+  if (loc.os === "windows") return windowsWrappers(spec);
   const { join } = pathFor(loc.os);
   const current = join(spec.installPrefix, "current");
-  if (loc.os === "windows") {
-    const v = cmdValue;
-    return [
-      {
-        path: join(loc.binDir, "jarvis.cmd"),
-        text: ["@echo off", "setlocal", `if not defined JARVIS_STATE_DIR set "JARVIS_STATE_DIR=${v(spec.stateDir)}"`, `if not defined JARVIS_INSTANCE set "JARVIS_INSTANCE=${v(spec.instance)}"`, `if not defined JARVIS_PORT set "JARVIS_PORT=${spec.port}"`, `"${v(join(current, "bin", "jarvis.cmd"))}" %*`, ""].join("\r\n"),
-        mode: 0o755,
-      },
-      {
-        path: join(loc.binDir, "jarvis-uninstall.cmd"),
-        text: ["@echo off", "setlocal", `set "JARVIS_PREFIX=${v(spec.installPrefix)}"`, `set "JARVIS_STATE_DIR=${v(spec.stateDir)}"`, `set "JARVIS_INSTANCE=${v(spec.instance)}"`, `powershell -NoProfile -ExecutionPolicy Bypass -File "${v(join(current, "uninstall.ps1"))}" %*`, ""].join("\r\n"),
-        mode: 0o755,
-      },
-    ];
-  }
   const q = shDouble;
   return [
     {
