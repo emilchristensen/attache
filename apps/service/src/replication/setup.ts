@@ -2,7 +2,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { classifyFailure, Git, GitError } from "./git.ts";
 import { BRANCH, REMOTE } from "./brain-repo.ts";
-import type { ReplicationSeams } from "./seams.ts";
+import type { Logger } from "../core/log.ts";
+import { normalizeRemote, RemoteError } from "./remote.ts";
+import type { RemoteVerdict, ReplicationSeams } from "./seams.ts";
 import { toLf } from "../memory/markdown.ts";
 
 /** A setup or join the owner has to change something for; `status` and `code` are the API's. */
@@ -44,6 +46,40 @@ function pinLineEndings(file: string): void {
 
 /** Marks a repository as one Jarvis made, so setup can be finished after it was interrupted. */
 const MANAGED_KEY = "jarvis.managed";
+
+/** The remote the owner typed, normalised, or why it is not one. */
+export function setupRemote(input: string): string {
+  try {
+    return normalizeRemote(input);
+  } catch (e) {
+    if (e instanceof RemoteError) throw new ReplicationSetupError(400, "invalid_remote", e.message);
+    throw e;
+  }
+}
+
+/** Why setup or join cannot use a remote the guards refused; null when they let it through. */
+export function refusalOf(v: RemoteVerdict): ReplicationSetupError | null {
+  if (v.ok) return null;
+  if (v.status === "offline") return new ReplicationSetupError(502, "remote_unreachable", v.cause);
+  if (v.status === "unauthorized") return new ReplicationSetupError(502, "remote_unauthorized", v.cause);
+  return new ReplicationSetupError(409, "remote_refused", v.cause);
+}
+
+/**
+ * A folder that is not empty may hold a Brain of its own. Two Brains are never
+ * merged, so the join is refused; the folder is backed up first, so the owner
+ * can move it aside and still keep what it held.
+ */
+export async function notEmptyRefusal(target: string, backUp: (folder: string) => Promise<string>, log: Logger): Promise<ReplicationSetupError> {
+  const refusal = `${target} is not empty. Jarvis joins a Brain only into an empty folder, so two Brains are never merged.`;
+  try {
+    const backup = await backUp(target);
+    return new ReplicationSetupError(409, "not_empty", `${refusal} It was backed up to ${backup}. Move the folder aside or choose an empty one, then join again.`, { backup });
+  } catch (e) {
+    log.error("could not back up a folder a join refused", { folder: target, error: (e as Error).message });
+    return new ReplicationSetupError(409, "not_empty", `${refusal} Backing it up failed too (${(e as Error).message}); nothing in it was changed.`);
+  }
+}
 
 /** Turn a remote failure into what the owner sees when setting up or joining. */
 export function remoteFailure(e: unknown, action: string): ReplicationSetupError {
