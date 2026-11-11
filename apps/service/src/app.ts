@@ -92,6 +92,8 @@ export class App {
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
+  /** Expires stale drafts and wakes snoozed items; stopped with the app, so it never touches a closed database. */
+  private housekeeping: NodeJS.Timeout | null = null;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
@@ -394,16 +396,18 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
-    const housekeeping = setInterval(() => {
+    this.housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
       if (expired.length || woke) this.bus.emit("event", { type: "attention.changed" });
     }, 30_000);
-    housekeeping.unref();
+    this.housekeeping.unref();
     void this.refreshModel();
   }
 
   async stop() {
+    if (this.housekeeping) clearInterval(this.housekeeping);
+    this.housekeeping = null;
     this.dataWatcher?.stop();
     await this.replication.stop();
     this.sessions.stop();
