@@ -6,6 +6,8 @@ import { locateTool } from "../tools.ts";
 import type { Notifier, NotifierState } from "./types.ts";
 
 const MAX = 240;
+/** D-Bus starts a notification daemon on its first notification, and a busy desktop answers slowly; allow for both. */
+const TIMEOUT_MS = 15_000;
 
 /** Notification bodies may carry markup (freedesktop.org Desktop Notifications), so their text is escaped. */
 const escapeMarkup = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -39,8 +41,9 @@ export function linuxNotifier(env: Env = process.env): Notifier {
     async notify(title, body) {
       const r = route(env);
       if (!("tool" in r)) return r;
-      const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeMarkup(body.slice(0, MAX))], { timeoutMs: 5000 });
+      const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeMarkup(body.slice(0, MAX))], { timeoutMs: TIMEOUT_MS });
       return done.code === 0 ? { available: true } : { available: false, reason: done.stderr.trim().split("\n")[0] || `notify-send exited with ${done.code}` };
     },
+    forget: async () => {},
   };
 }

@@ -1,11 +1,10 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { API_PREFIX } from "@jarvis/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { openDb } from "../core/db.ts";
 import { createPairingCode } from "../http/security.ts";
-import { replaceWith } from "../platform/replace-file.ts";
+import { writePrivateFile } from "../platform/private-file.ts";
 
 export interface Runtime {
   pid: number;
@@ -107,9 +106,7 @@ export class ServiceClient {
     const res = await this.fetch("POST", "/pair", null, { code, clientName: "Jarvis CLI", kind: "cli" });
     const out = (await res.json().catch(() => null)) as { token?: string; error?: { message?: string } } | null;
     if (!res.ok || !out?.token) throw new ServiceError(res.status, "pairing_failed", `The CLI could not pair with Jarvis: ${out?.error?.message ?? res.status}`);
-    const tmp = join(dirname(this.tokenFile), `.${randomUUID()}.tmp`);
-    writeFileSync(tmp, out.token, { mode: 0o600 });
-    replaceWith(tmp, this.tokenFile);
+    writePrivateFile(this.tokenFile, out.token);
     return out.token;
   }
 }

@@ -21,7 +21,7 @@ interface Status {
   node: string;
   stateDir: string;
   dataFolder: string | null;
-  credentialStore: "keychain" | "secret-service" | "file";
+  credentialStore: "keychain" | "secret-service" | "credential-manager" | "file";
   /** Why this store is in use when it is not the operating system's own. */
   credentialStoreNote: string | null;
   documents: number;
@@ -32,7 +32,8 @@ interface Status {
 const CREDENTIAL_STORES: Record<Status["credentialStore"], string> = {
   keychain: "macOS Keychain",
   "secret-service": "Secret Service (desktop keyring)",
-  file: "Local file (0600)",
+  "credential-manager": "Windows Credential Manager",
+  file: "Private file (only you can read it)",
 };
 
 function Schedules({ config, onSaved }: { config: Config; onSaved: () => void }) {

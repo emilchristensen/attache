@@ -24,6 +24,8 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
   `JARVIS_TEST_GIT_BASH` points the tests at a Git Bash outside `C:\Program Files\Git`.
 - `apps/service/test/linux-desktop.test.ts` runs the Linux secret store and notifications anywhere, against stand-ins for `secret-tool` and `notify-send`.
   `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `JARVIS_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
+- `apps/service/test/windows-desktop.test.ts` runs the Windows secret store and notifications anywhere, against a stand-in for Windows PowerShell (`fake-powershell.mjs`) and for `icacls` and `whoami`.
+  `apps/service/test/windows-desktop-real.test.ts` checks the same against Credential Manager and Windows notifications; it runs only on Windows with `JARVIS_TEST_REAL_DESKTOP=1`, as CI's Windows job does, because it shows notifications and writes to your Credential Manager (it removes what it wrote).
 - Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
   Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
@@ -48,7 +50,7 @@ node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --ope
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and the background service), `JARVIS_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose Harness hooks and MCP configuration are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script a Harness runs as Jarvis's MCP server; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model), `JARVIS_SECRET_TOOL_BIN` and `JARVIS_NOTIFY_SEND_BIN` (the `secret-tool` and `notify-send` Jarvis runs on Linux; tests point them at the recording stand-ins in `apps/service/test/fixtures/`).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and the background service), `JARVIS_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose Harness hooks and MCP configuration are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script a Harness runs as Jarvis's MCP server; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model), `JARVIS_SECRET_TOOL_BIN` and `JARVIS_NOTIFY_SEND_BIN` (the `secret-tool` and `notify-send` Jarvis runs on Linux), `JARVIS_POWERSHELL_BIN`, `JARVIS_ICACLS_BIN` and `JARVIS_WHOAMI_BIN` (the Windows PowerShell, `icacls` and `whoami` Jarvis runs on Windows); tests point them at the recording stand-ins in `apps/service/test/fixtures/`.
 
 Connecting a Harness edits real files in your home folder (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, Claude Desktop's settings folder).
 Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
@@ -66,6 +68,8 @@ Each platform is one job, `checks (macos-latest)`, `checks (ubuntu-latest)` and 
 | Lint | `pnpm lint --max-warnings 0` |
 | Typecheck | `pnpm typecheck` |
 | Unit and integration tests | `pnpm test` |
+| Linux desktop session tests (Linux only) | `JARVIS_TEST_REAL_DESKTOP=1 sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts` |
+| Windows desktop tests (Windows only) | `JARVIS_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
 | Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
 
 A separate job, `install (ubuntu-latest)`, runs the install test (see "Install test" below) and uploads `test-results/install-results.json`.

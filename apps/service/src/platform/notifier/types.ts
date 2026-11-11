@@ -7,4 +7,6 @@ export interface Notifier {
   check(): Promise<NotifierState>;
   /** Hand a notification to the operating system. Resolves available when it was shown. Never rejects. */
   notify(title: string, body: string): Promise<NotifierState>;
+  /** Remove whatever this notifier registered with the operating system, for the uninstaller. Nothing on macOS and Linux. */
+  forget(): Promise<void>;
 }

@@ -11,6 +11,7 @@ const check = async (): Promise<NotifierState> => (existsSync(OSASCRIPT) ? { ava
 /** Notification Center through osascript. The script text is passed on stdin, never as a shell string. */
 export const macosNotifier: Notifier = {
   check,
+  forget: async () => {},
   async notify(title, body) {
     const state = await check();
     if (!state.available) return state;
