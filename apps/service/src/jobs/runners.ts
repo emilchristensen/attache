@@ -5,7 +5,7 @@ import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMark
 import { getItem } from "../attention/engine.ts";
 import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
 import { complete } from "../models/providers.ts";
-import { toCitation } from "../conversation/service.ts";
+import { toCitation } from "../memory/citation.ts";
 import { newEffectKey } from "../actions/service.ts";
 import { RemoteError } from "../connectors/http.ts";
 import { SOURCE_KINDS } from "../capabilities/registry.ts";

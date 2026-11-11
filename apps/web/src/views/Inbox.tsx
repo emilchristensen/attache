@@ -284,7 +284,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
   if (!attentionOn)
     return (
       <Empty title="Attention and briefings is off" action={<Link to="/settings">Turn it on in Settings</Link>}>
-        Conversation and search still work.
+        Search still works.
       </Empty>
     );
   const failed = (conns.data ?? []).filter((c) => c.status !== "not_configured" && c.status !== "disconnected" && (c.status !== "connected" || (c.coverage && !["complete", "empty"].includes(c.coverage.state))));

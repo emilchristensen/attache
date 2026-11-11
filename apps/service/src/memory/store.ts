@@ -58,7 +58,7 @@ Jarvis keeps your knowledge here as plain Markdown. You can read and edit these 
 
 - \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
-- \`evidence/\` is archived evidence: captures, conversation archives, coding-agent sessions and connector observations.
+- \`evidence/\` is archived evidence: captures, coding-agent sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
 
@@ -110,7 +110,7 @@ export class MemoryStore {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
-    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
+    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
       const abs = join(root, d);
       if (!existsSync(abs)) {
         mkdirSync(abs, { recursive: true });
@@ -400,14 +400,6 @@ export class MemoryStore {
     const rel = this.uniquePath(`deliverables/${kind}`, `${today()}-${slugify(title)}`);
     const fm = { id: randomUUID(), type: kind.replace(/s$/, ""), title, generated_at: nowIso(), provenance: "generated", ...meta };
     this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body.trim()}\n`, "service");
-    return { relPath: rel };
-  }
-
-  archiveConversation(conversationId: string, title: string, messages: Array<{ role: string; content: string; at: string }>): { relPath: string } {
-    const rel = `evidence/conversations/${conversationId}.md`;
-    const fm = { id: conversationId, type: "conversation", title, archived_at: nowIso(), provenance: "conversation-archive" };
-    const body = messages.map((m) => `### ${m.role} · ${m.at}\n\n${m.content.trim()}`).join("\n\n");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body}\n`, "service");
     return { relPath: rel };
   }
 

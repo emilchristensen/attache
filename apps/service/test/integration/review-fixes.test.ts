@@ -152,13 +152,6 @@ describe("review fixes", () => {
     expect((await fetch(`${svc.url}/api/v1/status`, { headers: { authorization: `Bearer ${other.token}` } })).status).toBe(401);
   });
 
-  it("#9 answers interrupted by a restart become retryable errors", () => {
-    svc.app.db.prepare("insert into conversations (id, title, created_at, updated_at) values ('c-int','t',?,?)").run(new Date().toISOString(), new Date().toISOString());
-    svc.app.db.prepare("insert into messages (id, conversation_id, role, content, status, created_at, updated_at) values ('m-int','c-int','assistant','half','streaming',?,?)").run(new Date().toISOString(), new Date().toISOString());
-    expect(svc.app.conversations.recoverInterrupted()).toBe(1);
-    expect(svc.app.conversations.message("m-int")).toMatchObject({ status: "error", error: expect.stringMatching(/Interrupted by a service restart/) });
-  });
-
   it("#11 a fresh event stream starts at now; a reconnect replays every missed event beyond one batch", async () => {
     const job = svc.app.jobs.create({ kind: "demo-long", title: "events", input: { steps: 1, stepMs: 1 } }).job;
     // Let the job finish first: its own live events would otherwise reach the fresh stream.

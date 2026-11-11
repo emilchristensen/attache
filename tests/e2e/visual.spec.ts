@@ -38,9 +38,6 @@ test("screens", async ({ browser }) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
-  await page.getByRole("textbox", { name: "Message Jarvis" }).fill("When is the cutover plan due for the Orion migration?");
-  await page.keyboard.press("Enter");
-  await expect(page.locator(".msg.assistant").last()).toHaveAttribute("data-status", "complete");
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Prepare briefing" }).click();
   await page.waitForTimeout(1500);
@@ -60,8 +57,10 @@ test("screens", async ({ browser }) => {
     // Below the fold of the settings screenshot.
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
   }
-  await page.goto(stack.url);
-  await page.locator(".msg.assistant button.cite").first().click();
+  await page.goto(`${stack.url}/memory`);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("When is the cutover plan due for the Orion migration?");
+  await page.locator(".list-item", { hasText: "Orion" }).first().click();
+  await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
