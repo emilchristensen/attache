@@ -198,4 +198,16 @@ describe("Replication between Machines", () => {
     expect(join_.body.error.code).toBe("not_empty");
     expect((await other.get("/replication")).status).toBe("off");
   });
+
+  it("refuses a repository address with spaces, though a folder may have them", async () => {
+    single = await startTestService();
+    // Every test above replicates through folders whose paths have spaces and non-ASCII letters.
+    expect(single.dataDir).toMatch(/ æøå-/);
+    for (const remote of ["owner/my brain", "https://github.com/owner/my brain.git", "-uowner/brain"]) {
+      const r = await single.call("POST", "/replication/setup", { remote });
+      expect(r.status).toBe(400);
+      expect(r.body.error.code).toBe("invalid_remote");
+    }
+    expect((await single.get("/replication")).status).toBe("off");
+  });
 });

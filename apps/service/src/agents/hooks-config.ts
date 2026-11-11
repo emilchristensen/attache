@@ -1,6 +1,7 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Editing the `{ hooks: { Event: [{ matcher, hooks: [{ type, command, timeout }] }] } }`
@@ -153,7 +154,7 @@ export function replaceFile(path: string, content: string) {
   const tmp = join(dirname(target), `.${randomUUID()}.jarvis.tmp`);
   writeFileSync(tmp, content, { mode });
   chmodSync(tmp, mode);
-  renameSync(tmp, target);
+  replaceWith(tmp, target);
 }
 
 // ---- named format: { "<owner>": { enabled, Event: [{ type, command, timeout }] } } -------------

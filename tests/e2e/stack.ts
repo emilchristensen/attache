@@ -59,8 +59,9 @@ export function makeVault(dir: string) {
 
 export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const port = opts.port ?? 7610;
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-e2e-state-"));
-  const base = mkdtempSync(join(tmpdir(), "jarvis-e2e-"));
+  // A space and non-ASCII letters in every path, as in many owners' home folders.
+  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-e2e-state æøå-"));
+  const base = mkdtempSync(join(tmpdir(), "jarvis-e2e æøå-"));
   const dataDir = join(base, "Jarvis");
   const vaultDir = join(base, "vault");
   makeVault(vaultDir);

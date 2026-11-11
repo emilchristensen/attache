@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Git, GitError } from "./git.ts";
 import { machineTrailer, type StagedEntry } from "./commit-message.ts";
 import type { GuardVerdict, MachineRef, MergeNotice, MergeOutcome as MergedFile, ReplicationSeams, StagedFile } from "./seams.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 export const BRANCH = "main";
 export const REMOTE = "origin";
@@ -203,7 +204,7 @@ export class BrainRepo {
     mkdirSync(dirname(abs), { recursive: true });
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
     writeFileSync(tmp, content);
-    renameSync(tmp, abs);
+    replaceWith(tmp, abs);
     this.git.okSync(["add", "--", path]);
   }
 

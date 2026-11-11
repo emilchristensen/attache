@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
@@ -10,6 +10,7 @@ import { redact } from "../core/log.ts";
 import type { MachineIdentity } from "../core/machine.ts";
 import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -197,7 +198,7 @@ export class MemoryStore {
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
     // Archived evidence and generated deliverables never keep credentials that appeared in sources.
     writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
-    renameSync(tmp, abs);
+    replaceWith(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
     this.opts.onWrite?.(n);
   }

@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { stringify as stringifyYaml } from "yaml";
 import { HooksFileError } from "./hooks-config.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { auditSkill, saveSkill, type SkillText } from "./skill-text.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Where an agent reads user-level skills. Several agents can read one folder
@@ -147,7 +148,7 @@ export class AgentSkills {
       writeFileSync(join(tmp, rel), content, { mode: 0o644 });
     }
     rmSync(folder, { recursive: true, force: true });
-    renameSync(tmp, folder);
+    replaceWith(tmp, folder);
   }
 }
 

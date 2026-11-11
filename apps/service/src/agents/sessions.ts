@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { App } from "../app.ts";
@@ -17,6 +17,7 @@ import { projectSlug, removeContextFiles, writeContextFiles, type ProjectContext
 import { listedRepositories } from "../memory/repositories.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
 import { shellPath } from "../platform/shell-command.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 interface SessionRow {
   agent: string;
@@ -220,7 +221,7 @@ export class AgentSessions {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
     writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    renameSync(tmp, file);
+    replaceWith(tmp, file);
   }
 
   private userName(): string {
