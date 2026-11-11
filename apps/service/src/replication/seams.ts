@@ -1,13 +1,13 @@
-import { inboxMergeRule } from "../attention/inbox-merge.ts";
-import { credentialScan } from "./credential-scan.ts";
-
 /**
  * Where later rules plug into Replication without changing the loop:
  * merge rules for files both sides changed, guards that run before every
  * commit and before talking to the remote, and the credentials git uses.
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
+import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { proposalMergeRule } from "../memory/proposal-merge.ts";
+import { credentialScan } from "./credential-scan.ts";
+import { noteMergeRule } from "./note-merge/rule.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
@@ -96,7 +96,23 @@ export interface ReplicationSeams {
 /** Git's own credential setup on this Machine, until a ticket adds Jarvis's helper. */
 export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () => ({}) };
 
+/**
+ * The merge rules, in the order Replication tries them: the first rule that
+ * applies to a path and returns an outcome settles it. Order matters only
+ * where rules share paths; each rule names the paths it covers.
+ * 1. Review state (`review/inbox/`, then `review/proposals/`): latest decision wins.
+ * 2. Notes (`memory/**.md`): the fact, History and frontmatter merge (#26).
+ */
+function mergeRules(): readonly MergeRule[] {
+  return [inboxMergeRule, proposalMergeRule, noteMergeRule()];
+}
+
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [inboxMergeRule, proposalMergeRule], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return {
+    mergeRules: mergeRules(),
+    commitGuards: [credentialScan],
+    remoteGuards: [],
+    credentials: MACHINE_CREDENTIALS,
+  };
 }
