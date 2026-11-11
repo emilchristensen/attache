@@ -1,5 +1,9 @@
 /** Captures every view in light, dark and narrow layouts for visual review (test-results/screens). */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -10,6 +14,65 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => stack?.stop());
 
+const runGit = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
+
+async function api(page: Page, method: string, path: string, body?: unknown) {
+  await page.evaluate(
+    async ([m, p, b]) => {
+      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
+      if (!res.ok) throw new Error(`${m} ${p} failed: ${res.status}`);
+    },
+    [method, path, body] as const,
+  );
+}
+
+/** The Replication card in every theme and width: off, up to date with two Machines, and blocked with its cause. */
+async function replicationScreens(page: Page) {
+  // The card is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
+  const capture = async (path: string, on: boolean) => {
+    await page.goto(`${stack.url}/settings`);
+    const card = page.getByRole("region", { name: "Replication" });
+    if (on) await expect(card.locator(".machine-row").first()).toBeVisible();
+    await page.waitForTimeout(300);
+    await card.screenshot({ path });
+  };
+  const shoot = async (name: string) => {
+    await page.setViewportSize({ width: 1360, height: 2000 });
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await capture(`test-results/screens/${scheme}-settings-replication-${name}.png`, name !== "off");
+    }
+    await page.setViewportSize({ width: 390, height: 2400 });
+    await capture(`test-results/screens/narrow-settings-replication-${name}.png`, name !== "off");
+    await page.setViewportSize({ width: 1360, height: 900 });
+  };
+  await shoot("off");
+  const base = mkdtempSync(join(tmpdir(), "jarvis-visual-remote-"));
+  const remote = join(base, "brain.git");
+  runGit(base, "init", "--bare", "--quiet", "-b", "main", remote);
+  await api(page, "POST", "/replication/setup", { remote });
+  // Another Machine's record, as it would arrive from the repository.
+  const other = "6b1f0c7e-2d4a-4c55-9a8e-1f2e3d4c5b6a";
+  mkdirSync(join(stack.dataDir, "machines"), { recursive: true });
+  writeFileSync(join(stack.dataDir, "machines", `${other}.json`), `${JSON.stringify({ id: other, name: "Work Mac", standby: true, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  await api(page, "PUT", "/replication/preferred-reader", { machine: other });
+  await api(page, "POST", "/replication/check");
+  await shoot("up-to-date");
+  // Both Machines changed a file no merge rule settles.
+  const clone = join(base, "work-mac");
+  runGit(base, "clone", "--quiet", remote, clone);
+  writeFileSync(join(clone, "plan.txt"), "from the Work Mac\n");
+  runGit(clone, "add", "plan.txt");
+  runGit(clone, "commit", "--quiet", "-m", "Work Mac: plan");
+  runGit(clone, "push", "--quiet", "origin", "main");
+  writeFileSync(join(stack.dataDir, "plan.txt"), "from the Home PC\n");
+  await api(page, "POST", "/replication/check");
+  await shoot("blocked");
+  // The rest of the screens show a single Machine.
+  await api(page, "POST", "/replication/off");
+}
+
 test("screens", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   const page = await ctx.newPage();
@@ -19,6 +82,10 @@ test("screens", async ({ browser }) => {
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.screenshot({ path: "test-results/screens/setup-folder.png", fullPage: true });
+  const joinBrain = page.getByText("Already use Jarvis on another Machine?");
+  await joinBrain.click();
+  await page.locator(".join-brain").screenshot({ path: "test-results/screens/setup-join.png" });
+  await joinBrain.click();
   await page.getByRole("button", { name: "Use this folder" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
   const gh = page.locator('[data-connection="github"]');
@@ -62,6 +129,7 @@ test("screens", async ({ browser }) => {
     await call("PUT", "/harnesses/claude-code/auto-accept", { autoAccept: true });
     await call("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "6f1c2b0e-visual" }, autoAccept: true, items: [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }] });
   });
+  await replicationScreens(page);
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {

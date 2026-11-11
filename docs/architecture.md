@@ -100,10 +100,13 @@ Files written before this change keep their `<date>.md` name; search and the aud
 ## Replication
 
 Replication keeps every Machine's copy of the Brain the same through a git repository (ADR 0001); the whole Brain replicates (ADR 0002).
-The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication` and `POST /replication/check` expose it (`jarvis replication` calls them).
+The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication`, `POST /replication/check` and `POST /replication/off` expose it (`jarvis replication` calls them).
+The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.tsx`) and the join option on the first setup screen use the same endpoints and refresh on the `replication.changed` event.
 
-- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, and the last status.
+- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, the last status, and when a check last left the Machine up to date (`upToDateAt`).
   No row means off.
+  Switching off deletes the row and nothing else: the data folder, its `.git` and the remote stay as they are.
+  Setup on a Jarvis-managed repository whose history the remote shares (fetched into a scratch ref, `refs/jarvis/candidate`) resumes instead of refusing, and the next check merges both sides.
   A data folder other than the one Replication was set up for reads as blocked.
 - **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
   It refuses a remote whose `main` already has commits.
@@ -120,6 +123,11 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
   The message names each changed file and what the change log says happened to it (`created "Orion migration"`, `corrected Status`, `added an event`), or `added`/`edited`/`deleted` for files the change log does not know (hand edits, evidence), and ends with a `Jarvis-Machine: <name> (<id>)` trailer.
 - **Seams** (`replication/seams.ts`, listed in `defaultSeams()`): `mergeRules`, `commitGuards` (run on the staged files before every commit, merge commits included; a refusal stops the commit and the push), `remoteGuards` (run at setup, join and before every push), and `credentials` (`-c` settings and environment for commands that reach the remote, so a token never sits in the remote's address).
   `Replication.onPulled` and `onMergeNotice` let other parts of the service react to merged files and to what the rules want the owner to see.
+- **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
+  They are JSON, so search never indexes them, and they replicate like any file.
+  `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
+  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
+  Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
 - **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
