@@ -43,27 +43,24 @@ describe("A05 grounded recall and corrections", () => {
   let decision = "";
 
   it("retrieves a source-linked decision and the hit locates its evidence lines", async () => {
-    const cap = await svc.post("/memory/capture", {
-      text: "Vendor review: we agreed to renew the Nimbus contract for two years at the 12% discount.",
-      title: "Vendor review notes",
-      source: { kind: "user", ref: "meeting 2026-09-29" },
-      decision: { title: "Nimbus contract renewal", decision: "Renew Nimbus for two years at 12% discount", project: "Procurement" },
+    const out = await svc.post("/memory/save", {
+      origin: { agent: "claude-code", sessionId: "sess-vendor-review" },
+      items: [{ action: "create", type: "decision", title: "Nimbus contract renewal", facts: [{ subject: "Decision", value: "Renew Nimbus for two years at 12% discount" }, { subject: "Project", value: "Procurement" }] }],
     });
-    decision = cap.decision.relPath;
+    decision = out.saved[0].relPath;
     const hits = await recall("What did we decide about the Nimbus contract?");
     const hit = hits.find((h) => h.relPath === decision && h.section === "state");
     expect(hit).toBeTruthy();
     expect(hits[0]!.relPath).toBe(decision);
     // The hit's line range locates the evidence in the note.
     expect(await linesOf(hit!)).toContain("Renew Nimbus for two years at 12% discount");
-    // The decision links back to the capture it came from.
+    // The decision links back to the Harness session it came from.
     const doc = await svc.get(`/memory/document?root=data&path=${encodeURIComponent(decision)}`);
-    expect(doc.raw).toContain(cap.capture.relPath);
-    expect(readFileSync(join(svc.dataDir, cap.capture.relPath), "utf8")).toContain("12% discount");
+    expect(doc.raw).toContain("claude-code/sess-vendor-review");
   });
 
   it("a correction changes what the next search returns and keeps the old value in history", async () => {
-    await svc.post("/memory/correct", { relPath: decision, subject: "Decision", value: "Renew Nimbus for one year at 8% discount", reason: "Finance rejected the two-year term" });
+    await svc.post("/memory/save", { items: [{ action: "update", path: decision, facts: [{ subject: "Decision", value: "Renew Nimbus for one year at 8% discount", reason: "Finance rejected the two-year term" }] }] });
     const hits = await recall("What did we decide about the Nimbus contract?");
     const current = hits.filter((h) => h.relPath === decision && h.section === "state");
     expect(current.map((h) => h.text).join("\n")).toContain("one year at 8% discount");

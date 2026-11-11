@@ -52,7 +52,7 @@ export function ConnectionsView() {
     <div className="page page-narrow">
       <div className="page-header">
         <h1>Connections</h1>
-        <span className="subtitle">Each connection shows what it may read, whether it may write, when it last succeeded and how complete its last sync was.</span>
+        <span className="subtitle">Each connection shows what it may read and write, when it last succeeded and how complete its last Source refresh was.</span>
       </div>
       {oauth && (
         <div className={`state ${oauth === "ok" ? "partial" : "error"} small`} role="status" style={{ marginBottom: 14 }}>

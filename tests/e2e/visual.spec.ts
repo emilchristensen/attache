@@ -1,4 +1,6 @@
 /** Captures every view in light, dark and narrow layouts for visual review (test-results/screens). */
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test, expect } from "@playwright/test";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -49,7 +51,7 @@ test("screens", async ({ browser }) => {
   });
   // Recent saves on the Memory screen: a correction, a reverted one, and one a later save overwrote.
   await harnessSave(stack, [{ action: "create", type: "person", title: "Priya Shah", facts: [{ subject: "Role", value: "Engineering manager for billing" }, { subject: "Prefers", value: "Written updates on Mondays" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
-  await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion" }] }], { agent: "codex", session: "thread-visual-2" });
+  await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion", review: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10) }] }], { agent: "codex", session: "thread-visual-2" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Fridays", reason: "new rhythm" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "A short call on Fridays", reason: "changed again" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   // Claude Code connected with auto-accept on, and one auto-accepted save, so Settings and Recent saves show both.
@@ -62,6 +64,9 @@ test("screens", async ({ browser }) => {
     await call("PUT", "/harnesses/claude-code/auto-accept", { autoAccept: true });
     await call("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "6f1c2b0e-visual" }, autoAccept: true, items: [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }] });
   });
+  // An edit by hand: "Prefers" is past its Review date, so the note shows it unverified.
+  const priya = join(stack.dataDir, "memory/people/priya-shah.md");
+  writeFileSync(priya, readFileSync(priya, "utf8").replace(/\*\*Prefers\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Prefers** (2026-01-10, review 2026-02-01)"));
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
@@ -73,6 +78,11 @@ test("screens", async ({ browser }) => {
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
     await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
     await page.getByRole("region", { name: "Auto-accept saves" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
+    // A note opened read-only, below the review lists.
+    await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+    await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `test-results/screens/${scheme}-memory-note.png` });
     await page.goto(`${stack.url}/memory`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
   }
@@ -95,9 +105,13 @@ test("screens", async ({ browser }) => {
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"]] as const) {
+  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });
   }
+  await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+  await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "test-results/screens/narrow-memory-note.png" });
 });

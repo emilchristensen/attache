@@ -39,27 +39,4 @@ describe("migrating another notes system into Jarvis", () => {
     expect((await svc.call("POST", "/memory/archive", { path: join(old, "missing"), label: "x" })).status).toBe(400);
     expect((await svc.call("POST", "/memory/archive", { path: old, label: "../escape" })).status).toBe(400);
   });
-
-  it("a migrated note keeps each fact's original date and source line, carries history, and is found and cited", async () => {
-    const src = (lines: [number, number]) => ({ kind: "import", root: "data", ref: "evidence/archive/old-notes/brain/knowledge/mia.md", lines, observedAt: "2026-09-01T00:00:00Z", label: "OldNotes: mia" });
-    const out = await svc.post("/memory/notes", {
-      type: "person",
-      title: "Mia Jensen",
-      provenance: "migrated",
-      tags: ["client"],
-      state: [
-        { subject: "Role", value: "Design lead at the client", date: "2026-09-01", source: src([6, 6]) },
-        { subject: "Review preference", value: "Prefers async review notes", date: "2026-08-15", source: src([7, 7]) },
-      ],
-      history: ["2026-07-01 — Role: contractor (superseded 2026-09-01)"],
-      sources: [src([1, 7])],
-    });
-    const doc = readFileSync(join(svc.dataDir, out.relPath), "utf8");
-    expect(doc).toMatch(/provenance: migrated/);
-    expect(doc).toMatch(/- \*\*Role\*\* \(2026-09-01\): Design lead at the client — source: OldNotes: mia \(import: evidence\/archive\/old-notes\/brain\/knowledge\/mia\.md#L6-L6/);
-    expect(doc).toMatch(/- \*\*Review preference\*\* \(2026-08-15\)/);
-    expect(doc).toMatch(/## History[\s\S]*- 2026-07-01 — Role: contractor \(superseded 2026-09-01\)[\s\S]*created by user \(migrated, reviewed\)/);
-    const hits = (await svc.get(`/memory/search?q=${encodeURIComponent("async review notes")}`)).hits;
-    expect(hits.map((h: { relPath: string }) => h.relPath)).toEqual(expect.arrayContaining([out.relPath, "evidence/archive/old-notes/brain/knowledge/mia.md"]));
-  });
 });

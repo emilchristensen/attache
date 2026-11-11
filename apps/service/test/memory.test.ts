@@ -19,7 +19,7 @@ describe("memory store and retrieval", () => {
   it("retrieves a source-linked decision with exact line evidence", () => {
     const { db, store, root } = setup();
     const cap = store.capture({ text: "We agreed the Atlas launch moves to 14 October because QA found blocking issues.", title: "Atlas sync notes", source: { kind: "user", ref: "meeting", observedAt: "2026-09-29T10:00:00Z" } });
-    const { relPath } = store.recordDecision({ title: "Atlas launch date", decision: "Launch Atlas on 14 October", source: { kind: "capture", ref: cap.relPath, observedAt: "2026-09-29T10:00:00Z" } });
+    const { relPath } = store.createMemory({ type: "decision", title: "Atlas launch date", state: [{ subject: "Decision", value: "Launch Atlas on 14 October" }], sources: [{ kind: "capture", ref: cap.relPath, observedAt: "2026-09-29T10:00:00Z" }] }, "user");
     const hits = search(db, "When does Atlas launch?");
     expect(hits[0]?.relPath).toBe(relPath);
     const hit = hits[0]!;
@@ -30,7 +30,7 @@ describe("memory store and retrieval", () => {
 
   it("a correction replaces current state, keeps history, and changes the next retrieval", () => {
     const { db, store, root } = setup();
-    const { relPath } = store.recordDecision({ title: "Atlas launch date", decision: "Launch Atlas on 14 October", source: { kind: "user", ref: "chat", observedAt: "2026-09-29T10:00:00Z" } });
+    const { relPath } = store.createMemory({ type: "decision", title: "Atlas launch date", state: [{ subject: "Decision", value: "Launch Atlas on 14 October" }], sources: [{ kind: "user", ref: "chat", observedAt: "2026-09-29T10:00:00Z" }] }, "user");
     store.correct(relPath, { subject: "Decision", value: "Launch Atlas on 21 October", reason: "QA slipped a week" }, "user");
     const text = readFileSync(join(root, relPath), "utf8");
     const current = text.split("## History")[0]!;
