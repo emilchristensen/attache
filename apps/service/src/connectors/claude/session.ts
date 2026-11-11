@@ -228,6 +228,8 @@ function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Prom
       stop();
     };
     req.signal.addEventListener("abort", onAbort);
+    // A cancellation that came before this session started (during discovery, say) fires no event.
+    if (req.signal.aborted) onAbort();
     child.stderr.on("data", (d) => (stderr += String(d)));
     let buf = "";
     child.stdout.on("data", (chunk) => {
