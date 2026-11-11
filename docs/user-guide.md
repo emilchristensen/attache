@@ -137,6 +137,22 @@ Your data folder is plain Markdown, so you can open it as an Obsidian vault or i
 Jarvis picks up your edits within a few seconds.
 There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
 
+## Measuring search
+
+`jarvis evaluate-recall` scores search against a set of questions you keep in your Brain at `evaluation/recall-questions.json`.
+Each question names the note and the current fact that should answer it:
+
+```json
+{ "questions": [{ "question": "When is the Orion cutover?", "note": "memory/projects/orion-migration.md", "fact": "Status" }] }
+```
+
+`note` is the note's path inside the Brain and `fact` is the subject written in bold in its Current State.
+The report says how often the expected fact is the first result and how often it is in the first three, and lists every question that missed with the first three results search returned instead.
+A question whose note or fact is no longer in the Brain is not scored; the report lists it with the reason so you can correct the set.
+Use `--set <file>` to score another set and `--json` for the full report.
+Jarvis must be running, because the command scores the search the service runs.
+The set is JSON, not Markdown, so search never finds the questions themselves.
+
 ## Sleep, offline and notifications
 
 The service runs only while your Mac is awake.
@@ -161,7 +177,7 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 | Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
 | Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |

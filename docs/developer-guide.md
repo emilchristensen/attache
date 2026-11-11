@@ -57,6 +57,14 @@ It speaks the same stream-json and permission-control protocol as the real CLI a
 Fixture results are never reported as live results.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
 
+## Recall evaluation
+
+A change to search ships only when it improves recall evaluation.
+`apps/service/test/fixtures/recall-brain/` is a synthetic Brain with its own question set in `evaluation/recall-questions.json`, mixing exact lookups (ticket numbers, repository names), paraphrases and Danish questions.
+`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` and fails if it drops below the recorded baseline (`BASELINE`: first result 16 of 22, first three 18 of 22, keyword search only).
+When a change improves the score, raise the baseline in the same commit.
+The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare.
+
 ## Release
 
 ```sh
