@@ -35,7 +35,7 @@ afterAll(async () => {
   await svc?.stop();
 });
 
-describe("saving from a coding agent", () => {
+describe("saving from a Harness", () => {
   it("creates a new note and corrects an existing one in one save, citing the session", async () => {
     const r = await svc.post("/memory/save", {
       origin: { agent: "claude-code", sessionId: "sess-1", cwd: "/Users/alex/code/jarvis" },

@@ -61,7 +61,7 @@ Claude Code runs Jarvis's hooks through Git Bash, as it runs every hook on Windo
 
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
-On Windows, repairing the version you already run replaces its files, so close the coding agents that have Jarvis's MCP server open first; the installer says so if one still holds them.
+On Windows, repairing the version you already run replaces its files, so close each Harness that has Jarvis's MCP server open first; the installer says so if one still holds them.
 Harness hooks and the MCP server run Jarvis through a stable `current` link, so they keep working across upgrades.
 Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
@@ -356,7 +356,7 @@ The next time Jarvis starts with Credential Manager working, it moves the creden
   Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
-- **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
+- **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from each Harness, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
   Files you had before Jarvis are left alone, including notes already in the data folder you chose: only what Jarvis created there is removed.
 

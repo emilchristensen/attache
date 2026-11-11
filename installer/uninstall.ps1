@@ -102,7 +102,7 @@ for ($i = 0; Test-Path -LiteralPath $Apps; $i++) {
   try { Remove-Item -LiteralPath $Apps -Recurse -Force }
   catch {
     if ($i -lt 30) { Start-Sleep -Milliseconds 500; continue }
-    [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and remove the folder.")
+    [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close each Harness that uses Jarvis (such as Claude Code or Codex) and remove the folder.")
     exit 1
   }
 }

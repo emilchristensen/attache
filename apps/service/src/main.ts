@@ -88,7 +88,7 @@ async function status(argv: string[]) {
   }
 }
 
-/** Recall from a shell, for coding agents: top hits with file, lines and a snippet. Reads the index; never writes. */
+/** Recall from a shell, for a Harness: top hits with file, lines and a snippet. Reads the index; never writes. */
 async function searchCmd(argv: string[]) {
   const query = argv.slice(1).filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--state-dir" && all[i - 1] !== "--limit").join(" ").trim();
   if (!query) throw new Error('Usage: jarvis search "your query" [--limit 8] [--json]');

@@ -99,7 +99,7 @@ if (Test-Path -LiteralPath $App) {
   try { $Replaced = Move-Aside $App }
   catch {
     Remove-Item -LiteralPath $Tmp -Recurse -Force
-    Fail "could not replace $App, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and run the installer again."
+    Fail "could not replace $App, because a program is still using it: $($_.Exception.Message) Close each Harness that uses Jarvis (such as Claude Code or Codex) and run the installer again."
   }
 }
 # Removes the junction itself, never what it points at.

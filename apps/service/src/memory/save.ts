@@ -10,7 +10,7 @@ import { checkItems, writeItem, type CheckedItem } from "./save-items.ts";
 import type { ChangeMeta, SourceRef } from "./store.ts";
 
 /**
- * Apply what the user asked a coding agent to save. Every item is checked
+ * Apply what the owner asked a Harness to save. Every item is checked
  * before the first write, so a bad path or a duplicate note rejects the whole
  * save instead of leaving half of it behind. Writes run as the user: saving is
  * the user's explicit request, made through their own paired CLI.

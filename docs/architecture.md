@@ -248,7 +248,7 @@ Ranking uses BM25 with column weights (title 6, heading 3, text 1), fused by rec
 No document takes more than half of the results while other documents still have hits, so a long note that matches by title does not crowd out its evidence.
 A change to how files are chunked ships with a migration that clears every file's stored fingerprint, so the next scan re-chunks the data folder and imported folders while the old chunks stay searchable.
 The index is updated synchronously on every service write, fixing the new build's unscheduled indexer (four weeks stale when inspected).
-Edits made to the data folder outside the service (Obsidian, an editor, a coding agent) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
+Edits made to the data folder outside the service (Obsidian, an editor, a Harness) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
 Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
 The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
 If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
