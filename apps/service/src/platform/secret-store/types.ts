@@ -5,7 +5,7 @@
  */
 export interface SecretStore {
   readonly kind: "keychain" | "secret-service" | "credential-manager" | "file";
-  /** Why this store is in use when it is not the operating system's own, for the Dashboard; null otherwise. */
+  /** For the Dashboard: why this store is in use when it is not the operating system's own, or which secrets it could not take in; null otherwise. */
   readonly note: string | null;
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
