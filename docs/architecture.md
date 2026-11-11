@@ -19,7 +19,7 @@ flowchart LR
     Actions[Drafts, approvals, execution]
     Conn[Connector adapters]
     Models[Model adapters]
-    Creds[(Keychain credential store)]
+    Creds[(System secret store)]
   end
   API --> Registry --> Sched --> Jobs
   Jobs --> Conn & Models & Memory
@@ -39,7 +39,7 @@ flowchart LR
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); a 0600 file elsewhere for now | Outside the vault and outside frontend storage. |
+| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool` (values on stdin and stdout, never argv); a 0600 file where none is reachable and on Windows for now | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
 | Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
@@ -69,7 +69,8 @@ Imported files are indexed read-only as area `import` and cited by their real pa
 
 Service state (`~/Library/Application Support/Jarvis/state` on macOS): `jarvis.sqlite`, logs, runtime metadata, backups.
 Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>` on macOS.
+Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux.
+Both system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
 
 ## Platform modules
 
@@ -78,8 +79,8 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
 | `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service (not yet) | logon task (not yet) |
-| `secret-store/` | `SecretStore`: get, set, delete, keys | Keychain | owner-only file until Secret Service arrives | owner-only file until Credential Manager arrives |
-| `notifier/` | `Notifier`: notify | Notification Center via `osascript` | none yet | none yet |
+| `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | owner-only file until Credential Manager arrives |
+| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | none yet |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules and skills folders, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |

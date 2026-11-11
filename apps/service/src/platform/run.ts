@@ -14,8 +14,10 @@ export interface RunResult {
 export function run(cmd: string, args: string[], opts: { input?: string; timeoutMs?: number } = {}): Promise<RunResult> {
   return new Promise((resolve) => {
     const child = execFile(cmd, args, { maxBuffer: 1024 * 1024, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}) }, (error, stdout, stderr) => {
-      const code = error && typeof (error as { code?: unknown }).code === "number" ? Number((error as { code: number }).code) : error ? 1 : 0;
-      resolve({ code, stdout: String(stdout), stderr: String(stderr || (error && !String(stderr) ? error.message : "")) });
+      const exited = error && typeof (error as { code?: unknown }).code === "number";
+      const code = exited ? Number((error as { code: number }).code) : error ? 1 : 0;
+      // A tool that ran and failed speaks for itself on stderr; one that could not run (missing, timed out) gets Node's reason.
+      resolve({ code, stdout: String(stdout), stderr: String(stderr) || (error && !exited ? error.message : "") });
     });
     if (opts.input !== undefined) child.stdin?.end(opts.input);
   });

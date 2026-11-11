@@ -124,7 +124,8 @@ describe("clearing stored credentials on uninstall", () => {
     writeFileSync(join(state, "secrets.json"), JSON.stringify({ "github:token": "ghp_example", "slack:token": "xoxb-example" }), { mode: 0o600 });
     const r = jarvis(["credentials", "clear", "--state-dir", state]);
     expect(JSON.parse(r.stdout)).toEqual({ store: "file", removed: 2 });
-    expect(readFileSync(join(state, "secrets.json"), "utf8")).not.toMatch(/ghp_example|xoxb-example/);
+    // The file goes once it holds nothing.
+    expect(existsSync(join(state, "secrets.json"))).toBe(false);
   });
 });
 

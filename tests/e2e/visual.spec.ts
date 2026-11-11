@@ -61,6 +61,7 @@ test("screens", async ({ browser }) => {
     }
     // Below the fold of the settings screenshot.
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
+    await page.locator(".card", { has: page.getByRole("heading", { name: "Service health" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-health.png` });
   }
   await page.goto(`${stack.url}/memory`);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("When is the cutover plan due for the Orion migration?");

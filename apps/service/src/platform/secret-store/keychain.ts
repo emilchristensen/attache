@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { registerSecret } from "../../core/log.ts";
 import { run } from "../run.ts";
+import { KeyIndex } from "./key-index.ts";
 import type { SecretStore } from "./types.ts";
 
 const SECURITY = "/usr/bin/security";
@@ -16,21 +16,12 @@ function securityQuote(value: string): string {
  */
 export class KeychainSecretStore implements SecretStore {
   readonly kind = "keychain" as const;
+  readonly note = null;
   private readonly service: string;
-  private readonly indexFile: string;
+  private readonly index: KeyIndex;
   constructor(service: string, indexFile: string) {
     this.service = service;
-    this.indexFile = indexFile;
-  }
-
-  private readIndex(): string[] {
-    if (!existsSync(this.indexFile)) return [];
-    return JSON.parse(readFileSync(this.indexFile, "utf8")) as string[];
-  }
-  private writeIndex(keys: string[]) {
-    const tmp = `${this.indexFile}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify([...new Set(keys)].sort()), { mode: 0o600 });
-    renameSync(tmp, this.indexFile);
+    this.index = new KeyIndex(indexFile);
   }
 
   async get(key: string) {
@@ -46,13 +37,13 @@ export class KeychainSecretStore implements SecretStore {
     const cmd = `add-generic-password -U -s ${securityQuote(this.service)} -a ${securityQuote(key)} -l ${securityQuote("Jarvis: " + key)} -w ${securityQuote(value)}\n`;
     const r = await run(SECURITY, ["-i"], { input: cmd });
     if (r.code !== 0 || /error/i.test(r.stderr)) throw new Error(`Keychain write failed: ${r.stderr.trim() || r.code}`);
-    this.writeIndex([...this.readIndex(), key]);
+    this.index.add(key);
   }
   async delete(key: string) {
     await run(SECURITY, ["delete-generic-password", "-s", this.service, "-a", key]);
-    this.writeIndex(this.readIndex().filter((k) => k !== key));
+    this.index.remove(key);
   }
   async keys() {
-    return this.readIndex();
+    return this.index.list();
   }
 }

@@ -63,7 +63,8 @@ describe("voice is gone", () => {
     expect(cfg.config.features).toEqual({ drafts: false });
     expect(cfg.features).not.toHaveProperty("voice");
     expect((await svc.get("/connections")).map((c: { kind: string }) => c.kind)).not.toContain("speech");
-    await expect.poll(() => readFileSync(join(stateDir, "secrets.json"), "utf8")).not.toContain("conn:speech:apiKey");
+    const secretsFile = join(stateDir, "secrets.json");
+    await expect.poll(() => (existsSync(secretsFile) ? readFileSync(secretsFile, "utf8") : "")).not.toContain("conn:speech:apiKey");
     // Changing settings afterwards still works.
     expect((await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 40 } })).status).toBe(200);
   });

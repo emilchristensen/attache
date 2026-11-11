@@ -249,6 +249,15 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
   await expect(card.locator(".mono")).toHaveText(id!);
 });
 
+test("credentials: Settings says which secret store holds them and why", async () => {
+  const page = await open("/settings");
+  // The stack forces the private file, as an install without a system secret store would use.
+  const store = page.locator("[data-credential-store]");
+  await expect(store).toHaveAttribute("data-credential-store", "file");
+  await expect(store).toContainText("Local file (0600)");
+  await expect(store).toContainText("JARVIS_CREDENTIAL_STORE=file chose the file.");
+});
+
 test("reconnection: service restart shows a banner, then recovers state", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();

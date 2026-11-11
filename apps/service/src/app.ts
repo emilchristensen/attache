@@ -7,6 +7,7 @@ import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.t
 import { MachineStore } from "./core/machine.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
+import { DesktopNotifications, notifierFor } from "./platform/notifier/index.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -43,6 +44,7 @@ export class App {
   readonly db: Db;
   readonly log: Logger;
   readonly secrets: SecretStore;
+  readonly notifications: DesktopNotifications;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
   readonly memory: MemoryStore;
@@ -72,6 +74,7 @@ export class App {
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs()), log: this.log });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
@@ -247,6 +250,7 @@ export class App {
       }
     }
     this.scheduler.reconcile(cfg);
+    void this.notifications.start();
     this.jobs.start();
     this.scheduler.start();
     this.sessions.start();
