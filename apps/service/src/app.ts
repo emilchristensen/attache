@@ -8,6 +8,7 @@ import { MachineStore } from "./core/machine.ts";
 import { AutoAcceptStore } from "./agents/auto-accept.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
+import { DesktopNotifications, notifierFor } from "./platform/notifier/index.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -19,7 +20,7 @@ import { ConnectionManager } from "./connectors/manager.ts";
 import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
-import { Scheduler } from "./jobs/scheduler.ts";
+import { LATER, Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
 import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
@@ -39,6 +40,8 @@ import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
 import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
 import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
+import { Reader } from "./reader/reader.ts";
+import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -61,6 +64,7 @@ export class App {
   readonly db: Db;
   readonly log: Logger;
   readonly secrets: SecretStore;
+  readonly notifications: DesktopNotifications;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
   /** Which Harnesses save without asking, on this Machine. */
@@ -74,6 +78,8 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  /** Which Machine runs scheduled Source refresh, briefings and Review-date inbox items. */
+  readonly reader: Reader;
   /** The owner's inbox, kept in the Brain so it replicates. */
   readonly inbox: Inbox;
   /** Proposals, kept in the Brain so they replicate. */
@@ -101,6 +107,7 @@ export class App {
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs()), log: this.log });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
@@ -120,6 +127,16 @@ export class App {
       onChange: () => this.replicationChanged(),
       // Loaded when needed: the backup module imports this one.
       backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
+      lastSourceRefresh: () => lastSourceRefresh(this.db),
+      onLeaseChange: () => this.bus.emit("event", { type: "reader.changed" }),
+    });
+    this.reader = new Reader({
+      clock: this.clock,
+      machine: () => this.machine.get(),
+      replicated: () => this.replication.view().status !== "off",
+      lease: () => this.replication.readerLease(),
+      machineName: (id) => this.replication.recordedName(id),
+      lastRefreshAt: () => lastSourceRefresh(this.db),
     });
     this.inbox = new Inbox({
       db: this.db,
@@ -164,7 +181,10 @@ export class App {
   }
 
   private wire() {
-    this.jobs.events.on("event", (ev) => this.bus.emit("event", { type: "job.event", event: ev }));
+    this.jobs.events.on("event", (ev) => {
+      this.bus.emit("event", { type: "job.event", event: ev });
+      if (ev.type === "succeeded") this.jobSucceeded(ev.jobId);
+    });
     this.connections.onChange = (id) => {
       this.cachedModel = null;
       this.bus.emit("event", { type: "connections.changed", id });
@@ -198,6 +218,12 @@ export class App {
     };
     this.actions.authority = (a) => this.actionAuthority(a.kind, a.connectionId);
     this.scheduler.enqueue = (row, reason) => {
+      if (row.jobKind === "sync" || row.jobKind === "briefing") {
+        // Only the Reader reads on a schedule. A Reader whose lease lapsed while asleep or offline waits for its renewal, then catches up.
+        const role = this.reader.role();
+        if (role === "lapsed") return LATER;
+        if (role === "other") return null;
+      }
       if (row.jobKind === "sync") return this.jobs.create({ kind: "sync", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
@@ -334,6 +360,16 @@ export class App {
   private replicationChanged() {
     if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
     this.bus.emit("event", { type: "replication.changed" });
+    // Switching Replication on or off changes who the Reader is.
+    this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */
+  private jobSucceeded(jobId: string) {
+    const job = this.jobs.get(jobId);
+    if (!job || !isFullRefresh(job)) return;
+    this.replication.noteSourceRefresh();
+    this.bus.emit("event", { type: "reader.changed" });
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */
@@ -378,6 +414,7 @@ export class App {
     }
     this.meaning.start();
     this.scheduler.reconcile(cfg);
+    void this.notifications.start();
     this.jobs.start();
     this.scheduler.start();
     this.sessions.start();

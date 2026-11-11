@@ -174,6 +174,25 @@ export interface ReplicationMachinesView {
   preferredReader: string | null;
 }
 
+/**
+ * The Reader: the one Machine that runs scheduled Source refresh, briefings
+ * and Review-date inbox items. With Replication off, this Machine is its own Reader.
+ */
+export interface ReaderView {
+  /** The Reader as this Machine last heard; null while no Machine has taken the role yet. */
+  machine: MachineView | null;
+  /** The Reader is the Machine whose Dashboard is asking. */
+  thisMachine: boolean;
+  /** False with Replication off. */
+  replicated: boolean;
+  /** When the Reader last renewed its lease; null with Replication off. */
+  heartbeatAt: string | null;
+  /** The Reader has not renewed its lease for 30 minutes, so it no longer counts as the Reader. */
+  silent: boolean;
+  /** When the Reader's last Source refresh of every source finished; null when none has. */
+  lastRefreshAt: string | null;
+}
+
 export const ReplicationStandbyInput = z.object({ standby: z.boolean() });
 export type ReplicationStandbyInput = z.infer<typeof ReplicationStandbyInput>;
 /** `machine`: a listed Machine's id, or null for no Preferred Reader. */

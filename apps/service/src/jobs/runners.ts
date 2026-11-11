@@ -10,7 +10,6 @@ import { newEffectKey } from "../actions/service.ts";
 import { RemoteError } from "../connectors/http.ts";
 import { SOURCE_KINDS } from "../capabilities/registry.ts";
 import { nowIso } from "../core/db.ts";
-import { notifyDesktop } from "../platform/notifier/index.ts";
 import { CONSOLIDATION_JOB, runConsolidation } from "../consolidation/consolidate.ts";
 
 const sleep = (ms: number, signal: AbortSignal) =>
@@ -45,7 +44,7 @@ async function notifyUrgent(app: App, keys: string[]) {
   const cfg = app.config.get();
   if (!cfg.notifications.desktop || !keys.length) return;
   const rows = app.db.prepare(`select title, summary from attention_items where state = 'open' and priority >= 70 and item_key in (${keys.map(() => "?").join(",")}) limit 3`).all(...keys) as Array<{ title: string; summary: string }>;
-  for (const r of rows) await notifyDesktop(r.title, r.summary, { quietHours: cfg.notifications.quietHours });
+  for (const r of rows) await app.notifications.notify(r.title, r.summary, { quietHours: cfg.notifications.quietHours });
 }
 
 export function coverageList(app: App): SourceCoverage[] {

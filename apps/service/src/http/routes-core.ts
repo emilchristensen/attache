@@ -85,6 +85,8 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   });
 
   r.get("/machine", () => app.machine.get());
+  // Which Machine runs scheduled Source refresh and briefings, and when it last refreshed every source.
+  r.get("/reader", () => app.reader.view());
   r.patch("/machine", async (c) => {
     const next = app.machine.rename(await c.body(MachineRename));
     app.replication.machineRenamed();
@@ -139,7 +141,8 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     if (!cfg.dataFolder) throw new HttpError(409, "needs_data_folder", "Choose a data folder before finishing setup.");
     const next = app.config.patch({ setupCompleted: true });
     app.scheduler.reconcile(next);
-    if (app.featureEnabled("attention")) app.jobs.create({ kind: "sync", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
+    // A Machine that joined another's Brain leaves reading the sources to the Reader.
+    if (app.featureEnabled("attention") && app.reader.isReader()) app.jobs.create({ kind: "sync", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
     app.bus.emit("event", { type: "config.changed" });
     return { config: next, features: app.featureStatuses() };
   });
@@ -160,12 +163,14 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
       instance: app.instance,
       machine: app.machine.get(),
       replication: app.replication.view(),
+      reader: app.reader.view(),
       startedAt: app.startedAt,
       pid: process.pid,
       node: process.version,
       stateDir: app.paths.stateDir,
       dataFolder: app.config.get().dataFolder,
       credentialStore: app.secrets.kind,
+      credentialStoreNote: app.secrets.note,
       documents: Number((app.db.prepare("select count(*) n from documents").get() as { n: number }).n),
       jobs: counts,
       schedules: app.scheduler.list(),

@@ -866,6 +866,13 @@ button.count-chip {
   margin-left: auto;
   color: var(--muted);
 }
+.reader-line {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.reader-line.silent {
+  color: var(--warn);
+}
 
 /* ---- citations and sources ------------------------------------------------ */
 

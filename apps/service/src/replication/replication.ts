@@ -11,7 +11,9 @@ import { normalizeRemote, RemoteError } from "./remote.ts";
 import { cloneBrain, isEmptyFolder, prepareRepository, remoteFailure, remoteHasBrain, ReplicationSetupError, sharesHistoryWith } from "./setup.ts";
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
 import { ReplicatedMachines } from "./machines.ts";
-import { isMachineRecordPath } from "./machine-records.ts";
+import { isMachineRecordPath, MachineRecords } from "./machine-records.ts";
+import { ReaderLease } from "./reader-lease.ts";
+import type { LeaseRecord } from "../reader/lease.ts";
 import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
 
 /** A save is committed and pushed this long after the last write, so a burst of writes makes one commit. */
@@ -40,6 +42,10 @@ export interface ReplicationDeps {
   onChange?: () => void;
   /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
   backUpFolder: (folder: string) => Promise<string>;
+  /** This Machine's last Source refresh of every source, which the Reader lease carries to the others. */
+  lastSourceRefresh?: () => string | null;
+  /** The Reader lease as this Machine knows it changed. */
+  onLeaseChange?: () => void;
 }
 
 type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean };
@@ -56,6 +62,8 @@ export class Replication {
   readonly settings: ReplicationSettingsStore;
   /** The Machines sharing the Brain, standby flags and the Preferred Reader, as recorded in the Brain. */
   readonly machines: ReplicatedMachines;
+  /** Which Machine is the Reader, shared through the repository outside the Brain's history. */
+  private readonly lease: ReaderLease;
   private readonly deps: ReplicationDeps;
   private started = false;
   /** Wall-clock time the service started, compared with lock files' times (not the Clock, which drives timers). */
@@ -74,6 +82,15 @@ export class Replication {
   constructor(deps: ReplicationDeps) {
     this.deps = deps;
     this.settings = new ReplicationSettingsStore(deps.db);
+    this.lease = new ReaderLease({
+      log: deps.log,
+      clock: deps.clock,
+      machine: deps.machine,
+      credentials: deps.seams.credentials,
+      preferredReader: (root) => new MachineRecords(root).preferredReader(),
+      lastRefreshAt: () => deps.lastSourceRefresh?.() ?? null,
+      onChange: () => deps.onLeaseChange?.(),
+    });
     this.machines = new ReplicatedMachines({
       root: () => this.activeRoot(),
       machine: deps.machine,
@@ -116,6 +133,32 @@ export class Replication {
     if (!s) return OFF;
     const moved = this.folderMoved(s);
     return { status: moved ? "blocked" : s.status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt };
+  }
+
+  /** The Reader lease as this Machine last heard it; null while Replication is off or no Machine holds it yet. */
+  readerLease(): LeaseRecord | null {
+    const root = this.activeRoot();
+    return root ? this.lease.known(root) : null;
+  }
+
+  /** A Machine's name as its record in the Brain says; null while Replication is off or it has no record. */
+  recordedName(id: string): string | null {
+    const root = this.activeRoot();
+    return root ? (new MachineRecords(root).machine(id)?.name ?? null) : null;
+  }
+
+  /** A Source refresh of every source finished: the lease tells the other Machines at the next check, which is now. */
+  noteSourceRefresh(): void {
+    if (this.started && this.settings.get()) this.soon();
+  }
+
+  /** A lease that cannot be written now is written at a later check; the Brain's own Replication is not held up by it. */
+  private async renewLease(root: string, remote: string): Promise<void> {
+    try {
+      await this.lease.renew(root, remote);
+    } catch (e) {
+      this.deps.log.warn("could not renew the Reader lease; trying again at the next check", { error: e instanceof GitError ? e.cause : (e as Error).message });
+    }
   }
 
   // ---- triggers ---------------------------------------------------------------
@@ -237,7 +280,9 @@ export class Replication {
     if (!s || this.folderMoved(s)) return;
     const repo = this.repo(s.dataFolder);
     try {
-      this.report(await this.replicate(repo, s));
+      const outcome = await this.replicate(repo, s);
+      this.report(outcome);
+      if (outcome.status === "up_to_date") await this.renewLease(s.dataFolder, s.remote);
     } catch (e) {
       const outcome = failureOutcome(e);
       if (!(e instanceof GitError)) this.deps.log.error("replication check failed", { error: (e as Error).message });
@@ -403,6 +448,8 @@ export class Replication {
       }
       const at = this.deps.clock.now().toISOString();
       this.settings.enable({ dataFolder: root, remote, enabledAt: at, committedSeq: latest, pushedAt: at });
+      // The first Machine was its own Reader, and stays the Reader without a gap.
+      await this.renewLease(root, remote);
       return this.switchedOn();
     });
   }
@@ -469,6 +516,7 @@ export class Replication {
     if (!this.settings.get()) return this.view();
     this.clearTimers();
     this.settings.disable();
+    this.lease.forget();
     this.failures = 0;
     await this.running;
     this.deps.onChange?.();
