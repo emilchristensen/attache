@@ -54,7 +54,7 @@ Data folder (user-chosen, Markdown):
     people/ projects/ decisions/ notes/
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
-    captures/
+    captures/                captures, such as meeting notes and transcripts (a new one tagged as a meeting is consolidated)
     conversations/           chat archives from versions that had a chat (kept, never quoted by recall)
     connectors/<kind>/       connector snapshots, one file per day per Machine
     sessions/                coding-agent session logs, one file per day per Machine (searchable)
@@ -132,13 +132,20 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
   Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
   The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
-  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, one item per notice per merge, never resolved automatically, and kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  A notice is one item per merge, unless it is `perPath`: then it is one item per file while it stays open, and a later merge raises it again only after it resolved.
+  Items are resolved only by the owner, except the kinds listed in `SETTLED_BY_EDIT`: whenever the index changes (a save, an editor, a pull), `settleMergeNotices` reads their file and resolves the ones the owner has settled.
 - **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.
   It takes each version apart (`parts.ts`): frontmatter, Current State entries (with their indented lines), History items, and the prose, which keeps one placeholder line where the facts and the History items were.
   Facts merge by subject (`facts.ts`): a subject one side changed takes that change, a change wins over a removal, and when both changed it the newer date wins, a tie going to the Machine whose id sorts last; the losing value becomes a `superseded` History line naming both Machines, dated with the winner's date.
   History is unioned (`history.ts`): the shared start stays, what each side added is interleaved by date, every item once.
   Frontmatter merges field by field (`frontmatter.ts`): a field one side changed takes that change; when both did, `created` keeps the earliest, `updated` the latest, lists keep every item, anything else comes from the note updated last.
-  Prose goes to a `ProseMerge` (`prose.ts`); the default takes prose only one side changed and otherwise leaves the note to block.
+  Prose goes to a `ProseMerge` (`prose.ts`); Replication registers `keepBothVersions` (`prose-versions.ts`), a three-way line merge (`line-diff.ts`, `line-merge.ts`).
+  Changes from the two sides that touch different base lines all merge, neighbouring lines included; an insertion right before or after a line the other side changed is not a clash, two different insertions at the same place are.
+  Where both sides changed the same lines differently, the lines both versions start and end with stay shared, and what differs is kept twice: under `### Version from <Machine>` headings (one level below the section they sit in; a Machine's id is added when both carry the same name), in the agreed Machine order, with a `perPath` notice of kind `prose_versions`.
+  The facts and History placeholders never go inside a version.
+  With no common version (two notes created apart), the lines both have in common stand in for it.
+  The `prose_versions` item resolves once the note no longer holds two version headings of the same level in a row (`holdsTwoVersions`), or is gone.
   Both sides are put in an order that does not depend on which Machine merges (`sides.ts`) and nothing depends on the time of the merge, so two Machines merging the same versions write the same note.
   Two notes with the same type and title share a path, so they arrive with no common version and merge as one note.
 - **Commits** are authored by the Machine (name, and `<machine id>@machine.jarvis.invalid`), with the clock's time.
@@ -364,12 +371,30 @@ Antigravity reports every turn, so its summary waits until the conversation has 
 When a summary finds something durable, `session-distill` queues a `session-consolidate` job for the same turns (`consolidation/consolidate.ts`, input `{ agent, sessionId, from, to, topics }`, where `topics` are the summary's bullets).
 It runs on the Machine whose hook spooled the session; a Machine that receives the transcript and session log through Replication never ingests them, so it never consolidates them.
 Without a model the summary does not run, so nothing is queued and the session log entry says no Proposals were made; a job that finds the model gone returns `{ skipped: "no model" }` with that message.
-The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`), finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for at most five changes as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
+The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`) and hands them to the shared pipeline (`consolidation/pipeline.ts` `consolidate`), which a meeting capture also goes through: it finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for at most five changes as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
 The reply is untrusted data (`consolidation/reply.ts`, `consolidation/screen.ts`): an entry that is not a valid save item, whose evidence is not quoted from the session, or that fails `checkItems` (the save's validation) is dropped and logged, never repaired.
 Facts the note already holds with the same value, events already in the note, and parts of pending Proposals are removed; an item with nothing left is dropped.
+Values are compared as the owner reads them: case, spacing, emphasis, quotes around the value and a closing full stop do not count as a change, so a fact the session only mentions or repeats is never proposed.
+A fact the note holds with a different value is a correction: `app.proposals.proposeItems` records every such fact on the Proposal as `corrections[] { subject, was: { value, date, review }, value }` (`memory/proposal-corrections.ts`), for any Proposal, not only Consolidation's.
+The related notes are shown to the model with each fact's date, and the system prompt tells it that a mention is not a correction and that a correction's reason ends up in History beside the old value.
+Applying re-reads the note: when a corrected fact no longer holds the recorded old value, Apply is refused with 409 `fact_changed` and the Proposal stays pending.
 A session has room for five Proposals from Consolidation in total, counted across every run for it.
 What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
 Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
+
+#### Meeting captures
+
+A meeting capture is a Markdown file under `evidence/captures/` whose frontmatter `tags` include `meeting` or `meeting-transcript` (`consolidation/capture-text.ts`).
+Connector snapshots live under `evidence/connectors/`, so no snapshot is ever a meeting capture, whatever its tags.
+`consolidation/arrivals.ts` (`App.captures`) notices captures that arrive on this Machine and records every capture it has seen in two local tables, `capture_watch` (since when a data folder is watched) and `capture_arrivals` (`present`, `pulled` or `arrived`, per data folder and path); neither is part of the Brain.
+A data folder the owner adopts (`App.useDataFolder`: setup, a change of folder, or a join) has its captures recorded as `present`, so existing captures are never consolidated; a folder opened at start that was watched before is checked for captures written while the service was stopped.
+After that a check runs whenever the file watcher indexes an outside edit and whenever the store writes a file under `evidence/captures/`; each meeting capture not seen before is recorded as `arrived` and queues one `capture-consolidate` job (`consolidation/capture.ts`, input `{ path }`, idempotency key per data folder and path).
+Files Replication brings are recorded as `pulled` by the first `onPulled` listener, before any check can see them, so a capture is consolidated only on the Machine where it arrived.
+The job belongs to the `capture` feature.
+It reads the capture with its frontmatter dropped, the quote markers stripped and secrets redacted, one entry per line of the file, and searches related notes for its title, headings and first points.
+It goes through the same pipeline as a session (`consolidate` with subject `"meeting"`): the prompts name a meeting instead (`consolidationSystemPrompt(..., "meeting")`), and the parsing, screening, corrections and `fact_changed` refusal are the same.
+The five-Proposal cap is counted per capture, from the Proposals `proposedBy: "Consolidation"` whose source is that capture (`Proposals.citing`).
+Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `lines` is the shortest run of the file's lines that holds the quoted evidence.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.

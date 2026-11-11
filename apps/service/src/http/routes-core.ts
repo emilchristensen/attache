@@ -125,9 +125,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     const preview = dataFolderPreview(path);
     if (!preview.writable) throw new HttpError(400, "not_writable", `Jarvis cannot write to ${preview.path}`);
     mkdirSync(preview.path, { recursive: true });
-    const { created } = app.openDataFolder(preview.path);
-    app.config.patch({ dataFolder: preview.path });
-    app.bus.emit("event", { type: "config.changed" });
+    const { created } = app.useDataFolder(preview.path);
     return { path: preview.path, created, indexed: app.memory.listDocuments({ root: "data", limit: 2000 }).length };
   });
   r.post("/setup/identity", async (c) => {
