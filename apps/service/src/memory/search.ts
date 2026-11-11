@@ -1,4 +1,6 @@
 import type { Db } from "../core/db.ts";
+import { parseStateLine } from "./markdown.ts";
+import { isPastReview } from "./review-date.ts";
 
 export interface SearchHit {
   chunkId: number;
@@ -16,6 +18,10 @@ export interface SearchHit {
   snippet: string;
   score: number;
   meta: Record<string, unknown>;
+  /** A current fact's Review date, when the hit is a fact that has one. */
+  review: string | null;
+  /** The hit is a current fact past its Review date: still in the Brain, but to be checked before relying on it. */
+  unverified: boolean;
 }
 
 export interface SearchOptions {
@@ -88,9 +94,9 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
               d.id as docId, d.root, d.rel_path as relPath, d.area, d.doc_type as docType, d.title, d.meta
        from chunks c join documents d on d.id = c.doc_id where c.id in (${ids.map(() => "?").join(",")})`,
     )
-    .all(...ids) as Array<Omit<SearchHit, "score" | "snippet" | "meta"> & { meta: string }>;
+    .all(...ids) as Array<Omit<SearchHit, "score" | "snippet" | "meta" | "review" | "unverified"> & { meta: string }>;
 
-  let hits: SearchHit[] = rows
+  let hits: Array<Omit<SearchHit, "review" | "unverified">> = rows
     .filter((r) => (!opts.areas || opts.areas.includes(r.area)) && (!opts.docTypes || opts.docTypes.includes(r.docType ?? "")) && (!opts.roots || opts.roots.includes(r.root)) && !(opts.excludePrefixes ?? []).some((p) => r.root === "data" && r.relPath.startsWith(p)))
     .map((r) => {
       const meta = safeJson(r.meta);
@@ -105,7 +111,14 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
   const top = hits[0]?.score ?? 0;
   const cutoff = opts.relativeCutoff ?? 0.35;
   hits = hits.filter((h) => h.score >= top * cutoff);
-  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2)));
+  const now = new Date();
+  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2))).map((h) => withReview(h, now));
+}
+
+/** Mark a current fact with its Review date, and as unverified once that day has passed. */
+function withReview<T extends Omit<SearchHit, "review" | "unverified">>(hit: T, now: Date): T & Pick<SearchHit, "review" | "unverified"> {
+  const review = (hit.section === "state" && parseStateLine(hit.text.split("\n")[0] ?? "")?.review) || null;
+  return { ...hit, review, unverified: isPastReview(review, now) };
 }
 
 /**
@@ -113,10 +126,10 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
  * unless nothing else is left. A note is many small chunks (one per fact), so
  * without this a long note that matches by title would fill every slot.
  */
-function diversify(sorted: SearchHit[], limit: number, perDocument: number): SearchHit[] {
+function diversify<T extends { docId: string }>(sorted: T[], limit: number, perDocument: number): T[] {
   const taken = new Map<string, number>();
-  const picked: SearchHit[] = [];
-  const held: SearchHit[] = [];
+  const picked: T[] = [];
+  const held: T[] = [];
   for (const h of sorted) {
     const n = taken.get(h.docId) ?? 0;
     if (n < perDocument) {

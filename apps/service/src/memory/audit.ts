@@ -79,7 +79,7 @@ function auditEntry(app: App, s: StateEntry, now: Date, staleDays: number, dupli
     .filter((m) => m.dated > s.date)
     .slice(0, EVIDENCE_PER_ENTRY)
     .map(({ dated, ...m }) => ({ ...m, modified: new Date(`${dated}T00:00:00Z`).toISOString() }));
-  return { subject: s.subject, value: s.value, date: s.date, ageDays, source: s.source ?? null, line: s.line, flags, newerEvidence };
+  return { subject: s.subject, value: s.value, date: s.date, review: s.review ?? null, ageDays, source: s.source ?? null, line: s.line, flags, newerEvidence };
 }
 
 /** A source that names a file in the data folder which is no longer there. URLs, imports and sessions not yet archived are not checked. */

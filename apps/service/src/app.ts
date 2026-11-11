@@ -235,7 +235,7 @@ export class App {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
       // No hooks may keep spooling or injecting memory for a feature that is off.
-      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
+      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (a.hooks && this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
     }
     this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
