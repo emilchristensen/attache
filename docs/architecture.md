@@ -82,10 +82,17 @@ Write policy (deterministic, in `memory/policy.ts`):
 
 ## Retrieval
 
-Chunks are Markdown sections with exact line ranges.
+Chunks are pieces of Markdown sections with exact line ranges (`memory/chunker.ts`).
+Every entry under `## Current State` is its own chunk, cited at its own line, so a question retrieves the one fact that answers it however long the note is.
+A fact's source stays in the cited text but is left out of the search index, so a query never matches a fact because of the file it was imported from; the fact's subject is indexed with the heading.
+Other sections are cut into pieces of about 1,200 characters after a blank line or before a top-level list item, and never grow past 2,400 characters, so long lists and transcripts without blank lines still give narrow citations.
+A single line longer than that stays whole, because a citation is a range of whole lines.
 Each chunk is labelled `state`, `history` or `body`; History chunks are down-weighted and presented to the model as superseded.
 Queries are tokenised and every term is quoted before FTS5 `MATCH`, blocking operator injection.
 Ranking uses BM25 with column weights (title 6, heading 3, text 1), fused by reciprocal rank with a prefix-match list (`k = 60`), then adjusted: curated memory above imports, imports above evidence, current state above history.
+No document takes more than half of the results while other documents still have hits, so a long note that matches by title does not crowd out its evidence.
+When the user asks about the note they have open, that note is passed as whole sections (current state first) rather than as search hits, each limited to 6,000 characters.
+A change to how files are chunked ships with a migration that clears every file's stored fingerprint, so the next scan re-chunks the data folder and imported folders while the old chunks stay searchable.
 The index is updated synchronously on every service write, fixing the new build's unscheduled indexer (four weeks stale when inspected).
 Edits made to the data folder outside the service (Obsidian, an editor, a coding agent) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
 Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
@@ -210,7 +217,9 @@ The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvi
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
 Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
 The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID`.
-`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer documents that mention the note, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
+`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
+Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
+The document a fact cites as its source, archives under `evidence/archive/`, generated deliverables, and history or undated prose in other notes are never offered, because none of them can overturn the fact.
 It counts; the audit skill judges contradictions and proposes corrections through `jarvis save` for the user to approve.
 
 ## Capability registry

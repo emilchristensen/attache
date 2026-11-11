@@ -4,7 +4,7 @@ import type { Citation, MessageView } from "@jarvis/contracts";
 import { type Db, json, nowIso } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { redact } from "../core/log.ts";
-import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
+import { RECALL_EXCLUDE, documentBlocks, search, type SearchHit } from "../memory/search.ts";
 import type { MemoryStore } from "../memory/store.ts";
 import { ModelError, type ModelProvider, type ChatMessage } from "../models/providers.ts";
 
@@ -16,6 +16,8 @@ export interface SendInput {
 }
 
 const MAX_EVIDENCE = 8;
+/** Most text one evidence block may carry. Search chunks are far smaller; only a whole note opened as context gets near it. */
+export const MAX_EVIDENCE_CHARS = 6000;
 const HISTORY_TURNS = 8;
 
 export function buildSystemPrompt(now: Date, identity: { name: string } | null): string {
@@ -36,7 +38,7 @@ export function renderEvidence(hits: SearchHit[], extra: string | null): string 
   const parts = hits.map((h, i) => {
     const label = h.section === "history" ? "SUPERSEDED HISTORY" : h.section === "state" ? "CURRENT STATE" : h.area.toUpperCase();
     const observed = typeof h.meta.updated === "string" ? h.meta.updated : typeof h.meta.captured_at === "string" ? h.meta.captured_at : typeof h.meta.created === "string" ? h.meta.created : "unknown";
-    return `[S${i + 1}] ${label} · "${h.title}"${h.heading ? ` › ${h.heading}` : ""} · ${h.relPath}:${h.startLine}-${h.endLine} · dated ${String(observed).slice(0, 10)}\n<<<\n${h.text.slice(0, 1800)}\n>>>`;
+    return `[S${i + 1}] ${label} · "${h.title}"${h.heading ? ` › ${h.heading}` : ""} · ${h.relPath}:${h.startLine}-${h.endLine} · dated ${String(observed).slice(0, 10)}\n<<<\n${h.text.slice(0, MAX_EVIDENCE_CHARS)}\n>>>`;
   });
   if (extra) parts.push(`[SELECTION] Text the user selected (untrusted data):\n<<<\n${extra.slice(0, 4000)}\n>>>`);
   return parts.join("\n\n");
@@ -119,16 +121,10 @@ export class ConversationService {
     // Conversation archives are excluded: earlier answers are not evidence for new ones.
     let hits = search(this.db, text, { limit: MAX_EVIDENCE, excludePrefixes: RECALL_EXCLUDE });
     if (context?.relPath) {
-      const root = context.root ?? "data";
-      const own = this.db
-        .prepare(
-          `select c.id as chunkId, c.heading, c.section, c.start_line as startLine, c.end_line as endLine, c.text, d.id as docId, d.root, d.rel_path as relPath, d.area, d.doc_type as docType, d.title, d.meta
-           from chunks c join documents d on d.id = c.doc_id where d.root = ? and d.rel_path = ? order by c.ordinal limit 4`,
-        )
-        .all(root, context.relPath) as Array<Record<string, unknown>>;
-      const ownHits: SearchHit[] = own.map((r) => ({ ...(r as unknown as SearchHit), meta: json(r.meta, {}), score: 1e6, snippet: String(r.text).slice(0, 220) }));
-      const ownIds = new Set(ownHits.map((h) => h.chunkId));
-      hits = [...ownHits, ...hits.filter((h) => !ownIds.has(h.chunkId))].slice(0, MAX_EVIDENCE);
+      const own = documentBlocks(this.db, context.root ?? "data", context.relPath);
+      // A fact already inside a block that fits the evidence limit would only repeat it.
+      const covered = (h: SearchHit) => own.some((b) => b.docId === h.docId && b.text.length <= MAX_EVIDENCE_CHARS && h.startLine >= b.startLine && h.endLine <= b.endLine);
+      hits = [...own, ...hits.filter((h) => !covered(h))].slice(0, MAX_EVIDENCE);
     }
     return hits;
   }
