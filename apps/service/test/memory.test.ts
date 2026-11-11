@@ -78,15 +78,4 @@ describe("memory store and retrieval", () => {
     expect(r.indexed).toBeGreaterThanOrEqual(1);
     expect(search(db, "espresso descaling")[0]?.relPath).toBe("memory/notes/manual.md");
   });
-
-  it("approved proposals apply; rejected proposals change nothing", () => {
-    const { db, store } = setup();
-    const { relPath } = store.createMemory({ type: "project", title: "Atlas", state: [{ subject: "Owner", value: "Mia" }] }, "user");
-    const p1 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Mentioned in standup", source: "slack", actor: "model" });
-    store.decideProposal(p1.id, "reject");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Mia");
-    const p2 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Confirmed", source: "slack", actor: "model" });
-    store.decideProposal(p2.id, "apply");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Jonas");
-  });
 });

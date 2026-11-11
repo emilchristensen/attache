@@ -76,7 +76,8 @@ This is the state-versus-event rule from the old vault's 2026-08-13 repair, enfo
 Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes. Clients submit captures and corrections through the API.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
-- Model output never writes memory directly. Suggested memory changes are stored as proposals that the user applies or rejects.
+- Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
+  A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
 - Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder (a lock file with the owner pid prevents a second writer).
 - Paths are resolved and confined to the data folder; symlinks out of it are refused.
 
@@ -216,6 +217,13 @@ Skills call this install's CLI through the `current` path with `JARVIS_STATE_DIR
 The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
 Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
+Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
+
+A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
+`POST /api/v1/memory/proposals` runs the save's validation before recording it, `GET /api/v1/memory/proposals?status=proposed` lists pending ones with the whole item, and `POST /api/v1/memory/proposals/:id/apply|reject` decides one.
+Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
+Rejecting writes nothing.
+Proposals are rows in `memory_changes` with `change = 'proposal'`; rows made before Proposals carried save items (one fact in `{ value, newDoc }`) are read as the equivalent one-fact item, so they still apply and reject.
 The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID`.
 `GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
