@@ -19,6 +19,7 @@ const NODE = process.execPath;
 const VITE = join(ROOT, "apps/web/node_modules/vite/bin/vite.js");
 
 export interface Stack {
+  /** The service's address; the OS picks its port, so several runs on one machine never collide. */
   url: string;
   port: number;
   fixtureUrl: string;
@@ -61,8 +62,7 @@ export function makeVault(dir: string) {
   writeFileSync(join(dir, "People/Priya Shah.md"), "# Priya Shah\n\nEngineering manager for billing. Prefers written updates on Mondays.\n");
 }
 
-export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
-  const port = opts.port ?? 7610;
+export async function startStack(): Promise<Stack> {
   // A space and non-ASCII letters in every path, as in many owners' home folders.
   const stateDir = mkdtempSync(join(tmpdir(), "jarvis-e2e-state æøå-"));
   const base = mkdtempSync(join(tmpdir(), "jarvis-e2e æøå-"));
@@ -81,9 +81,12 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   writeFileSync(meaningModel, JSON.stringify(fixtureModelDescription(`${fixtureUrl}/meaning-model`)));
   const env = { ...process.env, JARVIS_MEANING_MODEL: meaningModel, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
+  // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
+  let port = 0;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
     await waitForLine(service, /jarvis service listening/);
+    port = boundPort(stateDir);
   };
   const stopService = async () => {
     if (!service) return;
@@ -144,4 +147,11 @@ export async function harnessSave(stack: Stack, items: unknown[], origin: { agen
 
 export function readRuntime(stateDir: string) {
   return JSON.parse(readFileSync(join(stateDir, "runtime.json"), "utf8"));
+}
+
+/** The port the service bound, from the runtime file it writes before it reports listening. */
+function boundPort(stateDir: string): number {
+  const port: unknown = readRuntime(stateDir).port;
+  if (typeof port !== "number" || !Number.isInteger(port) || port <= 0) throw new Error(`The service did not record the port it listens on: ${JSON.stringify(port)}`);
+  return port;
 }

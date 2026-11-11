@@ -10,7 +10,7 @@ let stack: Stack;
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   buildAll();
-  stack = await startStack({ port: 7613 });
+  stack = await startStack();
 });
 test.afterAll(() => stack?.stop());
 
