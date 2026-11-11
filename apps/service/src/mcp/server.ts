@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServicePaths } from "../core/paths.ts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
+import { registerAuditTool } from "./audit-tool.ts";
+import { failure } from "./failure.ts";
+import { registerPrompts } from "./prompts.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -25,10 +27,6 @@ const PassageShape = z.object({
 
 const NoteShape = { path: z.string(), title: z.string(), startLine: z.number().int(), endLine: z.number().int(), totalLines: z.number().int(), text: z.string() };
 
-function failure(e: unknown): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: (e as Error).message }] };
-}
-
 function renderPassages(query: string, passages: Passage[]): string {
   if (!passages.length) return `No passages in the Brain match "${query}".`;
   return passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
@@ -45,7 +43,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
     "search",
     {
       title: "Search the Brain",
-      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Raw chat and session transcripts are left out; their summaries are included.",
+      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Old chat archives and raw session transcripts are left out; session summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
       outputSchema: { passages: z.array(PassageShape) },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -81,6 +79,8 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       }
     },
   );
+  registerAuditTool(server, brain);
+  registerPrompts(server);
   return server;
 }
 

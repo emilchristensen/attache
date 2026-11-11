@@ -28,7 +28,7 @@ describe("A03 onboarding and persistence", () => {
     const done = await svc.post("/setup/complete");
     expect(done.config.setupCompleted).toBe(true);
     const statuses = Object.fromEntries(done.features.map((f: any) => [f.id, f.readiness]));
-    expect(statuses).toMatchObject({ recall: "ready", conversation: "partial", capture: "ready", attention: "ready", drafts: "disabled", sessions: "disabled" });
+    expect(statuses).toMatchObject({ recall: "ready", capture: "ready", attention: "ready", drafts: "disabled", sessions: "disabled" });
     const stateDir = svc.stateDir;
     const dataDir = svc.dataDir;
     await svc.stop();

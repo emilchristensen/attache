@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
-import { execFile } from "node:child_process";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
@@ -12,6 +11,9 @@ import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, saveCommand, type CliIo } from "./cli/memory-commands.ts";
+import { credentialsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
+import { currentOs } from "./platform/os.ts";
+import { openUrl } from "./platform/open-url.ts";
 import { runMcpServer } from "./mcp/server.ts";
 import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
 
@@ -57,7 +59,7 @@ async function pair(argv: string[]) {
   const url = `http://127.0.0.1:${port}/pair#code=${code}`;
   if (argv.includes("--json")) out(JSON.stringify({ code, url, expiresAt }));
   else out(`Pairing code: ${code} (expires ${expiresAt})\nOpen: ${url}`);
-  if (argv.includes("--open")) execFile("/usr/bin/open", [url]);
+  if (argv.includes("--open")) openUrl(currentOs(), url);
 }
 
 async function status(argv: string[]) {
@@ -129,9 +131,15 @@ function cliIo(): CliIo {
   return { out, readStdin: () => (process.stdin.isTTY ? "" : readFileSync(0, "utf8")), cwd: process.cwd(), env: process.env };
 }
 
+function platformIo(argv: string[]): PlatformCliIo {
+  return { out, arg: (name) => arg(name, argv), defaultPort: DEFAULT_PORT };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const cmd = argv[0] ?? "serve";
+  // Refuse an unsupported operating system up front, with a message instead of a failure halfway through.
+  if (cmd !== "version") currentOs();
   switch (cmd) {
     case "serve":
       return serve(argv);
@@ -154,16 +162,16 @@ async function main() {
     case "evaluate-recall":
       return evaluateRecallCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":
-    case "start": {
-      // Controls the LaunchAgent the installer created (macOS).
-      const instance = process.env.JARVIS_INSTANCE ?? "default";
-      const label = instance === "default" ? "dev.jarvis.service" : `dev.jarvis.${instance}`;
-      const plist = `${process.env.HOME}/Library/LaunchAgents/${label}.plist`;
-      const uid = process.getuid?.() ?? 0;
-      const args = cmd === "stop" ? ["bootout", `gui/${uid}/${label}`] : ["bootstrap", `gui/${uid}`, plist];
-      await new Promise<void>((resolve, reject) => execFile("/bin/launchctl", args, (err, _o, stderr) => (err && !(cmd === "stop" && /No such process|not find/i.test(String(stderr))) ? reject(new Error(`launchctl ${args[0]} failed: ${String(stderr).trim() || err.message}`)) : resolve())));
-      return out(cmd === "stop" ? "Jarvis service stopped. Start it again with: jarvis start" : "Jarvis service started.");
-    }
+    case "start":
+      return serviceCommand(cmd, platformIo(argv));
+    case "service":
+      return serviceCommand(argv[1], platformIo(argv));
+    case "wrappers":
+      return wrappersCommand(argv[1], platformIo(argv));
+    case "credentials":
+      return credentialsCommand(argv[1], platformIo(argv));
+    case "paths":
+      return pathsCommand(argv[1], platformIo(argv));
     case "backup": {
       const stateDir = arg("state-dir", argv);
       const app = new App({ ...(stateDir ? { stateDir } : {}), quiet: true });
@@ -182,7 +190,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, mcp, agent-hooks, backup, restore, version`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, paths`);
   }
 }
 

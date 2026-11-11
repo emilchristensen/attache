@@ -8,6 +8,7 @@ import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
 import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
+import { expandHome } from "../platform/locations.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -250,7 +251,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   r.post("/import/preview", async (c) => {
     requireFeature(app, "capture");
     const { path } = await c.body(z.object({ path: z.string().min(1) }));
-    return app.connections.previewImport(path.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+    return app.connections.previewImport(expandHome(path));
   });
   r.post("/import", async (c) => {
     requireFeature(app, "capture");

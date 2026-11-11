@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Db } from "./db.ts";
 import type { Logger } from "./log.ts";
 import type { ServicePaths } from "./paths.ts";
-import type { CredentialStore } from "./secrets.ts";
+import type { SecretStore } from "../platform/secret-store/index.ts";
 
 /** The whisper.cpp model voice downloaded, and the partial file an interrupted download left. */
 const VOICE_MODEL_FILES = ["ggml-base.en.bin", "ggml-base.en.bin.part"] as const;
@@ -13,7 +13,7 @@ const SPEECH_SECRET_NAMES = ["apiKey"] as const;
 export interface VoiceLeftovers {
   paths: ServicePaths;
   db: Db;
-  secrets: CredentialStore;
+  secrets: SecretStore;
   log: Logger;
 }
 

@@ -11,7 +11,8 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 
 ## What it does
 
-- Conversation with grounded recall: every answer searches your notes and cites file and line; search works without a model.
+- Search with exact citations: every hit names its file and lines, and search works without a model.
+  Jarvis has no chat box of its own; you ask the Brain from your Harness.
 - The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Claude Desktop and other Harnesses search and read your notes with file and line citations, with no token in their configuration.
 - Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
