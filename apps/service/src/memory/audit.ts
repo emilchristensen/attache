@@ -2,7 +2,8 @@ import { join } from "node:path";
 import type { MemoryAuditEntry, MemoryAuditReport } from "@jarvis/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
-import { MAX_DETAILED_PER_TYPE } from "../agents/context.ts";
+import { notesInSessionContext } from "../agents/project-notes.ts";
+import { brainNote, type BrainNote } from "./note-links.ts";
 import { parseStateEntries, parseStateLine, slugify, type StateEntry } from "./markdown.ts";
 import { isPastReview } from "./review-date.ts";
 import { RECALL_EXCLUDE, queryTerms, search, termCoverage, type SearchHit } from "./search.ts";
@@ -26,8 +27,8 @@ export function auditMemory(app: App, opts: { now?: Date } = {}): MemoryAuditRep
   if (!root) throw new Error("Choose a data folder first");
   const now = opts.now ?? new Date();
   const docs = app.memory.listDocuments({ area: "memory", root: "data", limit: 2000 }).filter((d) => d.relPath !== "memory/self.md");
-  const loaded = sessionIndexed(docs);
-  const findings: MemoryAuditReport["findings"] = [];
+  const read: Array<Omit<MemoryAuditReport["findings"][number], "inSessionIndex">> = [];
+  const notes: BrainNote[] = [];
   for (const d of docs) {
     let raw: string;
     try {
@@ -36,19 +37,22 @@ export function auditMemory(app: App, opts: { now?: Date } = {}): MemoryAuditRep
       continue;
     }
     const state = parseStateEntries(raw);
+    if (d.title) notes.push(brainNote({ relPath: d.relPath, type: d.docType ?? "note", title: d.title }, raw));
     const subjects = new Map<string, number>();
     for (const s of state) subjects.set(s.subject.toLowerCase(), (subjects.get(s.subject.toLowerCase()) ?? 0) + 1);
     const entries = state.map((s) => auditEntry(app, s, now, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
-    findings.push({
+    read.push({
       relPath: d.relPath,
       absPath: join(root, d.relPath),
       title: d.title,
       type: d.docType ?? "note",
-      inSessionIndex: loaded.has(d.relPath),
       flags: state.length ? [] : ["no-current-state"],
       entries,
     });
   }
+  // Notes whose facts a project's session context carries come first: those are what sessions repeat.
+  const loaded = notesInSessionContext(notes);
+  const findings = read.map((f) => ({ ...f, inSessionIndex: loaded.has(f.relPath) }));
   const weight = (f: MemoryAuditReport["findings"][number]) => f.flags.length + f.entries.reduce((n, e) => n + e.flags.length + e.newerEvidence.length, 0);
   findings.sort((a, b) => Number(b.inSessionIndex) - Number(a.inSessionIndex) || weight(b) - weight(a) || a.relPath.localeCompare(b.relPath));
   const counts: Record<string, number> = {};
@@ -151,19 +155,6 @@ function citedPath(source: string | undefined): string | null {
   if (!m) return null;
   const rel = m[2]!.replace(/#L\d+-L\d+$/, "");
   return /^(memory|evidence|deliverables)\/.+\.md$/.test(rel) ? rel : null;
-}
-
-/** The notes whose first fact every new agent session reads (see `buildSessionContext`). */
-function sessionIndexed(docs: Array<{ relPath: string; docType: string | null; title: string }>): Set<string> {
-  const perType = new Map<string, number>();
-  const out = new Set<string>();
-  for (const d of docs.filter((x) => x.title)) {
-    const t = d.docType ?? "note";
-    const n = perType.get(t) ?? 0;
-    if (n < MAX_DETAILED_PER_TYPE) out.add(d.relPath);
-    perType.set(t, n + 1);
-  }
-  return out;
 }
 
 function duplicates(docs: Array<{ relPath: string; title: string }>): MemoryAuditReport["possibleDuplicates"] {

@@ -28,7 +28,7 @@ function cli(args: string[], input = "", env: Record<string, string> = {}): Prom
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }] }] });
+  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }, { subject: "Repositories", value: "acme/orion" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
@@ -116,7 +116,9 @@ describe("auditing memory", () => {
     // Notes created without a source are unsupported, not contradicted.
     const orion = audit.findings.find((f: any) => f.relPath === "memory/projects/orion-migration.md");
     expect(orion.entries.find((e: any) => e.subject === "Owner").flags).toEqual(["unsourced"]);
+    // Sessions in Orion's repository read its facts; Helios lists no repository, so no session does.
     expect(orion.inSessionIndex).toBe(true);
+    expect(helios.inSessionIndex).toBe(false);
     expect(audit.counts.stale).toBeGreaterThanOrEqual(1);
     expect(audit.findings.some((f: any) => f.relPath === "memory/self.md")).toBe(false);
   });
@@ -210,7 +212,8 @@ describe("the terminal commands", () => {
   it("audit prints a readable report with absolute paths, and JSON on request", async () => {
     const text = (await cli(["audit"])).stdout;
     expect(text).toMatch(/^Jarvis memory audit: \d+ notes, \d+ current facts, stale = past its Review date/);
-    expect(text).toContain(`## Helios budget [project, first fact in every session's index]`);
+    expect(text).toContain(`## Orion migration [project, in a project's session context]`);
+    expect(text).toContain(`## Helios budget [project]`);
     expect(text).toMatch(/- Budget \(2026-01-05, review 2026-02-01, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);
     expect(text).toContain(`newer: ${svc.dataDir}/evidence/captures/`);
     const json = JSON.parse((await cli(["audit", "--json"])).stdout);
