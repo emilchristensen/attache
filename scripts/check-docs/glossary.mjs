@@ -27,7 +27,6 @@ export const ORDINARY_WORDS = new Map([
   ["server", "MCP servers, OAuth authorization servers and the test fixture server"],
   ["chat", "Claude Desktop's Chat tab, and the chat box Jarvis does not have"],
   ["app", "other applications, such as Obsidian or an OAuth app"],
-  ["agent", "the AI agent working inside a Harness, and the Agent sessions setting"],
   ["draft", "a drafted reply or comment waiting for approval, which is not a Proposal"],
   ["learning", "learning in its ordinary sense"],
   ["overwrite", "replacing a file's contents"],

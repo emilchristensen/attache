@@ -18,4 +18,4 @@ _Avoid_: Sync, poll
 
 **Harness**:
 The agent application the owner talks to.
-_Avoid_: Agent, coding agent, auto-save
+_Avoid_: coding agent, auto-save
