@@ -12,13 +12,13 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 ## What it does
 
 - Conversation with grounded recall: every answer searches your notes and cites file and line; search works without a model.
+- The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Claude Desktop and other Harnesses search and read your notes with file and line citations, with no token in their configuration.
 - Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
 - Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
 - Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.
-- Voice: optional push-to-talk with local whisper.cpp recognition and macOS speech, with interruption.
 
-Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, a model provider (Claude Code, Anthropic, OpenAI-compatible) and speech providers.
+Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic, OpenAI-compatible).
 Each is optional and starts read-only.
 
 ## Research and brief

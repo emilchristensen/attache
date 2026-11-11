@@ -163,16 +163,21 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
       process.env.HOME = home;
     }
     claude.mode = "hang";
+    // Cancelled before the session starts (e.g. while Jarvis lists the MCP servers): nothing is spawned.
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: AbortSignal.abort() })).rejects.toThrow(/Cancelled/);
+    expect(claude.sessions).toBe(0);
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
   });
 
-  it("a run cancelled before its session starts stops at once instead of waiting for the session timeout", async () => {
+  it("a run cancelled before its session starts fails as cancelled without starting Claude Code", async () => {
     claude.mode = "hang";
+    claude.sessions = 0;
     const ctrl = new AbortController();
     ctrl.abort();
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
+    expect(claude.sessions).toBe(0);
   }, 5_000);
 
   it("helpers: tool naming, order-insensitive argument equality, spill files only from the config dir", () => {
