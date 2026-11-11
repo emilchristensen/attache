@@ -10,7 +10,7 @@ import { harnessMcpConfigs } from "../../src/platform/harness-locations.ts";
 
 const HOME = process.env.JARVIS_AGENT_HOME!;
 const MCP = harnessMcpConfigs(currentOs());
-const at = (rel: string) => join(HOME, rel);
+const at = (...rel: string[]) => join(HOME, ...rel);
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const write = (p: string, text: string) => {
   mkdirSync(dirname(p), { recursive: true });
@@ -60,7 +60,8 @@ beforeAll(async () => {
   write(at(".claude.json"), JSON.stringify(CLAUDE_JSON, null, 2));
   write(at(".codex/config.toml"), CODEX_TOML);
   write(at(".gemini/config/mcp_config.json"), JSON.stringify(ANTIGRAVITY_MCP, null, 2));
-  write(at(".local/bin/agy"), "");
+  // The Antigravity command-line tool, as this operating system names an executable.
+  write(at(".local/bin", process.platform === "win32" ? "agy.exe" : "agy"), "");
   write(at(MCP["claude-desktop"].file), JSON.stringify(DESKTOP_CONFIG, null, 2));
   // What an earlier version left: its save and audit skills, another install's skill, and skills of the owner's own.
   legacySkill(at(".claude/skills/jarvis-save"), stateDir);

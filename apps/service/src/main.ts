@@ -1,4 +1,5 @@
 import { existsSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
@@ -91,7 +92,8 @@ async function searchCmd(argv: string[]) {
     const dataFolder = new ConfigStore(db).get().dataFolder;
     const roots = new Map((db.prepare("select id, settings from connections where kind = 'vault'").all() as Array<{ id: string; settings: string }>).map((r) => [`import:${r.id}`, String((JSON.parse(r.settings) as { path?: string }).path ?? "")]));
     const hits = search(db, query, { limit: Math.min(Number(arg("limit", argv) ?? 8), 30), excludePrefixes: RECALL_EXCLUDE }).map((h) => ({
-      file: h.root === "data" && dataFolder ? `${dataFolder}/${h.relPath}` : `${roots.get(h.root) ?? h.root}/${h.relPath}`,
+      // An absolute path in this operating system's own form, which a Harness can open as it is.
+      file: join(h.root === "data" && dataFolder ? dataFolder : (roots.get(h.root) ?? h.root), ...h.relPath.split("/")),
       lines: [h.startLine, h.endLine],
       title: h.title,
       snippet: h.snippet,
