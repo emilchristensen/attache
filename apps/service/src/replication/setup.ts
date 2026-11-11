@@ -46,6 +46,31 @@ function ensureLines(file: string, lines: readonly string[]): void {
   writeFileSync(file, `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
 }
 
+/** Whether `git.cwd` is a repository Jarvis made, i.e. Replication ran here before. */
+export function isManagedRepository(git: Git): boolean {
+  return existsSync(join(git.cwd, ".git")) && git.runSync(["config", "--get", MANAGED_KEY]).stdout.trim() === "true";
+}
+
+/**
+ * Whether the Brain in `remote` grew from the same history as this Machine's
+ * copy, as it does when Replication was switched off here and is set up again.
+ * Fetches into a scratch ref, so neither `origin` nor its tracking branch moves.
+ */
+export async function sharesHistoryWith(git: Git, remote: string, seams: ReplicationSeams): Promise<boolean> {
+  if (!isManagedRepository(git) || git.runSync(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).code !== 0) return false;
+  const scratch = "refs/jarvis/candidate";
+  try {
+    await git.with(seams.credentials.env(remote)).ok([...seams.credentials.config(remote).flatMap((c) => ["-c", c]), "fetch", "--quiet", "--no-tags", remote, `+refs/heads/${BRANCH}:${scratch}`]);
+  } catch (e) {
+    throw remoteFailure(e, "check the repository");
+  }
+  try {
+    return git.runSync(["merge-base", "HEAD", scratch]).code === 0;
+  } finally {
+    git.runSync(["update-ref", "-d", scratch]);
+  }
+}
+
 /**
  * Make the data folder a repository Jarvis manages, pointed at `remote`.
  * A repository Jarvis did not make is refused: its branches and settings are
@@ -54,7 +79,7 @@ function ensureLines(file: string, lines: readonly string[]): void {
 export function prepareRepository(git: Git, remote: string): void {
   const root = git.cwd;
   if (existsSync(join(root, ".git"))) {
-    if (git.runSync(["config", "--get", MANAGED_KEY]).stdout.trim() !== "true") {
+    if (!isManagedRepository(git)) {
       throw new ReplicationSetupError(409, "already_a_repository", `${root} is already a git repository that Jarvis did not make. Replication needs a data folder that is not under git yet.`);
     }
   } else {

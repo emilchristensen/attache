@@ -103,10 +103,13 @@ Files written before this change keep their `<date>.md` name; search and the aud
 ## Replication
 
 Replication keeps every Machine's copy of the Brain the same through a git repository (ADR 0001); the whole Brain replicates (ADR 0002).
-The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication` and `POST /replication/check` expose it (`jarvis replication` calls them).
+The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication`, `POST /replication/check` and `POST /replication/off` expose it (`jarvis replication` calls them).
+The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.tsx`) and the join option on the first setup screen use the same endpoints and refresh on the `replication.changed` event.
 
-- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, and the last status.
+- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, the last status, and when a check last left the Machine up to date (`upToDateAt`).
   No row means off.
+  Switching off deletes the row and nothing else: the data folder, its `.git` and the remote stay as they are.
+  Setup on a Jarvis-managed repository whose history the remote shares (fetched into a scratch ref, `refs/jarvis/candidate`) resumes instead of refusing, and the next check merges both sides.
   A data folder other than the one Replication was set up for reads as blocked.
 - **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
   It refuses a remote whose `main` already has commits.
@@ -141,6 +144,11 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
 - **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<jarvis> git-credential --state-dir <state> --connection <id>`.
   The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `JARVIS_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
   Other remotes use the Machine's own git setup (ssh keys, or nothing for a folder).
+- **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
+  They are JSON, so search never indexes them, and they replicate like any file.
+  `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
+  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
+  Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
