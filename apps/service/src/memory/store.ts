@@ -123,9 +123,14 @@ export class MemoryStore {
     this.indexer = new Indexer(db);
   }
 
+  /** The store's clock: the service clock when the App gives one, else the system clock. */
+  now(): Date {
+    return this.opts.now?.() ?? new Date();
+  }
+
   /** Today's day (`YYYY-MM-DD`) by the store's clock: the date a new fact or History line gets. */
   today(): string {
-    return factDay(this.opts.now?.() ?? new Date());
+    return factDay(this.now());
   }
 
   get dataRoot(): string | null {
