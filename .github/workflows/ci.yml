@@ -1,5 +1,5 @@
 # The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
-# on macOS and Linux. The job names are the required status checks on `main`.
+# on macOS, Linux and Windows. The job names are the required status checks on `main`.
 name: CI
 
 on:

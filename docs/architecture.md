@@ -83,6 +83,9 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules and skills folders, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
+| `shell-command.ts` | `shellPath`: a path quoted for the command lines a Harness runs (hooks, the search command in the session context) | single quotes | single quotes | double quotes and forward slashes, which Git Bash (Claude Code) and cmd.exe (Codex) read alike |
+| `launch.ts` | `launchTool`: how to start a tool found on disk without a shell | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
+| `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
 The installer and uninstaller are thin shell scripts that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
