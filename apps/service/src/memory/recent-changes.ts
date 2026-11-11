@@ -32,21 +32,21 @@ export function recentChanges(db: Db, store: MemoryStore, limit: number): Recent
   }));
 }
 
-function values(c: MemoryChange): { oldValue: string | null; newValue: string | null } {
+function values(c: MemoryChange): Pick<RecentChangeView, "oldValue" | "newValue" | "oldReview" | "newReview"> {
   switch (c.change) {
     case "create":
-      return { oldValue: null, newValue: c.afterValue };
+      return { oldValue: null, newValue: c.afterValue, oldReview: null, newReview: null };
     case "delete":
-      return { oldValue: c.beforeValue ? parseMarkdown(c.beforeValue, c.docRelPath).title : null, newValue: null };
+      return { oldValue: c.beforeValue ? parseMarkdown(c.beforeValue, c.docRelPath).title : null, newValue: null, oldReview: null, newReview: null };
     default:
-      return { oldValue: c.beforeValue, newValue: c.afterValue };
+      return { oldValue: c.beforeValue, newValue: c.afterValue, oldReview: c.beforeReview, newReview: c.afterReview };
   }
 }
 
 function sourceOf(c: MemoryChange): RecentChangeView["source"] {
   const harnessLabel = c.harness ? (integrationFor(c.harness)?.label ?? c.harness) : null;
   const label = harnessLabel ? `${harnessLabel}${c.sessionId ? `, session ${c.sessionId}` : ""}` : c.reverts ? "Revert in the Dashboard" : c.actor === "service" ? "A Proposal you approved" : (c.source ?? "You");
-  return { harness: c.harness, harnessLabel, sessionId: c.sessionId, label };
+  return { harness: c.harness, harnessLabel, sessionId: c.sessionId, label, autoAccepted: c.autoAccepted };
 }
 
 /** A note's title from the index, or for a note that is gone, from the change that created or removed it. */

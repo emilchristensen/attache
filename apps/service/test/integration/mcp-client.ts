@@ -13,6 +13,8 @@ export interface HarnessClientOptions {
   name?: string;
   /** The client title the Harness reports when it connects. */
   title?: string;
+  /** The folder the Harness starts the server in, as a Harness does with its working folder. */
+  cwd?: string;
   /** Environment the Harness gives the server, on top of a clean one. */
   env?: Record<string, string>;
   /** How the owner answers a confirmation request. Without it the client cannot show one. */
@@ -29,26 +31,35 @@ export interface McpClients {
    * environment.
    */
   connect(stateDir: string, opts?: HarnessClientOptions): Promise<Client>;
+  /** Start the server a Harness configuration names, exactly as that Harness would: its command and arguments. */
+  connectRegistered(entry: RegisteredServer, opts?: HarnessClientOptions): Promise<Client>;
   closeAll(): Promise<void>;
+}
+
+/** An MCP server entry in a Harness's configuration. */
+export interface RegisteredServer {
+  command: string;
+  args: string[];
 }
 
 export function mcpClients(): McpClients {
   const open: Client[] = [];
+  const track = (client: Client) => {
+    open.push(client);
+    return client;
+  };
   return {
-    async connect(stateDir, opts = {}) {
-      const client = await connectHarness(stateDir, opts);
-      open.push(client);
-      return client;
-    },
+    connect: async (stateDir, opts = {}) => track(await connectHarness({ command: process.execPath, args: [MAIN, "mcp", "--state-dir", stateDir] }, opts)),
+    connectRegistered: async (entry, opts = {}) => track(await connectHarness(entry, opts)),
     async closeAll() {
       await Promise.all(open.splice(0).map((c) => c.close()));
     },
   };
 }
 
-async function connectHarness(stateDir: string, opts: HarnessClientOptions): Promise<Client> {
+async function connectHarness(server: RegisteredServer, opts: HarnessClientOptions): Promise<Client> {
   const base = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !HARNESS_ENV.test(e[0])));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [MAIN, "mcp", "--state-dir", stateDir], env: { ...base, ...opts.env }, stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: server.command, args: server.args, env: { ...base, ...opts.env }, ...(opts.cwd ? { cwd: opts.cwd } : {}), stderr: "pipe" });
   const info = { name: opts.name ?? "test-harness", version: "1.0.0", ...(opts.title ? { title: opts.title } : {}) };
   const client = new Client(info, { capabilities: opts.confirm || opts.claimsConfirmation ? { elicitation: { form: {} } } : {} });
   const confirm = opts.confirm;

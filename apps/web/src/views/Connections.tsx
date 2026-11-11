@@ -52,7 +52,7 @@ export function ConnectionsView() {
     <div className="page page-narrow">
       <div className="page-header">
         <h1>Connections</h1>
-        <span className="subtitle">Each connection shows what it may read, whether it may write, when it last succeeded and how complete its last sync was.</span>
+        <span className="subtitle">Each connection shows what it may read and write, when it last succeeded and how complete its last Source refresh was.</span>
       </div>
       {oauth && (
         <div className={`state ${oauth === "ok" ? "partial" : "error"} small`} role="status" style={{ marginBottom: 14 }}>
@@ -68,8 +68,8 @@ export function ConnectionsView() {
           <ImportFolder onDone={caps.reload} />
           <h2>Work sources</h2>
           {d.connections.filter((c) => ["github", "jira", "confluence", "slack", "gmail", "gcal"].includes(c.kind)).map(card)}
-          <h2>Coding agents</h2>
-          {d.connections.filter((c) => ["claude-code", "codex", "antigravity"].includes(c.kind)).map(card)}
+          <h2>Harnesses</h2>
+          {d.connections.filter((c) => ["claude-code", "codex", "antigravity", "claude-desktop"].includes(c.kind)).map(card)}
           <h2>Model</h2>
           {d.connections.filter((c) => c.kind === "model").map(card)}
         </div>

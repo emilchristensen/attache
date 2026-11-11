@@ -17,6 +17,7 @@ function Parts({ item }: { item: MemorySaveItem }) {
           <span className="part-kind">Fact</span>
           <span>
             <strong>{f.subject}</strong>: {f.value}
+            {f.review && <span className="muted"> · review after {f.review}</span>}
             {"reason" in f && typeof f.reason === "string" && <span className="muted"> ({f.reason})</span>}
           </span>
         </li>

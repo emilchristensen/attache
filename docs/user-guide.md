@@ -38,7 +38,7 @@ If the installer says systemd could not be reached for your user, you are in a s
 
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
-Coding-agent hooks run Jarvis through a stable `current` link, so they keep working across upgrades.
+Harness hooks and the MCP server run Jarvis through a stable `current` link, so they keep working across upgrades.
 Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
 ## First-run setup
@@ -51,7 +51,7 @@ Setup has five steps and each works without the ones after it.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
    Search is always on.
-   Capture, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
+   Saving to memory, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
@@ -60,7 +60,8 @@ Setup has five steps and each works without the ones after it.
    For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
-   Under *Coding agents*, connect Claude Code, Codex or Antigravity if you use them (see Agent sessions below).
+   Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
+   Each gets Jarvis's MCP server, so it can search your Brain and save to it with your confirmation; Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
 4. **Model and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
@@ -79,7 +80,7 @@ Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain
 - The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
   **Away summary** covers the last three days.
-- **Sources** shows each source's last successful refresh and whether the last sync was complete, partial or failed.
+- **Sources** shows each source's last successful refresh and whether its last Source refresh was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.
 - Items are grouped into deadlines, review queue, meetings and pending replies.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
@@ -90,8 +91,9 @@ Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
 
 **Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
-Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next search returns the correction.
-**Capture** archives text as evidence and can record a decision in memory linked to that evidence.
+The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
+Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
+A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
@@ -124,11 +126,13 @@ Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 
-Jarvis can remember your work with coding agents: Claude Code, Codex and Antigravity.
-Connect each agent you use under Connections → *Coding agents*; the card says exactly which file changes before you connect.
+Jarvis remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
+Connect each one you use under Connections → *Harnesses*; the card says exactly which files change before you connect.
 
-- **What changes in the agent:** Jarvis adds its own hooks to the agent's settings (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json`).
-  Your other settings and hooks are kept, the file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
+- **What changes in the Harness:** connecting adds Jarvis's MCP server (see the next section) and Jarvis's own hooks, in one step.
+  The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
+  Your other settings, hooks and MCP servers are kept, each file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
+  A file Jarvis cannot read (for example JSON with comments, or TOML that does not parse) is refused with a message that names it, and nothing is changed.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
 - **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
@@ -145,44 +149,46 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
   Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Jarvis's again; reconnecting updates Jarvis's hooks in place and leaves yours where they are.
 - **If Jarvis is not running,** sessions are queued on your computer and saved the next time it starts.
-- **Save and audit skills:** connecting an agent also adds two skills that only you can run; the agent never starts them on its own.
-  In Claude Code and Antigravity type `/jarvis-save` or `/jarvis-audit`; in Codex type `$jarvis-save` or `$jarvis-audit`.
-  - `/jarvis-save` distills the important parts of the last turn (decisions, lessons, current facts about people and projects) into your curated memory.
-    It updates the note that already covers a topic instead of creating a second one, keeps every replaced value in the note's History, and records which session it came from.
-    Add a few words after the command to say what to focus on.
-  - `/jarvis-audit` checks your memory for facts that have quietly stopped being true, starting with the ones every new session reads.
-    It reports contradicted and unsupported facts with the evidence, and corrects only what you approve.
-  - Both use the Jarvis command line, so Jarvis must be running; `jarvis save --help` shows the format, and `jarvis audit` prints the same report from a terminal.
-  - The skills live in `~/.claude/skills`, `~/.agents/skills` (Codex) and `~/.gemini/config/skills`; Jarvis never changes a skill folder it did not create, and **Disconnect** removes them.
 
-Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks and skills.
-Uninstalling Jarvis removes them too.
+Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Jarvis's MCP server; Claude Desktop stays connected.
+Uninstalling Jarvis removes them all.
 
 ## The Brain in any Harness (MCP)
 
-Any Harness that speaks MCP, including ones without a shell such as Claude Desktop, can reach your Brain through Jarvis's MCP server.
-The Harness starts it as a local process with the command `jarvis mcp`; there is no URL and no token to copy.
+Every Harness you connect reaches your Brain through Jarvis's MCP server, including Claude Desktop, which has no shell and no hooks.
+Connect Claude Desktop under Connections → *Harnesses* like the others; it gets the MCP server only, in its `claude_desktop_config.json`, and needs a restart to load it.
+Its Code tab runs Claude Code, so connect Claude Code too to save those sessions.
+
+The Harness starts the server as a local process (`jarvis mcp`, pinned to this install); there is no URL and no token to copy.
 The server pairs with the running service the way the command line does and keeps its token in Jarvis's state folder, never in the Harness's configuration.
+It is listed under the name `jarvis`.
+If the Harness already lists a server named `jarvis` that Jarvis did not add (for example one you added by hand with `claude mcp add`), connecting stops and says so; remove that entry, then connect again.
 
-For now, add it to your Harness by hand, for example in Claude Code:
-
-```sh
-claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
-```
-
-Other Harnesses take the same command and argument in their MCP server settings.
+Earlier versions installed two skills, `jarvis-save` and `jarvis-audit`, and a `jarvis save` command.
+The MCP tools and prompts replace both, because a save is now confirmed by you in the Harness, which a shell command cannot do.
+When Jarvis starts after the upgrade, it removes the skill folders it installed (the ones with its `.jarvis-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
-- **read** returns a whole note, or only a line range, for a path that search returned.
-- **save** writes facts and events, with the same items as `jarvis save`: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+  A fact past its Review date is marked unverified.
+  While meaning-based search is not ready on this Machine, the answer starts with a line saying the passages match keywords only, and why.
+- **read** returns a whole note, or only a line range, for a path that search returned, and names the facts in it that are past their Review date.
+- **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+  A fact can carry a Review date (see below).
   Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
   Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
   Accept, and the items are written as you, each fact citing the Harness and session it came from.
   Decline or close the request, and nothing is written; the agent is told so.
   A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
-- **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
+- **Auto-accept** skips the confirmation for a Harness you trust.
+  In Settings, under **Auto-accept saves**, each connected Harness has a switch, off by default.
+  With it on, a save from that Harness is written without asking; every other Harness still asks.
+  The setting belongs to this Machine only: it is kept in Jarvis's local state, not in your Brain, so another Machine asks until you switch it on there too.
+  Disconnecting a Harness switches its auto-accept off.
+  An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
+  Your identity record is never changed this way.
+- **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
   In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
@@ -199,11 +205,34 @@ Other Harnesses take the same command and argument in their MCP server settings.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.
 
+## Review dates
+
+A fact you expect to change, such as a status, a plan or a deadline, can carry a Review date: the day after which it should be checked again.
+In the note it sits beside the fact's own date, for example `- **Status** (2026-11-10, review 2026-11-13): Beta opens to customers`.
+An agent sets it when it saves a fact, and a Proposal can carry one per fact; it must come after the fact's own date.
+You can also add or change one by hand in your editor, and Jarvis reads it.
+Facts that stay true, such as a repository's name, need none, and Jarvis never adds Review dates in bulk.
+
+Past its Review date a fact stays in your Brain, marked unverified: in the Dashboard, in search results, in what a Harness reads, and in the context a new agent session starts with.
+To clear the mark, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
+
 ## Editing notes in Obsidian
 
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
-There is no Obsidian plugin; use Jarvis in the browser to search, capture and review attention items.
+There is no Obsidian plugin; use the Dashboard in the browser to search, review attention items and decide on Proposals.
+
+## Meaning-based search
+
+Search can also find notes by meaning, so a question in other words, or in Danish, finds an English note.
+It uses a small multilingual model (multilingual-e5-small, about 135 MB) that runs on each Machine, without a network and without sending your notes anywhere.
+Jarvis does not ship the model: download it once per Machine in **Settings → Meaning-based search**.
+The card shows the model's state: not downloaded, downloading, building, ready or failed.
+After the download Jarvis builds a vector for every passage it has indexed, in the background, and keeps them current as files change.
+Search keeps working on keywords the whole time; until vectors are ready, results in the Dashboard and in a Harness say they match keywords only.
+If the download fails, the card says why and offers to download again.
+The model lives in the service state folder and its vectors in this Machine's index, never in your Brain, so they are not replicated; each Machine builds its own.
 
 ## Measuring search
 
@@ -249,22 +278,54 @@ Renaming the Machine affects files written from then on; earlier files keep thei
 Only one Jarvis service can use a data folder at a time.
 The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks` on macOS and `~/.local/state/jarvis/locks` on Linux.
 
+## Replication
+
+Replication keeps the Brain the same on every Machine you run Jarvis on, through a private git repository.
+It is off until you switch it on; a Brain on one Machine works exactly as before.
+Each Machine needs git installed.
+
+- **Switch it on** on the Machine that has your Brain: `jarvis replication setup owner/jarvis-brain`.
+  Name an empty repository: `owner/name` on GitHub, an `https://` or `ssh://` address, or a folder path.
+  Jarvis makes the data folder a git repository, commits everything in it and pushes it.
+  A repository that already holds a Brain is refused, so two Brains are never mixed.
+- **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
+  The folder must be empty or not exist yet.
+  Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
+- **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
+  `jarvis replication check` replicates now instead of waiting for the next check.
+
+What happens on its own:
+
+- A save is committed and pushed 30 seconds after the last write, so a burst of saves becomes one commit.
+- Edits you make by hand in an editor are committed and pushed too.
+- Every minute, at start and when the Machine wakes, Jarvis fetches the other Machines' changes and merges them; search includes them as soon as they arrive.
+- Each commit message names the files that changed, what changed in them (for example `corrected Status, added an event`) and the Machine.
+- Offline, saves and search carry on as usual; the status reads offline, and the Machine catches up by itself when the repository can be reached again.
+- A failing Replication never fails a save.
+- Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
+- A note is never left with conflict markers.
+  Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+
+The repository holds the whole Brain in plain text, so keep it private.
+Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
+
 ## Where things live
 
 | What | macOS | Linux |
 | --- | --- | --- |
 | Your knowledge (Markdown) | The data folder you chose | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` |
+| Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder |
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` | `secrets.json` in the service state folder, readable only by you |
 | App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` |
 | Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` |
 | Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` |
-| Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added) | the same |
-| Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills` | the same |
+| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added) | the same |
+| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` |
 
-The command line offers `status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `mcp`, `agent-hooks`, `backup` and `restore`.
-`jarvis agent-hooks status` lists the hooks and skills Jarvis added to your coding agents.
+The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup` and `restore`.
+`jarvis agent-hooks status` lists the hooks and MCP servers Jarvis added to your Harnesses.
 On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves the app, the state or the service definition.
 `jarvis paths` prints every one of these locations for the computer it runs on, and `jarvis service status` says whether the background service is loaded.
 
@@ -278,7 +339,7 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
 - *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
   For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
   Reconnect tests the connection again and says what is still wrong if it fails.
-  Once it succeeds, Jarvis refreshes that source straight away so the card stops showing the failed sync.
+  Once it succeeds, Jarvis refreshes that source straight away so the card stops showing the failed Source refresh.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
   If you chose **Sign in with Atlassian** directly, sign in again on the card.

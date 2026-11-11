@@ -1,5 +1,5 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -131,13 +131,18 @@ export function readSettings(path: string): Settings {
 
 /** Back up the current file (if any) into `backupDir`, then replace it atomically. */
 export function writeSettings(path: string, settings: Settings, backupDir: string): { backup: string | null } {
+  return writeConfigText(path, JSON.stringify(settings, null, 2) + "\n", backupDir);
+}
+
+/** Back up a Harness configuration file (if it exists) into `backupDir`, then replace its text atomically. */
+export function writeConfigText(path: string, text: string, backupDir: string): { backup: string | null } {
   let backup: string | null = null;
   if (existsSync(path)) {
     mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-    backup = join(backupDir, `${path.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+    backup = join(backupDir, `${path.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}${extname(path) || ".bak"}`);
     copyFileSync(path, backup);
   }
-  replaceFile(path, JSON.stringify(settings, null, 2) + "\n");
+  replaceFile(path, text);
   return { backup };
 }
 

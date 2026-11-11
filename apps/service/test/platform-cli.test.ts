@@ -35,9 +35,10 @@ describe("paths and Harness locations per operating system", () => {
       tar: "/usr/bin/tar",
       claudeManagedSettings: "/Library/Application Support/ClaudeCode/managed-settings.json",
     });
-    expect(p.harnesses["claude-code"]).toMatchObject({ hooksFile: ".claude/settings.json", skillsDir: ".claude/skills", executables: ["/Users/owner/.local/bin/claude", "/Users/owner/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] });
-    expect(p.harnesses.codex).toMatchObject({ hooksFile: ".codex/hooks.json", skillsDir: ".agents/skills" });
-    expect(p.harnesses.antigravity).toMatchObject({ hooksFile: ".gemini/config/hooks.json", rulesDir: ".gemini/config/rules", skillsDir: ".gemini/config/skills" });
+    expect(p.harnesses["claude-code"]).toMatchObject({ hooksFile: ".claude/settings.json", mcpFile: ".claude.json", legacySkillsDir: ".claude/skills", executables: ["/Users/owner/.local/bin/claude", "/Users/owner/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] });
+    expect(p.harnesses.codex).toMatchObject({ hooksFile: ".codex/hooks.json", mcpFile: ".codex/config.toml", mcpFormat: "toml", legacySkillsDir: ".agents/skills" });
+    expect(p.harnesses.antigravity).toMatchObject({ hooksFile: ".gemini/config/hooks.json", rulesDir: ".gemini/config/rules", mcpFile: ".gemini/config/mcp_config.json", legacySkillsDir: ".gemini/config/skills" });
+    expect(p.harnesses["claude-desktop"]).toMatchObject({ hooksFile: null, mcpFile: "Library/Application Support/Claude/claude_desktop_config.json", presence: ["/Applications/Claude.app", "/Users/owner/Library/Application Support/Claude"] });
     expect(p.harnesses.antigravity.presence).toContain("/Applications/Antigravity.app");
   });
 
@@ -54,6 +55,7 @@ describe("paths and Harness locations per operating system", () => {
     const custom = paths("linux", { HOME: "/home/owner", XDG_DATA_HOME: "/data", XDG_STATE_HOME: "/state", XDG_CONFIG_HOME: "/config" });
     expect(custom).toMatchObject({ installPrefix: "/data/jarvis", stateDir: "/state/jarvis", locksDir: "/home/owner/.local/state/jarvis/locks", serviceDefinitionDir: "/config/systemd/user" });
     expect(custom.harnesses.codex.executables).toEqual(["/home/owner/.local/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]);
+    expect(custom.harnesses["claude-desktop"]).toMatchObject({ mcpFile: ".config/Claude/claude_desktop_config.json", presence: ["/home/owner/.config/Claude"] });
   });
 
   it("resolves Windows locations under the owner's local application data", () => {
@@ -71,6 +73,7 @@ describe("paths and Harness locations per operating system", () => {
     });
     expect(p.harnesses.codex.executables).toEqual(["C:\\Users\\owner\\.local\\bin\\codex.exe", "C:\\Users\\owner\\.local\\bin\\codex.cmd", "C:\\Users\\owner\\AppData\\Roaming\\npm\\codex.exe", "C:\\Users\\owner\\AppData\\Roaming\\npm\\codex.cmd"]);
     expect(p.harnesses["claude-code"].presence).toContain("C:\\Users\\owner\\.claude");
+    expect(p.harnesses["claude-desktop"]).toMatchObject({ mcpFile: "AppData/Roaming/Claude/claude_desktop_config.json", presence: ["C:\\Users\\owner\\AppData\\Local\\AnthropicClaude", "C:\\Users\\owner\\AppData\\Roaming\\Claude"] });
   });
 
   it("prints a single location for installer scripts", () => {
