@@ -239,7 +239,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
                 {busy === "test" ? "Testing…" : "Test"}
               </button>
               {definition.scopes.length > 0 && status.kind !== "model" && status.status !== "needs_auth" && (
-                <button disabled={busy !== null} onClick={() => run("sync", () => post(`/connections/${status.id}/sync`).then(onChanged), "Refresh started")}>
+                <button disabled={busy !== null} onClick={() => run("refresh", () => post(`/connections/${status.id}/refresh`).then(onChanged), "Refresh started")}>
                   Refresh now
                 </button>
               )}

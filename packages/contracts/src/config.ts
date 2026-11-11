@@ -4,7 +4,7 @@ import { FeatureId } from "./features.ts";
 /** API contract: Configuration. */
 
 export const Schedules = z.object({
-  syncEveryMinutes: z.number().int().min(5).max(24 * 60).default(30),
+  refreshEveryMinutes: z.number().int().min(5).max(24 * 60).default(30),
   briefingAt: z.string().regex(/^\d{2}:\d{2}$/).default("08:00"),
   briefingEnabled: z.boolean().default(true),
 });
@@ -26,7 +26,7 @@ export const Config = z.object({
   setupStep: z.number().int().min(0).default(0),
   dataFolder: z.string().nullable().default(null),
   features: z.partialRecord(FeatureId, z.boolean()).default({}),
-  schedules: Schedules.default({ syncEveryMinutes: 30, briefingAt: "08:00", briefingEnabled: true }),
+  schedules: Schedules.default({ refreshEveryMinutes: 30, briefingAt: "08:00", briefingEnabled: true }),
   notifications: Notifications.default({ desktop: false, quietHours: null }),
   identity: z.object({ name: z.string(), email: z.string() }).nullable().default(null),
 });

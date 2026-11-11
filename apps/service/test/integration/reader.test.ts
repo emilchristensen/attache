@@ -23,10 +23,10 @@ describe("two Machines sharing a Brain", () => {
       expect(view).toMatchObject({ machine: { id: macId, name: "Work Mac" }, thisMachine: m === mac, replicated: true, silent: false });
       expect(view.heartbeatAt).not.toBeNull();
     }
-    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
     expect(runSchedules(pc)).toEqual([]);
     // Joining started no Source refresh on the PC either.
-    expect((await pc.get("/jobs")).filter((j: { kind: string }) => j.kind === "sync" || j.kind === "briefing")).toEqual([]);
+    expect((await pc.get("/jobs")).filter((j: { kind: string }) => j.kind === "source-refresh" || j.kind === "briefing")).toEqual([]);
   });
 
   it("hand the role to the Preferred Reader the owner names, recorded in the Brain", async () => {
@@ -47,7 +47,7 @@ describe("two Machines sharing a Brain", () => {
       expect((await readerOn(m)).machine).toEqual({ id: pcId, name: "Home PC" });
     }
     expect(runSchedules(mac)).toEqual([]);
-    expect(runSchedules(pc).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(pc).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
   });
 });
 
@@ -71,7 +71,7 @@ describe("the Reader's Source refresh", () => {
     const [, pc] = world.machines as [TestMachine, TestMachine];
     await pc.clock.advance(CHECK);
     expect((await readerOn(pc)).thisMachine).toBe(false);
-    const { job } = await pc.post("/connections/vault-data/sync");
+    const { job } = await pc.post("/connections/vault-data/refresh");
     await waitForJobs(pc, [job.id]);
     const source = ((await pc.get("/connections")) as Array<{ id: string; lastSuccessAt: string | null }>).find((c) => c.id === "vault-data")!;
     expect(source.lastSuccessAt).not.toBeNull();
@@ -91,7 +91,7 @@ describe("the Reader's Source refresh", () => {
     expect(runSchedules(pc)).toEqual([]);
     expect(await reviewItems(pc)).toEqual([]);
 
-    const sync = tickAllDue(mac).find((r) => r.id === "attention:sync")!;
+    const sync = tickAllDue(mac).find((r) => r.id === "attention:source-refresh")!;
     await waitForJobs(mac, [sync.jobId!]);
     expect((await reviewItems(mac)).map((i) => i.title)).toEqual(["Review date passed: “Budget” in Orion rollout"]);
     await mac.clock.advance(AFTER_WRITE);
@@ -150,7 +150,7 @@ describe("the Reader lease", () => {
     world.remote.goOnline();
     await mac.clock.advance(CHECK);
     expect((await readerOn(mac)).silent).toBe(false);
-    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
   });
 });
 
@@ -163,7 +163,7 @@ describe("a Machine without Replication", () => {
 
     await waitUntilIdle(lone);
     const ran = tickAllDue(lone);
-    expect(ran.map((r) => r.id).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(ran.map((r) => r.id).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
     expect(ran.every((r) => r.jobId !== null)).toBe(true);
     const finished = await waitForJobs(lone, ran.map((r) => r.jobId!));
 

@@ -3,7 +3,7 @@
  * (see claude-adapter.ts). list_events returns recurring events expanded
  * into instances, in the same shape as the Calendar REST API. Read-only.
  */
-import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, SyncResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, RefreshResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import { daysBetween, listingState, recordFailure } from "./common.ts";
@@ -167,7 +167,7 @@ export const gcalAdapter: ConnectorAdapter = {
     return testClaude(ctx, server(ctx), eventsCall(ctx.now(), null, 1), (text) => ({ account: parseEventPage(text).calendar }));
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     if (!ctx.connection.readScopes.includes("upcoming")) return { coverage: cov.finish(), observations };

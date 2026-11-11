@@ -222,6 +222,14 @@ export const MIGRATIONS: readonly string[] = [
     primary key (data_folder, rel_path)
   ) without rowid;
   `,
+  // Source refresh had been stored as "sync" (the job kind, its schedule and its interval setting);
+  // the glossary avoids that word, so stored rows and settings take the Source refresh name.
+  `
+  update jobs set kind = 'source-refresh' where kind = 'sync';
+  update schedules set id = 'attention:source-refresh', job_kind = 'source-refresh' where id = 'attention:sync';
+  update config set json = json_set(json_remove(json, '$.schedules.syncEveryMinutes'), '$.schedules.refreshEveryMinutes', json_extract(json, '$.schedules.syncEveryMinutes'))
+  where json_extract(json, '$.schedules.syncEveryMinutes') is not null;
+  `,
 ];
 
 export function openDb(file: string): Db {

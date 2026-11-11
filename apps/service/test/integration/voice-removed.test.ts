@@ -66,6 +66,6 @@ describe("voice is gone", () => {
     const secretsFile = join(stateDir, "secrets.json");
     await expect.poll(() => (existsSync(secretsFile) ? readFileSync(secretsFile, "utf8") : "")).not.toContain("conn:speech:apiKey");
     // Changing settings afterwards still works.
-    expect((await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 40 } })).status).toBe(200);
+    expect((await svc.call("PATCH", "/config", { schedules: { refreshEveryMinutes: 40 } })).status).toBe(200);
   });
 });

@@ -231,13 +231,13 @@ export class App {
     };
     this.actions.authority = (a) => this.actionAuthority(a.kind, a.connectionId);
     this.scheduler.enqueue = (row, reason) => {
-      if (row.jobKind === "sync" || row.jobKind === "briefing") {
+      if (row.jobKind === "source-refresh" || row.jobKind === "briefing") {
         // Only the Reader reads on a schedule. A Reader whose lease lapsed while asleep or offline waits for its renewal, then catches up.
         const role = this.reader.role();
         if (role === "lapsed") return LATER;
         if (role === "other") return null;
       }
-      if (row.jobKind === "sync") return this.jobs.create({ kind: "sync", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
+      if (row.jobKind === "source-refresh") return this.jobs.create({ kind: "source-refresh", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
     };

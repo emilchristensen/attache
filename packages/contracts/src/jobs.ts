@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /** API contract: Jobs. */
 
-export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate", "capture-consolidate"]);
+export const JobKind = z.enum(["research", "briefing", "draft", "source-refresh", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate", "capture-consolidate"]);
 export type JobKind = z.infer<typeof JobKind>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";
@@ -37,7 +37,7 @@ export interface JobEvent {
 }
 
 export const JobCreateInput = z.object({
-  kind: z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "demo-long"]),
+  kind: z.enum(["research", "briefing", "draft", "source-refresh", "import", "reindex", "demo-long"]),
   title: z.string().max(200).optional(),
   input: z.record(z.string(), z.unknown()).default({}),
   idempotencyKey: z.string().max(200).optional(),

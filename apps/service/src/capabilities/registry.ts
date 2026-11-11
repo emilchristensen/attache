@@ -15,7 +15,7 @@ export interface FeatureDefinition {
   requiresFeatures: FeatureId[];
   connections: Array<{ kinds: ConnectionKind[]; label: string; required: boolean; missingEffect: string }>;
   /** Scheduled triggers owned by this feature. */
-  schedules: Array<{ id: string; label: string; jobKind: "sync" | "briefing" }>;
+  schedules: Array<{ id: string; label: string; jobKind: "source-refresh" | "briefing" }>;
   /** Job kinds that belong to this feature (cancelled when it is disabled). */
   jobKinds: string[];
 }
@@ -66,10 +66,10 @@ export const FEATURES: FeatureDefinition[] = [
     requiresFeatures: ["jobs"],
     connections: [{ kinds: SOURCE_KINDS, label: "At least one source (your data folder counts)", required: true, missingEffect: "Nothing to watch." }],
     schedules: [
-      { id: "sync", label: "Source refresh", jobKind: "sync" },
+      { id: "source-refresh", label: "Source refresh", jobKind: "source-refresh" },
       { id: "briefing", label: "Daily briefing", jobKind: "briefing" },
     ],
-    jobKinds: ["sync", "briefing"],
+    jobKinds: ["source-refresh", "briefing"],
   },
   {
     id: "drafts",

@@ -24,7 +24,7 @@ describe("A03 onboarding and persistence", () => {
     expect(early.body.error.code).toBe("needs_data_folder");
     await svc.post("/setup/data-folder", { path: svc.dataDir });
     await svc.put("/features", { changes: { sessions: false, drafts: false }, cascade: true });
-    await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
+    await svc.call("PATCH", "/config", { schedules: { refreshEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     const done = await svc.post("/setup/complete");
     expect(done.config.setupCompleted).toBe(true);
     const statuses = Object.fromEntries(done.features.map((f: any) => [f.id, f.readiness]));
@@ -35,7 +35,7 @@ describe("A03 onboarding and persistence", () => {
     const again = await startTestService({ stateDir, dataDir, setup: false });
     running.push(again);
     const cfg = await again.get("/config");
-    expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
+    expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { refreshEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     expect(cfg.features).toMatchObject({ sessions: false, drafts: false, attention: true });
     // Search works before any model is connected.
     await again.post("/memory/save", { items: [{ action: "create", type: "note", title: "Espresso machine", facts: [{ subject: "Upkeep", value: "Needs descaling every Friday" }] }] });
@@ -56,7 +56,7 @@ describe("A04 configuration drives backend behaviour", () => {
     expect(s1.filter((s: any) => s.capability === "attention").every((s: any) => s.enabled)).toBe(true);
     // Queue work, then disable attention: triggers stop, queued jobs are cancelled, endpoints refuse.
     svc.app.jobs.stop();
-    const queued = svc.app.jobs.create({ kind: "sync", title: "q", input: { all: true }, capability: "attention" }).job;
+    const queued = svc.app.jobs.create({ kind: "source-refresh", title: "q", input: { all: true }, capability: "attention" }).job;
     const off = await svc.put("/features", { changes: { attention: false }, cascade: true });
     expect(off.removed).toEqual(["drafts"]);
     expect(off.effects.cancelledJobs).toContain(queued.id);
@@ -64,7 +64,7 @@ describe("A04 configuration drives backend behaviour", () => {
     const s2 = await svc.get("/schedules");
     expect(s2.filter((s: any) => s.capability === "attention").every((s: any) => !s.enabled && s.nextRunAt === null)).toBe(true);
     expect((await svc.call("GET", "/attention")).body.error.code).toBe("feature_disabled");
-    expect((await svc.call("POST", "/connections/github/sync")).body.error.code).toBe("feature_disabled");
+    expect((await svc.call("POST", "/connections/github/refresh")).body.error.code).toBe("feature_disabled");
     // Scheduler tick enqueues nothing for a disabled capability.
     expect(svc.app.scheduler.tick(new Date(Date.now() + 86_400_000))).toEqual([]);
     const on = await svc.put("/features", { changes: { attention: true, drafts: true }, cascade: true });
@@ -72,7 +72,7 @@ describe("A04 configuration drives backend behaviour", () => {
     const s3 = await svc.get("/schedules");
     expect(s3.filter((s: any) => s.capability === "attention").every((s: any) => s.enabled && s.nextRunAt)).toBe(true);
     svc.app.jobs.start();
-    const sync = await svc.post("/connections/github/sync");
+    const sync = await svc.post("/connections/github/refresh");
     await svc.waitJob(sync.job.id);
     // The fixture answers both default scopes (review requests, authored PRs), so there is one observation per scope.
     const observed = Number((svc.app.db.prepare("select count(*) n from observations where connection_id = 'github'").get() as { n: number }).n);
@@ -85,8 +85,8 @@ describe("A04 configuration drives backend behaviour", () => {
     expect(kept.deleted).toBe(false);
     expect(await svc.app.secrets.get("conn:github:token")).toBeNull();
     expect(svc.app.db.prepare("select count(*) n from observations where connection_id = 'github'").get()).toMatchObject({ n: observed });
-    expect((await svc.call("POST", "/connections/github/sync")).body.error.code).toBe("disconnected");
-    await svc.post("/jobs", { kind: "sync", input: { connectionId: "github" } }).then((r) => svc.waitJob(r.job.id));
+    expect((await svc.call("POST", "/connections/github/refresh")).body.error.code).toBe("disconnected");
+    await svc.post("/jobs", { kind: "source-refresh", input: { connectionId: "github" } }).then((r) => svc.waitJob(r.job.id));
     expect(fx.requests.length).toBe(before);
     // Reconnect then disconnect deleting data.
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });

@@ -79,7 +79,7 @@ describe("per-Machine evidence", () => {
     const svc = await start();
     await svc.call("PATCH", "/machine", { name: "Work Mac" });
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });
-    await svc.waitJob((await svc.post("/connections/github/sync")).job.id);
+    await svc.waitJob((await svc.post("/connections/github/refresh")).job.id);
     const files = readdirSync(join(svc.dataDir, "evidence/connectors/github"));
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(new RegExp(`^${today()}-work-mac-[0-9a-f]{8}\\.md$`));

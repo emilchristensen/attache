@@ -168,9 +168,9 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
-    // A connection that just recovered still shows the failed coverage of its last sync: refresh it now.
+    // A connection that just recovered still shows the failed coverage of its last Source refresh: refresh it now.
     if (out.ok && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
-      app.jobs.create({ kind: "sync", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
     }
     return { test: out, status: app.connections.status(app.connections.requireRecord(c.params.id!)) };
   });
@@ -194,11 +194,11 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     if (kind === "model") await app.refreshModel();
     return out;
   });
-  r.post("/connections/:id/sync", (c) => {
+  r.post("/connections/:id/refresh", (c) => {
     requireFeature(app, "attention");
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.status === "disconnected") throw new HttpError(409, "disconnected", "Reconnect this source first.");
-    const { job } = app.jobs.create({ kind: "sync", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+    const { job } = app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
     return { __status: 201, body: { job } };
   });
   r.post("/connections/:kind/oauth/start", async (c) => {
@@ -274,7 +274,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
 function defaultTitle(kind: JobKind, input: Record<string, unknown>): string {
   if (kind === "research") return `Research: ${String(input.question ?? "").slice(0, 120)}`;
   if (kind === "demo-long") return "Diagnostics: long-running self-test";
-  if (kind === "sync") return "Refresh sources";
+  if (kind === "source-refresh") return "Refresh sources";
   if (kind === "reindex") return "Rebuild search index";
   if (kind === "briefing") return "Briefing";
   return kind;

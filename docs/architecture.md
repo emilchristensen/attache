@@ -191,7 +191,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it, so it takes the role back when it returns; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); a standby Machine takes a lease that lapsed if it has a source connected besides the data folder (the standby flag from its record in the Brain, the sources from `App`, `ReplicationDeps.sourcesConnected`); otherwise the lease is left alone.
   A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
   A Machine that lost the lease hears so at its next check, so around a handover two Machines may both refresh for up to a minute: inbox items are files keyed by item (`review/inbox/`), so both Machines' writes meet as one file and the inbox merge rule keeps one, and deliverables such as briefings carry the Machine in their file name (`deliverableName`), so two briefings never collide.
-  The scheduler enqueues scheduled `sync` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
+  The scheduler enqueues scheduled `source-refresh` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
   A Source refresh the owner starts by hand runs on the Machine they are on.
   `GET /reader` (and `/status`) returns the Reader as this Machine last heard it, whether it is silent, and `lastRefreshAt`, the last finished Source refresh of every source (an all-sources `sync` job or a briefing), which the holder carries in the lease to the other Machines; `reader.changed` tells the Dashboard.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
@@ -280,11 +280,11 @@ Installs from before ADR 0003 drop their stored conversations and messages on up
 
 ## Connections and transports
 
-Every connection is an adapter with setup, test, sync, disconnect and coverage accounting (`apps/service/src/connectors/`).
+Every connection is an adapter with setup, test, Source refresh, disconnect and coverage accounting (`apps/service/src/connectors/`).
 Remote sources use one of three transports.
 
 - **GitHub** uses its REST API with a token or the GitHub CLI login.
-- **Jira and Confluence** use the Atlassian Rovo MCP server in one of two ways behind one interface (`atlassian-backend.ts`), so sync, attention, coverage and recovery rules are shared.
+- **Jira and Confluence** use the Atlassian Rovo MCP server in one of two ways behind one interface (`atlassian-backend.ts`), so Source refresh, attention, coverage and recovery rules are shared.
   By default they go through the user's claude.ai Atlassian Rovo connector (Rovo MCP v1 tools) on the same gated Claude Code path as Slack, Gmail and Calendar, described below.
   It is the default because some Atlassian organizations refuse other OAuth clients and API tokens while allowing claude.ai.
   The v1 views differ: Jira pages with `pageInfo.endCursor` passed back as `nextPageToken`; Confluence search returns no total and no next page, so a full page is reported `partial`; Confluence dates come back relative ("about 2 hours ago") and are kept out of timestamps and fingerprints.
@@ -304,7 +304,7 @@ Remote sources use one of three transports.
   A long result that Claude Code spills to a file (a 50-issue Jira page is about 80 KB) is read back only from Claude Code's exact `<persisted-output>` wrapper, only from a file inside the project directory of Jarvis's own connector session, and the file is deleted once read, so a path planted in a message is never followed and connector data does not accumulate under `~/.claude`.
   A read session that stalls is started once more; a write session never is.
   The session waits for MCP connections (`MCP_CONNECTION_NONBLOCKING=false`); one that still meets a `pending` connector stops at init, before any call, and is started again.
-  Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack sync is a few sessions rather than one per call.
+  Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack Source refresh is a few sessions rather than one per call.
 
 Authorization for the claude.ai connectors lives in claude.ai, so Jarvis stores no credential for them; disconnecting stops Jarvis's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
 Write actions keep the approval rules below.
@@ -315,7 +315,7 @@ Atlassian token refreshes are single-flight per connection because Atlassian rot
 A sign-in that is started but not finished never replaces the stored OAuth client: a newly registered client is saved only when the callback succeeds.
 Connections created before these transports lose their old credentials once at startup and show `needs auth` with an explanation, keeping their scopes, channels, site and write authority.
 A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Jarvis first.
-A test that succeeds on a connection that was `needs auth` or `error` queues a sync of that connection, so its coverage no longer shows the failed run.
+A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
 ## Attention and briefings

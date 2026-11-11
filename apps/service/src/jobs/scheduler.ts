@@ -72,7 +72,7 @@ export class Scheduler {
       for (const s of f.schedules) {
         const id = `${f.id}:${s.id}`;
         const enabled = isEnabled(config.features, f.id) && config.setupCompleted && (s.id !== "briefing" || config.schedules.briefingEnabled);
-        const every = s.id === "sync" ? config.schedules.syncEveryMinutes : null;
+        const every = s.id === "source-refresh" ? config.schedules.refreshEveryMinutes : null;
         const daily = s.id === "briefing" ? config.schedules.briefingAt : null;
         const existing = this.db.prepare("select * from schedules where id = ?").get(id) as Record<string, unknown> | undefined;
         if (!existing) {

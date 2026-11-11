@@ -67,7 +67,7 @@ describe("Reader failover", () => {
 
     await advanceTo(pc, lapse + CHECK);
     expect(await readerOn(pc)).toMatchObject({ machine: { id: pcId, name: "Home PC" }, thisMachine: true, silent: false });
-    expect(runSchedules(pc).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(pc).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
   });
 
   it("never hands the role to a Machine not marked standby, or to a standby without connected sources", async () => {
@@ -110,7 +110,7 @@ describe("Reader failover", () => {
     expect(onPc.machine).toEqual(onLaptop.machine);
     expect([onPc.thisMachine, onLaptop.thisMachine].sort()).toEqual([false, true]);
     const [winner, loser] = onPc.thisMachine ? [pc, laptop] : [laptop, pc];
-    expect(runSchedules(winner).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(winner).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
     expect(runSchedules(loser)).toEqual([]);
   });
 
@@ -120,7 +120,7 @@ describe("Reader failover", () => {
     await connectGitHub(world.machines[1]!, github);
     const { mac, pc, macId } = await handOverAndBack(world);
     expect(await readerOn(mac)).toMatchObject({ machine: { id: macId, name: "Work Mac" }, thisMachine: true, silent: false });
-    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:sync"]);
+    expect(runSchedules(mac).sort()).toEqual(["attention:briefing", "attention:source-refresh"]);
 
     await pc.clock.advance(CHECK);
     expect(await readerOn(pc)).toMatchObject({ machine: { id: macId, name: "Work Mac" }, thisMachine: false, silent: false });

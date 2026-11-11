@@ -57,7 +57,7 @@ export interface AttentionCandidate {
   draftable?: { actionKind: string; target: Record<string, unknown>; context: Record<string, unknown> };
 }
 
-export interface SyncResult {
+export interface RefreshResult {
   coverage: Coverage;
   observations: Observation[];
 }
@@ -86,7 +86,7 @@ export interface ConnectorAdapter {
   /** Store credentials from the setup form; returns the non-secret settings to persist. */
   configure(ctx: AdapterContext, fields: Record<string, string>): Promise<Record<string, unknown>>;
   test(ctx: AdapterContext): Promise<TestResult>;
-  sync?(ctx: AdapterContext): Promise<SyncResult>;
+  refresh?(ctx: AdapterContext): Promise<RefreshResult>;
   execute?(ctx: AdapterContext, action: { kind: string; target: Record<string, unknown>; payload: Record<string, unknown>; effectKey: string }): Promise<ExecuteResult>;
   /**
    * Look for an effect already applied with this key (restart recovery). `since` is when the pending

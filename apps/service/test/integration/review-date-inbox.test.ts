@@ -37,7 +37,7 @@ function editNote(rel: string, from: string, to: string) {
 
 /** "Refresh now" on the data folder, the Source refresh that reads the Brain. */
 async function refresh() {
-  const { job } = await svc.post("/connections/vault-data/sync", {});
+  const { job } = await svc.post("/connections/vault-data/refresh", {});
   const done = await svc.waitJob(job.id);
   expect(done.job.status).toBe("succeeded");
 }

@@ -47,7 +47,7 @@ function Schedules({ config, onSaved }: { config: Config; onSaved: () => void })
       <div className="grid-2">
         <label className="field">
           Refresh sources every (minutes)
-          <input type="number" min={5} max={1440} value={s.syncEveryMinutes} onChange={(e) => setS({ ...s, syncEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
+          <input type="number" min={5} max={1440} value={s.refreshEveryMinutes} onChange={(e) => setS({ ...s, refreshEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
         </label>
         <label className="field">
           Daily briefing at

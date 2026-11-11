@@ -26,13 +26,13 @@ function sourceConnections(app: App) {
   return app.connections.records().filter((r) => SOURCE_KINDS.includes(r.kind) && r.status !== "disconnected");
 }
 
-async function runSync(app: App, ctx: JobContext) {
+async function runSourceRefresh(app: App, ctx: JobContext) {
   const ids = ctx.input.connectionId ? [String(ctx.input.connectionId)] : sourceConnections(app).filter((r) => r.status === "connected" || r.status === "needs_auth" || r.status === "error").map((r) => r.id);
   const results: Array<{ id: string; coverage: string; created: number; changed: number; resolved: number }> = [];
   for (const [i, id] of ids.entries()) {
     if (ctx.signal.aborted) throw ctx.signal.reason;
     ctx.progress(i / Math.max(1, ids.length), `Refreshing ${id}`);
-    const r = await app.connections.sync(id, ctx.signal);
+    const r = await app.connections.refresh(id, ctx.signal);
     ctx.event("source_synced", { id, coverage: r.coverage.state, items: r.coverage.items });
     results.push({ id, coverage: r.coverage.state, created: r.attention.created.length, changed: r.attention.changed.length, resolved: r.attention.resolved.length });
     await notifyUrgent(app, [...r.attention.created, ...r.attention.reopened]);
@@ -62,7 +62,7 @@ async function runBriefing(app: App, ctx: JobContext) {
   for (const [i, s] of sources.entries()) {
     if (cp.synced.includes(s.id)) continue;
     ctx.progress((i / Math.max(1, sources.length)) * 0.7, `Refreshing ${s.label}`);
-    const r = await app.connections.sync(s.id, ctx.signal);
+    const r = await app.connections.refresh(s.id, ctx.signal);
     ctx.event("source_synced", { id: s.id, coverage: r.coverage.state });
     cp.synced.push(s.id);
     ctx.saveCheckpoint(cp);
@@ -262,7 +262,7 @@ async function runReindex(app: App, ctx: JobContext) {
 async function runImport(app: App, ctx: JobContext) {
   const id = String(ctx.input.connectionId);
   ctx.progress(0.1, "Indexing folder");
-  const r = await app.connections.sync(id, ctx.signal);
+  const r = await app.connections.refresh(id, ctx.signal);
   return { coverage: r.coverage, deadlines: r.observations };
 }
 
@@ -288,7 +288,7 @@ async function runDiagnostics(app: App, ctx: JobContext) {
 }
 
 export function registerRunners(app: App) {
-  app.jobs.register("sync", (ctx) => runSync(app, ctx));
+  app.jobs.register("source-refresh", (ctx) => runSourceRefresh(app, ctx));
   app.jobs.register("briefing", (ctx) => runBriefing(app, ctx));
   app.jobs.register("research", (ctx) => runResearch(app, ctx));
   app.jobs.register("draft", (ctx) => runDraft(app, ctx));

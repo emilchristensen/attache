@@ -33,7 +33,7 @@ try {
   }
   if (ghToken) {
     const { test } = await app.connections.configure("github", { method: "gh-cli" }, ["review_requests", "authored_prs", "assigned_issues"]);
-    const sync = await app.connections.sync("github");
+    const sync = await app.connections.refresh("github");
     results.push({
       kind: "github",
       mode: "live-read-only",
@@ -49,7 +49,7 @@ try {
   const live = async (kind, method, fields, scopes) => {
     const { test } = await app.connections.configure(kind, { method, ...fields }, scopes);
     if (!test.ok) return { kind, mode: "live-read-only", ok: false, status: test.state, test: test.message, writes: 0 };
-    const sync = await app.connections.sync(kind);
+    const sync = await app.connections.refresh(kind);
     return {
       kind,
       mode: "live-read-only",

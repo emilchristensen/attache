@@ -4,7 +4,7 @@
  * Reads are CQL searches; the one write is a footer comment, read back from
  * the page's footer comments.
  */
-import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
 import { asRemoteError, attemptStartMs, csvList, listingNote, listingState, recordFailure, sameLooseText, stringSetting } from "./common.ts";
@@ -207,7 +207,7 @@ export const confluenceAdapter: ConnectorAdapter = {
     }
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     const seen = new Set<string>();
