@@ -187,6 +187,40 @@ describe("Consolidation from a meeting capture", () => {
     expect(read(ORION)).toBe(before);
   });
 
+  it("a meeting capture that states a different value for a current fact yields a correction, as a session does", async () => {
+    const rel = "evidence/captures/2026-11-11-granola-orion-steering.md";
+    const today = new Date().toISOString().slice(0, 10);
+    const quote = "Orion is on hold until the vendor contract is signed";
+    const reason = "The steering group put Orion on hold.";
+    const stop = consolidationReplies((call) => {
+      // The model reads the meeting with the same correction rules a session gets, and sees the fact the meeting contradicts.
+      expect(call.system).toMatch(/A correction: when the meeting states a different value/);
+      expect(call.system).toMatch(/A meeting that mentions or repeats a current fact[^\n]*is not a correction/);
+      expect(call.user).toContain(`Status: Cutover planned (since ${today})`);
+      return { proposals: [{ item: { action: "update", path: ORION, facts: [{ subject: "Status", value: "On hold" }] }, reason, evidence: quote }] };
+    });
+    try {
+      writeIntoBrain(svc, rel, meetingCapture("Granola 2026-11-11: Orion steering", ["## Transcript", "", `[0:20] Priya: We decided that ${quote}.`]));
+      await consolidated(svc, rel);
+    } finally {
+      stop();
+    }
+    const [p, ...rest] = await proposalsFrom(rel);
+    expect(rest).toEqual([]);
+    expect(p).toMatchObject({
+      status: "proposed",
+      target: ORION,
+      reason,
+      evidence: quote,
+      corrections: [{ subject: "Status", was: { value: "Cutover planned", date: today, review: null }, value: "On hold" }],
+    });
+    await svc.post(`/memory/proposals/${p!.id}/apply`);
+    const [current, history] = read(ORION).split("## History");
+    expect(current).toContain(`- **Status** (${today}): On hold`);
+    expect(history).toContain(`**Status** was "Cutover planned" (dated ${today}`);
+    expect(history).toContain(`superseded: ${reason}`);
+  });
+
   it("a meeting capture yields at most five Proposals", async () => {
     const rel = "evidence/captures/2026-11-11-granola-orion-planning.md";
     const quote = "We agreed to log every step of the vendor freeze";
