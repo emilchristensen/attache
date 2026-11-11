@@ -1,3 +1,4 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { currentOs, type Os } from "./os.ts";
 import { pathFor } from "./locations.ts";
@@ -47,4 +48,15 @@ export function launchTool(path: string, args: string[], os: Os = currentOs()): 
   if (!target) throw new UnlaunchableToolError(`${path} is a batch file that was not written by npm, so Jarvis cannot start it safely. Install the tool's native Windows version instead.`);
   const resolved = join(dirname(path), target);
   return SCRIPT.test(resolved) ? { command: process.execPath, args: [resolved, ...args] } : { command: resolved, args };
+}
+
+/**
+ * Start a tool found on disk (see `launchTool`) with its streams piped. On
+ * Windows it gets no console window: the service runs in the background, so a
+ * console program it starts would otherwise flash one on the owner's screen.
+ * Throws `UnlaunchableToolError` when the tool cannot be started safely.
+ */
+export function spawnTool(path: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): ChildProcessWithoutNullStreams {
+  const launch = launchTool(path, args);
+  return spawn(launch.command, launch.args, { ...options, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 }

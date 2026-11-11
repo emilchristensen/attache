@@ -183,7 +183,7 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
       const launch = claudeLaunch(bin, ["auth", "status", "--json"]);
       let stdout: string;
       try {
-        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
+        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, windowsHide: true, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
       } catch (e) {
         const text = String((e as { stdout?: string }).stdout ?? "") || (e as Error).message;
         if (/"loggedIn"\s*:\s*false/.test(text) || /not logged in/i.test(text)) throw new RemoteError("Claude Code is not signed in. Run `claude` once and sign in with your claude.ai account.", "unauthorized");

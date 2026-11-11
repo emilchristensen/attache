@@ -10,13 +10,13 @@
  * from the raw `tool_result` blocks in the event stream, never from the
  * model's own summary.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteError } from "../http.ts";
 import { findClaudeCli } from "../../models/providers.ts";
-import { launchTool, UnlaunchableToolError } from "../../platform/launch.ts";
+import { launchTool, spawnTool, UnlaunchableToolError } from "../../platform/launch.ts";
 import { deepEqual, fullToolName, type CallOutcome, type PlannedCall, type ServerInfo } from "./plan.ts";
 
 export const CONNECTOR_MODEL = "claude-haiku-4-5-20251001";
@@ -115,8 +115,7 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
   if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
   const cwd = CONNECTOR_CWD;
   mkdirSync(cwd, { recursive: true });
-  const launch = claudeLaunch(bin, sessionArgs(req));
-  const child = spawn(launch.command, launch.args, {
+  const child = startClaude(bin, sessionArgs(req), {
     cwd,
     env: {
       ...process.env,
@@ -128,19 +127,28 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
       MCP_CONNECTION_NONBLOCKING: "false",
       MAX_MCP_OUTPUT_TOKENS: "50000",
     },
-    stdio: ["pipe", "pipe", "pipe"],
   });
   return drive(child, req);
 }
 
-/** Start the Claude Code CLI; one Jarvis cannot start is not configured, never a crash. */
-export function claudeLaunch(bin: string, args: string[]) {
+/** A Claude Code CLI Jarvis cannot start is not configured, never a crash. */
+function notConfiguredWhenUnlaunchable<T>(start: () => T): T {
   try {
-    return launchTool(bin, args);
+    return start();
   } catch (e) {
     if (e instanceof UnlaunchableToolError) throw new RemoteError(e.message, "not_configured");
     throw e;
   }
+}
+
+/** How to run the Claude Code CLI with these arguments. */
+export function claudeLaunch(bin: string, args: string[]) {
+  return notConfiguredWhenUnlaunchable(() => launchTool(bin, args));
+}
+
+/** Start the Claude Code CLI with its streams piped and no console window. */
+function startClaude(bin: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }): ChildProcessWithoutNullStreams {
+  return notConfiguredWhenUnlaunchable(() => spawnTool(bin, args, options));
 }
 
 function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Promise<SessionOutput> {
