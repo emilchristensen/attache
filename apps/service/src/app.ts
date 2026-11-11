@@ -39,7 +39,7 @@ import type { GitHubAccess } from "./replication/github.ts";
 import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
 import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
-import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
+import { brainFileReader, MERGE_NOTICE_SOURCE, raiseMergeNotices, SETTLED_BY_EDIT, settleMergeNotices } from "./replication/merge-notice-inbox.ts";
 import { CaptureArrivals } from "./consolidation/arrivals.ts";
 import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
@@ -167,6 +167,8 @@ export class App {
       { model: opts.meaning?.model ?? configuredMeaningModel(), loadEmbedder: opts.meaning?.loadEmbedder ?? loadOnnxEmbedder },
     );
     this.memory.indexer.onChange(() => this.meaning.indexChanged());
+    // Whatever changed a note (a save, an editor, another Machine), a merge item it settled resolves.
+    this.memory.indexer.onChange(() => this.settleMergeNotices());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
     this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
@@ -388,6 +390,18 @@ export class App {
     if (!job || !isFullRefresh(job)) return;
     this.replication.noteSourceRefresh();
     this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /** Resolve the merge items whose note the owner has settled. */
+  private settleMergeNotices() {
+    const root = this.memory.dataRoot;
+    if (!root) return;
+    try {
+      const ctx = { now: () => this.clock.now().toISOString(), machine: () => this.machine.get() };
+      if (settleMergeNotices(this.db, SETTLED_BY_EDIT, brainFileReader(root), ctx).length) this.bus.emit("event", { type: "attention.changed" });
+    } catch (e) {
+      this.log.error("could not check the notes merges kept in two versions", { error: (e as Error).message });
+    }
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */

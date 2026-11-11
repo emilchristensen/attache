@@ -136,6 +136,7 @@ describe("evidence written before the change", () => {
 });
 
 describe("the writer lock", () => {
+  const START_WAIT_MS = 60_000;
   /** A second Jarvis service, as its own process, on its own state folder. */
   async function otherService(dataDir: string): Promise<ChildProcess> {
     const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-other-state-"));
@@ -143,12 +144,14 @@ describe("the writer lock", () => {
     const child = spawn(process.execPath, [MAIN, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
     children.push(child);
     let url = "";
-    for (let i = 0; i < 150 && !url; i++) {
+    // A cold service process can take well over 15 s to start while the whole suite runs in parallel.
+    const deadline = Date.now() + START_WAIT_MS;
+    while (!url && child.exitCode === null && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 100));
       const rt = join(stateDir, "runtime.json");
       if (existsSync(rt) && JSON.parse(readFileSync(rt, "utf8")).pid === child.pid) url = JSON.parse(readFileSync(rt, "utf8")).url;
     }
-    if (!url) throw new Error("the other service did not start");
+    if (!url) throw new Error(child.exitCode === null ? "the other service did not start" : `the other service exited with code ${child.exitCode}`);
     const code = JSON.parse(execFileSync(process.execPath, [MAIN, "pair", "--state-dir", stateDir, "--json"], { env, encoding: "utf8" })).code;
     const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "other" }) })).json();
     const res = await fetch(`${url}/api/v1/setup/data-folder`, { method: "POST", headers: { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ path: dataDir }) });
@@ -171,7 +174,7 @@ describe("the writer lock", () => {
     // The other service is gone, so its lock no longer holds the folder.
     expect((await svc.call("POST", "/setup/data-folder", { path: dataDir })).status).toBe(200);
     expect(walk(dataDir).filter((f) => /lock/i.test(f))).toEqual([]);
-  }, 60_000);
+  }, 120_000);
 
   it("removes a lock an earlier version left inside the data folder", async () => {
     const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-oldlock-")), "data");
