@@ -112,7 +112,7 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
   // An abort listener never fires for a signal that is already aborted, so a session started after cancelling would run to its timeout.
   if (req.signal.aborted) throw new RemoteError("Cancelled", "error");
   const bin = findClaudeCli();
-  if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+  if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
   const cwd = CONNECTOR_CWD;
   mkdirSync(cwd, { recursive: true });
   const launch = claudeLaunch(bin, sessionArgs(req));

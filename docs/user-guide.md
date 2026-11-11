@@ -80,14 +80,14 @@ Setup has five steps and each works without the ones after it.
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
    Every connection starts read-only.
-   Slack, Gmail, Google Calendar, Jira and Confluence use your existing claude.ai connectors (Slack, Gmail, Google Calendar and Atlassian Rovo): Claude Code must be installed and signed in on this Mac with your claude.ai work account, and each connector must be connected in claude.ai → Settings → Connectors.
+   Slack, Gmail, Google Calendar, Jira and Confluence use your existing claude.ai connectors (Slack, Gmail, Google Calendar and Atlassian Rovo): Claude Code must be installed and signed in on this computer with your claude.ai work account, and each connector must be connected in claude.ai → Settings → Connectors.
    For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
    Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
    Each gets Jarvis's MCP server, so it can search your Brain and save to it with your confirmation; Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
 4. **Model and schedules.**
-   Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
+   Pick a model: Claude Code on this computer (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
    Set how often sources refresh, when the daily briefing is prepared, and whether urgent items raise a desktop notification.
 5. **Test and finish.**
@@ -354,7 +354,7 @@ The next time Jarvis starts with Credential Manager working, it moves the creden
 
 ## Backup, restore and uninstall
 
-- **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in Terminal.
+- **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in a terminal.
   A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts).
   Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.

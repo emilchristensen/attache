@@ -39,8 +39,8 @@ export function atlassianAuthMethods(product: Product, extraFields: ConnectionDe
   return [
     {
       id: "claude-ai",
-      label: "Your claude.ai Atlassian Rovo connector, through Claude Code on this Mac (recommended)",
-      reconnectHelp: "Make sure Claude Code is signed in on this Mac (run `claude` once in Terminal) and that Atlassian Rovo shows as connected in claude.ai → Settings → Connectors, then reconnect.",
+      label: "Your claude.ai Atlassian Rovo connector, through Claude Code on this computer (recommended)",
+      reconnectHelp: "Make sure Claude Code is signed in on this computer (run `claude` once in a terminal) and that Atlassian Rovo shows as connected in claude.ai → Settings → Connectors, then reconnect.",
       fields: [site, ...extraFields, server],
     },
     { id: "oauth", label: "Sign in with Atlassian directly (if your organization allows other MCP clients)", browserSignIn: true, fields: [site, ...extraFields] },
@@ -59,8 +59,8 @@ export function atlassianAuthMethods(product: Product, extraFields: ConnectionDe
 
 export function atlassianSetupSteps(): string[] {
   return [
-    "Recommended: connect Atlassian Rovo in claude.ai → Settings → Connectors with your work account, and have Claude Code installed and signed in on this Mac. Nothing else is needed; Jarvis stores no Atlassian credential.",
-    "Signing in directly instead: your Atlassian organization must allow the Atlassian Rovo MCP server. If sign-in or the API token is refused, an org admin manages it in Atlassian Administration → your organization → Rovo → Rovo MCP server (trusted domains, and whether API tokens are allowed). Jarvis signs in from this Mac (http://127.0.0.1).",
+    "Recommended: connect Atlassian Rovo in claude.ai → Settings → Connectors with your work account, and have Claude Code installed and signed in on this computer. Nothing else is needed; Jarvis stores no Atlassian credential.",
+    "Signing in directly instead: your Atlassian organization must allow the Atlassian Rovo MCP server. If sign-in or the API token is refused, an org admin manages it in Atlassian Administration → your organization → Rovo → Rovo MCP server (trusted domains, and whether API tokens are allowed). Jarvis signs in from this computer (http://127.0.0.1).",
     "Signing in directly the first time asks you to approve Jarvis for your site; approve it for the site you enter here.",
   ];
 }

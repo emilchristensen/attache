@@ -179,7 +179,7 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
   return {
     async account(signal) {
       const bin = findClaudeCli();
-      if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+      if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
       const launch = claudeLaunch(bin, ["auth", "status", "--json"]);
       let stdout: string;
       try {
