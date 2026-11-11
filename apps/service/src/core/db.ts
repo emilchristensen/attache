@@ -177,6 +177,11 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // When this Machine was last up to date with the others, for the Dashboard. Setup and join count.
+  `
+  alter table replication add column up_to_date_at text;
+  update replication set up_to_date_at = checked_at where status = 'up_to_date';
+  `,
 ];
 
 export function openDb(file: string): Db {

@@ -1,3 +1,5 @@
+import { machineRecordRule } from "./machine-record-rule.ts";
+
 /**
  * Where later rules plug into Replication without changing the loop:
  * merge rules for files both sides changed, guards that run before every
@@ -89,5 +91,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [machineRecordRule], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

@@ -87,6 +87,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   r.get("/machine", () => app.machine.get());
   r.patch("/machine", async (c) => {
     const next = app.machine.rename(await c.body(MachineRename));
+    app.replication.machineRenamed();
     app.bus.emit("event", { type: "config.changed" });
     return next;
   });
