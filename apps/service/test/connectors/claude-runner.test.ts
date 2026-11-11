@@ -29,7 +29,8 @@ beforeEach(() => {
 
 const read = (id: string, channel: string) => ({ id, tool: "slack_read_channel", args: { channel_id: channel, limit: 5 } });
 
-describe("claude.ai connector runner (Claude Code session gate)", () => {
+// Each test starts up to 15 fixture CLI processes; on a busy machine one can take seconds to start.
+describe("claude.ai connector runner (Claude Code session gate)", { timeout: 120_000 }, () => {
   it("runs planned calls with exactly the planned arguments and returns the raw tool results", async () => {
     const out = await runner().run(SLACK, [read("a", "C1"), read("b", "C2")], { signal: signal() });
     expect(out.get("a")).toEqual({ status: "ok", text: JSON.stringify({ messages: "read C1" }) });
@@ -166,6 +167,17 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
+  });
+
+  it("a run cancelled before its session starts never starts Claude Code", async () => {
+    // Also the case of a cancel that lands while the servers are listed: the next session starts already cancelled.
+    claude.mode = "hang";
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const started = Date.now();
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(claude.started).toEqual([]);
   });
 
   it("helpers: tool naming, order-insensitive argument equality, spill files only from the config dir", () => {
