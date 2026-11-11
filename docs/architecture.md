@@ -228,7 +228,8 @@ Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes.
   A Harness submits saves through the MCP server or `jarvis save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
-- Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
+- Model output never writes memory directly.
+  Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
 - Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
   A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
@@ -319,11 +320,13 @@ Before its first connector session the runner lists Claude Code's MCP servers wi
 ## Attention and briefings
 
 The attention engine follows these rules:
-- Item identity (`key`) is separate from change detection (`fingerprint`). Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
+- Item identity (`key`) is separate from change detection (`fingerprint`).
+  Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
 - Keys use the work item identity (for example `jira:ISSUE-1`), and the category (due, overdue) goes in the fingerprint, fixing the due→overdue key churn.
 - Transport-dependent fields (`updated_at`) are not fingerprint parts.
 - An item is resolved only if its source was fully covered in this and the previous run.
-- A dismissal records the fingerprint it applied to. Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
+- A dismissal records the fingerprint it applied to.
+  Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
 - The inbox replicates (`attention/inbox.ts`, `App.inbox`).
   Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
@@ -333,19 +336,31 @@ The attention engine follows these rules:
   Files are one line of JSON, so a file both Machines changed always reaches the merge rule (`attention/inbox-merge.ts`): the newer report of the item and the later decision win, a tie is broken by Machine id, and a deletion wins.
   Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
   The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
-- Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
+- Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`.
+  A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
   They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
-- Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
+- Gmail read state is derived from `labelIds`, never inferred.
+  A thread whose last message is from the user is never awaiting reply.
+  All-day events are detected from their midnight-to-midnight shape.
+  Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery
 
-- A job row is committed before the API acknowledges it. Every progress step writes an ordered `job_events` row; clients reconnect with `Last-Event-ID` and receive every missed event plus retained results.
-- The worker leases a job with an expiry. On service start, jobs with an expired lease are recovered from their last checkpoint.
-- External side effects go through an outbox keyed by an idempotency key. The key is recorded as `pending` before the call and `done` with the verified result after it. A recovered job that finds `done` reuses the result; one that finds `pending` verifies with the remote before retrying, so a restart cannot double-post.
-- Cancellation sets `cancel_requested_at`. The response and the job record state whether the work stopped (`stopped`) or the request arrived after completion (`too_late`).
-- The scheduler lives in the service. Schedules are rows with `next_run_at`. A tick every 15 s runs due schedules; if the gap between ticks exceeds twice the interval (the Mac slept), missed runs are coalesced into one catch-up run instead of replaying every missed interval. Offline sources simply record `offline` coverage and are retried next tick.
+- A job row is committed before the API acknowledges it.
+  Every progress step writes an ordered `job_events` row; clients reconnect with `Last-Event-ID` and receive every missed event plus retained results.
+- The worker leases a job with an expiry.
+  On service start, jobs with an expired lease are recovered from their last checkpoint.
+- External side effects go through an outbox keyed by an idempotency key.
+  The key is recorded as `pending` before the call and `done` with the verified result after it.
+  A recovered job that finds `done` reuses the result; one that finds `pending` verifies with the remote before retrying, so a restart cannot double-post.
+- Cancellation sets `cancel_requested_at`.
+  The response and the job record state whether the work stopped (`stopped`) or the request arrived after completion (`too_late`).
+- The scheduler lives in the service.
+  Schedules are rows with `next_run_at`.
+  A tick every 15 s runs due schedules; if the gap between ticks exceeds twice the interval (the Machine slept), missed runs are coalesced into one catch-up run instead of replaying every missed interval.
+  Offline sources simply record `offline` coverage and are retried next tick.
 - Browser tabs and service workers never schedule work.
 
 ## Drafts, approvals and execution
@@ -354,18 +369,23 @@ The attention engine follows these rules:
 - Editing a draft increments `version` and changes the hash, invalidating any approval.
 - Approval creates `{actionId, version, payloadHash, nonce, expiresAt, approvedBy}`.
 - Execution requires the approval; the server rechecks, immediately before calling the adapter: action status, version, hash, nonce unused (atomically consumed), approval and action expiry, feature enabled, connection connected and the write action authorized for that connection.
-- Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows). Otherwise `failed` with the error, or `unknown` if the call timed out after sending.
+- Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows).
+  Otherwise `failed` with the error, or `unknown` if the call timed out after sending.
 - Receipts and every attempt are stored in `action_events`.
 - Revoking an approval, disabling write authority or disconnecting prevents later execution.
 - Expiry uses 48 business hours (weekends skipped); refreshing a draft keeps its original `created`.
 
 ## Security
 
-- The service binds `127.0.0.1` only. The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
-- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
-- `Origin`, when present, must be the service origin. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
+- The service binds `127.0.0.1` only.
+  The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
+- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed).
+  The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
+- `Origin`, when present, must be the service origin.
+  State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
-- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The model Jarvis calls has no tools, so injected text cannot trigger actions.
+- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions.
+  The model Jarvis calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
 ## Harness sessions
@@ -515,9 +535,13 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
 
 ## Clients
 
-- Browser: React. Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
-- Obsidian: no plugin. The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher. (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
-- Electron: not in this release. The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
+- Browser: React.
+  Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
+- Obsidian: no plugin.
+  The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
+  (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
+- Electron: not in this release.
+  The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
 
 ## What was reused and what inspired the design
 
