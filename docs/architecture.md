@@ -252,6 +252,10 @@ The server starts even when the service is down, because a Harness launches its 
 - `search` calls `GET /api/v1/memory/search?recall=1`, which applies the recall exclusions (`RECALL_EXCLUDE`: raw conversations and session transcripts); without `recall=1` the Dashboard still searches everything.
   Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, section kind and note title.
 - `read` calls `GET /api/v1/memory/document`, which also accepts an absolute path inside the Brain or another indexed folder when no `root` is given, and slices the requested 1-based, inclusive line range from the raw file, so lines match search citations.
+- `audit` calls `GET /api/v1/memory/audit` and returns the report with every file named by one path, the same kind `search` returns (`memory/audit-view.ts`, shared with `jarvis audit`, which shows absolute paths instead).
+  It is read-only and marked so (`readOnlyHint`).
+- The `save` and `audit` prompts (`mcp/prompt-text.ts`) carry the procedures of the save and audit skills, with the MCP tools in place of shell commands.
+  Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
 - The server's instructions, sent once when the Harness connects, carry the owner's identity from the configuration and the titles of the curated notes per type (at most 40 per type), fetched from `/config` and `/memory/documents` with a 5-second limit.
 
 ## Capability registry

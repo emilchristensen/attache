@@ -3,6 +3,7 @@ import { MemorySaveInput, type MemoryAuditReport, type MemorySaveResult } from "
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "./client.ts";
 import { agentFromEnv } from "./agent-env.ts";
+import { auditView, renderAudit } from "../memory/audit-view.ts";
 
 const MAX_INPUT_BYTES = 1_000_000;
 
@@ -61,25 +62,5 @@ export async function auditCommand(argv: string[], paths: ServicePaths, io: CliI
   const report = await client.get<MemoryAuditReport>(`/memory/audit${days ? `?staleDays=${encodeURIComponent(days)}` : ""}`);
   if (argv.includes("--json")) return io.out(JSON.stringify(report));
   const roots = new Map((await client.get<Array<{ root: string; path: string }>>("/memory/roots")).map((r) => [r.root, r.path]));
-  io.out(renderAudit(report, roots));
-}
-
-export function renderAudit(r: MemoryAuditReport, roots: Map<string, string>): string {
-  const counts = Object.entries(r.counts)
-    .filter(([, n]) => n > 0)
-    .map(([k, n]) => `${k} ${n}`)
-    .join(" · ");
-  const lines = [`Jarvis memory audit: ${r.notes} notes, ${r.entries} current facts, stale after ${r.staleDays} days`, `Data folder: ${r.dataFolder}`, `Flags: ${counts || "none"}`];
-  if (r.possibleDuplicates.length) {
-    lines.push("", "Possible duplicate notes:");
-    for (const d of r.possibleDuplicates) lines.push(`- ${d.title}: ${d.relPaths.join(", ")}`);
-  }
-  for (const f of r.findings) {
-    lines.push("", `## ${f.title} [${f.type}${f.inSessionIndex ? ", first fact in every session's index" : ""}]${f.flags.length ? ` {${f.flags.join(", ")}}` : ""}`, `   ${f.absPath}`);
-    for (const e of f.entries) {
-      lines.push(`- ${e.subject} (${e.date}, ${e.ageDays} days, line ${e.line}): ${e.value}${e.source ? ` — source: ${e.source}` : ""}${e.flags.length ? ` {${e.flags.join(", ")}}` : ""}`);
-      for (const n of e.newerEvidence) lines.push(`    newer: ${roots.get(n.root) ?? n.root}/${n.relPath}:${n.startLine}-${n.endLine} (${n.modified.slice(0, 10)}) ${n.snippet}`);
-    }
-  }
-  return lines.join("\n");
+  io.out(renderAudit(auditView(report, (root, rel) => `${(roots.get(root) ?? root).replace(/\/+$/, "")}/${rel}`), { dataFolder: report.dataFolder }));
 }
