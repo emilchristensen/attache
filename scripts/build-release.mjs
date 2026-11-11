@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
+import { releaseLauncher } from "../apps/service/src/platform/wrapper.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const argVersion = process.argv.includes("--version") ? process.argv[process.argv.indexOf("--version") + 1] : null;
@@ -66,9 +67,11 @@ async function main() {
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-service.mjs"), join(STAGE, "service/jarvis-service.mjs"));
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-agent-hook.mjs"), join(STAGE, "service/jarvis-agent-hook.mjs"));
   cpSync(join(ROOT, "apps/web/dist"), join(STAGE, "web"), { recursive: true, filter: (s) => !s.endsWith(".map") });
+  // The launcher text is resolved per operating system with the rest of the platform code.
+  const launcher = releaseLauncher("macos");
   mkdirSync(join(STAGE, "bin"), { recursive: true });
-  writeFileSync(join(STAGE, "bin/jarvis"), '#!/bin/sh\nD="$(cd "$(dirname "$0")/.." && pwd -P)"\nexec "$D/runtime/node" "$D/service/jarvis-service.mjs" "$@"\n');
-  chmodSync(join(STAGE, "bin/jarvis"), 0o755);
+  writeFileSync(join(STAGE, launcher.path), launcher.text);
+  chmodSync(join(STAGE, launcher.path), launcher.mode);
   for (const f of ["install.sh", "uninstall.sh"]) {
     copyFileSync(join(ROOT, "installer", f), join(STAGE, f));
     chmodSync(join(STAGE, f), 0o755);

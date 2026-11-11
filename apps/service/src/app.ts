@@ -5,7 +5,8 @@ import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
 import { MachineStore } from "./core/machine.ts";
-import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
+import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
+import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -41,7 +42,7 @@ export class App {
   readonly instance: string;
   readonly db: Db;
   readonly log: Logger;
-  readonly secrets: CredentialStore;
+  readonly secrets: SecretStore;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
   readonly memory: MemoryStore;
@@ -70,7 +71,7 @@ export class App {
     this.instance = opts.instance ?? process.env.JARVIS_INSTANCE ?? "default";
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
-    this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);

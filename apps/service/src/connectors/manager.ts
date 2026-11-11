@@ -3,7 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ConnectionKind, ConnectionStatus, Coverage } from "@jarvis/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
-import type { CredentialStore } from "../core/secrets.ts";
+import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
 import { redact } from "../core/log.ts";
 import { createHttpClient, RemoteError } from "./http.ts";
@@ -21,7 +21,7 @@ export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence"
 
 export interface ManagerDeps {
   db: Db;
-  secrets: CredentialStore;
+  secrets: SecretStore;
   log: Logger;
   memory: MemoryStore;
   adapters: Map<ConnectionKind, ConnectorAdapter>;

@@ -14,6 +14,7 @@ import { json } from "../core/db.ts";
 import { saveToMemory } from "../memory/save.ts";
 import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
+import { expandHome } from "../platform/locations.ts";
 import { recentChanges } from "../memory/recent-changes.ts";
 import { revertChange } from "../memory/revert.ts";
 
@@ -146,7 +147,7 @@ export function registerDataRoutes(r: Router, app: App) {
     requireFeature(app, "capture");
     requireData(app);
     const input = await c.body(ArchiveInput);
-    const path = resolve(input.path.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+    const path = resolve(expandHome(input.path));
     if (!existsSync(path) || !statSync(path).isDirectory()) throw new HttpError(400, "not_found", `Folder not found: ${path}`);
     const out = app.memory.archiveFolder({ path, label: input.label, exclude: input.exclude, ...(input.origin ? { origin: input.origin } : {}) });
     app.bus.emit("event", { type: "memory.changed" });

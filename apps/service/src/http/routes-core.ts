@@ -10,8 +10,7 @@ import { createPairingCode, redeemPairingCode, sessionCookie, clearedCookie } fr
 import { resolveChange, effectiveFeatures } from "../capabilities/registry.ts";
 import { planScan } from "../memory/indexer.ts";
 import { nowIso } from "../core/db.ts";
-
-const expandHome = (p: string) => p.replace(/^~(?=\/|$)/, process.env.HOME ?? "~");
+import { expandHome, platformLocations } from "../platform/locations.ts";
 
 export function dataFolderPreview(path: string) {
   const abs = resolve(expandHome(path));
@@ -111,7 +110,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   });
 
   r.get("/setup/defaults", () => {
-    const home = process.env.HOME ?? "";
+    const home = platformLocations().home;
     return { home, suggestion: `${home}/Documents/Jarvis` };
   });
   r.post("/setup/data-folder/preview", async (c) => {

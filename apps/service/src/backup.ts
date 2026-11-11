@@ -6,9 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { App } from "./app.ts";
 import { VERSION } from "./app.ts";
 import { nowIso } from "./core/db.ts";
+import { platformLocations } from "./platform/locations.ts";
 
 function tar(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => execFile("/usr/bin/tar", args, { maxBuffer: 8 * 1024 * 1024 }, (err, _o, stderr) => (err ? reject(new Error(`tar failed: ${stderr || err.message}`)) : resolve())));
+  return new Promise((resolve, reject) => execFile(platformLocations().tar, args, { maxBuffer: 8 * 1024 * 1024 }, (err, _o, stderr) => (err ? reject(new Error(`tar failed: ${stderr || err.message}`)) : resolve())));
 }
 
 export interface BackupManifest {
