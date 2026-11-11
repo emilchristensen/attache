@@ -12,10 +12,10 @@ export interface RunResult {
 
 /**
  * Run an operating-system tool without a shell and report how it ended.
- * Never rejects: a tool that is missing or fails gives a non-zero code, and
- * the caller decides what that means.
+ * Never rejects: a tool that is missing, fails or is stopped by `signal`
+ * gives a non-zero code, and the caller decides what that means.
  */
-export function run(cmd: string, args: string[], opts: { input?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): Promise<RunResult> {
+export function run(cmd: string, args: string[], opts: { input?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv; signal?: AbortSignal } = {}): Promise<RunResult> {
   let launch;
   try {
     launch = launchTool(cmd, args);
@@ -23,7 +23,7 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
     return Promise.resolve({ code: 1, stdout: "", stderr: (e as Error).message, timedOut: false });
   }
   return new Promise((resolve) => {
-    const child = execFile(launch.command, launch.args, { maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) }, (error, stdout, stderr) => {
+    const child = execFile(launch.command, launch.args, { maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}), ...(opts.signal ? { signal: opts.signal } : {}) }, (error, stdout, stderr) => {
       const exited = error && typeof (error as { code?: unknown }).code === "number";
       const code = exited ? Number((error as { code: number }).code) : error ? 1 : 0;
       const timedOut = !!error && !!opts.timeoutMs && (error as { killed?: boolean }).killed === true;
