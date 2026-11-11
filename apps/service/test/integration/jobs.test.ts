@@ -145,7 +145,8 @@ describe("A08 service restart recovers work without duplicate execution", () => 
 
   const boot = async (): Promise<string> => {
     child = spawn(process.execPath, [BUNDLE, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
-    for (let i = 0; i < 100; i++) {
+    // Up to 30 s: the bundled service starts in about a second, but far slower when the machine is busy running other suites.
+    for (let i = 0; i < 300; i++) {
       await new Promise((r) => setTimeout(r, 100));
       const rt = join(stateDir, "runtime.json");
       if (existsSync(rt)) {
@@ -197,5 +198,6 @@ describe("A08 service restart recovers work without duplicate execution", () => 
     // The external side effect (a deliverable file) exists exactly once.
     const files = readdirSync(join(dataDir, "deliverables/research")).filter((f) => f.includes(job.id.slice(0, 8)));
     expect(files).toHaveLength(1);
-  }, 60_000);
+    // Two service starts, each allowed 30 s under load (see `boot`).
+  }, 120_000);
 });

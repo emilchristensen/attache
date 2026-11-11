@@ -115,7 +115,8 @@ describe("a note edited by hand with a Review date", () => {
     const text = run().split("\n");
     expect(text.find((l) => l.includes("lyra-rollout.md:8-8"))).toContain("(unverified: Review date 2026-02-01 passed)");
     expect(text.find((l) => l.includes("lyra-rollout.md:9-9"))).not.toContain("unverified");
-  });
+    // Two CLI processes, each compiling the TypeScript entry point: slow when the machine is busy.
+  }, 60_000);
 
   it("gives the audit each fact's Review date", async () => {
     const audit = await svc.get("/memory/audit");
