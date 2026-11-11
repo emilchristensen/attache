@@ -1,12 +1,15 @@
 # Jarvis user guide
 
-Jarvis is a local second brain that runs on your Mac.
+Jarvis is a local second brain that runs on your computer, on macOS or Linux.
 It keeps your knowledge as Markdown in a folder you choose, answers questions with cited evidence, watches the sources you connect, and prepares drafts that are only sent after you approve them.
 
 ## Install
 
-Requirements: macOS on Apple silicon.
 You do not need Node, Homebrew or any developer tools; the installer carries its own runtime.
+
+### On macOS
+
+Requirements: macOS on Apple silicon.
 
 1. Download `Jarvis-Installer-<version>-macos-arm64.command` from the release.
 2. Double-click it.
@@ -14,8 +17,28 @@ You do not need Node, Homebrew or any developer tools; the installer carries its
    In that case open it with right-click → Open, or run `sh ~/Downloads/Jarvis-Installer-<version>-macos-arm64.command` in Terminal.
 3. The installer copies Jarvis to `~/Library/Application Support/Jarvis`, starts the service at login as a LaunchAgent, and opens `http://127.0.0.1:7427` in your browser with a one-time pairing code.
 
+### On Linux
+
+Requirements: Linux on x86_64 with systemd, which every mainstream desktop distribution uses.
+
+1. Download `Jarvis-Installer-<version>-linux-x64.sh` from the release.
+2. In a terminal, run `sh ~/Downloads/Jarvis-Installer-<version>-linux-x64.sh` as yourself, not with `sudo`.
+3. The installer copies Jarvis to `~/.local/share/jarvis`, keeps its state in `~/.local/state/jarvis`, and runs it as the systemd user service `jarvis.service`.
+   The service starts when you log in, and systemd restarts it if it crashes.
+   The installer then opens `http://127.0.0.1:7427` in your browser with a one-time pairing code.
+4. The command line goes to `~/.local/bin`.
+   Most distributions already have that folder on your `PATH`; if `jarvis` is not found, add it, or run `~/.local/bin/jarvis`.
+
+The service stops when you log out, like any other user service.
+To keep it running without a login, for example on a home server, run `loginctl enable-linger` once.
+If the installer says systemd could not be reached for your user, you are in a session without a systemd user manager (for example after `su` to another user); log in as yourself, or turn on lingering as above.
+`systemctl --user status jarvis` shows the service, and `journalctl --user -u jarvis` shows what systemd did with it.
+
+### Repair and upgrade
+
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
+Harness hooks and the MCP server run Jarvis through a stable `current` link, so they keep working across upgrades.
 Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
 ## First-run setup
@@ -59,7 +82,7 @@ Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain
   **Away summary** covers the last three days.
 - **Sources** shows each source's last successful refresh and whether its last Source refresh was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.
-- Items are grouped into deadlines, review queue, meetings and pending replies.
+- Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Jarvis to write a reply or review comment with the item's context.
@@ -72,7 +95,7 @@ The Dashboard shows notes, evidence and deliverables read-only: it has no captur
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
-Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
+Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites, with the words it quotes from that evidence.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
@@ -117,8 +140,13 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
 - **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
   Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Jarvis named Machines keep their `<date>.md` name and are still searched and shown.
-  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
+  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript, and says that no Proposals were made.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
+- **Consolidation:** when the session log entry holds something durable, Jarvis reads the session again, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*.
+  Each names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
+  A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+  Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
+  It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
 - **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
   A session started inside one of a project's repositories also gets, first, that project's current state, the decisions and people linked to it, and the latest session-log entries from sessions in its repositories.
   A decision or a person is linked to a project when either note names the other, by its title or with a link to its file.
@@ -131,7 +159,7 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
   Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Jarvis's again; reconnecting updates Jarvis's hooks in place and leaves yours where they are.
-- **If Jarvis is not running,** sessions are queued on your Mac and saved the next time it starts.
+- **If Jarvis is not running,** sessions are queued on your computer and saved the next time it starts.
 
 Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Jarvis's MCP server; Claude Desktop stays connected.
 Uninstalling Jarvis removes them all.
@@ -172,6 +200,7 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
   An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
+  A fact is flagged stale only when it is past its Review date; a fact without one is never stale, however old it is.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
   In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
@@ -197,7 +226,12 @@ You can also add or change one by hand in your editor, and Jarvis reads it.
 Facts that stay true, such as a repository's name, need none, and Jarvis never adds Review dates in bulk.
 
 Past its Review date a fact stays in your Brain, marked unverified: in the Dashboard, in search results, in what a Harness reads, and in the context a new agent session starts with.
-To clear the mark, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+Each such fact also raises one item under **Facts to check** in the inbox, naming the note and the fact, when your data folder is next refreshed.
+Dismissing the item keeps it dismissed until the fact or its Review date changes.
+The audit flags these facts, and only these, as stale.
+
+To clear the mark and the item, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+To confirm a fact is still true, save the same value with a later Review date.
 The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
 
 ## Editing notes in Obsidian
@@ -235,7 +269,7 @@ The set is JSON, not Markdown, so search never finds the questions themselves.
 
 ## Sleep, offline and notifications
 
-The service runs only while your Mac is awake.
+The service runs only while your computer is awake.
 When it wakes, each overdue schedule runs once to catch up; missed intervals are not replayed.
 If a service is unreachable, its coverage shows *offline* and it is retried at the next refresh.
 
@@ -243,11 +277,12 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 
 - **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in Terminal.
   A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts).
-  Credentials stay in your Keychain and are not included; after restoring elsewhere, reconnect your accounts.
+  Credentials stay in your secret store and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
-- **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app and service, removes Jarvis's hooks from your coding agents, and keeps your data.
+- **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
+  Files you had before Jarvis are left alone, including notes already in the data folder you chose: only what Jarvis created there is removed.
 
 ## This Machine
 
@@ -258,7 +293,7 @@ Session logs and connector snapshots carry the name in their file name, for exam
 Renaming the Machine affects files written from then on; earlier files keep their name.
 
 Only one Jarvis service can use a data folder at a time.
-The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks`.
+The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks` on macOS and `~/.local/state/jarvis/locks` on Linux.
 
 ## Replication
 
@@ -266,21 +301,33 @@ Replication keeps the Brain the same on every Machine you run Jarvis on, through
 It is off until you switch it on; a Brain on one Machine works exactly as before.
 Each Machine needs git installed.
 
+Replication is in the Dashboard under **Settings → Replication**, and in the terminal as `jarvis replication`.
+
 - **Connect GitHub first** in the Dashboard's Connections.
   Replication reaches the repository with the GitHub connection's token, so its token needs Contents: read and write on the Brain's repository, besides what the GitHub source uses.
-- **Switch it on** on the Machine that has your Brain: `jarvis replication setup owner/jarvis-brain`.
+- **Switch it on** on the Machine that has your Brain: choose **Start with this Brain**, name the repository and select **Set up Replication** (or `jarvis replication setup owner/jarvis-brain`).
   Name an empty, private repository: `owner/name` on GitHub, a GitHub `ssh://` or `git@github.com:` address (which uses this Machine's ssh keys), or a folder path.
   A public repository is refused with a message that says so, and so is a repository on another host, because Jarvis can confirm that a repository is private only on GitHub.
   Jarvis makes the data folder a git repository, commits everything in it and pushes it.
   A repository that already holds a Brain is refused, so two Brains are never mixed.
-- **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
+- **Join** from another Machine.
+  On a new Machine, open **Already use Jarvis on another Machine?** on the first setup screen, name the repository and select **Join into this folder**.
+  On a Machine that is already set up, choose **Join another Machine** in Settings and name an empty folder for the Brain (or `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`).
   The folder must be empty or not exist yet.
   A folder that is not empty may hold a Brain of its own, and Jarvis never merges two Brains, so the join is refused.
   Jarvis backs that folder up first, together with its database, to the `backups/` folder, and the refusal names the archive; it changes nothing in the folder.
   Move the folder aside or name an empty one, then join again; `jarvis restore` brings the backup back if you need it.
   Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
-- **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
-  `jarvis replication check` replicates now instead of waiting for the next check.
+- **Status:** the card says off, up to date, offline, unauthorized or blocked, when this Machine was last up to date, and when it last checked and last sent changes.
+  When it is not up to date, the card shows the cause and what to do.
+  **Check now** replicates straight away instead of waiting for the next check (`jarvis replication status` and `jarvis replication check` in the terminal).
+- **Machines:** the card lists every Machine that shares the Brain, with when each last changed it.
+  Rename this Machine under **This Machine**; the others show the new name after their next check.
+  Tick **Standby** to let this Machine take over as Reader when the Reader goes silent, and choose the **Preferred Reader**, the Machine that should run Source refresh and briefings whenever it is online.
+  Both are recorded in the Brain, in `machines/`, so every Machine reads the same; when two Machines choose differently at the same time, the later choice wins.
+- **Switch off** stops replicating from this Machine (`jarvis replication off`).
+  The Brain stays in the data folder with its history, saves carry on locally, and the other Machines keep their copies.
+  Set Replication up again with the same repository to pick up where it left off: this Machine's changes from while it was off are sent, and the others' are merged in.
 
 What happens on its own:
 
@@ -366,19 +413,22 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 
 ## Where things live
 
-| What | Where |
-| --- | --- |
-| Your knowledge (Markdown) | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` |
-| Meaning model, once downloaded | `~/Library/Application Support/Jarvis/state/models` |
-| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
-| Credentials | macOS Keychain, service `dev.jarvis.default` |
-| App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
-| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
-| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry); `jarvis agent-hooks status` lists them |
-| Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
+| What | macOS | Linux |
+| --- | --- | --- |
+| Your knowledge (Markdown) | The data folder you chose | The data folder you chose |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` |
+| Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder |
+| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` |
+| Credentials | macOS Keychain, service `dev.jarvis.default` | `secrets.json` in the service state folder, readable only by you |
+| App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` |
+| Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` |
+| Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` |
+| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added) | the same |
+| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` |
 
+The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup` and `restore`.
+`jarvis agent-hooks status` lists the hooks and MCP servers Jarvis added to your Harnesses.
+On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves the app, the state or the service definition.
 `jarvis paths` prints every one of these locations for the computer it runs on, and `jarvis service status` says whether the background service is loaded.
 
 ## Troubleshooting
@@ -386,7 +436,7 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 - *Jarvis service is not reachable:* run `jarvis status`.
   `jarvis service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
-  Logs: `~/Library/Application Support/Jarvis/state/logs`.
+  Logs: `logs` in the service state folder (`~/Library/Application Support/Jarvis/state/logs` on macOS, `~/.local/state/jarvis/logs` on Linux).
 - *Pairing code expired:* run `jarvis pair --open`.
 - *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
   For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.

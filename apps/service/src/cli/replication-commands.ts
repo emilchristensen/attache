@@ -8,12 +8,14 @@ export const REPLICATION_USAGE = `Usage: jarvis replication status [--json]
        jarvis replication setup <repository> [--json]
        jarvis replication join <repository> [--data-folder <empty folder>] [--json]
        jarvis replication check [--json]
+       jarvis replication off [--json]
 
 Replication keeps the Brain the same on every Machine through a private git repository.
 setup switches it on with this Machine's Brain; the repository must be empty.
 join clones the Brain onto this Machine, into an empty folder that becomes the data folder.
-A repository is owner/name on GitHub, an https:// or ssh:// address, or a folder path.
-check commits, fetches, merges and pushes now instead of at the next one-minute check.`;
+A repository is a private one on GitHub (owner/name, or its https:// or ssh:// address) or a folder path.
+check commits, fetches, merges and pushes now instead of at the next one-minute check.
+off stops replicating from this Machine; the Brain in its data folder stays as it is.`;
 
 const STATUS_TEXT: Record<ReplicationView["status"], string> = {
   off: "Replication is off",
@@ -26,6 +28,7 @@ const STATUS_TEXT: Record<ReplicationView["status"], string> = {
 export function renderReplication(v: ReplicationView): string {
   const lines = [v.remote ? `${STATUS_TEXT[v.status]} (${v.remote})` : STATUS_TEXT[v.status]];
   if (v.cause) lines.push(`Cause: ${v.cause}`);
+  if (v.upToDateAt) lines.push(`Last up to date: ${v.upToDateAt}`);
   if (v.lastCheckedAt) lines.push(`Last checked: ${v.lastCheckedAt}`);
   if (v.lastPushedAt) lines.push(`Last sent: ${v.lastPushedAt}`);
   return lines.join("\n");
@@ -59,6 +62,7 @@ export async function replicationCommand(argv: string[], paths: ServicePaths, io
     const folder = flag(argv, "data-folder");
     view = await client.post<ReplicationView>("/replication/join", { remote: needRepository(), ...(folder ? { path: resolve(io.cwd, folder) } : {}) });
   } else if (sub === "check") view = await client.post<ReplicationView>("/replication/check", {});
+  else if (sub === "off") view = await client.post<ReplicationView>("/replication/off", {});
   else throw new Error(REPLICATION_USAGE);
   io.out(argv.includes("--json") ? JSON.stringify(view) : renderReplication(view));
 }

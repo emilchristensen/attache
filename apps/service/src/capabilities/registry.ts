@@ -84,16 +84,16 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, and give each new session your Jarvis memory.",
+    description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Jarvis memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
       { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
-      { kinds: ["model"], label: "A model to summarise sessions", required: false, missingEffect: "Sessions are saved without a summary." },
+      { kinds: ["model"], label: "A model to summarise sessions and propose changes", required: false, missingEffect: "Sessions are saved without a summary, and no Proposals are made from them." },
     ],
     schedules: [],
-    jobKinds: ["session-distill"],
+    jobKinds: ["session-distill", "session-consolidate"],
   },
 ];
 

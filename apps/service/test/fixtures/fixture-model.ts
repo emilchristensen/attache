@@ -27,15 +27,29 @@ function pickEvidence(prompt: string): { marker: string; line: string } | null {
   return best && best.score > 0 ? best : null;
 }
 
-export function installFixtureModel(fx: FixtureServer, prefix = "/model"): { calls: ModelCall[] } {
+/** A test's own answer for the calls it cares about; null leaves the call to the built-in answers. */
+export type ModelResponder = (call: ModelCall) => string | null;
+
+export interface FixtureModel {
+  calls: ModelCall[];
+  /** Answer matching calls with `responder` until the returned function is called. */
+  respond(responder: ModelResponder): () => void;
+}
+
+export function installFixtureModel(fx: FixtureServer, prefix = "/model"): FixtureModel {
   const calls: ModelCall[] = [];
+  const responders: ModelResponder[] = [];
   fx.route("POST", `${prefix}/chat/completions`, (req) => {
     const body = req.body as { messages: Array<{ role: string; content: string }> };
     const system = body.messages.find((m) => m.role === "system")?.content ?? "";
     const user = [...body.messages].reverse().find((m) => m.role === "user")?.content ?? "";
     calls.push({ system, user });
+    const scripted = responders.map((r) => r({ system, user })).find((a) => a !== null);
     let answer: string;
-    if (/Reply with exactly the word: ready/.test(system)) answer = "ready";
+    if (scripted !== undefined && scripted !== null) answer = scripted;
+    else if (/Reply with exactly the word: ready/.test(system)) answer = "ready";
+    // Consolidation without a scripted answer: nothing in the session is worth proposing.
+    else if (/Consolidation/.test(system)) answer = "NOTHING_DURABLE";
     else if (/keyword search queries/.test(system)) answer = user.split(/\s+/).slice(0, 3).join(" ");
     else if (/Write .* the user could send/.test(user)) answer = "Thanks for the update. I reviewed the changes and have one question about the migration order.";
     else if (/briefing/i.test(system + user) && /Attention items/.test(user)) answer = "Two deadlines need attention; nothing else changed.";
@@ -51,5 +65,14 @@ export function installFixtureModel(fx: FixtureServer, prefix = "/model"): { cal
     const text = chunks.map((c) => `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}\n\n`).join("") + "data: [DONE]\n\n";
     return { headers: { "content-type": "text/event-stream" }, text };
   });
-  return { calls };
+  return {
+    calls,
+    respond(responder) {
+      responders.push(responder);
+      return () => {
+        const i = responders.indexOf(responder);
+        if (i >= 0) responders.splice(i, 1);
+      };
+    },
+  };
 }

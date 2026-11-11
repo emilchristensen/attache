@@ -10,6 +10,7 @@ import { systemClock, type Clock } from "./clock.ts";
 import { credentialScan } from "./credential-scan.ts";
 import { deletedAndChangedRule } from "./deleted-and-changed.ts";
 import { githubCredentials } from "./github-credentials.ts";
+import { machineRecordRule } from "./machine-record-rule.ts";
 import { NO_GITHUB, type GitHubAccess } from "./github.ts";
 import { keepBothVersions } from "./note-merge/prose-versions.ts";
 import { noteMergeRule } from "./note-merge/rule.ts";
@@ -128,14 +129,16 @@ export function mergeByRules(rules: readonly MergeRule[], input: MergeInput): Me
  * 1. Any note (`*.md`) one side deleted and the other changed: the changed
  *    note is kept and an inbox item says so (#30). It must come before the
  *    note rule, which settles only notes both sides changed.
- * 2. Review state (`review/inbox/`, then `review/proposals/`, JSON): latest
+ * 2. Machine records (`machines/*.json`): the later `updatedAt` wins; a
+ *    deletion loses (#35).
+ * 3. Review state (`review/inbox/`, then `review/proposals/`, JSON): latest
  *    decision wins; a deletion wins over a change there.
- * 3. Notes both sides changed (`memory/**.md`): facts, History and frontmatter
+ * 4. Notes both sides changed (`memory/**.md`): facts, History and frontmatter
  *    merge (#26), prose by a three-way line merge that keeps both versions of
  *    lines both sides changed (#27).
  */
 function mergeRules(): readonly MergeRule[] {
-  return [deletedAndChangedRule, inboxMergeRule, proposalMergeRule, noteMergeRule({ prose: keepBothVersions })];
+  return [deletedAndChangedRule, machineRecordRule, inboxMergeRule, proposalMergeRule, noteMergeRule({ prose: keepBothVersions })];
 }
 
 /** What the service hands the seams that need more than the files. */

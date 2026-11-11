@@ -37,7 +37,8 @@ export function releaseLauncher(os: Os): WrapperFile {
 /**
  * The command-line entry points the installer puts on the owner's PATH:
  * `jarvis`, pinned to this install's state folder, instance and port unless
- * the environment says otherwise, and `jarvis-uninstall`. Both go through
+ * the environment says otherwise, and `jarvis-uninstall`, pinned to the
+ * install and its state folder. Both go through
  * the stable `current` link so they survive upgrades.
  */
 export function commandWrappers(loc: PlatformLocations, spec: WrapperSpec): WrapperFile[] {
@@ -53,7 +54,7 @@ export function commandWrappers(loc: PlatformLocations, spec: WrapperSpec): Wrap
       },
       {
         path: join(loc.binDir, "jarvis-uninstall.cmd"),
-        text: ["@echo off", "setlocal", `set "JARVIS_PREFIX=${v(spec.installPrefix)}"`, `set "JARVIS_INSTANCE=${v(spec.instance)}"`, `powershell -NoProfile -ExecutionPolicy Bypass -File "${v(join(current, "uninstall.ps1"))}" %*`, ""].join("\r\n"),
+        text: ["@echo off", "setlocal", `set "JARVIS_PREFIX=${v(spec.installPrefix)}"`, `set "JARVIS_STATE_DIR=${v(spec.stateDir)}"`, `set "JARVIS_INSTANCE=${v(spec.instance)}"`, `powershell -NoProfile -ExecutionPolicy Bypass -File "${v(join(current, "uninstall.ps1"))}" %*`, ""].join("\r\n"),
         mode: 0o755,
       },
     ];
@@ -67,7 +68,7 @@ export function commandWrappers(loc: PlatformLocations, spec: WrapperSpec): Wrap
     },
     {
       path: join(loc.binDir, "jarvis-uninstall"),
-      text: `#!/bin/sh\nJARVIS_PREFIX="${q(spec.installPrefix)}" JARVIS_INSTANCE="${q(spec.instance)}" exec /bin/sh "${q(join(current, "uninstall.sh"))}" "$@"\n`,
+      text: `#!/bin/sh\nJARVIS_PREFIX="${q(spec.installPrefix)}" JARVIS_STATE_DIR="${q(spec.stateDir)}" JARVIS_INSTANCE="${q(spec.instance)}" exec /bin/sh "${q(join(current, "uninstall.sh"))}" "$@"\n`,
       mode: 0o755,
     },
   ];

@@ -184,7 +184,8 @@ export class BrainRepo {
       if (r.code !== 0) return { kind: "retry", cause: new GitError("failed", "merge", r.stderr).cause };
       return { kind: "merged", changed: this.changedBetween(head, theirs), notices: [] };
     }
-    const r = this.git.runSync(["merge", "--no-ff", "--no-commit", "--quiet", theirs]);
+    // git refuses to start a merge without a committer, and a fresh computer has no git identity.
+    const r = this.git.with(authorEnv(local, at)).runSync(["merge", "--no-ff", "--no-commit", "--quiet", theirs]);
     if (r.code !== 0 && !existsSync(join(this.root, ".git", "MERGE_HEAD"))) return { kind: "retry", cause: new GitError("failed", "merge", r.stderr).cause };
     const resolved = this.resolveConflicts(local, theirs, at);
     if (resolved.kind === "blocked") {
@@ -239,6 +240,13 @@ export class BrainRepo {
     writeFileSync(tmp, content);
     renameSync(tmp, abs);
     this.git.okSync(["add", "--", path]);
+  }
+
+  /** When the Machine with `id` last authored a commit in this copy's history; null when it never has. */
+  lastChangeBy(id: string): string | null {
+    if (!this.revParse("HEAD")) return null;
+    const at = this.git.okSync(["log", "-1", "--format=%aI", "--fixed-strings", `--author=<${id}@${MACHINE_EMAIL_DOMAIN}>`, "HEAD"]).trim();
+    return at ? new Date(at).toISOString() : null;
   }
 
   private lastAuthor(ref: string, path: string): MachineRef {

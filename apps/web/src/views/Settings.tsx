@@ -4,6 +4,7 @@ import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
+import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
 import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
@@ -99,7 +100,7 @@ function ThisMachine() {
   return (
     <div className="card stack">
       <h3>This Machine</h3>
-      <p className="small muted">Session logs and connector snapshots written here carry this name, so you can tell which computer they came from.</p>
+      <p className="small muted">Session logs and connector snapshots written here carry this name, and with Replication on the other Machines list this one by it, so you can tell which computer a change came from.</p>
       {machine.loading && !machine.data && <Loading lines={1} />}
       <ErrorState error={machine.error} retry={machine.reload} />
       {machine.data && (
@@ -217,6 +218,7 @@ export function SettingsView() {
           </>
         )}
         <ThisMachine />
+        <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
         <AutoAccept />
         <MeaningSearchCard />
         <Clients />

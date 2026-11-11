@@ -1,34 +1,42 @@
 #!/bin/sh
-# Jarvis installer for macOS. Runs from an extracted release. Uses only tools
-# that ship with macOS (sh, cp, ln, curl); the Node.js runtime is bundled, and
-# everything that differs per operating system (where files go, the
-# background service, the command-line wrappers) is done by the bundled
-# `jarvis` itself through its platform modules.
+# Jarvis installer for macOS and Linux. Runs from an extracted release. Uses
+# only tools every such computer has (sh, cp, ln, mkdir); the Node.js runtime
+# is bundled, and everything that differs per operating system (where files
+# go, the background service, the command-line wrappers) is done by the
+# bundled `jarvis` itself through its platform modules.
 #
 #   ./install.sh                 install or upgrade, start the service, open setup
 #   JARVIS_NO_OPEN=1 ./install.sh   do not open the browser
 #
 # Environment overrides (for tests and advanced use):
-#   JARVIS_PREFIX    install location   (default: ~/Library/Application Support/Jarvis)
-#   JARVIS_PORT      service port       (default: 7427)
-#   JARVIS_INSTANCE  instance name      (default: default; also names the background service)
+#   JARVIS_PREFIX     install location   (default: ~/Library/Application Support/Jarvis on macOS, ~/.local/share/jarvis on Linux)
+#   JARVIS_STATE_DIR  service state      (default: <prefix>/state on macOS, ~/.local/state/jarvis on Linux)
+#   JARVIS_PORT       service port       (default: 7427)
+#   JARVIS_INSTANCE   instance name      (default: default; also names the background service)
 set -eu
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(cat "$SRC/VERSION")"
+TARGET="$(cat "$SRC/TARGET")"
 NEW="$SRC/bin/jarvis"
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'Jarvis install failed: %s\n' "$*" >&2; exit 1; }
 
-[ "$(uname -s)" = "Darwin" ] || fail "this installer targets macOS"
-[ "$(uname -m)" = "arm64" ] || fail "this build is for Apple silicon (arm64); found $(uname -m)"
-"$SRC/runtime/node" --version >/dev/null 2>&1 || fail "the bundled runtime does not run on this Mac"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) HOST="macos-arm64" ;;
+  Linux-x86_64) HOST="linux-x64" ;;
+  *) HOST="$(uname -s) on $(uname -m)" ;;
+esac
+[ "$HOST" = "$TARGET" ] || fail "this release is for $TARGET, and this computer is $HOST. Download the release for this computer."
+"$SRC/runtime/node" --version >/dev/null 2>&1 || fail "the bundled runtime does not run on this computer"
 
 export JARVIS_INSTANCE="${JARVIS_INSTANCE:-default}"
 PREFIX="${JARVIS_PREFIX:-$("$NEW" paths installPrefix)}"
 PORT="${JARVIS_PORT:-7427}"
-STATE="$PREFIX/state"
+# An install moved with JARVIS_PREFIX keeps its state inside it, as it always has.
+STATE="${JARVIS_STATE_DIR:-${JARVIS_PREFIX:+$JARVIS_PREFIX/state}}"
+[ -n "$STATE" ] || STATE="$("$NEW" paths stateDir)"
 APP="$PREFIX/app/$VERSION"
 
 PREVIOUS=""
@@ -76,10 +84,16 @@ rollback() {
 "$NEW" service start >/dev/null || rollback "the background service could not be started"
 
 say "Starting the Jarvis service on http://127.0.0.1:$PORT"
+# The bundled runtime asks the service for its version, so no curl is needed.
+healthy() {
+  "$SRC/runtime/node" -e '
+    fetch(process.argv[1]).then((r) => r.json()).then((h) => process.exit(h.version === process.argv[2] ? 0 : 1), () => process.exit(1));
+  ' "http://127.0.0.1:$PORT/api/v1/health" "$VERSION" 2>/dev/null
+}
 i=0
-until /usr/bin/curl -fsS "http://127.0.0.1:$PORT/api/v1/health" 2>/dev/null | grep -q "\"version\":\"$VERSION\""; do
+until healthy; do
   i=$((i + 1))
-  [ "$i" -gt 60 ] && rollback "the service did not become healthy; see $STATE/logs/launchd.err.log"
+  [ "$i" -gt 60 ] && rollback "the service did not become healthy; see the logs in $STATE/logs"
   sleep 0.5
 done
 

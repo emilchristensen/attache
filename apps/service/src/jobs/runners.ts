@@ -11,6 +11,7 @@ import { RemoteError } from "../connectors/http.ts";
 import { SOURCE_KINDS } from "../capabilities/registry.ts";
 import { nowIso } from "../core/db.ts";
 import { notifyDesktop } from "../platform/notifier/index.ts";
+import { CONSOLIDATION_JOB, runConsolidation } from "../consolidation/consolidate.ts";
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -296,4 +297,5 @@ export function registerRunners(app: App) {
   app.jobs.register("import", (ctx) => runImport(app, ctx));
   app.jobs.register("demo-long", (ctx) => runDiagnostics(app, ctx));
   app.jobs.register("session-distill", (ctx) => app.sessions.distill(ctx));
+  app.jobs.register(CONSOLIDATION_JOB, (ctx) => runConsolidation(app, ctx));
 }
