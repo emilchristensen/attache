@@ -135,6 +135,22 @@ describe("The inbox replicates", () => {
     expect((await pc.get("/replication")).status).toBe("up_to_date");
   });
 
+  it("shows a fact past its Review date on every Machine, as one item for the whole Brain", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    mkdirSync(join(mac.dataDir, "memory/projects"), { recursive: true });
+    writeFileSync(join(mac.dataDir, "memory/projects/orion.md"), ["---", "type: project", "title: Orion", "---", "# Orion", "", "## Current State", `- **Owner** (2026-01-10, review ${day(-1)}): Ingrid`, ""].join("\n"));
+    await refresh(mac);
+    const factItems = async (m: TestMachine) => ((await m.get("/attention?state=open,dismissed,snoozed,resolved")).items as Array<Item & { kind: string }>).filter((i) => i.kind === "fact-review");
+    const [raised] = await factItems(mac);
+    expect(raised).toMatchObject({ title: "Review date passed: “Owner” in Orion", state: "open" });
+    expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).not.toMatch(/review\/inbox\/fact-review/);
+
+    await replicate(mac, pc);
+    expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).toMatch(/review\/inbox\/fact-review/);
+    expect(await factItems(pc)).toEqual([expect.objectContaining({ id: raised!.id, key: raised!.key, state: "open" })]);
+  });
+
   it("keeps inbox items out of recall", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];

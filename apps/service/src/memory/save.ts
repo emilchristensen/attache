@@ -81,7 +81,7 @@ export function originSource(app: App, origin: MemorySaveInput["origin"]): Sourc
   return {
     kind: "agent-session",
     ref: row?.rel_path ?? `${origin.agent}/${origin.sessionId || "unknown-session"}`,
-    observedAt: nowIso(),
+    observedAt: app.clock.now().toISOString(),
     label: `${agentLabel} session${folder ? ` in ${folder}` : ""}`,
   };
 }

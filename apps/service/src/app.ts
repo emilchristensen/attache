@@ -34,7 +34,11 @@ import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
-import { REPLICATION_SOURCE, syncBlockedItem } from "./replication/blocked-inbox.ts";
+import type { GitHubAccess } from "./replication/github.ts";
+import { connectionSecretKey } from "./connectors/manager.ts";
+import { resolveEndpoint } from "./connectors/test-endpoints.ts";
+import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
+import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
 import { Reader } from "./reader/reader.ts";
 import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 
@@ -92,6 +96,8 @@ export class App {
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
+  /** Expires stale drafts and wakes snoozed items; stopped with the app, so it never touches a closed database. */
+  private housekeeping: NodeJS.Timeout | null = null;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
@@ -104,18 +110,20 @@ export class App {
     this.machine = new MachineStore(this.db);
     this.machine.get();
     this.autoAccept = new AutoAcceptStore(this.db);
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.clock = opts.clock ?? systemClock;
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite(), now: () => this.clock.now() });
     this.replication = new Replication({
       db: this.db,
       log: this.log,
       clock: this.clock,
-      seams: defaultSeams(),
+      seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
+      // Loaded when needed: the backup module imports this one.
+      backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
       lastSourceRefresh: () => lastSourceRefresh(this.db),
       onLeaseChange: () => this.bus.emit("event", { type: "reader.changed" }),
     });
@@ -134,11 +142,15 @@ export class App {
       dataRoot: () => this.memory.dataRoot,
       onWrite: () => this.replication.noteWrite(),
       onChange: () => this.bus.emit("event", { type: "attention.changed" }),
-      localSources: [REPLICATION_SOURCE],
+      // Replication's own items stay on this Machine: its status, and the notices of merges it made (raised once, where the merge ran).
+      localSources: [REPLICATION_SOURCE, MERGE_NOTICE_SOURCE],
     });
     this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.replication.onPulled((paths) => this.inbox.pulled(paths));
+    this.replication.onMergeNotice((notices) => {
+      if (raiseMergeNotices(this.db, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
+    });
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
       { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
@@ -327,9 +339,23 @@ export class App {
     return r;
   }
 
+  /** What Replication borrows from the GitHub connection: its API address and, from the secret store, its token. */
+  private githubAccess(): GitHubAccess {
+    const record = () => this.connections.records().find((r) => r.kind === "github" && r.status !== "disconnected" && r.status !== "not_configured") ?? null;
+    return {
+      connection: () => {
+        const r = record();
+        if (!r) return null;
+        const configured = typeof r.settings.apiBaseUrl === "string" && r.settings.apiBaseUrl ? r.settings.apiBaseUrl : "https://api.github.com";
+        return { id: r.id, apiBase: resolveEndpoint(configured) };
+      },
+      token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
+    };
+  }
+
   /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
   private replicationChanged() {
-    if (syncBlockedItem(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
     this.bus.emit("event", { type: "replication.changed" });
     // Switching Replication on or off changes who the Reader is.
     this.bus.emit("event", { type: "reader.changed" });
@@ -389,16 +415,18 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
-    const housekeeping = setInterval(() => {
+    this.housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
       if (expired.length || woke) this.bus.emit("event", { type: "attention.changed" });
     }, 30_000);
-    housekeeping.unref();
+    this.housekeeping.unref();
     void this.refreshModel();
   }
 
   async stop() {
+    if (this.housekeeping) clearInterval(this.housekeeping);
+    this.housekeeping = null;
     this.dataWatcher?.stop();
     await this.replication.stop();
     this.sessions.stop();

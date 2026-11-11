@@ -366,6 +366,8 @@ export const ProposalInput = z.object({
   reason: z.string().trim().min(1).max(1000),
   /** The evidence the suggestion came from. */
   source: SourceRefInput.optional(),
+  /** The words in that evidence the suggestion rests on, quoted from it. */
+  evidence: z.string().trim().min(1).max(1000).optional(),
 });
 export type ProposalInput = z.infer<typeof ProposalInput>;
 
@@ -379,6 +381,8 @@ export interface ProposalView {
   reason: string | null;
   /** The cited evidence, formatted as in the note. */
   source: string | null;
+  /** The words in the evidence the Proposal rests on, quoted from it; null when none were quoted. */
+  evidence: string | null;
   proposedBy: string;
   createdAt: string;
   decidedAt: string | null;
@@ -567,7 +571,7 @@ export const AttentionDecision = z.object({
 // ---------------------------------------------------------------------------
 // Jobs
 
-export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill"]);
+export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate"]);
 export type JobKind = z.infer<typeof JobKind>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";

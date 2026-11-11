@@ -18,7 +18,7 @@ interface Briefing {
   deliverablePath: string | null;
 }
 
-const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar", replication: "Replication" };
+const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar", replication: "Replication", replication_merge: "Replication" };
 const GROUPS: Array<{ id: string; title: string; match: (k: string) => boolean }> = [
   { id: "deadlines", title: "Deadlines", match: (k) => /due|overdue|deadline/.test(k) },
   { id: "reviews", title: "Review queue", match: (k) => /review/.test(k) && k !== "fact-review" },

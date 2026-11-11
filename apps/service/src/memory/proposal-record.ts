@@ -38,6 +38,8 @@ export const ProposalRecord = z.object({
   /** The cited evidence as the note will show it. */
   sourceText: z.string().nullable().default(null),
   origin: MemorySaveInput.shape.origin.unwrap().nullable().default(null),
+  /** The words in the cited evidence the change rests on, quoted from it. */
+  evidence: z.string().nullable().default(null),
   /** Checked when read, so a Proposal whose item no longer validates still lists and can be rejected. */
   item: z.unknown(),
   decisions: z.array(ProposalDecision).default([]),
@@ -72,6 +74,7 @@ export function toProposalView(record: ProposalRecord): ProposalView {
     target: (last?.decision === "applied" && last.path) || record.target,
     reason: record.reason,
     source: record.sourceText,
+    evidence: record.evidence,
     proposedBy: record.proposedBy,
     createdAt: record.createdAt,
     decidedAt: last?.at ?? null,

@@ -23,6 +23,8 @@ export interface ProposalMeta {
   reason: string;
   source: SourceRef | null;
   origin?: ProposalOrigin | null;
+  /** The words in the evidence the change rests on, quoted from it. */
+  evidence?: string | null;
   proposedBy: string;
 }
 
@@ -54,7 +56,7 @@ export class Proposals {
 
   /** Record one suggested change for the owner to decide in the Dashboard, checked like a save first. */
   propose(input: ProposalInput, proposedBy: string): ProposalView {
-    return this.proposeItems([input.item], { reason: input.reason, source: (input.source as SourceRef | undefined) ?? null, proposedBy })[0]!;
+    return this.proposeItems([input.item], { reason: input.reason, source: (input.source as SourceRef | undefined) ?? null, evidence: input.evidence ?? null, proposedBy })[0]!;
   }
 
   /** One Proposal per item. The items are checked together, like one save: one invalid item refuses them all. */
@@ -74,6 +76,7 @@ export class Proposals {
       source: meta.source,
       sourceText: meta.source ? formatSource(meta.source) : null,
       origin: meta.origin ?? null,
+      evidence: meta.evidence ?? null,
       item,
       decisions: [],
     }));
@@ -94,6 +97,14 @@ export class Proposals {
 
   list(opts: { status?: ProposalView["status"]; limit?: number } = {}): ProposalView[] {
     return this.index.list(opts).map(toProposalView);
+  }
+
+  /** The Proposals, whatever their status, that `proposedBy` made from one Harness session, newest first. */
+  from(proposedBy: string, origin: Pick<ProposalOrigin, "agent" | "sessionId">): ProposalView[] {
+    return this.index
+      .list({ limit: 500 })
+      .filter((r) => r.proposedBy === proposedBy && r.origin?.agent === origin.agent && (r.origin.sessionId ?? "") === (origin.sessionId ?? ""))
+      .map(toProposalView);
   }
 
   /**

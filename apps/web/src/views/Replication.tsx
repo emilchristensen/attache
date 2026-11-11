@@ -32,7 +32,7 @@ const PROBLEM: Partial<Record<ReplicationStatus, { title: string; todo: string; 
   },
 };
 
-const REPOSITORY_HELP = "owner/name on GitHub, or an https:// or ssh:// address. Keep the repository private.";
+const REPOSITORY_HELP = "A private repository on GitHub: owner/name, or its https:// or ssh:// address. A folder path works too.";
 
 function useSubmit(onDone: (v: ReplicationView) => void) {
   const [error, setError] = useState<ApiError | null>(null);

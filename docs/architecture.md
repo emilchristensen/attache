@@ -114,18 +114,36 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
 - **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
   It refuses a remote whose `main` already has commits.
   Join clones `main` into an empty folder, then opens it like `/setup/data-folder`, which indexes it.
+  A folder that is not empty is refused with `not_empty`, after `createBackup` archives it with the database to `backups/jarvis-backup-<time>-before-join.tar.gz`; the error's `details.backup` names the archive.
 - **The loop** (`replication.ts`): triggered 30 seconds after the last write (`MemoryStore` `onWrite`), on an outside edit the file watcher sees, at start, on wake (`Scheduler.onResume`) and by a one-minute check.
   One check at a time: commit everything (`git add -A`, so hand edits are included), fetch, commit what was saved meanwhile, merge, push; when the push is rejected because another Machine pushed first, fetch, merge and push again, up to five times, then retry with backoff.
   Failures set the status (offline, unauthorized, blocked) and never reach a save.
 - **Writes pause while git changes the folder.** Commit and merge run synchronously (`BrainRepo`, `Git.runSync`), so no save can land halfway through them; only fetch, push and clone wait on the network asynchronously.
-  A merge left behind by a crash (`MERGE_HEAD`) is aborted at the next check and merged again.
+  At the start of every check, what a crash left behind is undone: git lock files older than the service's start (`index.lock`, `HEAD.lock`, `ORIG_HEAD.lock`, the branch and tracking ref locks) are removed, then a merge in progress (`MERGE_HEAD`) is aborted, the files it had touched are re-indexed, and the check merges again.
 - **Never rewrites history.** Bringing in other Machines' changes is a fast-forward or a merge commit; `Git` refuses `rebase`, `pull`, `reset --hard` and any forced or deleting push before running git.
 - **Merging.** A file both sides changed goes to the merge rules (`MergeRule` in `seams.ts`); a file no rule settles aborts the merge and reads as blocked with its path, so no conflict marker is ever left in a file.
-  Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them.
+  Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
+  Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
+  The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
+  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, one item per notice per merge, never resolved automatically, and kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+- **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.
+  It takes each version apart (`parts.ts`): frontmatter, Current State entries (with their indented lines), History items, and the prose, which keeps one placeholder line where the facts and the History items were.
+  Facts merge by subject (`facts.ts`): a subject one side changed takes that change, a change wins over a removal, and when both changed it the newer date wins, a tie going to the Machine whose id sorts last; the losing value becomes a `superseded` History line naming both Machines, dated with the winner's date.
+  History is unioned (`history.ts`): the shared start stays, what each side added is interleaved by date, every item once.
+  Frontmatter merges field by field (`frontmatter.ts`): a field one side changed takes that change; when both did, `created` keeps the earliest, `updated` the latest, lists keep every item, anything else comes from the note updated last.
+  Prose goes to a `ProseMerge` (`prose.ts`); the default takes prose only one side changed and otherwise leaves the note to block.
+  Both sides are put in an order that does not depend on which Machine merges (`sides.ts`) and nothing depends on the time of the merge, so two Machines merging the same versions write the same note.
+  Two notes with the same type and title share a path, so they arrive with no common version and merge as one note.
 - **Commits** are authored by the Machine (name, and `<machine id>@machine.jarvis.invalid`), with the clock's time.
   The message names each changed file and what the change log says happened to it (`created "Orion migration"`, `corrected Status`, `added an event`), or `added`/`edited`/`deleted` for files the change log does not know (hand edits, evidence), and ends with a `Jarvis-Machine: <name> (<id>)` trailer.
 - **Seams** (`replication/seams.ts`, listed in `defaultSeams()`): `mergeRules`, `commitGuards` (run on the staged files before every commit, merge commits included; a refusal stops the commit and the push), `remoteGuards` (run at setup, join and before every push), and `credentials` (`-c` settings and environment for commands that reach the remote, so a token never sits in the remote's address).
   `Replication.onPulled` and `onMergeNotice` let other parts of the service react to merged files and to what the rules want the owner to see.
+- **Private repository** (`replication/private-remote.ts`, a `RemoteGuard`): a folder remote passes; a GitHub remote (`replication/github.ts` `githubRepoOf`) passes only when `GET /repos/{owner}/{name}` says private or internal, asked with the GitHub connection's token and API address; any other host is refused, because its privacy cannot be checked.
+  A private answer is trusted for five minutes (`VISIBILITY_CHECK_EVERY_MS`, on the Replication clock); a refusal is never cached.
+  Public reads as blocked, a rejected token (401, or 404 with a token) as unauthorized, and no answer as offline (`RemoteVerdict`); at setup and join these are 409 `remote_refused`, 502 `remote_unauthorized` and 502 `remote_unreachable`.
+- **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<jarvis> git-credential --state-dir <state> --connection <id>`.
+  The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `JARVIS_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
+  Other remotes use the Machine's own git setup (ssh keys, or nothing for a folder).
 - **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
   They are JSON, so search never indexes them, and they replicate like any file.
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
@@ -144,7 +162,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
-- **Blocked in the inbox** (`replication/blocked-inbox.ts`): whenever the status changes, `App` keeps one attention item, source `replication`, key `replication:blocked`, fingerprinted by the cause, open while the status is blocked and resolved when it is not.
+- **Blocked and unauthorized in the inbox** (`replication/blocked-inbox.ts` `syncReplicationItems`): whenever the status changes, `App` keeps one attention item, source `replication`, fingerprinted by the cause, open while the status is blocked (key `replication:blocked`) or unauthorized (key `replication:unauthorized`, asking the owner to reconnect GitHub when the remote is GitHub over https) and resolved when it is neither.
   It is this Machine's own item.
 - **Review state** is what waits for the owner's decision: Proposals (`review/proposals/`) and the inbox (`review/inbox/`).
   It lives in the Brain's top-level `review/` folder so it replicates, and recall never reads it: the files are JSON, and the indexer skips that folder of the data folder (`memory/indexer.ts`); the layout is in `review-state/files.ts`.
@@ -155,6 +173,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   When an approval made on one Machine and a later rejection made on another meet, the rejection stands and the approving Machine undoes what it wrote, as one-click revert would (`memory/proposal-undo.ts`); events stay, because History only grows.
   The inbox's own rule is `attention/inbox-merge.ts` (see the attention engine below).
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
+  `MemoryStore` dates facts, History lines and files by the same clock (`MemoryStoreOptions.now`, `MemoryStore.today()`).
 - **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
 
@@ -283,7 +302,7 @@ The attention engine follows these rules:
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
-  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" below).
+  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery
@@ -330,6 +349,18 @@ That job asks the model for durable decisions and lessons, appends one entry per
 An entry for a session that ran in a git repository carries a `Repository: <host/owner/name>` line, read from the folder's git config when the job runs, which ties it to the project that lists that repository.
 Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
 
+### Consolidation
+
+When a summary finds something durable, `session-distill` queues a `session-consolidate` job for the same turns (`consolidation/consolidate.ts`, input `{ agent, sessionId, from, to, topics }`, where `topics` are the summary's bullets).
+It runs on the Machine whose hook spooled the session; a Machine that receives the transcript and session log through Replication never ingests them, so it never consolidates them.
+Without a model the summary does not run, so nothing is queued and the session log entry says no Proposals were made; a job that finds the model gone returns `{ skipped: "no model" }` with that message.
+The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`), finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for at most five changes as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
+The reply is untrusted data (`consolidation/reply.ts`, `consolidation/screen.ts`): an entry that is not a valid save item, whose evidence is not quoted from the session, or that fails `checkItems` (the save's validation) is dropped and logged, never repaired.
+Facts the note already holds with the same value, events already in the note, and parts of pending Proposals are removed; an item with nothing left is dropped.
+A session has room for five Proposals from Consolidation in total, counted across every run for it.
+What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
+Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
+
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
@@ -366,7 +397,7 @@ Each pairs itself on first use as client kind `cli` (the same trust as `jarvis p
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
-A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
+A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested, the evidence it cites, and optionally the words it quotes from that evidence (`evidence`).
 `POST /api/v1/memory/proposals` runs the save's validation before recording it, `GET /api/v1/memory/proposals?status=proposed` lists pending ones with the whole item, and `POST /api/v1/memory/proposals/:id/apply|reject` decides one.
 Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
 Rejecting writes nothing.

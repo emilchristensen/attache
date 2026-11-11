@@ -9,7 +9,7 @@ async function asHttp<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (e instanceof ReplicationSetupError) throw new HttpError(e.status, e.code, e.message);
+    if (e instanceof ReplicationSetupError) throw new HttpError(e.status, e.code, e.message, e.details);
     throw e;
   }
 }

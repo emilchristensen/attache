@@ -16,6 +16,7 @@ import { removeContextFiles, writeContextFiles } from "./context-files.ts";
 import { repositoryKey } from "../memory/repositories.ts";
 import { gitRemoteUrls } from "./git-remotes.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
+import { queueConsolidation } from "../consolidation/consolidate.ts";
 
 interface SessionRow {
   agent: string;
@@ -285,7 +286,21 @@ export class AgentSessions {
     const saved = await ctx.effect(`session-log:${agent}:${sessionId}:${to}`, async () => this.app.memory.appendSessionLog(date, section));
     this.app.db.prepare("update agent_sessions set distilled_turns = max(distilled_turns, ?) where agent = ? and session_id = ?").run(to, agent, sessionId);
     this.app.bus.emit("event", { type: "memory.changed", relPath: saved.relPath });
-    return { relPath: saved.relPath, turns: to - from, summarised: bullets !== null, durable: bullets?.length ?? 0 };
+    // Consolidation reads what the summary found durable; without a model there is no summary, and the log says so.
+    const consolidation = bullets === null ? "no model" : bullets.length ? "queued" : "nothing durable";
+    if (consolidation === "queued") queueConsolidation(this.app, { agent, sessionId, from, to, topics: bullets! }, { label: integration.label, title: row.title ?? "Session" });
+    return { relPath: saved.relPath, turns: to - from, summarised: bullets !== null, durable: bullets?.length ?? 0, consolidation };
+  }
+
+  /** Turns `from` up to `to` of a session as the summariser read them (redacted), for Consolidation; null when the session is gone. */
+  sessionPart(agent: string, sessionId: string, from: number, to: number): { turns: Turn[]; title: string; cwd: string | null; agentLabel: string; userName: string } | null {
+    const integration = integrationFor(agent);
+    const row = this.row(agent, sessionId);
+    const cacheFile = this.cachePath(agent, sessionId);
+    if (!integration || !row || !existsSync(cacheFile)) return null;
+    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const turns = cached.turns.slice(from, to);
+    return turns.length ? { turns, title: row.title ?? "Session", cwd: row.cwd, agentLabel: integration.label, userName: this.userName() } : null;
   }
 
   // ---- session-start context ---------------------------------------------------

@@ -14,7 +14,7 @@ import { ReplicatedMachines } from "./machines.ts";
 import { isMachineRecordPath, MachineRecords } from "./machine-records.ts";
 import { ReaderLease } from "./reader-lease.ts";
 import type { LeaseRecord } from "../reader/lease.ts";
-import type { GuardVerdict, MergeNotice, ReplicationSeams } from "./seams.ts";
+import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
 
 /** A save is committed and pushed this long after the last write, so a burst of writes makes one commit. */
 export const COMMIT_DELAY_MS = 30_000;
@@ -40,6 +40,8 @@ export interface ReplicationDeps {
   latestSeq: () => number;
   /** Called whenever the status may have changed. */
   onChange?: () => void;
+  /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
+  backUpFolder: (folder: string) => Promise<string>;
   /** This Machine's last Source refresh of every source, which the Reader lease carries to the others. */
   lastSourceRefresh?: () => string | null;
   /** The Reader lease as this Machine knows it changed. */
@@ -64,6 +66,8 @@ export class Replication {
   private readonly lease: ReaderLease;
   private readonly deps: ReplicationDeps;
   private started = false;
+  /** Wall-clock time the service started, compared with lock files' times (not the Clock, which drives timers). */
+  private startedAtMs = Date.now();
   private busy = false;
   private commitTimer: TimerHandle | null = null;
   private checkTimer: TimerHandle | null = null;
@@ -161,6 +165,7 @@ export class Replication {
 
   start(): void {
     this.started = true;
+    this.startedAtMs = Date.now();
     if (!this.settings.get()) return;
     this.machines.recordThisMachine();
     this.soon();
@@ -287,7 +292,7 @@ export class Replication {
   }
 
   private async replicate(repo: BrainRepo, s: ReplicationSettings): Promise<Outcome> {
-    if (repo.abortInterruptedMerge()) this.deps.log.warn("abandoned a merge that was interrupted; merging again", { folder: s.dataFolder });
+    this.recoverInterrupted(repo, s.dataFolder);
     const first = this.commitLocal(repo);
     if (first) return first;
     const guard = await this.checkRemote(s.remote);
@@ -318,6 +323,20 @@ export class Replication {
     return { status: s.status, cause: s.cause };
   }
 
+  /**
+   * Undo what a crash left halfway: git's stale locks, then a merge in progress.
+   * The files the abandoned merge had changed are back as before and are
+   * re-indexed; the merge itself runs again in this check.
+   */
+  private recoverInterrupted(repo: BrainRepo, folder: string): void {
+    const locks = repo.removeStaleLocks(this.startedAtMs);
+    if (locks.length) this.deps.log.warn("removed git locks left by an interrupted command", { folder, locks });
+    const reverted = repo.abortInterruptedMerge();
+    if (!reverted) return;
+    this.deps.log.warn("abandoned a merge that was interrupted; merging again", { folder });
+    if (reverted.length) this.announce(reverted, []);
+  }
+
   private succeeded(pushed: boolean): Outcome {
     this.failures = 0;
     return { status: "up_to_date", cause: null, pushed };
@@ -335,7 +354,7 @@ export class Replication {
     return null;
   }
 
-  private async checkRemote(remote: string): Promise<GuardVerdict> {
+  private async checkRemote(remote: string): Promise<RemoteVerdict> {
     for (const g of this.deps.seams.remoteGuards) {
       const v = await g.check(remote);
       if (!v.ok) return v;
@@ -394,7 +413,10 @@ export class Replication {
 
   private async refuseRemote(remote: string): Promise<void> {
     const v = await this.checkRemote(remote);
-    if (!v.ok) throw new ReplicationSetupError(409, "remote_refused", v.cause);
+    if (v.ok) return;
+    if (v.status === "offline") throw new ReplicationSetupError(502, "remote_unreachable", v.cause);
+    if (v.status === "unauthorized") throw new ReplicationSetupError(502, "remote_unauthorized", v.cause);
+    throw new ReplicationSetupError(409, "remote_refused", v.cause);
   }
 
   /**
@@ -455,7 +477,7 @@ export class Replication {
   join(remoteInput: string, target: string, open: (path: string) => void): Promise<ReplicationView> {
     return this.exclusive(async () => {
       const remote = this.remote(remoteInput);
-      if (!isEmptyFolder(target)) throw new ReplicationSetupError(409, "not_empty", `${target} is not empty. Jarvis joins a Brain only into an empty folder, so two Brains are never merged.`);
+      if (!isEmptyFolder(target)) throw await this.refuseNotEmpty(target);
       await this.refuseRemote(remote);
       await cloneBrain(remote, target, this.deps.seams);
       open(target);
@@ -466,6 +488,22 @@ export class Replication {
       this.machines.recordThisMachine(target);
       return view;
     });
+  }
+
+  /**
+   * A folder that is not empty may hold a Brain of its own. Two Brains are never
+   * merged, so the join is refused; the folder is backed up first, so the owner
+   * can move it aside and still keep what it held.
+   */
+  private async refuseNotEmpty(target: string): Promise<ReplicationSetupError> {
+    const refusal = `${target} is not empty. Jarvis joins a Brain only into an empty folder, so two Brains are never merged.`;
+    try {
+      const backup = await this.deps.backUpFolder(target);
+      return new ReplicationSetupError(409, "not_empty", `${refusal} It was backed up to ${backup}. Move the folder aside or choose an empty one, then join again.`, { backup });
+    } catch (e) {
+      this.deps.log.error("could not back up a folder a join refused", { folder: target, error: (e as Error).message });
+      return new ReplicationSetupError(409, "not_empty", `${refusal} Backing it up failed too (${(e as Error).message}); nothing in it was changed.`);
+    }
   }
 
   /**

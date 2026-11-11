@@ -21,6 +21,11 @@ import type { MemoryStore } from "../memory/store.ts";
 
 export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"];
 
+/** Where a connection's secret lives in the secret store. Replication's credential helper reads the GitHub token by it. */
+export function connectionSecretKey(connectionId: string, name: string): string {
+  return `conn:${connectionId}:${name}`;
+}
+
 export interface ManagerDeps {
   db: Db;
   secrets: SecretStore;
@@ -73,7 +78,7 @@ export class ConnectionManager {
   }
 
   private secretKey(id: string, name: string) {
-    return `conn:${id}:${name}`;
+    return connectionSecretKey(id, name);
   }
 
   context(rec: ConnectionRecord, signal?: AbortSignal): AdapterContext {

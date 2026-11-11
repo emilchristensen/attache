@@ -13,7 +13,7 @@ export const REPLICATION_USAGE = `Usage: jarvis replication status [--json]
 Replication keeps the Brain the same on every Machine through a private git repository.
 setup switches it on with this Machine's Brain; the repository must be empty.
 join clones the Brain onto this Machine, into an empty folder that becomes the data folder.
-A repository is owner/name on GitHub, an https:// or ssh:// address, or a folder path.
+A repository is a private one on GitHub (owner/name, or its https:// or ssh:// address) or a folder path.
 check commits, fetches, merges and pushes now instead of at the next one-minute check.
 off stops replicating from this Machine; the Brain in its data folder stays as it is.`;
 

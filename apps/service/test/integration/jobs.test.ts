@@ -203,5 +203,6 @@ describe("A08 service restart recovers work without duplicate execution", () => 
     // The external side effect (a deliverable file) exists exactly once.
     const files = readdirSync(join(dataDir, "deliverables/research")).filter((f) => f.includes(job.id.slice(0, 8)));
     expect(files).toHaveLength(1);
-  }, 90_000);
+    // Two service starts, each allowed 25 s under load (see `boot`).
+  }, 120_000);
 });
