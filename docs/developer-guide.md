@@ -20,7 +20,8 @@ Service modules: `core/` (db, config, logging with redaction, credential store, 
 
 - macOS or Linux for lint, typecheck, Vitest and the browser journeys.
   The install test needs macOS (launchd, Keychain).
-- Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
 - Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
@@ -67,7 +68,7 @@ Every check runs even when an earlier one fails, so a run lists all failures at 
 On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
 Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
 
-To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.18.0-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
 A pull request with a failing check shows the failure on GitHub.
 For the failure to block merging, `main` needs a branch protection rule or ruleset that requires both `checks` jobs, which GitHub offers for private repositories only on a paid plan.

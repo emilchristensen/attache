@@ -136,6 +136,23 @@ describe("FolderWatcher", () => {
     await until(() => s.paths().length === 0);
   });
 
+  it("keeps indexing hand edits to a file the service or an editor replaced atomically", async () => {
+    const s = setup();
+    note(s.path, "memory/notes/z.md");
+    await watcher(s);
+    await until(() => s.paths().length === 1);
+    const replace = (body: string) => {
+      note(s.path, "memory/notes/.z.md.tmp", body);
+      renameSync(join(s.path, "memory/notes/.z.md.tmp"), join(s.path, "memory/notes/z.md"));
+    };
+    replace("The zebrafish migration slipped to December.");
+    await until(() => search(s.db, "December").length === 1);
+    replace("The zebrafish migration slipped to January.");
+    await until(() => search(s.db, "January").length === 1);
+    note(s.path, "memory/notes/z.md", "The zebrafish migration slipped to February.");
+    await until(() => search(s.db, "February").length === 1);
+  });
+
   it("debounces a burst of events into one update", async () => {
     const s = setup();
     let changes = 0;

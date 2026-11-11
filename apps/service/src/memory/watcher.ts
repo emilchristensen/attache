@@ -110,7 +110,7 @@ export class FolderWatcher {
   }
 
   private arm(): void {
-    // Some platforms watch a missing folder without an error (Linux on Node 24.18), so check first.
+    // Node before 24.22 on Linux watches a missing folder without an error, so check first.
     if (!existsSync(this.root.path)) {
       this.fail(new Error("data folder is missing"));
       return;
