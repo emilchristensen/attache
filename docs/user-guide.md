@@ -28,7 +28,7 @@ Setup has five steps and each works without the ones after it.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
    Search is always on.
-   Capture, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
+   Saving to memory, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
@@ -56,7 +56,7 @@ Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain
 - The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
   **Away summary** covers the last three days.
-- **Sources** shows each source's last successful refresh and whether the last sync was complete, partial or failed.
+- **Sources** shows each source's last successful refresh and whether its last Source refresh was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.
 - Items are grouped into deadlines, review queue, meetings and pending replies.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
@@ -67,8 +67,9 @@ Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
 
 **Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
-Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next search returns the correction.
-**Capture** archives text as evidence and can record a decision in memory linked to that evidence.
+The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
+Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
+A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
@@ -202,7 +203,7 @@ The old value keeps its Review date in History, and reverting a correction bring
 
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
-There is no Obsidian plugin; use Jarvis in the browser to search, capture and review attention items.
+There is no Obsidian plugin; use the Dashboard in the browser to search, review attention items and decide on Proposals.
 
 ## Meaning-based search
 
@@ -316,7 +317,7 @@ Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder
 - *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
   For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
   Reconnect tests the connection again and says what is still wrong if it fails.
-  Once it succeeds, Jarvis refreshes that source straight away so the card stops showing the failed sync.
+  Once it succeeds, Jarvis refreshes that source straight away so the card stops showing the failed Source refresh.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
   If you chose **Sign in with Atlassian** directly, sign in again on the card.

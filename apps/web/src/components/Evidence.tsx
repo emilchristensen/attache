@@ -20,7 +20,6 @@ interface DocView {
   area: string;
   docType: string | null;
   indexedAt: string | null;
-  editable: boolean;
   protected: boolean;
   frontmatter: Record<string, unknown>;
 }
@@ -117,7 +116,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
                   </button>
                 </div>
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
-                  <Link to={`/memory?path=${encodeURIComponent(d.relPath)}`}>Open in Memory to correct</Link>
+                  <Link to={`/memory?path=${encodeURIComponent(d.relPath)}`}>Open in Memory</Link>
                 )}
               </div>
               {mode === "source" ? <SourceView raw={d.raw} lines={target.lines} /> : <Markdown text={d.raw.replace(/^---[\s\S]*?---\n/, "")} />}

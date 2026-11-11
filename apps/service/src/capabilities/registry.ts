@@ -36,8 +36,8 @@ export const FEATURES: FeatureDefinition[] = [
   },
   {
     id: "capture",
-    label: "Capture and memory",
-    description: "Import a Markdown folder, capture notes and source-linked decisions, and correct what Jarvis remembers.",
+    label: "Saving to memory",
+    description: "Import a Markdown folder, save notes and decisions from a Harness, and review Proposals and recent saves.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["recall"],
@@ -65,7 +65,7 @@ export const FEATURES: FeatureDefinition[] = [
     requiresFeatures: ["jobs"],
     connections: [{ kinds: SOURCE_KINDS, label: "At least one source (your data folder counts)", required: true, missingEffect: "Nothing to watch." }],
     schedules: [
-      { id: "sync", label: "Refresh sources", jobKind: "sync" },
+      { id: "sync", label: "Source refresh", jobKind: "sync" },
       { id: "briefing", label: "Daily briefing", jobKind: "briefing" },
     ],
     jobKinds: ["sync", "briefing"],

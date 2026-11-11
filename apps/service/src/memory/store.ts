@@ -350,26 +350,6 @@ export class MemoryStore {
     return this.recordChange({ docRelPath: n, change: "create", subject: null, beforeValue: null, afterValue: parseMarkdown(raw, n).title, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
-  /** Edit a note's free-text body (Notes section) as the user. */
-  replaceNotes(rel: string, notes: string): void {
-    const n = normalizeRel(rel);
-    const raw = this.read(n);
-    const lines = raw.split("\n");
-    const start = lines.findIndex((l) => /^##\s+notes\s*$/i.test(l));
-    let out: string;
-    if (start >= 0) {
-      let end = start + 1;
-      while (end < lines.length && !/^##\s/.test(lines[end]!)) end++;
-      out = [...lines.slice(0, start + 1), notes.trim(), "", ...lines.slice(end)].join("\n");
-    } else {
-      const hist = lines.findIndex((l) => /^##\s+history\s*$/i.test(l));
-      const at = hist >= 0 ? hist : lines.length;
-      out = [...lines.slice(0, at), "## Notes", notes.trim(), "", ...lines.slice(at)].join("\n");
-    }
-    this.writeFile(n, bumpFrontmatter(out, { updated: today() }), "user");
-    this.recordChange({ docRelPath: n, change: "append", subject: "Notes", beforeValue: null, afterValue: notes.slice(0, 500), reason: "notes edited", source: null, actor: "user", status: "applied" });
-  }
-
   // ---- proposals -----------------------------------------------------------------
 
   /** Record a Proposal. What it holds is opaque here; `memory/proposals.ts` gives it meaning. */
@@ -468,13 +448,6 @@ export class MemoryStore {
     const manifest = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# Archive of ${origin}\n\nVerbatim copies of ${rows.length} Markdown files, at the same relative paths, so citations keep their line numbers.\n\n| File | Bytes | SHA-256 (first 16) |\n| --- | --- | --- |\n${rows.join("\n")}\n`;
     this.writeFile(`${base}/ARCHIVE.md`, manifest, "user");
     return { relPath: `${base}/ARCHIVE.md`, written, unchanged, excluded: skipped, files: rows.length };
-  }
-
-  /** A source-linked decision: curated memory that cites the evidence it came from. */
-  recordDecision(input: { title: string; decision: string; rationale?: string; source: SourceRef; project?: string }, actor: WriteActor = "user"): { relPath: string } {
-    const state = [{ subject: "Decision", value: input.decision }];
-    if (input.project) state.push({ subject: "Project", value: input.project });
-    return this.createMemory({ type: "decision", title: input.title, state, ...(input.rationale ? { notes: input.rationale } : {}), sources: [input.source], provenance: "user-stated" }, actor);
   }
 
   writeDeliverable(kind: "briefings" | "research" | "drafts", title: string, body: string, meta: Record<string, unknown> = {}): { relPath: string } {
