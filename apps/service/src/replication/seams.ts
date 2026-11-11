@@ -7,6 +7,7 @@
 import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { proposalMergeRule } from "../memory/proposal-merge.ts";
 import { credentialScan } from "./credential-scan.ts";
+import { deletedAndChangedRule } from "./deleted-and-changed.ts";
 import { noteMergeRule } from "./note-merge/rule.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
@@ -36,6 +37,8 @@ export interface MergeNotice {
   path: string;
   kind: string;
   message: string;
+  /** A short headline for the inbox item; a generic one naming the path when left out. */
+  title?: string;
 }
 
 export interface MergeOutcome {
@@ -96,15 +99,27 @@ export interface ReplicationSeams {
 /** Git's own credential setup on this Machine, until a ticket adds Jarvis's helper. */
 export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () => ({}) };
 
+/** Settles one file as Replication does: the first rule that applies and returns an outcome wins. */
+export function mergeByRules(rules: readonly MergeRule[], input: MergeInput): MergeOutcome | null {
+  for (const rule of rules) {
+    const outcome = rule.appliesTo(input.path) ? rule.merge(input) : null;
+    if (outcome) return outcome;
+  }
+  return null;
+}
+
 /**
  * The merge rules, in the order Replication tries them: the first rule that
- * applies to a path and returns an outcome settles it. Order matters only
- * where rules share paths; each rule names the paths it covers.
- * 1. Review state (`review/inbox/`, then `review/proposals/`): latest decision wins.
- * 2. Notes (`memory/**.md`): the fact, History and frontmatter merge (#26).
+ * applies to a path and returns an outcome settles it.
+ * 1. Any note (`*.md`) one side deleted and the other changed: the changed
+ *    note is kept and an inbox item says so (#30). It must come before the
+ *    note rule, which settles only notes both sides changed.
+ * 2. Review state (`review/inbox/`, then `review/proposals/`, JSON): latest
+ *    decision wins; a deletion wins over a change there.
+ * 3. Notes both sides changed (`memory/**.md`): facts, History and frontmatter merge (#26).
  */
 function mergeRules(): readonly MergeRule[] {
-  return [inboxMergeRule, proposalMergeRule, noteMergeRule()];
+  return [deletedAndChangedRule, inboxMergeRule, proposalMergeRule, noteMergeRule()];
 }
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */

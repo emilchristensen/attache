@@ -44,8 +44,8 @@ export function noteMergeRule(options: NoteMergeOptions = {}): MergeRule {
     name: "note",
     appliesTo: isNotePath,
     merge(input) {
-      // A change wins over a deletion, so nothing a Machine wrote is lost.
-      if (input.ours === null || input.theirs === null) return { content: input.ours ?? input.theirs };
+      // A note one side deleted is the deleted-and-changed rule's, which runs first and tells the owner.
+      if (input.ours === null || input.theirs === null) return null;
       return mergeNote(input, input.ours, input.theirs, prose);
     },
   };

@@ -272,6 +272,9 @@ Each Machine needs git installed.
   A repository that already holds a Brain is refused, so two Brains are never mixed.
 - **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
   The folder must be empty or not exist yet.
+  A folder that is not empty may hold a Brain of its own, and Jarvis never merges two Brains, so the join is refused.
+  Jarvis backs that folder up first, together with its database, to the `backups/` folder, and the refusal names the archive; it changes nothing in the folder.
+  Move the folder aside or name an empty one, then join again; `jarvis restore` brings the backup back if you need it.
   Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
 - **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
   `jarvis replication check` replicates now instead of waiting for the next check.
@@ -286,6 +289,8 @@ What happens on its own:
 - A failing Replication never fails a save.
 - Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
 - A note is never left with conflict markers, and no merge waits for you.
+- If the service stops in the middle of a merge, for example in a crash or a power cut, it abandons the half-done merge when it starts again, leaves the folder as it was before, and merges again.
+- A note you delete, in Jarvis or in an editor, disappears from every Machine and from their search.
 - When two Machines changed the same note while apart, its facts merge by subject.
   A fact only one Machine changed keeps that change.
   When both changed the same fact, the value with the newer date wins on every Machine, with its Review date; the other value goes to the note's History, naming the Machine it came from.
@@ -293,21 +298,12 @@ What happens on its own:
   History keeps every line from both Machines, once each.
   The frontmatter merges field by field: the earliest `created`, the latest `updated`, lists such as `tags` and `sources` keep every item.
 - Two notes with the same type and title, created on two Machines, become one note with the facts and History of both.
-- A note one Machine changed and the other deleted is kept.
+- A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
+  One inbox item, on the Machine that brought the two changes together, names the note and both Machines; delete the note again if it should go.
+  Unlike other inbox items, it stays on that Machine.
 - Until the prose merge arrives, a note whose free text both Machines changed differently, or any other file both changed in the same place, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
 - While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
   It resolves by itself once Replication is up to date again.
-
-### Credential scan
-
-Before every commit, setup and merges included, Jarvis scans the files about to be committed for credentials.
-It looks for exactly what it redacts from logs and evidence: GitHub, Slack, Atlassian, AWS, Google and Anthropic tokens, API keys, JSON web tokens, private keys, authorization headers, and the secrets of your connections.
-A finding stops the commit and the push: the status reads blocked, and the cause and the inbox item name the file and line, never the credential itself.
-Saves and search keep working on this Machine meanwhile, and the other Machines keep replicating with each other.
-Everything already committed stays in the repository and on the other Machines.
-Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
-If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
-A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to.
 
 The inbox replicates with the Brain:
 
@@ -321,6 +317,33 @@ Proposals replicate the same way, from the Brain's `review/proposals/` folder, w
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
+
+### Credential scan
+
+Before every commit, setup and merges included, Jarvis scans the files about to be committed for credentials.
+It looks for exactly what it redacts from logs and evidence: GitHub, Slack, Atlassian, AWS, Google and Anthropic tokens, API keys, JSON web tokens, private keys, authorization headers, and the secrets of your connections.
+A finding stops the commit and the push: the status reads blocked, and the cause and the inbox item name the file and line, never the credential itself.
+Saves and search keep working on this Machine meanwhile, and the other Machines keep replicating with each other.
+Everything already committed stays in the repository and on the other Machines.
+Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
+If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
+A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to (see [Deleted notes stay in git history](#deleted-notes-stay-in-git-history)).
+
+### Deleted notes stay in git history
+
+Deleting a note removes it from the Brain, not from the repository's history: every earlier version stays in git, on GitHub and on every Machine's copy.
+Jarvis never rewrites history, so it cannot erase it for you.
+To purge a note that must not be kept, for example one holding a secret:
+
+1. Check that `jarvis replication status` says up to date on every Machine, so nothing is waiting to be pushed, then run `jarvis stop` on every Machine.
+2. On one Machine, clone the repository into a new folder outside the data folder and rewrite its history without the file, for example with [git filter-repo](https://github.com/newren/git-filter-repo): `git filter-repo --invert-paths --path memory/notes/the-note.md`.
+   filter-repo removes the clone's remote, so add it back (`git remote add origin <repository>`) and run `git push --force origin main`.
+   On GitHub, branch protection must allow the force-push, and GitHub support can remove cached views of old commits.
+3. On every Machine, in the data folder, replace the old history with the rewritten one: `git fetch origin`, `git reset --hard origin/main`, `git reflog expire --expire=now --all` and `git gc --prune=now`.
+   Otherwise the next merge would bring the old history back.
+4. Run `jarvis start` on every Machine, and delete the clone from step 2.
+
+A secret that was ever pushed should be treated as exposed: rotate it as well.
 
 ## Where things live
 

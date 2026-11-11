@@ -8,10 +8,13 @@ import type { ReplicationSeams } from "./seams.ts";
 export class ReplicationSetupError extends Error {
   readonly status: number;
   readonly code: string;
-  constructor(status: number, code: string, message: string) {
+  /** Machine-readable facts for the API, e.g. where a refused folder was backed up. */
+  readonly details: Readonly<Record<string, unknown>> | undefined;
+  constructor(status: number, code: string, message: string, details?: Readonly<Record<string, unknown>>) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 

@@ -179,7 +179,8 @@ async function main() {
     case "backup": {
       const stateDir = arg("state-dir", argv);
       const app = new App({ ...(stateDir ? { stateDir } : {}), quiet: true });
-      const r = await createBackup(app, arg("out", argv));
+      const dest = arg("out", argv);
+      const r = await createBackup(app, dest ? { dest } : {});
       app.db.close();
       return out(JSON.stringify({ path: r.path, bytes: r.bytes, manifest: r.manifest }));
     }

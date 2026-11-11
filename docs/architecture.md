@@ -111,15 +111,19 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
 - **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
   It refuses a remote whose `main` already has commits.
   Join clones `main` into an empty folder, then opens it like `/setup/data-folder`, which indexes it.
+  A folder that is not empty is refused with `not_empty`, after `createBackup` archives it with the database to `backups/jarvis-backup-<time>-before-join.tar.gz`; the error's `details.backup` names the archive.
 - **The loop** (`replication.ts`): triggered 30 seconds after the last write (`MemoryStore` `onWrite`), on an outside edit the file watcher sees, at start, on wake (`Scheduler.onResume`) and by a one-minute check.
   One check at a time: commit everything (`git add -A`, so hand edits are included), fetch, commit what was saved meanwhile, merge, push; when the push is rejected because another Machine pushed first, fetch, merge and push again, up to five times, then retry with backoff.
   Failures set the status (offline, unauthorized, blocked) and never reach a save.
 - **Writes pause while git changes the folder.** Commit and merge run synchronously (`BrainRepo`, `Git.runSync`), so no save can land halfway through them; only fetch, push and clone wait on the network asynchronously.
-  A merge left behind by a crash (`MERGE_HEAD`) is aborted at the next check and merged again.
+  At the start of every check, what a crash left behind is undone: git lock files older than the service's start (`index.lock`, `HEAD.lock`, `ORIG_HEAD.lock`, the branch and tracking ref locks) are removed, then a merge in progress (`MERGE_HEAD`) is aborted, the files it had touched are re-indexed, and the check merges again.
 - **Never rewrites history.** Bringing in other Machines' changes is a fast-forward or a merge commit; `Git` refuses `rebase`, `pull`, `reset --hard` and any forced or deleting push before running git.
 - **Merging.** A file both sides changed goes to the merge rules (`MergeRule` in `seams.ts`); a file no rule settles aborts the merge and reads as blocked with its path, so no conflict marker is ever left in a file.
-  Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them.
-- **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/`.
+  Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
+  Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
+  The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
+  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, one item per notice per merge, never resolved automatically, and kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+- **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.
   It takes each version apart (`parts.ts`): frontmatter, Current State entries (with their indented lines), History items, and the prose, which keeps one placeholder line where the facts and the History items were.
   Facts merge by subject (`facts.ts`): a subject one side changed takes that change, a change wins over a removal, and when both changed it the newer date wins, a tie going to the Machine whose id sorts last; the losing value becomes a `superseded` History line naming both Machines, dated with the winner's date.
   History is unioned (`history.ts`): the shared start stays, what each side added is interleaved by date, every item once.

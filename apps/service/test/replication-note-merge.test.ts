@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderMemoryDoc, type StateEntryInput } from "../src/memory/markdown.ts";
-import { defaultSeams, type MachineRef, type MergeInput, type MergeRule } from "../src/replication/seams.ts";
+import { defaultSeams, mergeByRules, type MachineRef, type MergeInput, type MergeRule } from "../src/replication/seams.ts";
 
 /**
  * The note merge rule through the merge-rule seam Replication calls. Two
@@ -21,10 +21,10 @@ function note(opts: { id: string; updated: string; state: StateEntryInput[]; his
   });
 }
 
+/** All of Replication's merge rules, tried in their order, as one rule. */
 const rule = (): MergeRule => {
-  const found = defaultSeams().mergeRules.find((r) => r.appliesTo("memory/projects/orion-migration.md"));
-  if (!found) throw new Error("no merge rule for notes");
-  return found;
+  const rules = defaultSeams().mergeRules;
+  return { name: "replication", appliesTo: () => true, merge: (input) => mergeByRules(rules, input) };
 };
 
 /** The same merge as each Machine runs it: its own version is `ours`. */
@@ -75,6 +75,8 @@ describe("note merge rule on either Machine", () => {
     const base = note({ id: "a", updated: "2026-11-01", state: [{ subject: "Status", date: "2026-11-01", value: "Planned" }], history: [created] });
     const changed = note({ id: "a", updated: "2026-11-02", state: [{ subject: "Status", date: "2026-11-02", value: "Started" }], history: [created] });
     const input: MergeInput = { path: "memory/projects/orion-migration.md", base, ours: null, theirs: changed, local: MAC, remote: PC, now: NOW };
-    expect(rule().merge(input)?.content).toBe(changed);
+    const outcome = rule().merge(input);
+    expect(outcome?.content).toBe(changed);
+    expect(outcome?.notices?.map((n) => n.kind)).toEqual(["deleted_and_changed"]);
   });
 });
