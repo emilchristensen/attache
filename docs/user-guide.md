@@ -29,6 +29,10 @@ Requirements: Linux on x86_64 with systemd, which every mainstream desktop distr
 4. The command line goes to `~/.local/bin`.
    Most distributions already have that folder on your `PATH`; if `jarvis` is not found, add it, or run `~/.local/bin/jarvis`.
 
+Two packages are optional, and most desktops already have them.
+`secret-tool` (`libsecret-tools` on Debian and Ubuntu, `libsecret` on Arch and Fedora) lets Jarvis keep credentials in your desktop's keyring; without it they go to a file only you can read (see [Credentials on Linux](#credentials-on-linux)).
+`notify-send` (`libnotify-bin` on Debian and Ubuntu, `libnotify` on Arch and Fedora) lets Jarvis raise desktop notifications for urgent items.
+
 The service stops when you log out, like any other user service.
 To keep it running without a login, for example on a home server, run `loginctl enable-linger` once.
 If the installer says systemd could not be reached for your user, you are in a session without a systemd user manager (for example after `su` to another user); log in as yourself, or turn on lingering as above.
@@ -65,7 +69,7 @@ Setup has five steps and each works without the ones after it.
 4. **Model and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
-   Set how often sources refresh, when the daily briefing is prepared, and whether urgent items raise a macOS notification.
+   Set how often sources refresh, when the daily briefing is prepared, and whether urgent items raise a desktop notification.
 5. **Test and finish.**
    Jarvis tests each connection and reports every feature as ready, partial, needs setup or unavailable.
    You can finish with a notes-only workspace and connect things later.
@@ -273,11 +277,26 @@ The service runs only while your computer is awake.
 When it wakes, each overdue schedule runs once to catch up; missed intervals are not replayed.
 If a service is unreachable, its coverage shows *offline* and it is retried at the next refresh.
 
+Urgent inbox items raise a desktop notification when that is switched on in Settings, except during quiet hours.
+On macOS they appear in Notification Center.
+On Linux they go to the desktop's notification service (GNOME, KDE Plasma, mako, dunst and others) through `notify-send`, which comes with libnotify (`libnotify-bin` on Debian and Ubuntu, `libnotify` on Arch and Fedora).
+Without `notify-send` or a running notification service, Jarvis keeps working and its log says `desktop notifications are off` with the reason; it says `desktop notifications are on again` once one answers.
+
+## Credentials on Linux
+
+On Linux, Jarvis keeps credentials in the Secret Service: GNOME Keyring, KWallet or KeePassXC, whichever your desktop runs.
+It talks to it through `secret-tool`, which comes with libsecret (`libsecret-tools` on Debian and Ubuntu, `libsecret` on Arch and Fedora).
+Each credential is an item labelled `Jarvis: <name>` with the attribute `service` set to `dev.jarvis.default`.
+
+When no Secret Service is reachable as Jarvis starts, for example on a computer without a desktop, credentials go to `secrets.json` in the service state folder, a file only you can read.
+**Settings → Service health → Credentials** shows which store is in use and, for the file, why.
+The next time Jarvis starts with a Secret Service reachable, it moves the credentials from the file into it and deletes the file.
+
 ## Backup, restore and uninstall
 
 - **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in Terminal.
   A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts).
-  Credentials stay in your secret store and are not included; after restoring elsewhere, reconnect your accounts.
+  Credentials stay in your Keychain (on Linux, the Secret Service) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
 - **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
@@ -414,7 +433,7 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 | Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` |
 | Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder |
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` |
-| Credentials | macOS Keychain, service `dev.jarvis.default` | `secrets.json` in the service state folder, readable only by you |
+| Credentials | macOS Keychain, service `dev.jarvis.default` | Secret Service, service `dev.jarvis.default`; `secrets.json` in the service state folder, readable only by you, when none is reachable (see [Credentials on Linux](#credentials-on-linux)) |
 | App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` |
 | Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` |
 | Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` |

@@ -1,23 +1,32 @@
-import { currentOs, type Os } from "../os.ts";
+import type { Logger } from "../../core/log.ts";
+import type { Env } from "../locations.ts";
+import type { Os } from "../os.ts";
+import { linuxNotifier } from "./linux.ts";
 import { macosNotifier } from "./macos.ts";
-import type { Notifier } from "./types.ts";
+import type { Notifier, NotifierState } from "./types.ts";
 
-export type { Notifier } from "./types.ts";
+export type { Notifier, NotifierState } from "./types.ts";
 
-/** Linux and Windows notifications arrive with their releases; until then nothing is shown there, as before. */
-const unavailable: Notifier = { notify: async () => false };
+/** Windows notifications arrive with its release; until then nothing is shown there. */
+const notOnWindows: Notifier = {
+  check: async () => ({ available: false, reason: "Jarvis does not show notifications on Windows yet" }),
+  notify: async () => ({ available: false, reason: "Jarvis does not show notifications on Windows yet" }),
+};
 
-export function notifierFor(os: Os): Notifier {
+export function notifierFor(os: Os, env: Env = process.env): Notifier {
   switch (os) {
     case "macos":
       return macosNotifier;
     case "linux":
+      return linuxNotifier(env);
     case "windows":
-      return unavailable;
+      return notOnWindows;
   }
 }
 
-function inQuietHours(q: { start: string; end: string } | null, now = new Date()): boolean {
+export type QuietHours = { start: string; end: string } | null;
+
+function inQuietHours(q: QuietHours, now: Date): boolean {
   if (!q) return false;
   const m = now.getHours() * 60 + now.getMinutes();
   const [sh, sm] = q.start.split(":").map(Number) as [number, number];
@@ -28,10 +37,50 @@ function inQuietHours(q: { start: string; end: string } | null, now = new Date()
 }
 
 /**
- * Post a desktop notification unless notifications are switched off
- * (`JARVIS_NO_NOTIFY=1`) or it is quiet hours. Returns false when nothing was shown.
+ * Desktop notifications for the service: skipped when switched off
+ * (`JARVIS_NO_NOTIFY=1`) or in quiet hours, and logged when the operating
+ * system cannot show them, once per change, so a computer without a
+ * notification service runs on and says so in the log.
  */
-export function notifyDesktop(title: string, body: string, opts: { quietHours: { start: string; end: string } | null }): Promise<boolean> {
-  if (process.env.JARVIS_NO_NOTIFY === "1" || inQuietHours(opts.quietHours)) return Promise.resolve(false);
-  return notifierFor(currentOs()).notify(title, body);
+export class DesktopNotifications {
+  private readonly notifier: Notifier;
+  private readonly log: Logger;
+  private readonly env: Env;
+  /** The reason last logged for notifications being off; null while they work. */
+  private offBecause: string | null = null;
+
+  constructor(deps: { notifier: Notifier; log: Logger; env?: Env }) {
+    this.notifier = deps.notifier;
+    this.log = deps.log;
+    this.env = deps.env ?? process.env;
+  }
+
+  private get disabled(): boolean {
+    return this.env.JARVIS_NO_NOTIFY === "1";
+  }
+
+  /** Check once at start, so a computer without a notification service says so in the log right away. */
+  async start(): Promise<void> {
+    if (this.disabled) return;
+    this.record(await this.notifier.check());
+  }
+
+  /** Post a notification. Returns false when nothing was shown. */
+  async notify(title: string, body: string, opts: { quietHours: QuietHours }): Promise<boolean> {
+    if (this.disabled || inQuietHours(opts.quietHours, new Date())) return false;
+    const state = await this.notifier.notify(title, body);
+    this.record(state);
+    return state.available;
+  }
+
+  private record(state: NotifierState): void {
+    if (state.available) {
+      if (this.offBecause !== null) this.log.info("desktop notifications are on again");
+      this.offBecause = null;
+      return;
+    }
+    if (this.offBecause === state.reason) return;
+    this.offBecause = state.reason;
+    this.log.warn("desktop notifications are off", { reason: state.reason });
+  }
 }
