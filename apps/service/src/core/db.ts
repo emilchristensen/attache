@@ -154,6 +154,12 @@ export const MIGRATIONS: readonly string[] = [
   drop table if exists messages;
   drop table if exists conversations;
   `,
+  // Auto-accept per Harness: local state of this Machine, never part of the Brain. A change
+  // written without asking the owner is marked so in the change log.
+  `
+  create table harness_settings (harness text primary key, auto_accept integer not null default 0, updated_at text not null);
+  alter table memory_changes add column auto_accepted integer not null default 0;
+  `,
 ];
 
 export function openDb(file: string): Db {

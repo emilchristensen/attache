@@ -52,6 +52,16 @@ test("screens", async ({ browser }) => {
   harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion" }] }], { agent: "codex", session: "thread-visual-2" });
   harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Fridays", reason: "new rhythm" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "A short call on Fridays", reason: "changed again" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  // Claude Code connected with auto-accept on, and one auto-accepted save, so Settings and Recent saves show both.
+  await page.evaluate(async () => {
+    const call = async (method: string, path: string, body: unknown) => {
+      const res = await fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
+    };
+    await call("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
+    await call("PUT", "/harnesses/claude-code/auto-accept", { autoAccept: true });
+    await call("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "6f1c2b0e-visual" }, autoAccept: true, items: [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }] });
+  });
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
@@ -61,6 +71,9 @@ test("screens", async ({ browser }) => {
     }
     // Below the fold of the settings screenshot.
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
+    await page.getByRole("region", { name: "Auto-accept saves" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
+    await page.goto(`${stack.url}/memory`);
+    await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
   }
   await page.goto(`${stack.url}/memory`);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("When is the cutover plan due for the Orion migration?");

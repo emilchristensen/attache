@@ -299,6 +299,12 @@ The server starts even when the service is down, because a Harness launches its 
   Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
 - `save` takes `items` with the `MemorySaveItem` schema of `POST /memory/save`.
   It checks them with `POST /memory/save/check` (the save's own validation, no write), so an invalid item or the identity record is refused before the owner is asked.
+  The check also answers `autoAccept`: whether the owner switched on auto-accept for the origin's Harness on this Machine.
+  If so, the tool writes through `POST /memory/save` with `autoAccept: true` and no confirmation request; the service checks the setting again and refuses the save (409 `auto_accept_off`) when it is off.
+  Auto-accept is stored per Harness in the `harness_settings` table of the service database (`agents/auto-accept.ts`), local to the Machine and never in the Brain, so Replication never carries it.
+  `GET /harnesses` lists each connected Harness with its switch and `PUT /harnesses/:id/auto-accept` changes it; a Harness that is not connected is refused, and disconnecting one switches it off.
+  Every change an auto-accepted save makes is marked in the change log (`memory_changes.auto_accepted`) beside its Harness and session, and Recent saves shows the mark.
+  It never applies to the identity record, which no save can change.
   It then sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 10-minute limit.
   Accept writes through `POST /memory/save` as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
   A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.

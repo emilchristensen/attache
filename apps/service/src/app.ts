@@ -5,6 +5,7 @@ import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
 import { MachineStore } from "./core/machine.ts";
+import { AutoAcceptStore } from "./agents/auto-accept.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
@@ -45,6 +46,8 @@ export class App {
   readonly secrets: SecretStore;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
+  /** Which Harnesses save without asking, on this Machine. */
+  readonly autoAccept: AutoAcceptStore;
   readonly memory: MemoryStore;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
@@ -76,6 +79,7 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
+    this.autoAccept = new AutoAcceptStore(this.db);
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get() });
     this.bus.setMaxListeners(500);
     this.sessions = new AgentSessions(this);
@@ -106,6 +110,8 @@ export class App {
     this.connections.onDisconnect = (id, kind) => {
       const agent = integrationFor(kind);
       if (agent) {
+        // Connecting the Harness again starts with auto-accept off, as a new Harness does.
+        this.autoAccept.set(agent.kind, false);
         try {
           this.sessions.hooks.uninstall(agent);
         } catch (e) {
