@@ -104,6 +104,17 @@ describe("Linux secret store", () => {
     SLOW,
   );
 
+  it("removes a reachability check item a stopped check left behind when credentials are cleared", () => {
+    const desktop = linuxDesktop();
+    // A check stopped between writing its throwaway item and removing it, as a slow keyring can make it.
+    const probe = { label: "Jarvis: reachability check", attributes: { service: "dev.jarvis.linux-test", account: "jarvis-reachability-check" }, secret: "0123abcd" };
+    writeFileSync(join(desktop.keyring, "items.json"), JSON.stringify([probe]));
+    const cleared = jarvisCli(["credentials", "clear", "--state-dir", newStateDir()], desktop.env);
+    expect(cleared.stderr).toBe("");
+    expect(JSON.parse(cleared.stdout)).toEqual({ store: "secret-service", removed: 0 });
+    expect(keyringItems(desktop)).toEqual([]);
+  });
+
   it(
     "falls back to the private file without a Secret Service and says so",
     async () => {
