@@ -29,6 +29,6 @@ function describeNote(memory: MemoryStore, path: string): RelatedNote[] {
   const type = typeof note.frontmatter.type === "string" ? note.frontmatter.type : "note";
   const facts = note.state
     .slice(0, MAX_FACTS_PER_NOTE)
-    .map(({ subject, value, review }) => ({ subject, value: value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS - 1)}…` : value, ...(review ? { review } : {}) }));
+    .map(({ subject, value, date, review }) => ({ subject, date, value: value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS - 1)}…` : value, ...(review ? { review } : {}) }));
   return [{ path, type, title: note.title, facts }];
 }

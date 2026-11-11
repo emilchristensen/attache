@@ -158,4 +158,13 @@ describe("the briefing", () => {
     expect(memory.items.map((i: any) => i.title)).toContain('New person "Freya Lund" (Role: Designer; Team: Atlas; 1 event)');
     expect(briefing.counts.proposals).toBe((await svc.get("/memory/proposals")).proposals.length);
   });
+
+  it("shows a correction as the old value and the new one", async () => {
+    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Billing revamp", facts: [{ subject: "Status", value: "Draft" }] }] });
+    await svc.post("/memory/proposals", { item: { action: "update", path: "memory/projects/billing-revamp.md", facts: [{ subject: "Status", value: "Approved", reason: "Signed off" }, { subject: "Budget", value: "40k", reason: "Signed off" }] }, reason: "Steering group" });
+    const { job } = await svc.post("/briefings", { kind: "manual" });
+    expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");
+    const memory = (await svc.get("/briefings/latest")).briefing.sections.find((s: any) => s.id === "memory");
+    expect(memory.items.map((i: any) => i.title)).toContain("Status: Draft → Approved; Budget: 40k");
+  });
 });

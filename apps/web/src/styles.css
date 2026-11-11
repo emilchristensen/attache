@@ -761,7 +761,7 @@ button.count-chip {
 }
 .proposal-parts li {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
   overflow-wrap: anywhere;
@@ -776,11 +776,16 @@ button.count-chip {
 .proposal-parts li[data-part="notes"] > span:last-child {
   white-space: pre-wrap;
 }
+/* A correction strikes the value it replaces, so the old and the new value read side by side. */
+.proposal-parts del {
+  color: var(--muted);
+  text-decoration-thickness: 1px;
+}
 /* The words a Proposal rests on, laid out like its parts: a label column, then the quote. */
 .proposal-evidence {
   margin: 0;
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
   font-size: 13px;
@@ -825,9 +830,21 @@ button.count-chip {
 .state-row > .state-review {
   grid-area: review;
 }
-.proposal-meta > span + span::before {
+/*
+ * Separator dots sit in the gap before each part. The first part on every line,
+ * wrapped ones too, has its dot outside the box, where it is clipped, so no
+ * line starts with a separator.
+ */
+.item .proposal-meta {
+  column-gap: 16px;
+  overflow: hidden;
+}
+.proposal-meta > span::before {
   content: "·";
-  margin-right: 8px;
+  display: inline-block;
+  width: 16px;
+  margin-left: -16px;
+  text-align: center;
 }
 .item.priority-high {
   border-left: 3px solid var(--warn);
@@ -1176,7 +1193,7 @@ button.count-chip {
     align-items: flex-start;
     gap: 2px;
   }
-  .proposal-meta > span + span::before {
+  .proposal-meta > span::before {
     content: none;
   }
 }

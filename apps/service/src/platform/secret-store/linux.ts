@@ -44,7 +44,9 @@ function reach(opts: LinuxSecretStoreOptions): Reachability {
   const stored = secretTool(tool, ["store", "--label=Jarvis: reachability check", ...attributes], { input: value, timeoutMs: STORE_TIMEOUT_MS });
   if (!stored.ok) return { reachable: false, why: stored.why };
   const read = secretTool(tool, ["lookup", ...attributes], { timeoutMs: READ_TIMEOUT_MS });
-  secretTool(tool, ["clear", ...attributes], { timeoutMs: READ_TIMEOUT_MS });
+  // Removing is a write too, and a probe left behind would stay in the owner's keyring, so it gets the longer timeout and a second try.
+  const clear = () => secretTool(tool, ["clear", ...attributes], { timeoutMs: STORE_TIMEOUT_MS });
+  if (!clear().ok) clear();
   if (!read.ok) return { reachable: false, why: read.why };
   if (read.stdout !== value) return { reachable: false, why: "the Secret Service returned a different value than was stored" };
   return { reachable: true, tool };
