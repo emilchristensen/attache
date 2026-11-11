@@ -3,11 +3,11 @@ import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInp
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
-import { search } from "../memory/search.ts";
+import { RECALL_EXCLUDE, search } from "../memory/search.ts";
 import { decide, getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
@@ -53,6 +53,15 @@ export function resolveAbsolute(app: App, absPath: string): { root: string; relP
   return null;
 }
 
+/** The note a document request names: a root and a path inside it, or an absolute path inside the Brain or another indexed folder. */
+function documentTarget(app: App, root: string | null | undefined, path: string | null | undefined): { root: string; rel: string } {
+  if (!path) throw new HttpError(400, "invalid_request", "path is required");
+  if (root || !isAbsolute(path)) return { root: root ?? "data", rel: path };
+  const found = resolveAbsolute(app, path);
+  if (!found) throw new HttpError(404, "not_found", `${path} is not in the Brain or another folder Jarvis indexes.`);
+  return { root: found.root, rel: found.relPath };
+}
+
 export function registerDataRoutes(r: Router, app: App) {
   // ---- memory ------------------------------------------------------------------
   r.get("/memory/search", (c) => {
@@ -60,7 +69,9 @@ export function registerDataRoutes(r: Router, app: App) {
     const q = c.query("q") ?? "";
     const area = c.query("area");
     const type = c.query("type");
-    return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}) }) };
+    // `recall=1` searches the way recall does: raw conversations and session transcripts stay out, their summaries stay in.
+    const recall = c.query("recall") === "1";
+    return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
   });
   r.get("/memory/documents", (c) => {
     requireFeature(app, "recall");
@@ -68,9 +79,7 @@ export function registerDataRoutes(r: Router, app: App) {
   });
   r.get("/memory/document", (c) => {
     requireFeature(app, "recall");
-    const root = c.query("root") ?? "data";
-    const rel = c.query("path");
-    if (!rel) throw new HttpError(400, "invalid_request", "path is required");
+    const { root, rel } = documentTarget(app, c.query("root"), c.query("path"));
     const base = rootPath(app, root);
     const abs = resolveInside(base, rel);
     if (!existsSync(abs)) throw new HttpError(404, "not_found", `${rel} no longer exists. The index will drop it on the next refresh.`);

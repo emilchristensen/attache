@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { App } from "../../src/app.ts";
@@ -80,6 +80,8 @@ export async function startTestService(opts: { stateDir?: string; dataDir?: stri
     async stop() {
       await server.close();
       await app.stop();
+      // What `jarvis serve` does on a clean stop, so the CLI sees the service as stopped.
+      rmSync(app.paths.runtimeFile, { force: true });
     },
   };
   if (opts.setup !== false && !app.config.get().setupCompleted) {

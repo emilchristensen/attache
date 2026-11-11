@@ -91,7 +91,7 @@ export class ServiceClient {
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (e) {
-      throw new ServiceError(503, "unreachable", `Could not reach Jarvis at ${this.base}: ${(e as Error).message}`);
+      throw new ServiceError(503, "unreachable", `Could not reach Jarvis at ${this.base} (${(e as Error).message}). If it is stopped, start it with \`jarvis start\`, then try again.`);
     }
   }
 

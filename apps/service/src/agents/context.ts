@@ -19,7 +19,7 @@ export const MAX_DETAILED_PER_TYPE = 15;
 const MAX_TITLES_PER_TYPE = 40;
 const MAX_GIST_CHARS = 120;
 const MAX_LOG_CHARS = 6000;
-const TYPE_LABEL: Record<string, string> = { person: "People", project: "Projects", decision: "Decisions", note: "Notes" };
+export const TYPE_LABEL: Record<string, string> = { person: "People", project: "Projects", decision: "Decisions", note: "Notes" };
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
