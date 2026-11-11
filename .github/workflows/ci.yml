@@ -37,9 +37,12 @@ jobs:
         id: minimum
         run: node scripts/node-minimum.mjs
 
+      # The current release is the newest stable Node: `*` with check-latest, because the `current` alias
+      # takes the first version nodejs.org lists, which can be an alpha, and `*` alone takes the runner's cached one.
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node == 'minimum' && steps.minimum.outputs.version || 'current' }}
+          node-version: ${{ matrix.node == 'minimum' && steps.minimum.outputs.version || '*' }}
+          check-latest: ${{ matrix.node == 'current' }}
           cache: pnpm
 
       - name: Install dependencies
