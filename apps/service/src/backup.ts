@@ -23,30 +23,39 @@ export interface BackupManifest {
   connectionsNeedingReconnect: string[];
 }
 
+export interface BackupOptions {
+  /** Where to write the archive; the backups folder when left out. */
+  dest?: string;
+  /** The folder to back up instead of the configured data folder, e.g. one a join refused. */
+  dataFolder?: string;
+  /** Added to the archive's name, e.g. "before-join". */
+  label?: string;
+}
+
 /**
  * Create a backup archive: a consistent database snapshot (VACUUM INTO), the
  * whole data folder, and a manifest. Credentials are never exported; they stay
  * in the Keychain and connections are re-authorised after a restore elsewhere.
  */
-export async function createBackup(app: App, dest?: string): Promise<{ path: string; bytes: number; manifest: BackupManifest }> {
+export async function createBackup(app: App, opts: BackupOptions = {}): Promise<{ path: string; bytes: number; manifest: BackupManifest }> {
   const stamp = nowIso().replace(/[:.]/g, "-");
+  const folder = opts.dataFolder ?? app.config.get().dataFolder;
   const work = mkdtempSync(join(tmpdir(), "jarvis-backup-"));
   try {
     app.db.exec(`vacuum into '${join(work, "jarvis.sqlite").replace(/'/g, "''")}'`);
-    const cfg = app.config.get();
     const manifest: BackupManifest = {
       format: "jarvis-backup-1",
       version: VERSION,
       createdAt: nowIso(),
       instance: app.instance,
-      dataFolder: cfg.dataFolder,
-      includesData: !!cfg.dataFolder && existsSync(cfg.dataFolder),
+      dataFolder: folder,
+      includesData: !!folder && existsSync(folder),
       credentialsIncluded: false,
       connectionsNeedingReconnect: app.connections.records().filter((r) => r.kind !== "vault" && r.status !== "disconnected").map((r) => r.id),
     };
     writeFileSync(join(work, "manifest.json"), JSON.stringify(manifest, null, 2));
-    if (manifest.includesData) cpSync(cfg.dataFolder!, join(work, "data"), { recursive: true, filter: (src) => basename(src) !== "writer.lock" });
-    const out = dest ?? join(app.paths.backupsDir, `jarvis-backup-${stamp}.tar.gz`);
+    if (manifest.includesData) cpSync(folder!, join(work, "data"), { recursive: true, filter: (src) => basename(src) !== "writer.lock" });
+    const out = opts.dest ?? join(app.paths.backupsDir, `jarvis-backup-${stamp}${opts.label ? `-${opts.label}` : ""}.tar.gz`);
     mkdirSync(join(out, ".."), { recursive: true });
     await tar(["-czf", out, "-C", work, "."]);
     return { path: out, bytes: statSync(out).size, manifest };

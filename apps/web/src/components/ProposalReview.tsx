@@ -58,11 +58,17 @@ export function ProposalReview() {
         <article key={p.id} className="item" data-proposal={p.id} aria-label={headline(p.item, p.target)}>
           <div className="title">{headline(p.item, p.target)}</div>
           {p.item ? <Parts item={p.item} /> : <div className="summary">This Proposal can no longer be read. Reject it to clear it.</div>}
+          {p.evidence && (
+            <figure className="proposal-evidence" data-evidence>
+              <figcaption>Evidence</figcaption>
+              <blockquote>{p.evidence}</blockquote>
+            </figure>
+          )}
           <div className="meta proposal-meta">
             {p.reason && <span>Why: {p.reason}</span>}
             {p.source && <span>Source: {p.source}</span>}
             <span>
-              Proposed by {p.proposedBy} <Time iso={p.createdAt} />
+              Proposed by {p.proposedBy} on {p.proposedOn} <Time iso={p.createdAt} />
             </span>
           </div>
           <div className="item-actions">

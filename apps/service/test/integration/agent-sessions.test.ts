@@ -154,8 +154,8 @@ describe("coding-agent sessions", () => {
   it("a session summarised in a project's repository starts that project's next sessions", async () => {
     const repo = join(work, "orion-checkout");
     mkdirSync(repo, { recursive: true });
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
-    execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/orion.git"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/orion.git"], { cwd: repo });
     const transcript = join(work, "s-orion.jsonl");
     writeFileSync(transcript, claudeTranscript("s-orion", repo, [["How do we migrate the ledger?", "We decided to migrate the ledger table by table."]]));
     runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: "s-orion", transcript_path: transcript, cwd: repo, reason: "exit" });

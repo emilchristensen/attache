@@ -209,7 +209,11 @@ export function removeStateEntry(raw: string, entry: { subject: string; date: st
   return { text: appendHistory(text, formerValueLine(entry.date, removed, "removed", reason)), removed };
 }
 
-function formerValueLine(date: string, former: StateEntry, outcome: "superseded" | "removed", reason: string): string {
+/**
+ * The History line that keeps a value no longer current:
+ * `- <date> — **Subject** was "<value>" (dated <d>[, review <r>][, source: …]); <outcome>: <reason>`.
+ */
+export function formerValueLine(date: string, former: Omit<StateEntry, "line">, outcome: "superseded" | "removed", reason: string): string {
   return `- ${date} — **${former.subject}** was "${former.value}" (dated ${former.date}${former.review ? `, review ${former.review}` : ""}${former.source ? `, source: ${former.source}` : ""}); ${outcome}: ${reason.replace(/\s*\n\s*/g, " ")}`;
 }
 

@@ -26,13 +26,19 @@ import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { wakeSnoozed } from "./attention/engine.ts";
+import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
+import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
-import { syncBlockedItem } from "./replication/blocked-inbox.ts";
+import type { GitHubAccess } from "./replication/github.ts";
+import { connectionSecretKey } from "./connectors/manager.ts";
+import { resolveEndpoint } from "./connectors/test-endpoints.ts";
+import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
+import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -68,6 +74,10 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  /** The owner's inbox, kept in the Brain so it replicates. */
+  readonly inbox: Inbox;
+  /** Proposals, kept in the Brain so they replicate. */
+  readonly proposals: Proposals;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -96,20 +106,37 @@ export class App {
     this.machine = new MachineStore(this.db);
     this.machine.get();
     this.autoAccept = new AutoAcceptStore(this.db);
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.clock = opts.clock ?? systemClock;
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite(), now: () => this.clock.now() });
     this.replication = new Replication({
       db: this.db,
       log: this.log,
       clock: this.clock,
-      seams: defaultSeams(),
+      seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
+      // Loaded when needed: the backup module imports this one.
+      backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
     });
+    this.inbox = new Inbox({
+      db: this.db,
+      log: this.log,
+      ctx: { now: () => this.clock.now().toISOString(), machine: () => this.machine.get() },
+      dataRoot: () => this.memory.dataRoot,
+      onWrite: () => this.replication.noteWrite(),
+      onChange: () => this.bus.emit("event", { type: "attention.changed" }),
+      // Replication's own items stay on this Machine: its status, and the notices of merges it made (raised once, where the merge ran).
+      localSources: [REPLICATION_SOURCE, MERGE_NOTICE_SOURCE],
+    });
+    this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
+    this.replication.onPulled((paths) => this.inbox.pulled(paths));
+    this.replication.onMergeNotice((notices) => {
+      if (raiseMergeNotices(this.db, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
+    });
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
       { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
@@ -124,6 +151,7 @@ export class App {
       secrets: this.secrets,
       log: this.log,
       memory: this.memory,
+      inbox: this.inbox,
       adapters: this.adapters,
       claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
@@ -267,6 +295,8 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
+    this.inbox.reconcile();
+    this.proposals.open();
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
       onChange: () => {
@@ -286,9 +316,23 @@ export class App {
     return r;
   }
 
+  /** What Replication borrows from the GitHub connection: its API address and, from the secret store, its token. */
+  private githubAccess(): GitHubAccess {
+    const record = () => this.connections.records().find((r) => r.kind === "github" && r.status !== "disconnected" && r.status !== "not_configured") ?? null;
+    return {
+      connection: () => {
+        const r = record();
+        if (!r) return null;
+        const configured = typeof r.settings.apiBaseUrl === "string" && r.settings.apiBaseUrl ? r.settings.apiBaseUrl : "https://api.github.com";
+        return { id: r.id, apiBase: resolveEndpoint(configured) };
+      },
+      token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
+    };
+  }
+
   /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
   private replicationChanged() {
-    if (syncBlockedItem(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
     this.bus.emit("event", { type: "replication.changed" });
   }
 
@@ -312,6 +356,7 @@ export class App {
       const r = this.memory.indexer.scan(root);
       if (r.indexed || r.removed) changed = true;
     }
+    if (this.proposals.reload(paths)) changed = true;
     if (changed) this.bus.emit("event", { type: "memory.changed" });
   }
 

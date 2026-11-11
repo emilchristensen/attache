@@ -26,6 +26,8 @@ export interface TestWorld {
   machines: TestMachine[];
   /** Start another Machine; it joins unless `join: false`. */
   addMachine(name: string, opts?: { join?: boolean }): Promise<TestMachine>;
+  /** Stop a Machine's service and start it again on the same state and Brain, as after a crash or reboot. */
+  restart(machine: TestMachine): Promise<TestMachine>;
   stop(): Promise<void>;
 }
 
@@ -77,10 +79,21 @@ export async function startMachines(names: string[]): Promise<TestWorld> {
     return m;
   };
   for (const name of names) await addMachine(name);
+  const restart = async (machine: TestMachine) => {
+    const i = machines.indexOf(machine);
+    if (i < 0) throw new Error(`${machine.name} is not part of this world`);
+    await machine.stop();
+    const clock = new ManualClock(machine.clock.now().getTime());
+    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir });
+    const again = Object.assign(svc, { name: machine.name, clock });
+    machines.splice(i, 1, again);
+    return again;
+  };
   return {
     remote,
     machines,
     addMachine,
+    restart,
     async stop() {
       for (const m of machines) await m.stop();
     },
