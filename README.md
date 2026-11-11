@@ -12,6 +12,7 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 ## What it does
 
 - Conversation with grounded recall: every answer searches your notes and cites file and line; search works without a model.
+- Meaning-based search on each Machine: a small multilingual model, downloaded once from Settings, runs locally and builds vectors for every passage; search falls back to keywords until they are ready.
 - The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Claude Desktop and other Harnesses search and read your notes with file and line citations, with no token in their configuration.
 - Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.

@@ -64,7 +64,19 @@ test("screens", async ({ browser }) => {
     }
     // Below the fold of the settings screenshot.
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
+    await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
   }
+  // Search before and after the meaning model is downloaded.
+  await page.goto(`${stack.url}/memory`);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await expect(page.locator("[data-keywords-only]")).toBeVisible();
+  await page.locator("[data-keywords-only]").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "test-results/screens/dark-memory-keywords-only.png", fullPage: false });
+  await page.goto(`${stack.url}/settings`);
+  const meaning = page.locator("[data-meaning-search]");
+  await meaning.getByRole("button", { name: /^Download model/ }).click();
+  await expect(meaning.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await meaning.screenshot({ path: "test-results/screens/dark-settings-meaning-ready.png" });
   await page.goto(stack.url);
   await page.locator(".msg.assistant button.cite").first().click();
   await page.waitForTimeout(300);

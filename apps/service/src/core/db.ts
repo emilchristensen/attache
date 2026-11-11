@@ -148,6 +148,16 @@ export const MIGRATIONS: readonly string[] = [
   create index memory_changes_doc on memory_changes(doc_rel_path);
   create index memory_changes_reverts on memory_changes(reverts);
   `,
+  // Meaning-based search, local to this Machine: the text each chunk's vector is made from, and the
+  // vectors, keyed by model and that text's hash so text that did not change keeps its vector when its
+  // file is re-chunked. Forget every file's fingerprint so the next scan fills in the new columns.
+  `
+  alter table chunks add column embed_text text;
+  alter table chunks add column embed_hash text;
+  create index chunks_embed on chunks(embed_hash);
+  create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
+  update documents set hash = '', mtime_ms = -1;
+  `,
 ];
 
 export function openDb(file: string): Db {

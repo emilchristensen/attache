@@ -99,6 +99,16 @@ describe("Jarvis MCP server", () => {
     expect(paths.filter((p) => p.startsWith("evidence/conversations/") || p.startsWith("evidence/sessions/transcripts/"))).toEqual([]);
   });
 
+  it("says when results match keywords only, because meaning-based search is not ready yet", async () => {
+    const client = await connect(svc.stateDir);
+    const r = await callTool<{ passages: Passage[]; meaning: { state: string; note: string | null } }>(client, "search", { query: "Orion cutover" });
+    expect(r.isError).toBe(false);
+    expect(r.data.meaning.state).toBe("missing");
+    expect(r.data.meaning.note).toMatch(/keywords only.*not downloaded/);
+    expect(r.text.split("\n")[0]).toBe(r.data.meaning.note);
+    expect(r.data.passages.length).toBeGreaterThan(0);
+  });
+
   it("says when nothing matches", async () => {
     const client = await connect(svc.stateDir);
     const r = await callTool<{ passages: Passage[] }>(client, "search", { query: "xylophone" });

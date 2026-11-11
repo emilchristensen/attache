@@ -3,3 +3,5 @@ packages:
   - "apps/*"
 allowBuilds:
   esbuild: true
+  # Its install script only prints a version notice; nothing is built.
+  protobufjs: false

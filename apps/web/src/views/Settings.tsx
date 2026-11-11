@@ -4,6 +4,7 @@ import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { FeatureList } from "./Setup.tsx";
+import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -215,6 +216,7 @@ export function SettingsView() {
           </>
         )}
         <ThisMachine />
+        <MeaningSearchCard />
         <Clients />
         <Backups />
         <div className="card stack-sm">

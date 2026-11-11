@@ -277,6 +277,26 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
   await expect(card.locator(".mono")).toHaveText(id!);
 });
 
+test("meaning-based search: search says it matches keywords only until the owner downloads the model in Settings", async () => {
+  const page = await open("/memory");
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
+  await expect(page.locator(".list-item").first()).toBeVisible();
+
+  await page.locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
+  const card = page.locator("[data-meaning-search]");
+  await expect(card.getByText("not downloaded")).toBeVisible();
+  await card.getByRole("button", { name: /^Download model/ }).click();
+  await expect(card.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(card.getByText(/Every passage in this Machine's index has a vector/)).toBeVisible();
+  await expect(card.getByRole("button", { name: /Download/ })).toHaveCount(0);
+
+  await page.goto(`${stack.url}/memory`);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
+});
+
 test("reconnection: service restart shows a banner, then recovers state", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();

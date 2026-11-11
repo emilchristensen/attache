@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { App } from "../../src/app.ts";
+import { App, type AppOptions } from "../../src/app.ts";
 import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
 
@@ -27,10 +27,10 @@ export interface TestService {
   stop(): Promise<void>;
 }
 
-export async function startTestService(opts: { stateDir?: string; dataDir?: string; setup?: boolean; features?: Record<string, boolean> } = {}): Promise<TestService> {
+export async function startTestService(opts: { stateDir?: string; dataDir?: string; setup?: boolean; features?: Record<string, boolean>; meaning?: AppOptions["meaning"] } = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? mkdtempSync(join(tmpdir(), "jarvis-it-state-"));
   const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "jarvis-it-data-")), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}` });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.meaning ? { meaning: opts.meaning } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `jarvis serve` writes, so the CLI finds this service.

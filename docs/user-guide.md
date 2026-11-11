@@ -156,6 +156,7 @@ Other Harnesses take the same command and argument in their MCP server settings.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out raw chat and session transcripts and includes their summaries.
+  While meaning-based search is not ready on this Machine, the answer starts with a line saying the passages match keywords only, and why.
 - **read** returns a whole note, or only a line range, for a path that search returned.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
@@ -166,6 +167,17 @@ Other Harnesses take the same command and argument in their MCP server settings.
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
 There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
+
+## Meaning-based search
+
+Search can also find notes by meaning, so a question in other words, or in Danish, finds an English note.
+It uses a small multilingual model (multilingual-e5-small, about 135 MB) that runs on each Machine, without a network and without sending your notes anywhere.
+Jarvis does not ship the model: download it once per Machine in **Settings → Meaning-based search**.
+The card shows the model's state: not downloaded, downloading, building, ready or failed.
+After the download Jarvis builds a vector for every passage it has indexed, in the background, and keeps them current as files change.
+Search keeps working on keywords the whole time; until vectors are ready, results in the Dashboard and in a Harness say they match keywords only.
+If the download fails, the card says why and offers to download again.
+The model lives in the service state folder and its vectors in this Machine's index, never in your Brain, so they are not replicated; each Machine builds its own.
 
 ## Measuring search
 
@@ -215,7 +227,8 @@ The lock that enforces this lives outside the data folder, in `~/Library/Applica
 | What | Where |
 | --- | --- |
 | Your knowledge (Markdown) | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name) | `~/Library/Application Support/Jarvis/state` |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` |
+| Meaning model, once downloaded | `~/Library/Application Support/Jarvis/state/models` |
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |

@@ -22,6 +22,8 @@ export interface FixtureResponse {
   headers?: Record<string, string>;
   json?: unknown;
   text?: string;
+  /** Raw bytes, for file downloads. */
+  body?: Uint8Array;
 }
 
 export type FixtureHandler = (req: FixtureRequest) => FixtureResponse | Promise<FixtureResponse>;
@@ -55,9 +57,10 @@ export async function startFixtureServer(port = 0): Promise<FixtureServer> {
     }
     try {
       const out = await route.handler(freq);
-      const headers = { ...(out.json !== undefined ? { "content-type": "application/json" } : { "content-type": "text/plain" }), ...(out.headers ?? {}) };
+      const type = out.json !== undefined ? "application/json" : out.body !== undefined ? "application/octet-stream" : "text/plain";
+      const headers = { "content-type": type, ...(out.body !== undefined ? { "content-length": String(out.body.length) } : {}), ...(out.headers ?? {}) };
       res.writeHead(out.status ?? 200, headers);
-      res.end(out.json !== undefined ? JSON.stringify(out.json) : (out.text ?? ""));
+      res.end(out.json !== undefined ? JSON.stringify(out.json) : (out.body ?? out.text ?? ""));
     } catch (e) {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ message: (e as Error).message }));
