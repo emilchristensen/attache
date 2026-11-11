@@ -1,3 +1,6 @@
+import { inboxMergeRule } from "../attention/inbox-merge.ts";
+import { credentialScan } from "./credential-scan.ts";
+
 /**
  * Where later rules plug into Replication without changing the loop:
  * merge rules for files both sides changed, guards that run before every
@@ -55,6 +58,11 @@ export interface StagedFile {
   change: "added" | "modified" | "deleted";
   /** The content about to be committed; null for a deletion. */
   read(): string | null;
+  /**
+   * The versions of this file in the commits this one builds on (HEAD, and
+   * the other side's tip during a merge): what is in the shared history already.
+   */
+  committed?(): readonly string[];
 }
 
 export type GuardVerdict = { ok: true } | { ok: false; status: "blocked" | "unauthorized"; cause: string };
@@ -91,5 +99,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [noteMergeRule()], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [inboxMergeRule, noteMergeRule()], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

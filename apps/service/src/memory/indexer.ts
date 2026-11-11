@@ -5,6 +5,7 @@ import { type Db, nowIso, tx } from "../core/db.ts";
 import { chunkSection } from "./chunker.ts";
 import { parseMarkdown } from "./markdown.ts";
 import { areaOf, type Area } from "./policy.ts";
+import { isReviewPath } from "../review-state/files.ts";
 
 export interface IndexRoot {
   /** "data" for the Jarvis data folder, "import:<id>" for imported folders. */
@@ -15,6 +16,11 @@ export interface IndexRoot {
 
 const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".jarvis", ".DS_Store"]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+/** Review state (the inbox and Proposals) lives in the Brain but is never recall evidence. */
+function unindexed(root: IndexRoot, rel: string): boolean {
+  return root.id === "data" && isReviewPath(rel);
+}
 
 export interface ScanPlan {
   read: string[];
@@ -180,6 +186,7 @@ export class Indexer {
     if (!parts.length || parts.includes("..")) return "rescan";
     if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p) || p.startsWith("."))) return "ignored";
     const n = parts.join("/");
+    if (unindexed(root, n)) return "ignored";
     const isMarkdown = n.toLowerCase().endsWith(".md");
     const abs = join(root.path, n);
     let st;
@@ -225,6 +232,7 @@ export class Indexer {
       ),
     );
     for (const rel of plan.read) {
+      if (unindexed(root, rel)) continue;
       if (onlyAreas && root.id === "data" && !onlyAreas.includes(rel.split("/")[0] ?? "")) continue;
       present.add(rel);
       try {

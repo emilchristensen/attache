@@ -116,8 +116,11 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Jarvis named Machines keep their `<date>.md` name and are still searched and shown.
   Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
-- **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
-  A session started inside one of a project's repositories also gets that project's current state first.
+- **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  A session started inside one of a project's repositories also gets, first, that project's current state, the decisions and people linked to it, and the latest session-log entries from sessions in its repositories.
+  A decision or a person is linked to a project when either note names the other, by its title or with a link to its file.
+  The whole block stays within about 8 KB; when there is more, Jarvis drops note titles first, then the oldest session entries, then the least recently updated decisions and people, and says what it left out.
+  The project's own facts are always there, and a fact past its Review date is marked unverified.
   A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
   The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
   Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.
@@ -289,6 +292,27 @@ What happens on its own:
 - Two notes with the same type and title, created on two Machines, become one note with the facts and History of both.
 - A note one Machine changed and the other deleted is kept.
 - Until the prose merge arrives, a note whose free text both Machines changed differently, or any other file both changed in the same place, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+- While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
+  It resolves by itself once Replication is up to date again.
+
+### Credential scan
+
+Before every commit, setup and merges included, Jarvis scans the files about to be committed for credentials.
+It looks for exactly what it redacts from logs and evidence: GitHub, Slack, Atlassian, AWS, Google and Anthropic tokens, API keys, JSON web tokens, private keys, authorization headers, and the secrets of your connections.
+A finding stops the commit and the push: the status reads blocked, and the cause and the inbox item name the file and line, never the credential itself.
+Saves and search keep working on this Machine meanwhile, and the other Machines keep replicating with each other.
+Everything already committed stays in the repository and on the other Machines.
+Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
+If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
+A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to.
+
+The inbox replicates with the Brain:
+
+- An item raised on one Machine shows on all of them.
+- Dismissing or snoozing an item on one Machine applies on every Machine.
+- A dismissed item whose source changed reopens everywhere, marked "changed since your decision".
+- When two Machines decided differently on the same item before hearing of each other, the later decision wins.
+- Inbox items live in the Brain's `review/inbox/` folder, one small file per item, and never show up in search.
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.

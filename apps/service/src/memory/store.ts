@@ -11,6 +11,7 @@ import type { MachineIdentity } from "../core/machine.ts";
 import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
 import { factDay } from "./review-date.ts";
+import { REVIEW_STATE_DIR } from "../review-state/files.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -87,6 +88,7 @@ Jarvis keeps your knowledge here as plain Markdown. You can read and edit these 
 - \`evidence/\` is archived evidence: captures, coding-agent sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
+- \`review/\` holds the inbox (and its dismiss and snooze decisions) as one small JSON file per item, so it replicates with the rest; search never indexes it.
 
 Search indexes are rebuilt from these files, so deleting the index never loses knowledge.
 Service state (jobs, approvals, settings) and credentials live outside this folder.
@@ -157,7 +159,7 @@ export class MemoryStore {
     // Record what Jarvis created, so a data-deleting uninstall never removes files the user already had.
     const owned = join(root, ".jarvis", "owned.json");
     if (!existsSync(owned)) {
-      const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
+      const mine = ["memory", "evidence", "deliverables", REVIEW_STATE_DIR, ".jarvis", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
     this.takeLock(root);

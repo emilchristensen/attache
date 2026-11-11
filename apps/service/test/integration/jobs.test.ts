@@ -144,14 +144,18 @@ describe("A08 service restart recovers work without duplicate execution", () => 
   const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_INSTANCE: "restart-test" };
 
   const boot = async (): Promise<string> => {
-    child = spawn(process.execPath, [BUNDLE, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
-    // Up to 30 s: the bundled service starts in about a second, but far slower when the machine is busy running other suites.
-    for (let i = 0; i < 300; i++) {
+    const proc = spawn(process.execPath, [BUNDLE, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
+    child = proc;
+    let exited: number | string | null = null;
+    proc.once("exit", (code, signal) => (exited = code ?? signal));
+    // A cold bundle start can take well over 10s while the full suite loads the machine; the test's own timeout still bounds it.
+    for (let i = 0; i < 250; i++) {
       await new Promise((r) => setTimeout(r, 100));
+      if (exited !== null) throw new Error(`service exited before starting (${exited})`);
       const rt = join(stateDir, "runtime.json");
       if (existsSync(rt)) {
         const j = JSON.parse(readFileSync(rt, "utf8"));
-        if (j.pid === child.pid) return j.url;
+        if (j.pid === proc.pid) return j.url;
       }
     }
     throw new Error("service did not start");
@@ -198,6 +202,6 @@ describe("A08 service restart recovers work without duplicate execution", () => 
     // The external side effect (a deliverable file) exists exactly once.
     const files = readdirSync(join(dataDir, "deliverables/research")).filter((f) => f.includes(job.id.slice(0, 8)));
     expect(files).toHaveLength(1);
-    // Two service starts, each allowed 30 s under load (see `boot`).
+    // Two service starts, each allowed 25 s under load (see `boot`).
   }, 120_000);
 });
