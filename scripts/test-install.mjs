@@ -304,7 +304,9 @@ async function main() {
     check("A14", "restore refuses to overwrite a live profile", again);
   } finally {
     const exited = new Promise((r) => svc.once("exit", r));
-    svc.kill("SIGTERM");
+    // Killed outright, as Windows always ends it (it has no SIGTERM) and as a crash would: the writer lock
+    // it leaves behind is one the data-deleting uninstall below must still remove.
+    svc.kill("SIGKILL");
     await Promise.race([exited, sleep(10_000)]);
     for (const dir of [freshState, dirname(freshData)]) rmSync(dir, { recursive: true, force: true });
   }

@@ -2,7 +2,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
-import { resolvePaths } from "../core/paths.ts";
+import { defaultLocksDir, resolvePaths } from "../core/paths.ts";
+import { clearStaleLocks } from "../memory/writer-lock.ts";
 import { currentOs } from "../platform/os.ts";
 import { platformLocations, type PlatformLocations } from "../platform/locations.ts";
 import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } from "../platform/harness-locations.ts";
@@ -128,6 +129,16 @@ export async function credentialsCommand(sub: string | undefined, io: PlatformCl
   const store = createSecretStore({ os: currentOs(), stateDir: paths.stateDir, secretsFile: paths.secretsFile, instance: instance() });
   const removed = await clearSecrets(store);
   io.out(JSON.stringify({ store: store.kind, removed }));
+}
+
+/**
+ * `jarvis locks clear-stale [--locks-dir <path>]`: for a data-deleting
+ * uninstall, remove the writer locks of services that are gone, so the shared
+ * locks folder can go once no live service holds a lock in it.
+ */
+export function locksCommand(sub: string | undefined, io: PlatformCliIo): void {
+  if (sub !== "clear-stale") throw new Error("Usage: jarvis locks clear-stale [--locks-dir <path>]");
+  io.out(JSON.stringify(clearStaleLocks(io.arg("locks-dir") ?? defaultLocksDir())));
 }
 
 /** `jarvis notifications forget`: remove what Jarvis registered to show notifications (its sender on Windows; nothing elsewhere). */

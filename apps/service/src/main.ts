@@ -16,7 +16,7 @@ import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
-import { credentialsCommand, dataFolderCommand, notificationsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
+import { credentialsCommand, dataFolderCommand, locksCommand, notificationsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
 import { currentOs } from "./platform/os.ts";
 import { openUrl } from "./platform/open-url.ts";
 import { runMcpServer } from "./mcp/server.ts";
@@ -196,6 +196,8 @@ async function main() {
       return credentialsCommand(argv[1], platformIo(argv));
     case "notifications":
       return notificationsCommand(argv[1], platformIo(argv));
+    case "locks":
+      return locksCommand(argv[1], platformIo(argv));
     case "paths":
       return pathsCommand(argv[1], platformIo(argv));
     case "data-folder":
@@ -219,7 +221,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, notifications, paths, data-folder`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, notifications, locks, paths, data-folder`);
   }
 }
 

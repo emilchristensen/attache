@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { json, nowIso } from "../core/db.ts";
 import { PolicyError } from "./policy.ts";
@@ -12,6 +12,8 @@ interface LockOwner {
 /** Where versions before Machine identity kept the lock: inside the data folder, which Replication shares. */
 const LEGACY_LOCK = join(".jarvis", "writer.lock");
 const TAKE_ATTEMPTS = 3;
+/** A lock file's name: a hash of the data folder's real path. */
+const LOCK_FILE = /^[0-9a-f]{32}\.lock$/;
 
 /**
  * The single-writer lock on one data folder. It lives outside the folder, in a
@@ -64,6 +66,23 @@ export class WriterLock {
   release(): void {
     if (readOwner(this.file)?.pid === process.pid) rmSync(this.file, { force: true });
   }
+}
+
+/**
+ * Remove the locks in `locksDir` whose holder is gone, as a service killed
+ * outright (a crash, or any hard stop on Windows) leaves them. A lock a live
+ * process holds stays, and so does one that cannot be read, which may be a
+ * service writing it this moment. Returns how many were removed and kept.
+ */
+export function clearStaleLocks(locksDir: string): { removed: number; kept: number } {
+  if (!existsSync(locksDir)) return { removed: 0, kept: 0 };
+  const locks = readdirSync(locksDir).filter((name) => LOCK_FILE.test(name)).map((name) => join(locksDir, name));
+  const stale = locks.filter((file) => {
+    const owner = readOwner(file);
+    return owner !== null && owner.pid > 0 && !isAlive(owner.pid);
+  });
+  for (const file of stale) rmSync(file, { force: true });
+  return { removed: stale.length, kept: locks.length - stale.length };
 }
 
 function readOwner(file: string): LockOwner | null {

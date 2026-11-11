@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -177,6 +177,31 @@ describe("clearing stored credentials on uninstall", () => {
     expect(JSON.parse(r.stdout)).toEqual({ store: "file", removed: 2 });
     // The file goes once it holds nothing.
     expect(existsSync(join(state, "secrets.json"))).toBe(false);
+  });
+});
+
+describe("clearing stale writer locks on uninstall", () => {
+  /** The pid of a process that has come and gone. */
+  const gonePid = () => spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" }).stdout;
+
+  it("removes the locks of services that are gone, and keeps those a live process holds or that cannot be read", () => {
+    const locks = tempDir("jarvis-locks-");
+    const lock = (name: string, content: string) => writeFileSync(join(locks, name), content);
+    const record = (pid: number | string) => JSON.stringify({ pid: Number(pid), instance: "default", dataFolder: "/data", at: "2026-11-11T00:00:00.000Z" });
+    lock("0123456789abcdef0123456789abcdef.lock", record(gonePid()));
+    lock("11111111111111111111111111111111.lock", record(process.pid));
+    lock("22222222222222222222222222222222.lock", "");
+    lock("notes.txt", record(gonePid()));
+    const r = jarvis(["locks", "clear-stale", "--locks-dir", locks]);
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout)).toEqual({ removed: 1, kept: 2 });
+    expect(readdirSync(locks).sort()).toEqual(["11111111111111111111111111111111.lock", "22222222222222222222222222222222.lock", "notes.txt"]);
+  });
+
+  it("does nothing when there is no locks folder", () => {
+    const r = jarvis(["locks", "clear-stale", "--locks-dir", join(tempDir("jarvis-locks-"), "missing")]);
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout)).toEqual({ removed: 0, kept: 0 });
   });
 });
 

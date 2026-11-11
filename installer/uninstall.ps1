@@ -92,6 +92,9 @@ if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not remove the Jarv
 if ($Delete) {
   $null = Jarvis credentials clear --state-dir $State
   if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not delete every stored credential; see the message above.') }
+  # A service that was killed outright (a crash, a power cut) leaves its writer lock; the service has stopped by now.
+  $null = Jarvis locks clear-stale --locks-dir $Locks
+  if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not remove the writer locks of stopped services; see the message above.') }
 }
 
 $null = Jarvis wrappers uninstall --prefix $Prefix
@@ -126,7 +129,7 @@ if ($Delete) {
       Write-Host "Kept your own files in $DataFolder; removed only what Jarvis created there."
     }
   }
-  # Writer locks are released when the service stops; the folder is shared by every instance, so only an empty one goes.
+  # The locks folder is shared by every instance, so it goes only once no live service holds a lock in it.
   RemoveIfEmpty $Locks
   RemoveIfEmpty $Prefix
   Write-Host 'Jarvis removed, including its data.'

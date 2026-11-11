@@ -59,6 +59,8 @@ JARVIS_STATE_DIR="$STATE" "$JARVIS" agent-hooks uninstall --state-dir "$STATE" >
 
 if [ "$DELETE" = "1" ]; then
   JARVIS_STATE_DIR="$STATE" "$JARVIS" credentials clear --state-dir "$STATE" >/dev/null || printf 'Could not delete every stored credential; see the message above.\n' >&2
+  # A service that was killed outright (a crash, a power cut) leaves its writer lock; the service has stopped by now.
+  "$JARVIS" locks clear-stale --locks-dir "$LOCKS" >/dev/null || printf 'Could not remove the writer locks of stopped services; see the message above.\n' >&2
 fi
 
 "$JARVIS" wrappers uninstall >/dev/null || true
@@ -76,7 +78,7 @@ if [ "$DELETE" = "1" ]; then
       echo "Kept your own files in $DATA_FOLDER; removed only what Jarvis created there."
     fi
   fi
-  # Writer locks are released when the service stops; the folder is shared by every instance, so only an empty one goes.
+  # The locks folder is shared by every instance, so it goes only once no live service holds a lock in it.
   rmdir "$LOCKS" 2>/dev/null || true
   rmdir "$PREFIX" 2>/dev/null || true
   echo "Jarvis removed, including its data."
