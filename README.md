@@ -1,6 +1,6 @@
 # Jarvis
 
-A local-first second brain for macOS, Linux and Windows.
+A local-first personal assistant for macOS, Linux and Windows that keeps your knowledge and brings forward what needs your attention.
 It runs in the browser, keeps your knowledge as Markdown in a folder you choose, answers with cited evidence, watches the sources you connect, and prepares drafts that are sent only after you approve the exact version.
 You can also read and edit the notes in Obsidian or any other Markdown editor.
 

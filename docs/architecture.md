@@ -38,7 +38,7 @@ flowchart LR
 | Contracts | `zod` schemas in `packages/contracts` | Shared by service, web and plugin; validated at the server boundary. |
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
-| Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
+| Dashboard | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
 | Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool`, Windows Credential Manager via Windows PowerShell (values on stdin and stdout, never argv); a private file (0600, or an owner-only access-control list on Windows) where none works | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
 | Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
@@ -556,7 +556,7 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
   The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
   (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
 - Electron: not in this release.
-  The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
+  The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same Dashboard.
 
 ## What was reused and what inspired the design
 

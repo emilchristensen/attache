@@ -1,6 +1,6 @@
 # Jarvis user guide
 
-Jarvis is a local second brain that runs on your computer, on macOS, Linux or Windows.
+Jarvis is a personal assistant that keeps your knowledge on your own computer, on macOS, Linux or Windows.
 It keeps your knowledge as Markdown in a folder you choose, answers questions with cited evidence, watches the sources you connect, and prepares drafts that are only sent after you approve them.
 
 ## Install

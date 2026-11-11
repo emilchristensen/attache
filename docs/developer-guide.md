@@ -10,7 +10,7 @@ Developer setup is separate from end-user installation: users run the installer 
 | `apps/service` | The local service: memory writer, index, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
-| `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
+| `scripts` | Release build, verification, install tests, live read-only checks, exclusion check, docs check |
 | `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
@@ -34,10 +34,10 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
 
 ```sh
 pnpm install
-pnpm build              # service bundle, web client, plugin
+pnpm build              # contracts, service bundle, Dashboard
 pnpm test               # Vitest: unit, adapter contract and HTTP integration tests
 pnpm e2e                # Playwright journeys (builds as needed)
-pnpm lint
+pnpm lint               # docs check, then ESLint
 pnpm typecheck
 ```
 
@@ -47,7 +47,7 @@ Run the service against a scratch profile while developing:
 pnpm dev                 # [--port 7500] [--state-dir <folder>]
 ```
 
-`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/jarvis-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the web client with hot reload on `http://localhost:5173`.
+`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/jarvis-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the Dashboard with hot reload on `http://localhost:5173`.
 It prints a pairing link for that client.
 The scratch profile keeps its secrets in a file, and its writer locks and Harness home (`JARVIS_AGENT_HOME`) inside the state folder, so connecting a Harness there never touches your own.
 The same steps by hand:
@@ -191,3 +191,6 @@ Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e
 - Service code starts tools with `run`, `spawnTool` or `launchTool` and replaces files with `replaceWith` from `platform/`, and `pnpm lint` rejects a `node:child_process` import or an fs `rename` outside `platform/`, so Windows shims, console windows and locked files are handled in one place.
 - Database migrations are append-only in `core/db.ts`.
 - Code runs under Node type stripping: no enums, no parameter properties (`erasableSyntaxOnly`).
+- In Markdown, each sentence sits on its own line, and text the owner reads uses the glossary's terms.
+  `pnpm lint` checks both with `scripts/check-docs.mjs`, which reads the words to avoid from `GLOSSARY.md`, so a word added there is checked from then on.
+  Its header says which files and which strings it reads; an avoided word that is also the ordinary name of something else goes in its `ORDINARY_WORDS` list, with the reason.
