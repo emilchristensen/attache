@@ -7,6 +7,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fixtureModelDescription } from "../../apps/service/test/fixtures/fixture-meaning-model.ts";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
@@ -69,7 +70,10 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
   // claude.ai connectors go through the fixture CLI with an empty Claude config: journeys never reach a real account.
   const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures/fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
-  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
+  // The meaning model comes from the fixture server, never from Hugging Face.
+  const meaningModel = join(base, "meaning-model.json");
+  writeFileSync(meaningModel, JSON.stringify(fixtureModelDescription(`${fixtureUrl}/meaning-model`)));
+  const env = { ...process.env, JARVIS_MEANING_MODEL: meaningModel, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });

@@ -1,5 +1,8 @@
 import { build, context } from "esbuild";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const version = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version;
 const options = {
@@ -16,6 +19,20 @@ const options = {
   logLevel: "info",
 };
 
+/**
+ * ONNX Runtime's WebAssembly build, which runs the meaning model, loads these
+ * at run time from the bundle's own folder. They are the same on every platform.
+ */
+const ORT_RUNTIME_FILES = ["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.mjs"];
+
+function copyOrtRuntime() {
+  const from = dirname(createRequire(import.meta.url).resolve("onnxruntime-web"));
+  const to = fileURLToPath(new URL("./dist/", import.meta.url));
+  mkdirSync(to, { recursive: true });
+  for (const f of ORT_RUNTIME_FILES) copyFileSync(join(from, f), join(to, f));
+}
+
+copyOrtRuntime();
 if (process.argv.includes("--watch")) {
   const ctx = await context(options);
   await ctx.watch();

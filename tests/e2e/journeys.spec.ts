@@ -257,6 +257,26 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
   await expect(card.locator(".mono")).toHaveText(id!);
 });
 
+test("meaning-based search: search says it matches keywords only until the owner downloads the model in Settings", async () => {
+  const page = await open("/memory");
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
+  await expect(page.locator(".list-item").first()).toBeVisible();
+
+  await page.locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
+  const card = page.locator("[data-meaning-search]");
+  await expect(card.getByText("not downloaded")).toBeVisible();
+  await card.getByRole("button", { name: /^Download model/ }).click();
+  await expect(card.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(card.getByText(/Every passage in this Machine's index has a vector/)).toBeVisible();
+  await expect(card.getByRole("button", { name: /Download/ })).toHaveCount(0);
+
+  await page.goto(`${stack.url}/memory`);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
+});
+
 test("reconnection: service restart shows a banner, then recovers state", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
@@ -434,6 +454,40 @@ test("recent saves: each save shows its Harness and session, and one click rever
   expect(existsSync(join(stack.dataDir, "memory/notes/quasar-pricing-idea.md"))).toBe(false);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Quasar");
   await expect(page.getByText("No matches")).toBeVisible();
+});
+
+test("auto-accept: switched on for one Harness in Settings, kept across reload, and its saves are marked", async () => {
+  const page = await open("/settings");
+  const card = page.getByRole("region", { name: "Auto-accept saves" });
+  // Only connected Harnesses are listed: Claude Code was connected in onboarding, Codex was not found.
+  const claude = card.getByRole("checkbox", { name: /Claude Code/ });
+  await expect(claude).not.toBeChecked();
+  await expect(card.getByRole("checkbox", { name: /Codex/ })).toHaveCount(0);
+  await claude.click();
+  await expect(page.getByText("Claude Code saves without asking on this Machine")).toBeVisible();
+  await expect(claude).toBeChecked();
+  await expect(card.getByText("Saves without asking.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ })).toBeChecked();
+
+  // What the MCP save tool sends when auto-accept is on.
+  const status = await page.evaluate(async () => {
+    const body = { origin: { agent: "claude-code", sessionId: "sess-auto" }, autoAccept: true, items: [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }] };
+    const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+    return res.status;
+  });
+  expect(status).toBe(200);
+  await page.goto(`${stack.url}/memory`);
+  const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
+  await expect(created).toContainText("Claude Code, session sess-auto");
+  await expect(created).toContainText("auto-accepted");
+
+  // Switched off again, the Harness asks before every save.
+  await page.goto(`${stack.url}/settings`);
+  const again = page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ });
+  await again.click();
+  await expect(page.getByText("Claude Code asks before every save")).toBeVisible();
+  await expect(again).not.toBeChecked();
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {

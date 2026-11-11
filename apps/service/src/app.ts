@@ -5,12 +5,16 @@ import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
 import { MachineStore } from "./core/machine.ts";
+import { AutoAcceptStore } from "./agents/auto-accept.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
+import { MeaningSearch, type MeaningOptions } from "./meaning/service.ts";
+import { configuredMeaningModel } from "./meaning/model.ts";
+import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
 import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
@@ -25,6 +29,9 @@ import { wakeSnoozed } from "./attention/engine.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
+import { systemClock, type Clock } from "./replication/clock.ts";
+import { Replication } from "./replication/replication.ts";
+import { defaultSeams } from "./replication/seams.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -32,6 +39,10 @@ export interface AppOptions {
   quiet?: boolean;
   schedulerTickMs?: number;
   jobConcurrency?: number;
+  /** Drives Replication's timers; tests pass a clock they move by hand. */
+  clock?: Clock;
+  /** The meaning model and how to load it; by default the configured model on ONNX Runtime. */
+  meaning?: Partial<MeaningOptions>;
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
@@ -45,12 +56,17 @@ export class App {
   readonly secrets: SecretStore;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
+  /** Which Harnesses save without asking, on this Machine. */
+  readonly autoAccept: AutoAcceptStore;
   readonly memory: MemoryStore;
+  readonly meaning: MeaningSearch;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
   readonly scheduler: Scheduler;
   readonly actions: ActionService;
   readonly sessions: AgentSessions;
+  readonly clock: Clock;
+  readonly replication: Replication;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -76,8 +92,27 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get() });
+    this.autoAccept = new AutoAcceptStore(this.db);
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
+    this.clock = opts.clock ?? systemClock;
+    this.replication = new Replication({
+      db: this.db,
+      log: this.log,
+      clock: this.clock,
+      seams: defaultSeams(),
+      machine: () => this.machine.get(),
+      dataRoot: () => this.memory.dataRoot,
+      changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
+      latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
+      onChange: () => this.bus.emit("event", { type: "replication.changed" }),
+    });
+    this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
+    this.meaning = new MeaningSearch(
+      { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
+      { model: opts.meaning?.model ?? configuredMeaningModel(), loadEmbedder: opts.meaning?.loadEmbedder ?? loadOnnxEmbedder },
+    );
+    this.memory.indexer.onChange(() => this.meaning.indexChanged());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
     this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
@@ -106,6 +141,8 @@ export class App {
     this.connections.onDisconnect = (id, kind) => {
       const agent = integrationFor(kind);
       if (agent) {
+        // Connecting the Harness again starts with auto-accept off, as a new Harness does.
+        this.autoAccept.set(agent.kind, false);
         try {
           this.sessions.hooks.uninstall(agent);
         } catch (e) {
@@ -134,7 +171,10 @@ export class App {
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
     };
-    this.scheduler.onResume = (gapMs) => this.bus.emit("event", { type: "service.resumed", gapMs });
+    this.scheduler.onResume = (gapMs) => {
+      this.replication.wake();
+      this.bus.emit("event", { type: "service.resumed", gapMs });
+    };
   }
 
   // ---- model ---------------------------------------------------------------
@@ -225,9 +265,45 @@ export class App {
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
     this.dataWatcher?.stop();
-    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, { onChange: () => this.bus.emit("event", { type: "memory.changed" }) });
+    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
+      onChange: () => {
+        this.replication.noteOutsideEdit();
+        this.bus.emit("event", { type: "memory.changed" });
+      },
+    });
     this.dataWatcher.start();
     return r;
+  }
+
+  /** Make `path` this Machine's data folder: open it, index it and remember it. */
+  useDataFolder(path: string): { created: string[] } {
+    const r = this.openDataFolder(path);
+    this.config.patch({ dataFolder: path });
+    this.bus.emit("event", { type: "config.changed" });
+    return r;
+  }
+
+  /** Re-index the files another Machine changed, as soon as git wrote them. */
+  private reindexPulled(paths: readonly string[]) {
+    const root = this.memory.rootRef;
+    if (!root) return;
+    let changed = false;
+    let scan = false;
+    for (const rel of paths) {
+      try {
+        const r = this.memory.indexer.syncPath(root, rel);
+        if (r === "rescan") scan = true;
+        if (r === "changed") changed = true;
+      } catch (e) {
+        this.log.warn("could not index a file another Machine changed", { path: rel, error: (e as Error).message });
+        scan = true;
+      }
+    }
+    if (scan) {
+      const r = this.memory.indexer.scan(root);
+      if (r.indexed || r.removed) changed = true;
+    }
+    if (changed) this.bus.emit("event", { type: "memory.changed" });
   }
 
   start() {
@@ -246,10 +322,12 @@ export class App {
         if (root && existsSync(root.path)) this.memory.indexer.scan(root);
       }
     }
+    this.meaning.start();
     this.scheduler.reconcile(cfg);
     this.jobs.start();
     this.scheduler.start();
     this.sessions.start();
+    this.replication.start();
     const housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
@@ -261,9 +339,11 @@ export class App {
 
   async stop() {
     this.dataWatcher?.stop();
+    await this.replication.stop();
     this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();
+    await this.meaning.stop();
     this.memory.releaseLock();
     this.db.close();
   }

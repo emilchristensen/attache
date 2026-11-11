@@ -87,10 +87,26 @@ export interface IndexResult {
   errors: Array<{ path: string; error: string }>;
 }
 
+/** What a chunk's meaning vector is made from: the same title, heading and text that keyword search matches. */
+export function embedText(title: string, heading: string, text: string): string {
+  return [title, heading, text].filter(Boolean).join("\n");
+}
+
 export class Indexer {
   private readonly db: Db;
+  private readonly listeners = new Set<() => void>();
   constructor(db: Db) {
     this.db = db;
+  }
+
+  /** Call `listener` after chunks were added or removed. Returns a function that stops the calls. */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private changed(): void {
+    for (const l of this.listeners) l();
   }
 
   indexFile(root: IndexRoot, rel: string): "indexed" | "unchanged" {
@@ -118,18 +134,22 @@ export class Indexer {
         )
         .run(id, root.id, rel, area, docType, parsed.title, hash, Math.floor(st.mtimeMs), JSON.stringify(parsed.frontmatter), nowIso());
       const insChunk = this.db.prepare(
-        "insert into chunks (doc_id, ordinal, heading, start_line, end_line, section, text) values (?,?,?,?,?,?,?)",
+        "insert into chunks (doc_id, ordinal, heading, start_line, end_line, section, text, embed_text, embed_hash) values (?,?,?,?,?,?,?,?,?)",
       );
       const insFts = this.db.prepare("insert into chunks_fts (rowid, title, heading, text) values (?,?,?,?)");
       let ordinal = 0;
       for (const s of parsed.sections) {
         const { kind, chunks } = chunkSection(s);
         for (const c of chunks) {
-          const r = insChunk.run(id, ordinal++, s.heading, c.startLine, c.endLine, kind, c.text);
-          insFts.run(Number(r.lastInsertRowid), parsed.title, [s.heading, c.searchHeading].filter(Boolean).join(" "), c.searchText ?? c.text);
+          const heading = [s.heading, c.searchHeading].filter(Boolean).join(" ");
+          const searchText = c.searchText ?? c.text;
+          const meaning = embedText(parsed.title, heading, searchText);
+          const r = insChunk.run(id, ordinal++, s.heading, c.startLine, c.endLine, kind, c.text, meaning, createHash("sha256").update(meaning).digest("hex"));
+          insFts.run(Number(r.lastInsertRowid), parsed.title, heading, searchText);
         }
       }
     });
+    this.changed();
     return "indexed";
   }
 
@@ -146,6 +166,7 @@ export class Indexer {
       this.removeChunks(id);
       this.db.prepare("delete from documents where id = ?").run(id);
     });
+    this.changed();
   }
 
   /**
@@ -232,6 +253,7 @@ export class Indexer {
     tx(this.db, () => {
       this.db.exec("delete from chunks_fts; delete from chunks; delete from documents;");
     });
+    this.changed();
     const total: IndexResult = { indexed: 0, unchanged: 0, removed: 0, errors: [] };
     for (const root of roots) {
       const r = this.scan(root);

@@ -131,6 +131,30 @@ export const MachineRename = z.object({
 export type MachineRename = z.infer<typeof MachineRename>;
 
 // ---------------------------------------------------------------------------
+// Replication
+
+/** off: not set up. offline: the remote cannot be reached; saves carry on and catch up later. */
+export const ReplicationStatus = z.enum(["off", "up_to_date", "offline", "unauthorized", "blocked"]);
+export type ReplicationStatus = z.infer<typeof ReplicationStatus>;
+
+export interface ReplicationView {
+  status: ReplicationStatus;
+  /** The repository's address; never holds a token. */
+  remote: string | null;
+  /** What to fix, when the status is not up to date. */
+  cause: string | null;
+  lastCheckedAt: string | null;
+  lastPushedAt: string | null;
+}
+
+const RepositoryName = z.string().trim().min(1, "Name the repository").max(500);
+export const ReplicationSetupInput = z.object({ remote: RepositoryName });
+export type ReplicationSetupInput = z.infer<typeof ReplicationSetupInput>;
+/** `path`: the empty folder to clone into; the configured data folder when left out. */
+export const ReplicationJoinInput = z.object({ remote: RepositoryName, path: z.string().trim().min(1).max(1000).optional() });
+export type ReplicationJoinInput = z.infer<typeof ReplicationJoinInput>;
+
+// ---------------------------------------------------------------------------
 // Memory
 
 export interface Citation {
@@ -215,6 +239,11 @@ export const MemorySaveInput = z.object({
     })
     .optional(),
   items: z.array(MemorySaveItem).min(1).max(20),
+  /**
+   * Write without asking the owner, because they switched on auto-accept for
+   * the origin's Harness on this Machine. Refused when it is off.
+   */
+  autoAccept: z.boolean().optional(),
 });
 export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
@@ -225,10 +254,24 @@ export interface MemorySaveResult {
 /** What a save would change, checked against the Brain without writing: one entry per item, in order. */
 export interface MemorySaveCheckResult {
   items: Array<{ action: "create"; title: string; relPath: null } | { action: "update"; title: string; /** The note the update changes. */ relPath: string }>;
+  /** Whether the save may be written without asking: auto-accept is on for the origin's Harness on this Machine. */
+  autoAccept: boolean;
 }
 
+/** A connected Harness and whether its saves skip the confirmation request on this Machine. */
+export interface HarnessSettingView {
+  /** Harness integration kind, e.g. `claude-code`. */
+  id: string;
+  label: string;
+  /** Off by default; kept in this Machine's local state, never in the Brain. */
+  autoAccept: boolean;
+}
+
+export const HarnessAutoAcceptInput = z.object({ autoAccept: z.boolean() });
+export type HarnessAutoAcceptInput = z.infer<typeof HarnessAutoAcceptInput>;
+
 /** A save the owner could not confirm, stored as one Proposal per item for review in the Dashboard. */
-export const MemorySaveProposalInput = MemorySaveInput.extend({
+export const MemorySaveProposalInput = MemorySaveInput.omit({ autoAccept: true }).extend({
   /** Why the save waits for review, shown beside each Proposal. */
   reason: z.string().trim().min(1).max(1000),
 });
@@ -303,6 +346,8 @@ export interface RecentChangeView {
     sessionId: string | null;
     /** What to show: the Harness and session, or who else made the change. */
     label: string;
+    /** Written without asking the owner, because auto-accept was on for the Harness. */
+    autoAccepted: boolean;
   };
   at: string;
   /** The change this one reverted, and the change that reverted this one. */
@@ -394,6 +439,31 @@ export interface RecallEvaluationReport {
   misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
   /** Questions that cannot be scored, because their note or fact is not in the Brain. */
   invalid: Array<RecallQuestion & { problem: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Meaning-based search
+
+/**
+ * Where this Machine's meaning-based search stands. Search answers on keywords
+ * in every state; vectors are only complete in `ready`.
+ * - `missing`: the model is not downloaded.
+ * - `downloading`: the owner started the download and it is running.
+ * - `failed`: the download, or loading the downloaded model, failed; `error` says why.
+ * - `building`: the model is here and vectors are being built for chunks that lack one.
+ * - `ready`: every chunk in this Machine's index has a vector.
+ */
+export const MeaningState = z.enum(["missing", "downloading", "failed", "building", "ready"]);
+export type MeaningState = z.infer<typeof MeaningState>;
+
+export interface MeaningStatus {
+  state: MeaningState;
+  model: { name: string; bytes: number };
+  /** Bytes received so far, while downloading. */
+  download: { received: number; total: number } | null;
+  /** Chunks in this Machine's index, and how many of them have a vector. */
+  vectors: { chunks: number; embedded: number };
+  error: string | null;
 }
 
 // ---------------------------------------------------------------------------

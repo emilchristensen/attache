@@ -2,7 +2,8 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ServicePaths } from "../core/paths.ts";
-import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage } from "./brain.ts";
+import { MeaningState } from "@jarvis/contracts";
+import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage, type SearchAnswer } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
 import { registerAuditTool } from "./audit-tool.ts";
 import { failure } from "./failure.ts";
@@ -31,9 +32,10 @@ const PassageShape = z.object({
 
 const NoteShape = { path: z.string(), title: z.string(), startLine: z.number().int(), endLine: z.number().int(), totalLines: z.number().int(), text: z.string() };
 
-function renderPassages(query: string, passages: Passage[]): string {
-  if (!passages.length) return `No passages in the Brain match "${query}".`;
-  return passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
+function renderPassages(query: string, { passages, meaning }: SearchAnswer): string {
+  const note = meaning.note ? `${meaning.note}\n\n` : "";
+  if (!passages.length) return `${note}No passages in the Brain match "${query}".`;
+  return note + passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
 }
 
 function renderNote(n: NoteText): string {
@@ -49,13 +51,13 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       title: "Search the Brain",
       description: "Search the owner's Brain by words. Returns passages with their path, line range, area, section kind (current state, history or body) and note title. Only passages from area `memory` state current facts; `evidence` records what was observed or said, such as session logs and wrap-ups. Old chat archives and raw session transcripts are left out; session summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
-      outputSchema: { passages: z.array(PassageShape) },
+      outputSchema: { passages: z.array(PassageShape), meaning: z.object({ state: MeaningState, note: z.string().nullable() }) },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query, limit }) => {
       try {
-        const passages = await brain.search(query, limit ?? DEFAULT_LIMIT);
-        return { content: [{ type: "text", text: renderPassages(query, passages) }], structuredContent: { passages } };
+        const answer = await brain.search(query, limit ?? DEFAULT_LIMIT);
+        return { content: [{ type: "text", text: renderPassages(query, answer) }], structuredContent: { ...answer } };
       } catch (e) {
         return failure(e);
       }
