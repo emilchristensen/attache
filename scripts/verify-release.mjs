@@ -80,7 +80,6 @@ if (!QUICK) {
     return rec;
   };
   e2e(["A05", "A07", "A08", "A09", "A12"], "Browser journeys (real Chrome)", "journeys");
-  e2e(["A10"], "Voice journeys (whisper.cpp, macOS speech, real Chrome microphone device)", "voice");
   e2e(["A12"], "Visual captures (light, dark, narrow)", "visual");
   step(["A02", "A14"], "Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
     extract: (out) => ({ summary: /(\d+\/\d+) installation checks passed/.exec(out)?.[1] ?? "" }),
@@ -108,7 +107,6 @@ const ACCEPTANCE = {
   A07: "Dismissed items stay dismissed, changes resurface, failed sources visible",
   A08: "Durable jobs, reconnection replay, restart recovery, retry/cancel outcomes",
   A09: "Draft/approval enforcement, replay protection, verified receipts",
-  A10: "Real voice input/output, interruption, denied microphone, typed chat during work",
   A12: "Browser journeys incl. keyboard, narrow screen, reconnection, console errors",
   A13: "Lint, typecheck, build, behavioural tests",
   A14: "Backup/restore to fresh profile, upgrade, data-preserving uninstall, brains intact",
@@ -126,7 +124,7 @@ const missingDocs = docs.filter((d) => !existsSync(join(ROOT, d)));
 const artifacts = [`release/${version}/Jarvis-Installer-${version}-macos-arm64.command`, `release/${version}/jarvis-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
 const missingArtifacts = artifacts.filter((a) => !existsSync(join(ROOT, a)));
 rollup.A15 = { status: missingDocs.length || missingArtifacts.length ? "fail" : "pass", checks: [`docs present: ${docs.length - missingDocs.length}/${docs.length}${missingDocs.length ? ` (missing ${missingDocs.join(", ")})` : ""}`, `artifacts present: ${artifacts.length - missingArtifacts.length}/${artifacts.length}${missingArtifacts.length ? ` (missing ${missingArtifacts.join(", ")})` : ""}`] };
-if (QUICK) for (const id of ["A02", "A10", "A12", "A14"]) if (rollup[id].status === "not run" || rollup[id].status === "pass") rollup[id] = { ...rollup[id], status: rollup[id].checks.length ? rollup[id].status : "not run" };
+if (QUICK) for (const id of ["A02", "A12", "A14"]) if (rollup[id].status === "not run" || rollup[id].status === "pass") rollup[id] = { ...rollup[id], status: rollup[id].checks.length ? rollup[id].status : "not run" };
 
 const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, acceptance: rollup, live };
 writeFileSync(join(OUT, "verification-report.json"), JSON.stringify(report, null, 2));

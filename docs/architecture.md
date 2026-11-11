@@ -18,7 +18,7 @@ flowchart LR
     Sched[Scheduler]
     Actions[Drafts, approvals, execution]
     Conn[Connector adapters]
-    Models[Model + speech adapters]
+    Models[Model adapters]
     Creds[(Keychain credential store)]
   end
   API --> Registry --> Sched --> Jobs
@@ -64,7 +64,7 @@ Imported folders stay where they are.
 The import preview lists what will be read, what is skipped and that zero files in the source folder change.
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
-Service state (`~/Library/Application Support/Jarvis/state`): `jarvis.sqlite`, logs, runtime metadata, backups, downloaded speech models.
+Service state (`~/Library/Application Support/Jarvis/state`): `jarvis.sqlite`, logs, runtime metadata, backups.
 Credentials: Keychain service `dev.jarvis.<instance>`.
 
 ## Memory model
@@ -236,7 +236,7 @@ The server starts even when the service is down, because a Harness launches its 
 
 ## Capability registry
 
-`capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, voice, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
+`capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
 The setup checklist, dependency validation, API access checks (`requireFeature`) and scheduler all read it.
 Disabling a feature disables its schedules, rejects its endpoints with `feature_disabled`, and cancels its queued jobs.
 Disconnecting a connection deletes its credentials, stops new requests, cancels queued jobs that depend on it, revokes pending approvals targeting it, and offers to keep or delete its retained observations.

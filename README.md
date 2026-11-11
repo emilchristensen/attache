@@ -17,9 +17,8 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
 - Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
 - Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.
-- Voice: optional push-to-talk with local whisper.cpp recognition and macOS speech, with interruption.
 
-Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, a model provider (Claude Code, Anthropic, OpenAI-compatible) and speech providers.
+Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic, OpenAI-compatible).
 Each is optional and starts read-only.
 
 ## Research and brief

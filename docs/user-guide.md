@@ -16,6 +16,7 @@ You do not need Node, Homebrew or any developer tools; the installer carries its
 
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
+Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
 ## First-run setup
 
@@ -27,7 +28,7 @@ Setup has five steps and each works without the ones after it.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
    Conversation and search are always on.
-   Capture, background work, attention and briefings, drafts and approvals, agent sessions and voice are optional.
+   Capture, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
@@ -37,10 +38,9 @@ Setup has five steps and each works without the ones after it.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
    Under *Coding agents*, connect Claude Code, Codex or Antigravity if you use them (see Agent sessions below).
-4. **Model, voice and schedules.**
+4. **Model and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
-   If voice is on, set up speech here (see Voice below).
    Set how often sources refresh, when the daily briefing is prepared, and whether urgent items raise a macOS notification.
 5. **Test and finish.**
    Jarvis tests each connection and reports every feature as ready, partial, needs setup or unavailable.
@@ -68,7 +68,7 @@ Jarvis remembers the width in that browser.
 Every question first searches your notes.
 Answers cite their sources as `S1`, `S2`…; click a citation to open the file with the cited lines highlighted.
 If nothing relevant is found, the answer says so and is marked unverified.
-Press `/` to jump to the message box, `Esc` to stop speech, and `g` followed by a letter (h, m, d, j, c, s) to switch views.
+Press `/` to jump to the message box and `g` followed by a letter (h, m, d, j, c, s) to switch views.
 
 **Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
@@ -137,20 +137,6 @@ Other Harnesses take the same command and argument in their MCP server settings.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.
-
-## Voice
-
-Voice is optional and push-to-talk only; the microphone is never on otherwise.
-Hold **Hold to talk** (or hold Space while it is focused), speak, and release.
-Jarvis transcribes, answers in text, and speaks the answer if *Speak replies* is on. Press `Esc` or **Stop speaking** to interrupt.
-
-- **On this Mac:** speech recognition with whisper.cpp and the macOS voice.
-  Install whisper.cpp once with `brew install whisper-cpp`; Jarvis downloads the 148 MB recognition model when you click Download in setup.
-  Audio stays on your Mac.
-- **OpenAI-compatible speech API:** enter the base URL and key.
-- **Browser:** recognition and speech in Chrome (audio is sent to Google by the browser).
-
-If the microphone is blocked, Jarvis tells you how to allow it; typing always works.
 
 ## Editing notes in Obsidian
 
