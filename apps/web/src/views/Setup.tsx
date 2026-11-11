@@ -89,9 +89,11 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
   const [importPath, setImportPath] = useState("");
   const [importPreview, setImportPreview] = useState<{ path: string; filesToRead: number; sample: string[]; skippedCount: number; note: string } | null>(null);
   const { busy, run } = useAction();
+  // Once the owner is in the field, a suggestion that arrives late would mix into what they type.
+  const [ownersChoice, setOwnersChoice] = useState(false);
   useEffect(() => {
-    if (!path && defaults.data) setPath(defaults.data.suggestion);
-  }, [defaults.data, path]);
+    if (!path && !ownersChoice && defaults.data) setPath(defaults.data.suggestion);
+  }, [defaults.data, path, ownersChoice]);
   const doPreview = async () => {
     setErr(null);
     try {
@@ -116,7 +118,7 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
         <label className="field">
           Data folder
           <div className="row" style={{ flexWrap: "nowrap" }}>
-            <input value={path} onChange={(e) => { setPath(e.target.value); setPreview(null); }} spellCheck={false} aria-describedby="folder-help" />
+            <input value={path} onFocus={() => setOwnersChoice(true)} onChange={(e) => { setPath(e.target.value); setPreview(null); }} spellCheck={false} aria-describedby="folder-help" />
             <button onClick={doPreview} disabled={!path.trim()}>
               Preview
             </button>
