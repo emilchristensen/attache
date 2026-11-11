@@ -77,7 +77,7 @@ export function registerDataRoutes(r: Router, app: App) {
     const type = c.query("type");
     // `recall=1` searches the way recall does: old chat archives and session transcripts stay out, their summaries stay in.
     const recall = c.query("recall") === "1";
-    return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
+    return { query: q, meaning: app.meaning.status(), hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
   });
   r.get("/memory/documents", (c) => {
     requireFeature(app, "recall");

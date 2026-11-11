@@ -158,7 +158,17 @@ Folder creates, moves and deletes, watcher failures and a catch-up just after th
 The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
 If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
 Imported vaults are not watched; they are rescanned when their connection syncs.
-Vector search is deliberately not in this release: no embedding model is guaranteed on a clean install, and lexical recall with exact citations is verifiable.
+
+Meaning-based search (`meaning/`) runs a small multilingual sentence-embedding model on the Machine: multilingual-e5-small with 8-bit weights, 384 dimensions, pinned to one Hugging Face revision (`meaning/model.ts`).
+It runs on ONNX Runtime's WebAssembly build (`onnxruntime-web`) with the pure-JavaScript Hugging Face tokenizer (`@huggingface/tokenizers`), so one set of files works on macOS, Linux and Windows with no native module to build or ship per platform; the release carries `ort-wasm-simd-threaded.wasm` and `.mjs` next to the service bundle.
+The model is not in the release: the owner starts its download from the Dashboard (`POST /memory/meaning/download`), each file is checked against its size and SHA-256, and the folder `<state>/models/<model id>/` appears only once every file has passed.
+After that it runs offline.
+`JARVIS_MEANING_MODEL` names a JSON model description to use instead (a mirror, or the fixture model in tests).
+Each chunk stores the text its vector is made from (title, heading and the same text keyword search matches) and that text's SHA-256.
+Vectors live in `chunk_vectors`, keyed by model id and text hash, in the Machine's own SQLite index: they never enter the Brain and do not replicate, and re-chunking a file keeps the vectors of text that did not change.
+A background builder (`meaning/builder.ts`) embeds chunks without a vector in batches of eight whenever the indexer reports a change, then drops vectors no chunk uses.
+`GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress and how many chunks have vectors; search answers on keywords in every state, and the MCP `search` tool starts with a line saying so until vectors are ready.
+Meaning-based results do not yet join the ranking.
 
 Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
 A question set names, per question, the note and the subject of the current fact expected to answer it.

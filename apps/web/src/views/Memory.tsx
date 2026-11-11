@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import type { MeaningStatus } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { ProposalReview } from "../components/ProposalReview.tsx";
 import { RecentSaves } from "./RecentSaves.tsx";
@@ -229,6 +230,24 @@ function Capture({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Why search results match keywords only, while meaning-based search is not ready on this Machine. */
+function KeywordsOnly({ meaning }: { meaning: MeaningStatus }) {
+  const why: Record<MeaningStatus["state"], string | null> = {
+    missing: "the meaning model is not downloaded",
+    downloading: "the meaning model is downloading",
+    failed: "meaning-based search stopped with an error",
+    building: `search vectors are being built (${meaning.vectors.embedded} of ${meaning.vectors.chunks})`,
+    ready: null,
+  };
+  const reason = why[meaning.state];
+  if (!reason) return null;
+  return (
+    <p className="small muted" data-keywords-only>
+      Matching keywords only: {reason}. <Link to="/settings">Settings</Link>
+    </p>
+  );
+}
+
 export function MemoryView() {
   const loc = useLocation();
   const [tab, setTab] = useState(loc.search.get("tab") ?? "decision");
@@ -238,7 +257,7 @@ export function MemoryView() {
   const selectedRoot = loc.search.get("root") ?? "data";
   const t = TABS.find((x) => x.id === tab) ?? TABS[0]!;
   const list = useResource<DocListItem[]>(query ? null : `/memory/documents?${t.query}`, ["memory.changed"]);
-  const results = useResource<{ hits: Hit[] }>(query ? `/memory/search?q=${encodeURIComponent(query)}` : null, ["memory.changed"]);
+  const results = useResource<{ hits: Hit[]; meaning: MeaningStatus }>(query ? `/memory/search?q=${encodeURIComponent(query)}` : null, ["memory.changed"]);
   const [capturing, setCapturing] = useState(false);
   const open = useOpenEvidence();
   useEffect(() => {
@@ -279,6 +298,7 @@ export function MemoryView() {
             <>
               {results.loading && !results.data && <Loading />}
               <ErrorState error={results.error} retry={results.reload} />
+              {results.data && <KeywordsOnly meaning={results.data.meaning} />}
               {results.data?.hits.length === 0 && <Empty title="No matches">Try other words. Search looks at titles, headings and text.</Empty>}
               <div className="list">
                 {results.data?.hits.map((h) => (

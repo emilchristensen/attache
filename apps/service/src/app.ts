@@ -12,6 +12,9 @@ import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
+import { MeaningSearch, type MeaningOptions } from "./meaning/service.ts";
+import { configuredMeaningModel } from "./meaning/model.ts";
+import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
 import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
@@ -38,6 +41,8 @@ export interface AppOptions {
   jobConcurrency?: number;
   /** Drives Replication's timers; tests pass a clock they move by hand. */
   clock?: Clock;
+  /** The meaning model and how to load it; by default the configured model on ONNX Runtime. */
+  meaning?: Partial<MeaningOptions>;
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
@@ -54,6 +59,7 @@ export class App {
   /** Which Harnesses save without asking, on this Machine. */
   readonly autoAccept: AutoAcceptStore;
   readonly memory: MemoryStore;
+  readonly meaning: MeaningSearch;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
   readonly scheduler: Scheduler;
@@ -102,6 +108,11 @@ export class App {
     });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
+    this.meaning = new MeaningSearch(
+      { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
+      { model: opts.meaning?.model ?? configuredMeaningModel(), loadEmbedder: opts.meaning?.loadEmbedder ?? loadOnnxEmbedder },
+    );
+    this.memory.indexer.onChange(() => this.meaning.indexChanged());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
     this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
@@ -311,6 +322,7 @@ export class App {
         if (root && existsSync(root.path)) this.memory.indexer.scan(root);
       }
     }
+    this.meaning.start();
     this.scheduler.reconcile(cfg);
     this.jobs.start();
     this.scheduler.start();
@@ -331,6 +343,7 @@ export class App {
     this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();
+    await this.meaning.stop();
     this.memory.releaseLock();
     this.db.close();
   }

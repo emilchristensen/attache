@@ -132,6 +132,8 @@ async function main() {
   await http("POST", "/memory/capture", { text: "The Helios budget review is on Thursday.", title: "Helios", source: { kind: "user", ref: "install-test" }, decision: { title: "Helios budget", decision: "Cap Helios at 40k" } }, token);
   await http("POST", "/setup/complete", {}, token);
   check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  const meaning = await http("GET", "/memory/meaning", undefined, token);
+  check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
   const hookCmds = JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")).hooks);
   check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && hookCmds.includes(`${PREFIX}/current/runtime/node`) && hookCmds.includes(`${PREFIX}/current/service/jarvis-agent-hook.mjs`) && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));

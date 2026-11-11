@@ -5,6 +5,7 @@ import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
 import { FeatureList } from "./Setup.tsx";
+import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -217,6 +218,7 @@ export function SettingsView() {
         )}
         <ThisMachine />
         <AutoAccept />
+        <MeaningSearchCard />
         <Clients />
         <Backups />
         <div className="card stack-sm">

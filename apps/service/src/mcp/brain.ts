@@ -1,4 +1,5 @@
-import type { Config, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
+import type { Config, MeaningState, MeaningStatus, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
+import { meaningNote } from "../meaning/note.ts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 import { auditView, type AuditView, type PathOf } from "../memory/audit-view.ts";
@@ -19,6 +20,12 @@ export interface Passage {
   heading: string | null;
   title: string;
   text: string;
+}
+
+/** Passages found, and whether they match by keywords only because meaning-based search is not ready on this Machine. */
+export interface SearchAnswer {
+  passages: Passage[];
+  meaning: { state: MeaningState; note: string | null };
 }
 
 export interface NoteText {
@@ -43,7 +50,7 @@ export interface BrainOverview {
 
 /** The Brain as the MCP server reaches it: through the running service, paired the same way as the CLI. */
 export interface BrainAccess {
-  search(query: string, limit: number): Promise<Passage[]>;
+  search(query: string, limit: number): Promise<SearchAnswer>;
   read(path: string, range: LineRange): Promise<NoteText>;
   overview(): Promise<BrainOverview>;
   /** Every current fact with its date, source, flags and newer evidence. Read-only. */
@@ -83,9 +90,9 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
   return {
     async search(query, limit) {
       const c = client();
-      const { hits } = await c.get<{ hits: RawHit[] }>(`/memory/search?recall=1&limit=${limit}&q=${encodeURIComponent(query)}`);
+      const { hits, meaning } = await c.get<{ hits: RawHit[]; meaning: MeaningStatus }>(`/memory/search?recall=1&limit=${limit}&q=${encodeURIComponent(query)}`);
       const pathOf = await brainPaths(c, hits.map((h) => h.root));
-      return hits.map((h) => ({
+      const passages = hits.map((h) => ({
         path: pathOf(h.root, h.relPath),
         startLine: h.startLine,
         endLine: h.endLine,
@@ -95,6 +102,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         title: h.title,
         text: h.text,
       }));
+      return { passages, meaning: { state: meaning.state, note: meaningNote(meaning) } };
     },
     async read(path, range) {
       const doc = await client().get<{ raw: string; title: string }>(`/memory/document?path=${encodeURIComponent(path)}`);
