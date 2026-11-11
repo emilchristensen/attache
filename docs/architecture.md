@@ -58,6 +58,7 @@ Data folder (user-chosen, Markdown):
     connectors/<kind>/       connector snapshots, one file per day per Machine
     sessions/                coding-agent session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
+    wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts)
 ```
 
@@ -75,6 +76,7 @@ Each Machine has an id (a UUID made once) and a name (the hostname without its d
 `GET /machine` returns both; `PATCH /machine` renames (1 to 64 characters, no control characters); Settings shows them.
 Evidence that every Machine appends to is written per Machine, so that Replication never merges two Machines' writes into one file (ADR 0001): session logs go to `evidence/sessions/<date>-<machine>.md` and connector snapshots to `evidence/connectors/<kind>/<date>-<machine>.md`.
 `<machine>` is the name's slug plus the first eight hex digits of the id, so two Machines with the same name still write apart; the frontmatter records `machine` and `machine_id`.
+Wrap-ups are new files rather than appends, and carry the tag too (`evidence/wrap-ups/<date>-<machine>-<title>.md`), so two Machines never create the same file.
 Files written before this change keep their `<date>.md` name; search and the audit index them like any evidence, and the session context reads every file of a day, old or per-Machine, as that day's log.
 
 ## Memory model
@@ -250,8 +252,15 @@ Every tool call builds a fresh client from `state/runtime.json`, so a server sta
 The server starts even when the service is down, because a Harness launches its MCP servers when it starts and would otherwise mark Jarvis as failed.
 
 - `search` calls `GET /api/v1/memory/search?recall=1`, which applies the recall exclusions (`RECALL_EXCLUDE`: raw conversations and session transcripts); without `recall=1` the Dashboard still searches everything.
-  Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, section kind and note title.
+  Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, area, section kind and note title.
+  The area tells curated memory, the only place a current fact can come from, apart from evidence, deliverables and imported notes.
 - `read` calls `GET /api/v1/memory/document`, which also accepts an absolute path inside the Brain or another indexed folder when no `root` is given, and slices the requested 1-based, inclusive line range from the raw file, so lines match search citations.
+- The `wrap-up` prompt asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.
+  It exists for conversations Jarvis cannot capture, such as Claude Desktop's Chat tab.
+  `wrap_up` calls `POST /api/v1/memory/wrap-up` (`memory/wrap-up.ts`), which writes one evidence document per call with the points under `## Points` in the body, never under Current State, so search returns them as evidence and never as a current fact.
+  The Harness comes from the client information it sent when it connected (`mcp/harness.ts`: `claude-ai` is Claude Desktop, `claude-code` is Claude Code); the date and the Machine come from the service.
+  The store redacts the title before it names the file and the whole document as it writes it, like all evidence.
+  A call with no points stores nothing and answers that the conversation held nothing durable.
 - The server's instructions, sent once when the Harness connects, carry the owner's identity from the configuration and the titles of the curated notes per type (at most 40 per type), fetched from `/config` and `/memory/documents` with a 5-second limit.
 
 ## Capability registry

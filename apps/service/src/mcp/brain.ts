@@ -1,4 +1,4 @@
-import type { Config } from "@jarvis/contracts";
+import type { Config, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 
@@ -8,6 +8,12 @@ export interface Passage {
   path: string;
   startLine: number;
   endLine: number;
+  /**
+   * What kind of document holds it: `memory` (curated notes), `evidence`
+   * (captures, session logs, wrap-ups, snapshots), `deliverables` or `import`.
+   * Only `memory` passages state current facts.
+   */
+  area: string;
   section: "state" | "history" | "body";
   heading: string | null;
   title: string;
@@ -39,6 +45,8 @@ export interface BrainAccess {
   search(query: string, limit: number): Promise<Passage[]>;
   read(path: string, range: LineRange): Promise<NoteText>;
   overview(): Promise<BrainOverview>;
+  /** Store a conversation's durable points as evidence; no points stores nothing. */
+  wrapUp(input: WrapUpInput): Promise<WrapUpResult>;
 }
 
 interface RawHit {
@@ -46,6 +54,7 @@ interface RawHit {
   relPath: string;
   startLine: number;
   endLine: number;
+  area: string;
   section: Passage["section"];
   heading: string | null;
   title: string;
@@ -71,6 +80,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         path: h.root === "data" ? h.relPath : `${(roots.get(h.root) ?? h.root).replace(/\/+$/, "")}/${h.relPath}`,
         startLine: h.startLine,
         endLine: h.endLine,
+        area: h.area,
         section: h.section,
         heading: h.heading,
         title: h.title,
@@ -89,6 +99,9 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         owner: config.identity ? { name: config.identity.name, ...(config.identity.email ? { email: config.identity.email } : {}) } : null,
         notes: docs.filter((d) => d.relPath !== "memory/self.md" && d.title).map((d) => ({ type: d.docType ?? "note", title: d.title })),
       };
+    },
+    async wrapUp(input) {
+      return client().post<WrapUpResult>("/memory/wrap-up", input);
     },
   };
 }

@@ -5,6 +5,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServicePaths } from "../core/paths.ts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
+import { registerWrapUpPrompt } from "./prompts/wrap-up.ts";
+import { registerWrapUpTool } from "./wrap-up-tool.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -17,6 +19,7 @@ const PassageShape = z.object({
   path: z.string(),
   startLine: z.number().int(),
   endLine: z.number().int(),
+  area: z.string(),
   section: z.enum(["state", "history", "body"]),
   heading: z.string().nullable(),
   title: z.string(),
@@ -31,7 +34,7 @@ function failure(e: unknown): CallToolResult {
 
 function renderPassages(query: string, passages: Passage[]): string {
   if (!passages.length) return `No passages in the Brain match "${query}".`;
-  return passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
+  return passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
 }
 
 function renderNote(n: NoteText): string {
@@ -45,7 +48,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
     "search",
     {
       title: "Search the Brain",
-      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Raw chat and session transcripts are left out; their summaries are included.",
+      description: "Search the owner's Brain by words. Returns passages with their path, line range, area, section kind (current state, history or body) and note title. Only passages from area `memory` state current facts; `evidence` records what was observed or said, such as session logs and wrap-ups. Raw chat and session transcripts are left out; their summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
       outputSchema: { passages: z.array(PassageShape) },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -81,6 +84,8 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       }
     },
   );
+  registerWrapUpTool(server, brain);
+  registerWrapUpPrompt(server);
   return server;
 }
 

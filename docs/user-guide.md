@@ -136,9 +136,14 @@ claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
 
 Other Harnesses take the same command and argument in their MCP server settings.
 
-- **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
+- **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out raw chat and session transcripts and includes their summaries.
 - **read** returns a whole note, or only a line range, for a path that search returned.
+- The **wrap-up** prompt records the durable points of the current conversation: decisions, facts about people and projects, commitments and stated preferences.
+  Use it where Jarvis cannot capture the conversation itself, such as the Chat tab in Claude Desktop.
+  The agent stores the points with the `wrap_up` tool as one evidence document in `evidence/wrap-ups/`, with the Harness and the date, and with secrets redacted.
+  The points are evidence, not curated memory: search finds them, labelled `evidence`, but none becomes a current fact unless it is saved to a note.
+  When the conversation held nothing durable, nothing is stored and the agent tells you so.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.
