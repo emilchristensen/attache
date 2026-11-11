@@ -79,7 +79,8 @@ export async function startTestService(opts: TestServiceOptions = {}): Promise<T
     get: (p) => ok("GET", p),
     post: (p, b = {}) => ok("POST", p, b),
     put: (p, b = {}) => ok("PUT", p, b),
-    async waitJob(id, statuses = ["succeeded", "failed", "cancelled", "blocked"], timeoutMs = 20_000) {
+    // Jobs that run fake Claude Code processes can take over 20 s while other suites load the machine; the test's own timeout still applies.
+    async waitJob(id, statuses = ["succeeded", "failed", "cancelled", "blocked"], timeoutMs = 60_000) {
       const end = Date.now() + timeoutMs;
       for (;;) {
         const r = await ok("GET", `/jobs/${id}`);
