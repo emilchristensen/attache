@@ -8,7 +8,6 @@ import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
 import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
-import { SpeechError } from "../speech/engine.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -159,7 +158,6 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
-    if (kind === "speech") fields.whisperModelPath = app.speech.modelPath;
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
     return out;
@@ -265,35 +263,6 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     requireFeature(app, "recall");
     const { job } = app.jobs.create({ kind: "reindex", title: "Rebuild search index", input: {}, capability: "recall" });
     return { __status: 201, body: { job } };
-  });
-
-  // ---- voice ---------------------------------------------------------------------------------
-  r.get("/voice/status", async () => ({ enabled: app.featureEnabled("voice"), modes: await app.speech.clientModes(), environment: app.speech.environment(), voices: await app.speech.voices() }));
-  r.post("/voice/model/download", () => {
-    void app.speech.downloadModel();
-    return { __status: 202, body: { download: app.speech.environment().download } };
-  });
-  r.post("/voice/transcribe", async (c) => {
-    requireFeature(app, "voice");
-    const audio = await c.raw(20 * 1024 * 1024);
-    try {
-      const text = await app.speech.transcribe(audio);
-      return { text };
-    } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
-      throw e;
-    }
-  });
-  r.post("/voice/speak", async (c) => {
-    requireFeature(app, "voice");
-    const { text } = await c.body(z.object({ text: z.string().min(1).max(8000) }));
-    try {
-      const out = await app.speech.synthesize(text);
-      return { __raw: out.audio, mime: out.mime };
-    } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
-      throw e;
-    }
   });
 
   // ---- backup ---------------------------------------------------------------------------------

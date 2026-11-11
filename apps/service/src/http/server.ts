@@ -131,12 +131,6 @@ export async function startServer(app: App, opts: { port: number; host?: string 
       const ctx = makeCtx(req, res, url, m.params, client);
       const out = await m.route.handler(ctx);
       if (res.headersSent || res.writableEnded) return;
-      if (out && typeof out === "object" && "__raw" in (out as Record<string, unknown>)) {
-        const r = out as { __raw: Buffer; mime: string; status?: number; headers?: Record<string, string> };
-        res.writeHead(r.status ?? 200, { "content-type": r.mime, "cache-control": "no-store", ...cors, ...(r.headers ?? {}) });
-        res.end(r.__raw);
-        return;
-      }
       if (out && typeof out === "object" && "__status" in (out as Record<string, unknown>)) {
         const r = out as { __status: number; body: unknown; headers?: Record<string, string> };
         send(res, r.__status, r.body, { ...cors, ...(r.headers ?? {}) });

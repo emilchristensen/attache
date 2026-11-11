@@ -7,6 +7,7 @@ import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.t
 import { MachineStore } from "./core/machine.ts";
 import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
 import { ConfigStore } from "./core/config.ts";
+import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
@@ -21,7 +22,6 @@ import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { wakeSnoozed } from "./attention/engine.ts";
-import { SpeechService } from "./speech/service.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
@@ -51,7 +51,6 @@ export class App {
   readonly scheduler: Scheduler;
   readonly actions: ActionService;
   readonly conversations: ConversationService;
-  readonly speech: SpeechService;
   readonly sessions: AgentSessions;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
@@ -74,6 +73,7 @@ export class App {
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
@@ -95,7 +95,6 @@ export class App {
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db);
     this.conversations = new ConversationService(this.db, this.memory, this.log);
-    this.speech = new SpeechService(this);
     this.wire();
     registerRunners(this);
   }
@@ -173,7 +172,7 @@ export class App {
 
   featureStatuses() {
     const cfg = this.config.get();
-    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status, detail: c.kind === "speech" ? { stt: !!c.settings.stt && c.settings.stt !== "none", tts: !!c.settings.tts && c.settings.tts !== "none" } : {} }));
+    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status }));
     return computeStatus(cfg.features, conns, { dataFolder: cfg.dataFolder });
   }
 

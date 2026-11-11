@@ -93,17 +93,6 @@ export const FEATURES: FeatureDefinition[] = [
     jobKinds: ["draft", "action"],
   },
   {
-    id: "voice",
-    label: "Voice",
-    description: "Optional push-to-talk and spoken answers. Typing always works.",
-    core: false,
-    defaultEnabled: false,
-    requiresFeatures: ["conversation"],
-    connections: [{ kinds: ["speech"], label: "A speech provider", required: true, missingEffect: "Voice needs speech recognition and/or speech output configured." }],
-    schedules: [],
-    jobKinds: [],
-  },
-  {
     id: "sessions",
     label: "Agent sessions",
     description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, and give each new session your Jarvis memory.",
@@ -187,7 +176,7 @@ export function resolveChange(current: Partial<Record<FeatureId, boolean>>, chan
 
 export function computeStatus(
   features: Partial<Record<FeatureId, boolean>>,
-  connections: Array<{ kind: ConnectionKind; status: string; detail?: { stt?: boolean; tts?: boolean } }>,
+  connections: Array<{ kind: ConnectionKind; status: string }>,
   opts: { dataFolder: string | null },
 ): FeatureStatus[] {
   const eff = effectiveFeatures(features);
@@ -219,12 +208,6 @@ export function computeStatus(
         } else if (readiness === "ready") {
           readiness = "partial";
           reason = c.missingEffect;
-        }
-      } else if (f.id === "voice") {
-        const d = ok[0]!.detail ?? {};
-        if (!d.stt || !d.tts) {
-          readiness = "partial";
-          reason = !d.stt ? "Speech output works; speech recognition is not configured." : "Speech recognition works; spoken answers are not configured.";
         }
       }
     }
