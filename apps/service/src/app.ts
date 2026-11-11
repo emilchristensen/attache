@@ -31,6 +31,7 @@ import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
+import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
 
 export interface AppOptions {
@@ -67,6 +68,7 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  readonly proposals: Proposals;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -106,6 +108,7 @@ export class App {
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.bus.emit("event", { type: "replication.changed" }),
     });
+    this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
@@ -264,6 +267,7 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
+    this.proposals.open();
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
       onChange: () => {
@@ -303,6 +307,7 @@ export class App {
       const r = this.memory.indexer.scan(root);
       if (r.indexed || r.removed) changed = true;
     }
+    if (this.proposals.reload(paths)) changed = true;
     if (changed) this.bus.emit("event", { type: "memory.changed" });
   }
 

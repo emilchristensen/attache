@@ -4,6 +4,7 @@
  * commit and before talking to the remote, and the credentials git uses.
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
+import { proposalMergeRule } from "../memory/proposal-merge.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
@@ -89,5 +90,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [proposalMergeRule], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

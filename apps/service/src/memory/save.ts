@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@jarvis/contracts";
 import type { App } from "../app.ts";
-import { nowIso, tx } from "../core/db.ts";
+import { nowIso } from "../core/db.ts";
 import { harnessLabel } from "../agents/integrations.ts";
 import { HttpError } from "../http/router.ts";
-import { proposeItems } from "./proposals.ts";
 import { isProtected } from "./policy.ts";
 import { checkItems, writeItem, type CheckedItem } from "./save-items.ts";
 import type { ChangeMeta, SourceRef } from "./store.ts";
@@ -70,7 +69,7 @@ function mayAutoAccept(app: App, origin: MemorySaveInput["origin"], plan: readon
 export function proposeSave(app: App, input: MemorySaveProposalInput): MemorySaveProposalResult {
   const source = originSource(app, input.origin);
   const proposedBy = input.origin ? harnessLabel(input.origin.agent) : "model";
-  return { proposals: tx(app.db, () => proposeItems(app.memory, input.items, { reason: input.reason, source, origin: input.origin ?? null, proposedBy })) };
+  return { proposals: app.proposals.proposeItems(input.items, { reason: input.reason, source, origin: input.origin ?? null, proposedBy }) };
 }
 
 /** Cite the session the items came from: its archived transcript when Jarvis has one, otherwise the agent and session id. */

@@ -177,6 +177,16 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Proposals live in the Brain (review/proposals/), so they replicate. This table is only this
+  // Machine's index of those files, rebuilt from them; Proposals stored in the change log before
+  // are carried over into files when the data folder is next opened.
+  `
+  create table proposals (
+    id text primary key, rel_path text not null unique, status text not null, created_at text not null,
+    decided_at text, record text not null
+  );
+  create index proposals_status on proposals(status, created_at);
+  `,
 ];
 
 export function openDb(file: string): Db {

@@ -3,7 +3,8 @@ import type { AttentionItemView, Coverage } from "@jarvis/contracts";
 import { type Db, json, nowIso } from "../core/db.ts";
 import { listItems } from "./engine.ts";
 import { search } from "../memory/search.ts";
-import { proposalHeadline } from "../memory/proposals.ts";
+import { ProposalIndex } from "../memory/proposal-index.ts";
+import { proposalHeadline } from "../memory/proposal-record.ts";
 import { complete, type ModelProvider } from "../models/providers.ts";
 
 export interface SourceCoverage {
@@ -75,10 +76,8 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
   }
   const drafts = db.prepare("select id, title, status from actions where status in ('draft','approved') order by updated_at desc limit 20").all() as Array<{ id: string; title: string; status: string }>;
   if (drafts.length) sections.set("prepared", { id: "prepared", title: "Prepared for your review", items: drafts.map((d) => ({ id: d.id, title: d.title, summary: d.status === "approved" ? "Approved, not yet sent." : "Draft awaiting your review.", url: null, isNew: false, changed: false })) });
-  const proposals = db
-    .prepare("select id, doc_rel_path as docRelPath, subject, after_value as afterValue, reason, source, created_at as createdAt from memory_changes where change = 'proposal' and status = 'proposed' order by created_at desc limit 20")
-    .all() as Array<{ id: string; docRelPath: string; subject: string | null; afterValue: string | null; reason: string | null; source: string | null; createdAt: string }>;
-  if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.docRelPath}`, url: null, isNew: false, changed: false })) });
+  const proposals = new ProposalIndex(db).list({ status: "proposed", limit: 20 });
+  if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.target}`, url: null, isNew: false, changed: false })) });
   const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "other"];
   return {
     id: randomUUID(),

@@ -69,23 +69,34 @@ function checkRemoved(store: MemoryStore, change: MemoryChange, later: MemoryCha
   return ALLOWED;
 }
 
+/** Why a change is undone, as History and the restored fact's source will say. */
+export interface RevertReason {
+  reason: (change: MemoryChange) => string;
+  label: string;
+}
+
+const DASHBOARD_REVERT: RevertReason = {
+  reason: (change) => `reverted the change of ${change.createdAt.slice(0, 16).replace("T", " ")} UTC in the Dashboard`,
+  label: "Revert in the Dashboard",
+};
+
 /**
  * Undo one change as the owner's own Dashboard action: a fact gets its previous
  * value back as a correction (so History shows both steps), a created note is
  * removed from the Brain and search, and a removed note comes back as it was.
  * The undo is recorded as a change of its own.
  */
-export function revertChange(store: MemoryStore, id: string): MemoryChange {
+export function revertChange(store: MemoryStore, id: string, why: RevertReason = DASHBOARD_REVERT): MemoryChange {
   const change = store.getChange(id);
   if (!change || !isBrainChange(change)) throw new HttpError(404, "not_found", "That change is not in the change log. Reload the list.");
   const check = checkRevert(store, change);
   if (!check.allowed) throw new HttpError(409, "not_revertible", check.reason);
-  const reason = `reverted the change of ${change.createdAt.slice(0, 16).replace("T", " ")} UTC in the Dashboard`;
+  const reason = why.reason(change);
   const meta = { reverts: change.id };
   switch (change.change) {
     case "correct":
       if (change.beforeValue === null) return store.removeFact(change.docRelPath, { subject: change.subject!, reason }, "user", meta);
-      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, reason, source: { kind: "user", ref: "dashboard", label: "Revert in the Dashboard", observedAt: new Date().toISOString() } }, "user", {}, meta);
+      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, reason, source: { kind: "user", ref: "dashboard", label: why.label, observedAt: new Date().toISOString() } }, "user", {}, meta);
     case "create":
       return store.deleteMemory(change.docRelPath, { reason }, "user", meta);
     case "delete":

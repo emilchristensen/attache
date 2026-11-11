@@ -74,6 +74,9 @@ Each Proposal shows the whole change before you decide: the new note or the note
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
+With Replication on, a Proposal made on one Machine shows on every Machine, and the Machine it was made on is named.
+Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
+If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
 **Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, a Proposal you approved, or you) and when.
@@ -271,6 +274,8 @@ What happens on its own:
 - Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
 - A note is never left with conflict markers.
   Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+
+Proposals and what else waits for your decision replicate too: they are kept in the Brain's `review/` folder, which search never reads.
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
