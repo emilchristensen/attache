@@ -1,3 +1,8 @@
+import { systemClock, type Clock } from "./clock.ts";
+import { githubCredentials } from "./github-credentials.ts";
+import { NO_GITHUB, type GitHubAccess } from "./github.ts";
+import { PrivateRemoteGuard } from "./private-remote.ts";
+
 /**
  * Where later rules plug into Replication without changing the loop:
  * merge rules for files both sides changed, guards that run before every
@@ -63,10 +68,13 @@ export interface CommitGuard {
   check(files: readonly StagedFile[]): GuardVerdict;
 }
 
+/** A remote guard's answer; `offline` when it could not find out this time, so the next check asks again. */
+export type RemoteVerdict = GuardVerdict | { ok: false; status: "offline"; cause: string };
+
 /** Runs at setup, at join and before every push; a refusal stops the push. */
 export interface RemoteGuard {
   readonly name: string;
-  check(remote: string): Promise<GuardVerdict>;
+  check(remote: string): Promise<RemoteVerdict>;
 }
 
 /** How git authenticates to the remote, without the secret ever being part of its address. */
@@ -84,10 +92,21 @@ export interface ReplicationSeams {
   credentials: GitCredentials;
 }
 
-/** Git's own credential setup on this Machine, until a ticket adds Jarvis's helper. */
+/** Git's own credential setup on this Machine: what remotes other than GitHub over https use. */
 export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () => ({}) };
 
+/** What the service hands the seams that need more than the files. */
+export interface SeamDeps {
+  /** The GitHub connection, for the private-repository check and the repository token. */
+  github?: GitHubAccess;
+  clock?: Pick<Clock, "now">;
+  /** This install's state folder and instance, for the credential helper git runs. */
+  install?: { stateDir: string; instance: string };
+}
+
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
-export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+export function defaultSeams(deps: SeamDeps = {}): ReplicationSeams {
+  const github = deps.github ?? NO_GITHUB;
+  const credentials = deps.install ? githubCredentials({ github, ...deps.install }) : MACHINE_CREDENTIALS;
+  return { mergeRules: [], commitGuards: [], remoteGuards: [new PrivateRemoteGuard({ github, clock: deps.clock ?? systemClock })], credentials };
 }

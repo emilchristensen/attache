@@ -32,6 +32,10 @@ import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { defaultSeams } from "./replication/seams.ts";
+import type { GitHubAccess } from "./replication/github.ts";
+import { ReplicationProblems } from "./replication/problem-inbox.ts";
+import { connectionSecretKey } from "./connectors/manager.ts";
+import { resolveEndpoint } from "./connectors/test-endpoints.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -67,6 +71,8 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  /** The inbox item for a blocked or unauthorized Replication. */
+  private readonly replicationProblems: ReplicationProblems;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -99,13 +105,17 @@ export class App {
       db: this.db,
       log: this.log,
       clock: this.clock,
-      seams: defaultSeams(),
+      seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
-      onChange: () => this.bus.emit("event", { type: "replication.changed" }),
+      onChange: () => {
+        this.bus.emit("event", { type: "replication.changed" });
+        if (this.replicationProblems.update(this.replication.view())) this.bus.emit("event", { type: "attention.changed" });
+      },
     });
+    this.replicationProblems = new ReplicationProblems(this.db, () => this.clock.now());
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
@@ -281,6 +291,20 @@ export class App {
     this.config.patch({ dataFolder: path });
     this.bus.emit("event", { type: "config.changed" });
     return r;
+  }
+
+  /** What Replication borrows from the GitHub connection: its API address and, from the secret store, its token. */
+  private githubAccess(): GitHubAccess {
+    const record = () => this.connections.records().find((r) => r.kind === "github" && r.status !== "disconnected" && r.status !== "not_configured") ?? null;
+    return {
+      connection: () => {
+        const r = record();
+        if (!r) return null;
+        const configured = typeof r.settings.apiBaseUrl === "string" && r.settings.apiBaseUrl ? r.settings.apiBaseUrl : "https://api.github.com";
+        return { id: r.id, apiBase: resolveEndpoint(configured) };
+      },
+      token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
+    };
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */

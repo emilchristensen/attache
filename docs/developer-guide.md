@@ -94,6 +94,8 @@ Nothing replicates until a test moves a Machine's clock: `await mac.clock.advanc
 `world.remote.goOffline()` and `goOnline()` make the remote unreachable and back; `world.remote.git(...)` inspects what was pushed.
 The bare repository refuses any push that is not a fast-forward, so a test fails if Replication ever rewrote history.
 `JARVIS_GIT_BIN` points Replication at another git executable.
+For GitHub itself, `apps/service/test/fixtures/github-git-server.ts` serves git's smart HTTP protocol (through the Machine's `git http-backend`) behind token authentication, plus `GET /repos/{owner}/{name}` with a visibility the test sets.
+`replication-private-repo.test.ts` sends `https://github.com/` there with git's `url.<base>.insteadOf`, set through `GIT_CONFIG_COUNT` in the environment, and points the GitHub connection's API URL at it, so no test-only code is needed in the service.
 
 ## Recall evaluation
 
