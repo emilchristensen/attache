@@ -167,42 +167,43 @@ describe("auditing memory", () => {
   });
 });
 
-describe("the jarvis save and audit commands", () => {
-  it("save pairs itself on first use, reads JSON from stdin and detects the agent session", async () => {
-    const items = { items: [{ action: "create", type: "note", title: "Pairing the CLI", facts: [{ subject: "How", value: "The CLI pairs itself and keeps its token in the state folder" }] }] };
-    const r = await cli(["save"], JSON.stringify(items), { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "cli-sess" });
+describe("the terminal commands", () => {
+  it("has no save command, because a save is confirmed in a Harness", async () => {
+    const r = await cli(["save"], JSON.stringify({ items: [{ action: "create", type: "note", title: "From a shell", facts: [{ subject: "How", value: "x" }] }] }));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("Unknown command save");
+    expect(r.stderr).not.toMatch(/Commands: .*\bsave\b/);
+    expect(existsSync(join(svc.dataDir, "memory/notes/from-a-shell.md"))).toBe(false);
+  });
+
+  it("search finds curated memory from a terminal", async () => {
+    const r = await cli(["search", "Orion cutover", "--json"]);
+    expect(r.status).toBe(0);
+    expect((JSON.parse(r.stdout) as Array<{ file: string }>).some((h) => h.file === join(svc.dataDir, "memory/projects/orion-migration.md"))).toBe(true);
+  });
+
+  it("audit pairs itself on first use and keeps its token in the state folder", async () => {
+    const r = await cli(["audit", "--json"]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("Created Pairing the CLI (1 fact, 0 events)");
-    expect(r.stdout).toContain(join(svc.dataDir, "memory/notes/pairing-the-cli.md"));
-    expect(readFileSync(join(svc.dataDir, "memory/notes/pairing-the-cli.md"), "utf8")).toContain("ref: claude-code/cli-sess");
-    const token = join(svc.stateDir, "cli-token");
-    expect(statSync(token).mode & 0o777).toBe(0o600);
+    expect(statSync(join(svc.stateDir, "cli-token")).mode & 0o777).toBe(0o600);
     const clients = svc.app.db.prepare("select name, kind from clients where revoked_at is null").all() as Array<{ name: string; kind: string }>;
     expect(clients).toContainEqual({ name: "Jarvis CLI", kind: "cli" });
   });
 
-  it("save re-pairs when its token was revoked", async () => {
+  it("audit re-pairs when its token was revoked", async () => {
     svc.app.db.prepare("update clients set revoked_at = ? where name = 'Jarvis CLI'").run(new Date().toISOString());
-    const r = await cli(["save", "--json"], JSON.stringify({ items: [{ action: "update", path: "memory/notes/pairing-the-cli.md", events: ["Token revoked and re-paired"] }] }));
+    const r = await cli(["audit", "--json"]);
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout).saved[0]).toMatchObject({ action: "updated", events: 1 });
+    expect(JSON.parse(r.stdout).findings.length).toBeGreaterThan(0);
   });
 
-  it("save explains invalid input before contacting the service", async () => {
-    const bad = await cli(["save"], JSON.stringify({ items: [{ action: "create", type: "idea", title: "x", facts: [] }] }));
-    expect(bad.status).toBe(1);
-    expect(bad.stderr).toContain("do not match what Jarvis saves");
-    expect((await cli(["save"], "not json")).stderr).toContain("not valid JSON");
-    expect((await cli(["save"], "")).stderr).toContain("Nothing to save");
-  });
-
-  it("save says how to start Jarvis when it is not running", async () => {
+  it("audit says how to start Jarvis when it is not running", async () => {
     const rt = join(svc.stateDir, "runtime.json");
     const saved = readFileSync(rt, "utf8");
     writeFileSync(rt, JSON.stringify({ ...JSON.parse(saved), pid: 999_999 }));
     try {
-      const r = await cli(["save"], JSON.stringify({ items: [{ action: "update", path: "memory/notes/pairing-the-cli.md", events: ["x"] }] }));
+      const r = await cli(["audit"]);
       expect(r.status).toBe(1);
       expect(r.stderr).toContain("jarvis start");
     } finally {

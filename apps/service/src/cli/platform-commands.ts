@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { resolvePaths } from "../core/paths.ts";
 import { currentOs } from "../platform/os.ts";
 import { platformLocations, type PlatformLocations } from "../platform/locations.ts";
-import { HARNESS_FILES, harnessInstalls, type HarnessKind } from "../platform/harness-locations.ts";
+import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } from "../platform/harness-locations.ts";
 import { serviceManagerFor } from "../platform/service-manager/index.ts";
 import { clearSecrets, createSecretStore } from "../platform/secret-store/index.ts";
 import { commandWrappers, type WrapperSpec } from "../platform/wrapper.ts";
@@ -90,7 +90,8 @@ export async function credentialsCommand(sub: string | undefined, io: PlatformCl
 /** Everything `platform/` resolves for this operating system, as JSON; with a key, just that value (for installer scripts). */
 export function pathsReport(loc: PlatformLocations = platformLocations()) {
   const installs = harnessInstalls(loc);
-  const harnesses = Object.fromEntries((Object.keys(HARNESS_FILES) as HarnessKind[]).map((k) => [k, { ...HARNESS_FILES[k], ...installs[k] }]));
+  const mcp = harnessMcpConfigs(loc.os);
+  const harnesses = Object.fromEntries((Object.keys(HARNESS_FILES) as HarnessKind[]).map((k) => [k, { ...HARNESS_FILES[k], mcpFile: mcp[k].file, mcpFormat: mcp[k].format, ...installs[k] }]));
   return { ...loc, harnesses };
 }
 

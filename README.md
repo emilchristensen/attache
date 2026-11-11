@@ -14,7 +14,8 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 - Search with exact citations: every hit names its file and lines, and search works without a model.
   Jarvis has no chat box of its own; you ask the Brain from your Harness.
 - Meaning-based search on each Machine: a small multilingual model, downloaded once from Settings, runs locally and builds vectors for every passage; search falls back to keywords until they are ready.
-- The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Claude Desktop and other Harnesses search and read your notes with file and line citations, and save facts and events you confirm inside the Harness (or, for a Harness you switch auto-accept on for, without asking), with no token in their configuration.
+- The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts and events you confirm inside the Harness (or, for a Harness you switch auto-accept on for, without asking), with no token in their configuration.
+  Connecting a Harness in the Dashboard adds the server, and for Claude Code, Codex and Antigravity the session hooks, in one step.
   A wrap-up prompt records the durable points of a conversation Jarvis cannot capture, such as Claude Desktop's Chat tab, as evidence.
 - Memory: import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
   The Dashboard shows the Brain read-only and takes one-click decisions; notes are added and corrected from a Harness.

@@ -1,6 +1,6 @@
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
 import type { MemorySaveInput } from "@jarvis/contracts";
-import { agentFromEnv } from "../cli/agent-env.ts";
+import { agentFromEnv } from "./agent-env.ts";
 import { slugify } from "../memory/markdown.ts";
 
 /** The Harness on the other end of an MCP connection, in Jarvis's words. */
