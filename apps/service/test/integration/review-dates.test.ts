@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
 
@@ -178,6 +179,27 @@ describe("a Proposal with a Review date", () => {
     const note = brainFile(applied.target);
     expect(lineOf(note, "Pilot starts")).toContain(`(${TODAY}, review ${IN_A_MONTH}): Pilot starts in January`);
     expect(lineOf(note, "**Owner**")).toContain(`(${TODAY}): Bao`);
+  });
+
+  it("is applied without a Review date that passed while it waited, and the note's History says so", async () => {
+    const clock = new ManualClock();
+    const later = await startTestService({ clock });
+    try {
+      const tomorrow = new Date(clock.now().getTime() + 86_400_000).toISOString().slice(0, 10);
+      const proposal = await later.post("/memory/proposals", {
+        item: { action: "create", type: "project", title: "Lyra pilot", facts: [{ subject: "Status", value: "Pilot starts on Monday", review: tomorrow }] },
+        reason: "Heard in the planning call",
+      });
+      clock.skip(3 * 86_400_000);
+      const applied = await later.call("POST", `/memory/proposals/${proposal.id}/apply`);
+      expect(applied.status).toBe(200);
+      const note = readFileSync(join(later.dataDir, applied.body.target), "utf8");
+      const applyDay = clock.now().toISOString().slice(0, 10);
+      expect(lineOf(note, "**Status**")).toContain(`(${applyDay}): Pilot starts on Monday`);
+      expect(note.split("## History")[1]).toContain(`Review date ${tomorrow} of "Status" dropped: it had passed when the Proposal was applied`);
+    } finally {
+      await later.stop();
+    }
   });
 
   it("is refused when its Review date is not after today, like a save", async () => {

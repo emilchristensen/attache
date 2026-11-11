@@ -279,6 +279,8 @@ The audit flags these facts, and only these, as stale.
 To clear the mark and the item, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
 To confirm a fact is still true, save the same value with a later Review date.
 The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
+A Proposal whose Review date passes before you apply it is still applied: the fact is written without that date, and the note's History says which date was dropped and why.
+Give the fact a new Review date with a later save if it still needs one.
 
 ## Editing notes in Obsidian
 
