@@ -131,6 +131,12 @@ If the data folder itself goes missing, the rescan is skipped so an unmounted dr
 Imported vaults are not watched; they are rescanned when their connection syncs.
 Vector search is deliberately not in this release: no embedding model is guaranteed on a clean install, and lexical recall with exact citations is verifiable.
 
+Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
+A question set names, per question, the note and the subject of the current fact expected to answer it.
+Each question runs through the same search a Harness gets (8 results, raw archives excluded), and a result counts only when it is that fact's own chunk.
+The report gives how often the expected fact is first and how often it is in the first three, every question not answered first with the first three results, and, unscored, every question whose note or fact is not in the Brain.
+The owner's set lives in the Brain at `evaluation/recall-questions.json`, as JSON so the indexer never reads it; a synthetic Brain with its own set lives in `apps/service/test/fixtures/recall-brain/` and runs with the test suite.
+
 Answers: the service retrieves first, numbers the evidence `[S1]..[Sn]`, sends it to the model as quoted data with an instruction that documents are untrusted, and maps cited markers back to exact file and line ranges.
 When nothing relevant is retrieved the answer is marked unsupported and the model is told to say so.
 Without a model, chat returns the retrieved evidence directly and says no model is connected.
