@@ -154,6 +154,34 @@ export const MIGRATIONS: readonly string[] = [
   drop table if exists messages;
   drop table if exists conversations;
   `,
+  // Replication of the Brain through git: local state, never part of the Brain. No row means off.
+  `
+  create table replication (
+    id integer primary key check (id = 1), data_folder text not null, remote text not null, enabled_at text not null,
+    committed_seq integer not null default 0, status text not null, cause text, checked_at text, pushed_at text
+  );
+  `,
+  // Auto-accept per Harness: local state of this Machine, never part of the Brain. A change
+  // written without asking the owner is marked so in the change log.
+  `
+  create table harness_settings (harness text primary key, auto_accept integer not null default 0, updated_at text not null);
+  alter table memory_changes add column auto_accepted integer not null default 0;
+  `,
+  // Meaning-based search, local to this Machine: the text each chunk's vector is made from, and the
+  // vectors, keyed by model and that text's hash so text that did not change keeps its vector when its
+  // file is re-chunked. Forget every file's fingerprint so the next scan fills in the new columns.
+  `
+  alter table chunks add column embed_text text;
+  alter table chunks add column embed_hash text;
+  create index chunks_embed on chunks(embed_hash);
+  create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
+  update documents set hash = '', mtime_ms = -1;
+  `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
 ];
 
 export function openDb(file: string): Db {

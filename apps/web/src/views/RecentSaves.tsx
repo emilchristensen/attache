@@ -40,6 +40,7 @@ function What({ c }: { c: RecentChangeView }) {
           ) : (
             <span className="muted">(removed)</span>
           )}
+          {c.newValue !== null && c.newReview && <span className="small muted">review after {c.newReview}</span>}
         </span>
       );
   }
@@ -60,6 +61,7 @@ function ChangeRow({ c, onReverted }: { c: RecentChangeView; onReverted: () => v
             </Link>
           )}
           {c.revertOf && <StatusPill state="draft" label="revert" />}
+          {c.source.autoAccepted && <span className="pill" title="Written without asking, because auto-accept was on for this Harness">auto-accepted</span>}
           {c.revertedBy && <StatusPill state="rejected" label="reverted" />}
         </div>
         <div className="recent-change-what">

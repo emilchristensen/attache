@@ -7,6 +7,10 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { fixtureModelDescription } from "../../apps/service/test/fixtures/fixture-meaning-model.ts";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
@@ -19,7 +23,7 @@ export interface Stack {
   stateDir: string;
   dataDir: string;
   vaultDir: string;
-  /** Home folder whose coding-agent settings the service edits; never the real one. */
+  /** Home folder whose Harness settings the service edits; never the real one. */
   agentHome: string;
   pairUrl(): string;
   stopService(): Promise<void>;
@@ -69,7 +73,10 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
   // claude.ai connectors go through the fixture CLI with an empty Claude config: journeys never reach a real account.
   const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures/fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
-  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
+  // The meaning model comes from the fixture server, never from Hugging Face.
+  const meaningModel = join(base, "meaning-model.json");
+  writeFileSync(meaningModel, JSON.stringify(fixtureModelDescription(`${fixtureUrl}/meaning-model`)));
+  const env = { ...process.env, JARVIS_MEANING_MODEL: meaningModel, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
@@ -104,9 +111,32 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   };
 }
 
-/** Save items the way a Harness does today: through the jarvis executable, citing its session. */
-export function harnessSave(stack: Stack, items: unknown[], origin: { agent: string; session: string }) {
-  execFileSync(NODE, [BUNDLE, "save", "--agent", origin.agent, "--session", origin.session, "--state-dir", stack.stateDir], { input: JSON.stringify({ items }), env: { ...process.env, JARVIS_CREDENTIAL_STORE: "file" } });
+/** The environment each Harness gives the processes it starts, naming its session. */
+const HARNESS_SESSION_ENV: Record<string, (session: string) => Record<string, string>> = {
+  "claude-code": (session) => ({ CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: session }),
+  codex: (session) => ({ CODEX_THREAD_ID: session }),
+  antigravity: (session) => ({ ANTIGRAVITY_CONVERSATION_ID: session }),
+};
+
+/**
+ * Save items the way a Harness does: it starts Jarvis's MCP server, calls the
+ * save tool from one of its sessions, and the owner accepts the confirmation.
+ */
+export async function harnessSave(stack: Stack, items: unknown[], origin: { agent: string; session: string }) {
+  const sessionEnv = HARNESS_SESSION_ENV[origin.agent];
+  if (!sessionEnv) throw new Error(`No session environment for Harness ${origin.agent}`);
+  const base = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !/^(CLAUDECODE|CLAUDE_CODE_|CODEX_|ANTIGRAVITY_)/.test(e[0])));
+  const transport = new StdioClientTransport({ command: NODE, args: [BUNDLE, "mcp", "--state-dir", stack.stateDir], env: { ...base, JARVIS_CREDENTIAL_STORE: "file", ...sessionEnv(origin.session) }, stderr: "pipe" });
+  const client = new Client({ name: origin.agent, version: "1.0.0" }, { capabilities: { elicitation: { form: {} } } });
+  client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: {} }));
+  await client.connect(transport);
+  try {
+    const r = await client.callTool({ name: "save", arguments: { items } });
+    const outcome = (r.structuredContent as { outcome?: string } | undefined)?.outcome;
+    if (r.isError || outcome !== "saved") throw new Error(`The save did not go through: ${JSON.stringify(r.content)}`);
+  } finally {
+    await client.close();
+  }
 }
 
 export function readRuntime(stateDir: string) {

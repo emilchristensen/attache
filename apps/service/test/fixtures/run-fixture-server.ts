@@ -6,6 +6,7 @@
 import { startFixtureServer } from "./fixture-server.ts";
 import { installScenarios } from "./scenarios.ts";
 import { installFixtureModel } from "./fixture-model.ts";
+import { installFixtureMeaningModel } from "./fixture-meaning-model.ts";
 
 const port = Number(process.argv[2] ?? process.env.FIXTURE_PORT ?? 4599);
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -24,6 +25,8 @@ fx.route("POST", "/__control/claude-server", (req) => {
   return { json: { ok: true } };
 });
 installFixtureModel(fx, "/model");
+// The meaning model a journey downloads from the Dashboard, described to the service by JARVIS_MEANING_MODEL.
+installFixtureMeaningModel(fx, "/meaning-model");
 process.stdout.write(`FIXTURE_READY ${fx.url}\n`);
 
 const stop = () => {

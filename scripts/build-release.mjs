@@ -66,6 +66,8 @@ async function main() {
   mkdirSync(join(STAGE, "service"), { recursive: true });
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-service.mjs"), join(STAGE, "service/jarvis-service.mjs"));
   copyFileSync(join(ROOT, "apps/service/dist/jarvis-agent-hook.mjs"), join(STAGE, "service/jarvis-agent-hook.mjs"));
+  // ONNX Runtime's WebAssembly files, loaded from the bundle's folder to run the meaning model; the same on every platform.
+  for (const f of ["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.mjs"]) copyFileSync(join(ROOT, "apps/service/dist", f), join(STAGE, "service", f));
   cpSync(join(ROOT, "apps/web/dist"), join(STAGE, "web"), { recursive: true, filter: (s) => !s.endsWith(".map") });
   // The launcher text is resolved per operating system with the rest of the platform code.
   const launcher = releaseLauncher("macos");

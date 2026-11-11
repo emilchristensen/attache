@@ -3,7 +3,9 @@ import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, Mac
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { AutoAccept } from "./AutoAccept.tsx";
 import { FeatureList } from "./Setup.tsx";
+import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -23,7 +25,7 @@ interface Status {
   credentialStoreNote: string | null;
   documents: number;
   jobs: Array<{ status: string; n: number }>;
-  schedules: Array<{ id: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
+  schedules: Array<{ id: string; label: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
 }
 
 const CREDENTIAL_STORES: Record<Status["credentialStore"], string> = {
@@ -223,6 +225,8 @@ export function SettingsView() {
           </>
         )}
         <ThisMachine />
+        <AutoAccept />
+        <MeaningSearchCard />
         <Clients />
         <Backups />
         <div className="card stack-sm">
@@ -253,7 +257,7 @@ export function SettingsView() {
               <dd>
                 {status.data.schedules.map((s) => (
                   <div key={s.id}>
-                    {s.id}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
+                    {s.label}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
                   </div>
                 ))}
               </dd>

@@ -11,7 +11,7 @@ const SAVE_EXAMPLE = [
   "```json",
   '{ "items": [',
   '  { "action": "create", "type": "decision", "title": "…", "facts": [{ "subject": "Decision", "value": "…" }], "notes": "Why, and what was rejected", "events": ["…"] },',
-  '  { "action": "update", "path": "memory/projects/….md", "facts": [{ "subject": "Status", "value": "…", "reason": "what changed" }], "events": ["…"] }',
+  '  { "action": "update", "path": "memory/projects/….md", "facts": [{ "subject": "Status", "value": "…", "reason": "what changed", "review": "2026-12-15" }], "events": ["…"] }',
   "] }",
   "```",
 ].join("\n");
@@ -54,6 +54,10 @@ Three precise items beat ten vague ones.
 - An **event** is something that happened (a meeting, a slip, a fix that shipped).
   It goes in \`events\` and is appended to History, never replacing anything.
 
+A fact you expect to change, such as a status, a plan or a deadline, can carry a Review date: \`review\`, a day (YYYY-MM-DD) after today, after which it should be checked again.
+Past that day Jarvis keeps the fact but shows it as unverified.
+Leave it out for facts that stay true, such as a repository's name; a correction without one clears the old Review date.
+
 Write every value so it makes sense months from now without this conversation.
 Name the project, the person and the system, use absolute dates (YYYY-MM-DD), and never write "this", "today" or "the bug".
 
@@ -73,6 +77,7 @@ Its arguments look like this:
 ${SAVE_EXAMPLE}
 
 Jarvis asks the owner to confirm the items before it writes them, and records which Harness and session they came from.
+If the owner switched on auto-accept for this Harness, Jarvis writes them without asking; the reply says so.
 If the owner declines, nothing is saved: say so, and do not call the tool again unless they ask.
 If the reply says the items await review, tell the owner they can approve them in the Jarvis Dashboard.
 If the tool returns an error, read its message, fix the items and call it again.
@@ -135,7 +140,7 @@ Every fact needs a \`reason\` that cites the evidence; Jarvis moves the old valu
 ${CORRECTION_EXAMPLE}
 
 Make the corrections through the \`save\` tool only after the owner says yes, and only the ones they accept.
-Jarvis then asks the owner to confirm the save once more before it writes.
+Jarvis then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
 For an unsupported fact, ask the owner for the current value rather than guessing.
 ${HANDS_OFF}
 The identity record (\`memory/self.md\`) can only be changed in Jarvis Settings; point the owner there.

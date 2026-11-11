@@ -7,8 +7,9 @@ import { nowIso } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { parseStateEntries, splitFrontmatter } from "../memory/markdown.ts";
 import { sessionLogDate } from "../memory/evidence-paths.ts";
-import { AgentHooks, stablePath } from "./install.ts";
-import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
+import { AgentHooks, agentHome, stablePath } from "./install.ts";
+import { AGENT_INTEGRATIONS, integrationFor, type AgentIntegration } from "./integrations.ts";
+import { removeLegacySkills } from "./legacy-skills.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
 import { redact } from "../core/log.ts";
@@ -71,6 +72,7 @@ export class AgentSessions {
 
   start() {
     mkdirSync(spoolDir(this.stateDir), { recursive: true, mode: 0o700 });
+    this.upgradeHarnesses();
     const kick = () => {
       if (this.debounce) clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.tick(), 300);
@@ -132,12 +134,12 @@ export class AgentSessions {
   private ingestOne(r: SpoolRecord): boolean {
     const integration = integrationFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
-    if (!integration || !copy || !existsSync(copy)) {
+    if (!integration?.hooks || !copy || !existsSync(copy)) {
       this.app.log.warn("agent session not saved", { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") });
       return false;
     }
     const raw = readFileSync(copy, "utf8");
-    const parsed = integration.parseTranscript(raw);
+    const parsed = integration.hooks.parseTranscript(raw);
     if (!parsed.turns.length) {
       if (raw.trim()) this.keepUnparsed(r, copy);
       return false;
@@ -308,15 +310,36 @@ export class AgentSessions {
     const text = buildSessionContext(base);
     const projects = notes.filter((d) => d.docType === "project").flatMap((d) => this.projectContext(base, d));
     writeContextFiles(this.stateDir, text, projects);
-    for (const a of AGENT_INTEGRATIONS) {
-      if (this.app.connections.record(a.kind)?.status !== "connected") continue;
+    for (const a of this.connectedHarnesses()) {
       try {
-        // Agents without a session-start hook read the same context from a rule file.
+        // Harnesses without a session-start hook read the same context from a rule file.
         this.hooks.writeRules(a, text);
-        // Keep the save and audit skills in step with this version.
-        this.hooks.skills.install(a);
       } catch (e) {
-        this.app.log.warn("could not update agent memory rule or skills", { agent: a.kind, error: (e as Error).message });
+        this.app.log.warn("could not update a Harness's memory rule", { agent: a.kind, error: (e as Error).message });
+      }
+    }
+  }
+
+  private connectedHarnesses(): AgentIntegration[] {
+    return AGENT_INTEGRATIONS.filter((a) => this.app.connections.record(a.kind)?.status === "connected");
+  }
+
+  /**
+   * Bring connected Harnesses up to this version once per start: an upgrade
+   * may move the install's paths, so the MCP server entry is rewritten when it
+   * no longer matches, and the save and audit skills earlier versions
+   * installed are removed, since the MCP prompts replace them.
+   */
+  private upgradeHarnesses() {
+    const skills = removeLegacySkills(agentHome(), this.stateDir);
+    if (skills.removed.length) this.app.log.info("removed the save and audit skills the MCP prompts replace", { folders: skills.removed });
+    for (const e of skills.errors) this.app.log.warn("could not remove an earlier version's skill folder", e);
+    for (const a of this.connectedHarnesses()) {
+      try {
+        const r = this.hooks.refreshMcp(a);
+        if (r.changed) this.app.log.info("registered Jarvis's MCP server", { agent: a.kind, path: r.path });
+      } catch (e) {
+        this.app.log.warn("could not register Jarvis's MCP server", { agent: a.kind, error: (e as Error).message });
       }
     }
   }
@@ -333,7 +356,7 @@ export class AgentSessions {
       const state = parseStateEntries(this.app.memory.read(relPath));
       const repositories = listedRepositories(state);
       if (!repositories.length) return [];
-      const project = { title, path: join(this.app.memory.dataRoot!, relPath), state: state.map(({ subject, date, value }) => ({ subject, date, value })) };
+      const project = { title, path: join(this.app.memory.dataRoot!, relPath), state: state.map(({ subject, date, review, value }) => ({ subject, date, ...(review ? { review } : {}), value })) };
       return [{ slug: projectSlug(relPath), repositories, text: buildSessionContext({ ...base, project }) }];
     } catch (e) {
       this.app.log.warn("could not build a project's session context", { relPath, error: (e as Error).message });
@@ -341,11 +364,11 @@ export class AgentSessions {
     }
   }
 
-  /** A note's first current fact, so the index says what each note is about. */
-  private gist(relPath: string): { gist?: string } {
+  /** A note's first current fact, so the index says what each note is about, with its Review date. */
+  private gist(relPath: string): { gist?: string; gistReview?: string } {
     try {
       const first = parseStateEntries(this.app.memory.read(relPath))[0];
-      return first ? { gist: first.value.replace(/\s+/g, " ").trim() } : {};
+      return first ? { gist: first.value.replace(/\s+/g, " ").trim(), ...(first.review ? { gistReview: first.review } : {}) } : {};
     } catch {
       return {};
     }
