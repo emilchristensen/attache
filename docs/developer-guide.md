@@ -18,8 +18,10 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
 
 ## Requirements
 
-- macOS on Apple silicon for the full suite (launchd, Keychain).
-- Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+- macOS or Linux for lint, typecheck, Vitest and the browser journeys.
+  The install test needs macOS (launchd, Keychain).
+- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
 - Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
@@ -48,6 +50,28 @@ Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, 
 Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
 `jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS and Linux (`ubuntu-latest` and `macos-latest`).
+Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, with these steps:
+
+| Step | Run it locally |
+| --- | --- |
+| Install | `pnpm install --frozen-lockfile` |
+| Lint | `pnpm lint --max-warnings 0` |
+| Typecheck | `pnpm typecheck` |
+| Unit and integration tests | `pnpm test` |
+| Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
+
+Every check runs even when an earlier one fails, so a run lists all failures at once.
+On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
+Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+
+To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+
+A pull request with a failing check shows the failure on GitHub.
+For the failure to block merging, `main` needs a branch protection rule or ruleset that requires both `checks` jobs, which GitHub offers for private repositories only on a paid plan.
 
 ## Fixtures versus live
 
