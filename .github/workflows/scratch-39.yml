@@ -23,9 +23,16 @@ jobs:
           $null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
           $null = [Windows.UI.Notifications.NotificationSetting, Windows.UI.Notifications, ContentType = WindowsRuntime]
           $n = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe')
-          "setting: [$($n.Setting)]"
-          whoami /user
-          query session
+          try { "ps setting: [$($n.get_Setting())]" } catch { "ps setting threw: $($_.Exception.ToString())" }
+          $key = 'HKCU:\Software\Classes\AppUserModelId\dev.jarvis.diag'
+          $null = New-Item -Path $key -Force
+          $null = New-ItemProperty -LiteralPath $key -Name DisplayName -Value 'Jarvis diag' -PropertyType String -Force
+          $m = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('dev.jarvis.diag')
+          try { "registered setting: [$($m.get_Setting())]" } catch { "registered setting threw: $($_.Exception.ToString())" }
+          $u = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('dev.jarvis.unregistered')
+          try { "unregistered setting: [$($u.get_Setting())]" } catch { "unregistered setting threw: $($_.Exception.ToString())" }
+          Set-StrictMode -Version Latest
+          try { $x = $m.Setting; "strict registered: [$x]" } catch { "strict threw: $($_.Exception.ToString())" }
       - name: Windows desktop tests
         if: ${{ !cancelled() }}
         env:
