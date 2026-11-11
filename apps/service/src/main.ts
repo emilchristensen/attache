@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";

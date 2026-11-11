@@ -1,4 +1,4 @@
-import { cliCommand } from "../agents/install.ts";
+import { cliScript, stablePath } from "../agents/install.ts";
 import { githubRepoOf, type GitHubAccess } from "./github.ts";
 import type { GitCredentials } from "./seams.ts";
 
@@ -7,7 +7,14 @@ export const CREDENTIAL_HELPER_COMMAND = "git-credential";
 /** The user name GitHub expects alongside a token. */
 export const TOKEN_USERNAME = "x-access-token";
 
+/** Quoted for the POSIX shell git runs helpers with (Git for Windows brings its own). */
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** This install's `jarvis`: the bundled runtime and service through the stable `current` path, or `jarvis` on PATH. */
+function jarvisCommand(): string {
+  const script = cliScript();
+  return script ? `${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : "jarvis";
+}
 
 /**
  * Git reaches a GitHub repository over https with the GitHub connection's
@@ -25,7 +32,7 @@ export function githubCredentials(deps: { github: GitHubAccess; stateDir: string
       const connection = deps.github.connection();
       // An empty helper first drops every helper the Machine's git config lists.
       if (!connection) return ["credential.helper="];
-      return ["credential.helper=", `credential.helper=!${cliCommand(deps.stateDir)} ${CREDENTIAL_HELPER_COMMAND} --connection ${quote(connection.id)}`];
+      return ["credential.helper=", `credential.helper=!${jarvisCommand()} ${CREDENTIAL_HELPER_COMMAND} --state-dir ${quote(deps.stateDir)} --connection ${quote(connection.id)}`];
     },
     env(remote): Readonly<Record<string, string>> {
       return githubRepoOf(remote)?.transport === "https" ? { JARVIS_INSTANCE: deps.instance } : {};

@@ -42,7 +42,7 @@ export function hookScript(): string {
 }
 
 /** The script behind this install's `jarvis` command: the bundled service in releases, `JARVIS_CLI_SCRIPT` in tests and development. */
-function cliScript(): string {
+export function cliScript(): string {
   return process.env.JARVIS_CLI_SCRIPT || (process.argv[1] && /jarvis-service\.mjs$/.test(process.argv[1]) ? process.argv[1] : "");
 }
 

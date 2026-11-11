@@ -9,7 +9,7 @@ export interface GitCredentialIo {
   write(text: string): void;
 }
 
-const USAGE = "Usage: jarvis git-credential --connection <id> <get|store|erase> (git runs this for Replication)";
+const USAGE = "Usage: jarvis git-credential [--state-dir <path>] --connection <id> <get|store|erase> (git runs this for Replication)";
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 /**
