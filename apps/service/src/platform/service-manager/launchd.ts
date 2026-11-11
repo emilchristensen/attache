@@ -5,17 +5,16 @@ import { run } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
+import { sleep, waitUntil } from "../wait.ts";
+import { escapeXml } from "../xml.ts";
 
 const LAUNCHCTL = "/bin/launchctl";
 const STOP_WAIT_MS = 10_000;
 const BOOTSTRAP_ATTEMPTS = 6;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
 /** The LaunchAgent: starts at login, restarts on crash, runs the bundled runtime through the stable `current` link. */
 export function launchAgentPlist(label: string, home: string, spec: ServiceSpec): string {
-  const p = (s: string) => xml(s);
+  const p = escapeXml;
   const current = join(spec.installPrefix, "current");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -88,11 +87,7 @@ export class LaunchdServiceManager implements ServiceManager {
 
   async stop(): Promise<void> {
     const r = await run(LAUNCHCTL, ["bootout", `${this.domain}/${this.name}`]);
-    const deadline = Date.now() + STOP_WAIT_MS;
-    while (await this.loaded()) {
-      if (Date.now() > deadline) throw new Error(`launchctl bootout failed: ${r.stderr.trim() || "the service is still loaded"}`);
-      await sleep(250);
-    }
+    if (!(await waitUntil(async () => !(await this.loaded()), STOP_WAIT_MS))) throw new Error(`launchctl bootout failed: ${r.stderr.trim() || "the service is still loaded"}`);
   }
 
   async uninstall(): Promise<void> {
