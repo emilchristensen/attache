@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -74,7 +74,7 @@ export function registerDataRoutes(r: Router, app: App) {
     const q = c.query("q") ?? "";
     const area = c.query("area");
     const type = c.query("type");
-    // `recall=1` searches the way recall does: raw conversations and session transcripts stay out, their summaries stay in.
+    // `recall=1` searches the way recall does: old chat archives and session transcripts stay out, their summaries stay in.
     const recall = c.query("recall") === "1";
     return { query: q, hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
   });
@@ -231,28 +231,6 @@ export function registerDataRoutes(r: Router, app: App) {
   });
 
   r.get("/memory/roots", () => memoryRoots(app));
-
-  // ---- conversation ----------------------------------------------------------------
-  r.get("/conversations", () => app.conversations.listConversations());
-  r.get("/conversations/:id/messages", (c) => app.conversations.messages(c.params.id!));
-  r.post("/chat", async (c) => {
-    requireFeature(app, "conversation");
-    requireData(app);
-    const input = await c.body(ChatInput);
-    await app.model();
-    let context = input.context;
-    if (context?.absPath && !context.relPath) {
-      const hit = resolveAbsolute(app, context.absPath);
-      context = { ...context, ...(hit ? { relPath: hit.relPath, root: hit.root } : {}) };
-    }
-    return app.conversations.send({ conversationId: input.conversationId ?? null, text: input.text, ...(context ? { context } : {}), clientId: c.client!.id });
-  });
-  r.get("/messages/:id", (c) => {
-    const m = app.conversations.message(c.params.id!);
-    if (!m) throw new HttpError(404, "not_found", "Message not found");
-    return m;
-  });
-  r.post("/messages/:id/cancel", (c) => ({ cancelled: app.conversations.cancel(c.params.id!) }));
 
   // ---- attention ---------------------------------------------------------------------
   r.get("/attention", (c) => {

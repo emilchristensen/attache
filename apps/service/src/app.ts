@@ -16,7 +16,6 @@ import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
 import { Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
-import { ConversationService } from "./conversation/service.ts";
 import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
@@ -50,7 +49,6 @@ export class App {
   readonly jobs: JobQueue;
   readonly scheduler: Scheduler;
   readonly actions: ActionService;
-  readonly conversations: ConversationService;
   readonly sessions: AgentSessions;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
@@ -94,15 +92,11 @@ export class App {
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db);
-    this.conversations = new ConversationService(this.db, this.memory, this.log);
     this.wire();
     registerRunners(this);
   }
 
   private wire() {
-    this.conversations.getModel = () => this.modelSync();
-    this.conversations.getIdentity = () => this.config.get().identity;
-    this.conversations.events.on("event", (ev) => this.bus.emit("event", ev));
     this.jobs.events.on("event", (ev) => this.bus.emit("event", { type: "job.event", event: ev }));
     this.connections.onChange = (id) => {
       this.cachedModel = null;
@@ -143,10 +137,6 @@ export class App {
   }
 
   // ---- model ---------------------------------------------------------------
-
-  private modelSync(): ModelProvider | null {
-    return this.cachedModel?.provider ?? null;
-  }
 
   async refreshModel(): Promise<ModelProvider | null> {
     const rec = this.connections.connected("model")[0];
@@ -240,7 +230,6 @@ export class App {
   }
 
   start() {
-    this.conversations.recoverInterrupted();
     void this.connections.migrateLegacyTransports().catch((e) => this.log.error("connection migration failed", { error: (e as Error).message }));
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {

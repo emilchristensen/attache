@@ -50,7 +50,7 @@ export function queryTerms(query: string): string[] {
 
 const quote = (t: string) => `"${t.replace(/"/g, '""')}"`;
 
-/** Raw archives that recall never quotes as evidence: Jarvis conversations and coding-agent transcripts. Their summaries are searchable. */
+/** Raw archives that recall never quotes as evidence: chat archives from versions that had a chat, and coding-agent transcripts. Their summaries are searchable. */
 export const RECALL_EXCLUDE = ["evidence/conversations/", "evidence/sessions/transcripts/"];
 
 const AREA_WEIGHT: Record<string, number> = { memory: 1.0, import: 0.9, deliverables: 0.7, evidence: 0.75 };
@@ -126,31 +126,6 @@ function diversify(sorted: SearchHit[], limit: number, perDocument: number): Sea
   }
   const chosen = new Set([...picked.slice(0, limit), ...held.slice(0, Math.max(0, limit - picked.length))]);
   return sorted.filter((h) => chosen.has(h));
-}
-
-/**
- * A whole document as evidence: its chunks merged back into one block per run
- * of the same section, current state first. Used when the user asks about the
- * note they have open, where the question may not share a word with it.
- */
-export function documentBlocks(db: Db, root: string, relPath: string, maxBlocks = 4): SearchHit[] {
-  const rows = db
-    .prepare(
-      `select c.id as chunkId, c.heading, c.section, c.start_line as startLine, c.end_line as endLine, c.text,
-              d.id as docId, d.root, d.rel_path as relPath, d.area, d.doc_type as docType, d.title, d.meta
-       from chunks c join documents d on d.id = c.doc_id where d.root = ? and d.rel_path = ? order by c.ordinal`,
-    )
-    .all(root, relPath) as Array<Omit<SearchHit, "score" | "snippet" | "meta"> & { meta: string }>;
-  const blocks: SearchHit[] = [];
-  for (const r of rows) {
-    const last = blocks.at(-1);
-    if (last && last.section === r.section && last.heading === r.heading) {
-      blocks[blocks.length - 1] = { ...last, text: `${last.text}\n${r.text}`, endLine: r.endLine };
-    } else {
-      blocks.push({ ...r, meta: safeJson(r.meta), score: 1e6, snippet: "" });
-    }
-  }
-  return blocks.slice(0, maxBlocks).map((b) => ({ ...b, snippet: b.text.slice(0, 220) }));
 }
 
 /** The share of `terms` found in `text`, forgiving a different word ending. */

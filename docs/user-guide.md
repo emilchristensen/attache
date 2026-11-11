@@ -27,7 +27,7 @@ Setup has five steps and each works without the ones after it.
    Preview shows exactly what will be created and confirms that existing files are not modified.
    You can also point Jarvis at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
 2. **Features.**
-   Conversation and search are always on.
+   Search is always on.
    Capture, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
    If a feature needs another one, Jarvis explains it and offers to turn the requirement on (or dependents off).
 3. **Connections.**
@@ -50,9 +50,8 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 
 ## Everyday use
 
-**Home** shows the attention inbox beside a persistent conversation.
-Drag the line between them to resize the conversation, or focus it and use the arrow keys; double-click it to reset.
-Jarvis remembers the width in that browser.
+**Home** shows the attention inbox.
+Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
 - The briefing summarises what changed, what needs your judgment and what Jarvis has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
@@ -64,15 +63,11 @@ Jarvis remembers the width in that browser.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Jarvis to write a reply or review comment with the item's context.
 
-**Conversation.**
-Every question first searches your notes.
-Answers cite their sources as `S1`, `S2`…; click a citation to open the file with the cited lines highlighted.
-If nothing relevant is found, the answer says so and is marked unverified.
-Press `/` to jump to the message box and `g` followed by a letter (h, m, d, j, c, s) to switch views.
+Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
 
 **Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
-Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next answer uses the correction.
+Use **Correct** to change a fact: the new value replaces the current one, the old value moves to *History* with the date and your reason, and the next search returns the correction.
 **Capture** archives text as evidence and can record a decision in memory linked to that evidence.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
@@ -155,7 +150,7 @@ claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
 Other Harnesses take the same command and argument in their MCP server settings.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
-  Like recall, it leaves out raw chat and session transcripts and includes their summaries.
+  Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
 - **read** returns a whole note, or only a line range, for a path that search returned.
 - **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
@@ -173,7 +168,7 @@ Other Harnesses take the same command and argument in their MCP server settings.
 
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
-There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
+There is no Obsidian plugin; use Jarvis in the browser to search, capture and review attention items.
 
 ## Measuring search
 

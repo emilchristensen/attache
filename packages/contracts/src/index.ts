@@ -7,7 +7,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // ---------------------------------------------------------------------------
 // Features and connections
 
-export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "sessions"]);
+export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
 export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
@@ -384,28 +384,6 @@ export interface RecallEvaluationReport {
   misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
   /** Questions that cannot be scored, because their note or fact is not in the Brain. */
   invalid: Array<RecallQuestion & { problem: string }>;
-}
-
-// ---------------------------------------------------------------------------
-// Conversation
-
-export const ChatInput = z.object({
-  conversationId: z.string().nullable().optional(),
-  text: z.string().min(1).max(20_000),
-  context: z.object({ relPath: z.string().optional(), root: z.string().optional(), absPath: z.string().max(4096).optional(), title: z.string().max(300).optional(), selection: z.string().max(20_000).optional() }).optional(),
-});
-
-export interface MessageView {
-  id: string;
-  conversationId: string;
-  role: "user" | "assistant";
-  content: string;
-  status: "streaming" | "complete" | "error" | "cancelled";
-  citations: Citation[];
-  retrieval: { query: string; hits: number; supported: boolean; mode: "model" | "retrieval-only" } | null;
-  error: string | null;
-  model: string | null;
-  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------

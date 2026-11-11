@@ -43,7 +43,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
     "search",
     {
       title: "Search the Brain",
-      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Raw chat and session transcripts are left out; their summaries are included.",
+      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Old chat archives and raw session transcripts are left out; session summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
       outputSchema: { passages: z.array(PassageShape) },
       annotations: { readOnlyHint: true, openWorldHint: false },
