@@ -291,6 +291,39 @@ export interface ProposalView {
   decidedAt: string | null;
 }
 
+/**
+ * One change to the Brain in the recent-saves list. `create` and `delete` are
+ * whole notes, `correct` is one fact (a `null` value means the subject had or
+ * has no value), `append` is an event or a prose edit.
+ */
+export interface RecentChangeView {
+  id: string;
+  relPath: string;
+  /** The note's title, also for a note that no longer exists. */
+  title: string;
+  kind: "create" | "correct" | "append" | "delete";
+  subject: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  source: {
+    /** Harness integration kind, e.g. `claude-code`. */
+    harness: string | null;
+    harnessLabel: string | null;
+    sessionId: string | null;
+    /** What to show: the Harness and session, or who else made the change. */
+    label: string;
+  };
+  at: string;
+  /** The change this one reverted, and the change that reverted this one. */
+  revertOf: string | null;
+  revertedBy: string | null;
+  revert: { allowed: true; reason: null } | { allowed: false; reason: string };
+}
+
+export interface RecentChangesResult {
+  changes: RecentChangeView[];
+}
+
 export interface MemoryAuditEntry {
   subject: string;
   value: string;
@@ -315,6 +348,61 @@ export interface MemoryAuditReport {
   findings: Array<{ relPath: string; absPath: string; title: string; type: string; inSessionIndex: boolean; flags: string[]; entries: MemoryAuditEntry[] }>;
   /** Pairs of notes whose titles reduce to the same name. */
   possibleDuplicates: Array<{ title: string; relPaths: string[] }>;
+}
+
+// ---------------------------------------------------------------------------
+// Recall evaluation
+
+/** One question and the fact expected to answer it: a note in the Brain and the subject of one of its current facts. */
+export const RecallQuestion = z.object({
+  question: z.string().trim().min(1).max(500),
+  /** The note's path inside the Brain, e.g. `memory/projects/orion-migration.md`. */
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .transform((p) => p.replace(/^(\.\/)+/, ""))
+    .refine((p) => p.endsWith(".md") && !p.startsWith("/") && !p.split("/").includes(".."), "must be a Markdown file's path inside the Brain"),
+  /** The subject of the current fact, as written between `**` in the note. */
+  fact: z.string().trim().min(1).max(100),
+});
+export type RecallQuestion = z.infer<typeof RecallQuestion>;
+
+export const RecallQuestionSet = z.object({ questions: z.array(RecallQuestion).min(1).max(1000) });
+export type RecallQuestionSet = z.infer<typeof RecallQuestionSet>;
+
+/** Score a supplied question set, or, without one, the set kept in the Brain. */
+export const RecallEvaluationInput = z.object({ set: RecallQuestionSet.optional() });
+export type RecallEvaluationInput = z.infer<typeof RecallEvaluationInput>;
+
+export interface RecallEvaluationHit {
+  root: string;
+  relPath: string;
+  title: string;
+  /** The fact this hit is, when it is one. */
+  fact: string | null;
+  startLine: number;
+  endLine: number;
+  snippet: string;
+}
+
+export interface RecallEvaluationReport {
+  generatedAt: string;
+  /** Where the questions came from: the Brain's own set (its path inside the Brain) or the caller. */
+  set: { source: "brain"; path: string } | { source: "supplied" };
+  /** Questions scored. Questions whose expected fact is not in the Brain are listed under `invalid` instead. */
+  questions: number;
+  /** How many questions have the expected fact as the first result. */
+  top1: number;
+  /** How many questions have the expected fact in the first three results. */
+  top3: number;
+  top1Rate: number;
+  top3Rate: number;
+  /** Every scored question whose expected fact is not the first result, with the first three results. */
+  misses: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }>;
+  /** Questions that cannot be scored, because their note or fact is not in the Brain. */
+  invalid: Array<RecallQuestion & { problem: string }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1332,3 +1332,78 @@ label.field select {
     white-space: nowrap;
   }
 }
+
+/* ---- recent saves ------------------------------------------------------ */
+
+.recent-saves {
+  margin-bottom: 14px;
+}
+.recent-changes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.recent-change {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.recent-change:first-child {
+  border-top: none;
+}
+.recent-change-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.recent-change-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recent-change-title {
+  font-weight: 560;
+  overflow-wrap: anywhere;
+}
+.recent-change-what {
+  font-size: 13px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.recent-change .change-values {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+.recent-change .change-values strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.recent-change .change-old {
+  color: var(--muted);
+}
+.recent-change .change-new {
+  text-decoration: none;
+  color: var(--text);
+}
+.recent-change-meta {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  column-gap: 4px;
+  flex-wrap: wrap;
+}
+.recent-change-why {
+  font-size: 12px;
+  color: var(--warn);
+}
