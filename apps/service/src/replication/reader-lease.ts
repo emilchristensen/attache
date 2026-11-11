@@ -19,6 +19,8 @@ export interface ReaderLeaseDeps {
   preferredReader: (root: string) => string | null;
   /** Whether this Machine may take a silent Reader's place: marked standby in the Brain at `root`, with its sources connected. */
   standIn: (root: string) => boolean;
+  /** Whether this Machine set up Replication of the Brain at `root`. */
+  founder: (root: string) => boolean;
   /** This Machine's last Source refresh of every source. */
   lastRefreshAt: () => string | null;
   /** The lease as this Machine knows it changed. */
@@ -56,7 +58,7 @@ export class ReaderLease {
       this.remember(root, stored?.record ?? null);
       const me = this.deps.machine();
       const now = this.deps.clock.now();
-      const next = leaseToWrite(stored?.record ?? null, { me: { id: me.id, name: me.name }, preferredReader: this.deps.preferredReader(root), standIn: this.deps.standIn(root), now, lastRefreshAt: this.deps.lastRefreshAt() });
+      const next = leaseToWrite(stored?.record ?? null, { me: { id: me.id, name: me.name }, preferredReader: this.deps.preferredReader(root), standIn: this.deps.standIn(root), founder: this.deps.founder(root), now, lastRefreshAt: this.deps.lastRefreshAt() });
       if (!next) return;
       if (await ref.write(remote, next, stored, authorEnv(me, now))) {
         this.remember(root, next);

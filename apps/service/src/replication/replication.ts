@@ -93,6 +93,7 @@ export class Replication {
       credentials: deps.seams.credentials,
       preferredReader: (root) => new MachineRecords(root).preferredReader(),
       standIn: (root) => new MachineRecords(root).machine(deps.machine().id)?.standby === true && (deps.sourcesConnected?.() ?? false),
+      founder: (root) => this.repo(root).foundedBy() === deps.machine().id,
       lastRefreshAt: () => deps.lastSourceRefresh?.() ?? null,
       onChange: () => deps.onLeaseChange?.(),
       ...(deps.leaseGenerationCommits ? { generationCommits: deps.leaseGenerationCommits } : {}),
