@@ -3,7 +3,7 @@ import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
 import { RECALL_EXCLUDE, search } from "../memory/search.ts";
-import { decide, getItem, listItems } from "../attention/engine.ts";
+import { getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
@@ -208,7 +208,7 @@ export function registerDataRoutes(r: Router, app: App) {
     const body = await c.body(AttentionDecision);
     if (!getItem(app.db, c.params.id!)) throw new HttpError(404, "not_found", "Attention item not found");
     try {
-      const item = decide(app.db, c.params.id!, body.decision, c.client!.id, body.until);
+      const item = app.inbox.decide(c.params.id!, body.decision, c.client!.id, body.until);
       app.bus.emit("event", { type: "attention.changed" });
       return item;
     } catch (e) {

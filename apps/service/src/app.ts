@@ -26,13 +26,14 @@ import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { wakeSnoozed } from "./attention/engine.ts";
+import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { defaultSeams } from "./replication/seams.ts";
-import { syncBlockedItem } from "./replication/blocked-inbox.ts";
+import { REPLICATION_SOURCE, syncBlockedItem } from "./replication/blocked-inbox.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -68,6 +69,8 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
+  /** The owner's inbox, kept in the Brain so it replicates. */
+  readonly inbox: Inbox;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -107,7 +110,17 @@ export class App {
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
     });
+    this.inbox = new Inbox({
+      db: this.db,
+      log: this.log,
+      ctx: { now: () => this.clock.now().toISOString(), machine: () => this.machine.get() },
+      dataRoot: () => this.memory.dataRoot,
+      onWrite: () => this.replication.noteWrite(),
+      onChange: () => this.bus.emit("event", { type: "attention.changed" }),
+      localSources: [REPLICATION_SOURCE],
+    });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
+    this.replication.onPulled((paths) => this.inbox.pulled(paths));
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
       { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
@@ -122,6 +135,7 @@ export class App {
       secrets: this.secrets,
       log: this.log,
       memory: this.memory,
+      inbox: this.inbox,
       adapters: this.adapters,
       claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
@@ -265,6 +279,7 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
+    this.inbox.reconcile();
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
       onChange: () => {

@@ -1,3 +1,4 @@
+import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { credentialScan } from "./credential-scan.ts";
 
 /**
@@ -96,5 +97,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [inboxMergeRule], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

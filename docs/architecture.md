@@ -61,6 +61,8 @@ Data folder (user-chosen, Markdown):
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
     wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts)
+  review/                   review state, one JSON file per item, never indexed for recall
+    inbox/                   inbox items with the owner's latest decision
 ```
 
 Imported folders stay where they are.
@@ -243,6 +245,14 @@ The attention engine follows these rules:
 - An item is resolved only if its source was fully covered in this and the previous run.
 - A dismissal records the fingerprint it applied to. Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
+- The inbox replicates (`attention/inbox.ts`, `App.inbox`).
+  Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
+  The state is never stored in the file: each Machine works it out the same way (`deriveState` in `attention/inbox-record.ts`): resolved by its source, else snoozed while the snooze runs, else dismissed or done while the evidence is what the owner decided on, else open.
+  The database row is this Machine's copy, plus links that stay local (drafts, briefings).
+  Items about one Machine alone (`localSources`, today its own "Replication is blocked" item) never enter the Brain.
+  Files are one line of JSON, so a file both Machines changed always reaches the merge rule (`attention/inbox-merge.ts`): the newer report of the item and the later decision win, a tie is broken by Machine id, and a deletion wins.
+  Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
+  The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 

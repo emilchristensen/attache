@@ -298,6 +298,14 @@ Remove the credential from the file, by hand or with a save, and Replication con
 If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
 A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to.
 
+The inbox replicates with the Brain:
+
+- An item raised on one Machine shows on all of them.
+- Dismissing or snoozing an item on one Machine applies on every Machine.
+- A dismissed item whose source changed reopens everywhere, marked "changed since your decision".
+- When two Machines decided differently on the same item before hearing of each other, the later decision wins.
+- Inbox items live in the Brain's `review/inbox/` folder, one small file per item, and never show up in search.
+
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
 
