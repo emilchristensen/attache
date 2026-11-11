@@ -4,8 +4,12 @@ import { applyCandidates, type CandidateWithSource } from "../attention/engine.t
 import { fingerprint } from "../attention/fingerprint.ts";
 import type { MergeNotice } from "./seams.ts";
 
-/** Inbox items Replication raises carry this source. */
-export const REPLICATION_SOURCE = "replication";
+/**
+ * Inbox items raised by merges carry this source. It is not the blocked item's
+ * `replication` source: that one is synced with complete coverage, which would
+ * resolve every other item of its source.
+ */
+export const MERGE_NOTICE_SOURCE = "replication_merge";
 const PRIORITY = 60;
 
 function candidate(notice: MergeNotice, at: string): CandidateWithSource {
@@ -18,7 +22,7 @@ function candidate(notice: MergeNotice, at: string): CandidateWithSource {
     summary: notice.message,
     why: "Two Machines changed the Brain at the same time, and Jarvis settled it without asking.",
     priority: PRIORITY,
-    sourceKind: REPLICATION_SOURCE,
+    sourceKind: MERGE_NOTICE_SOURCE,
     connectionId: null,
     fingerprint: fingerprint(parts),
     evidence: [{ label: notice.path, relPath: notice.path, observedAt: at }],
@@ -35,5 +39,5 @@ export function raiseMergeNotices(db: Db, notices: readonly MergeNotice[], at: D
   const iso = at.toISOString();
   // Never "complete": a merge only reports what it found, so it must not resolve earlier items.
   const coverage: Coverage = { state: "partial", scopes: [], items: notices.length, at: iso };
-  return applyCandidates(db, { sourceKind: REPLICATION_SOURCE, connectionId: null, coverage, previousCoverage: null }, notices.map((n) => candidate(n, iso))).created;
+  return applyCandidates(db, { sourceKind: MERGE_NOTICE_SOURCE, connectionId: null, coverage, previousCoverage: null }, notices.map((n) => candidate(n, iso))).created;
 }

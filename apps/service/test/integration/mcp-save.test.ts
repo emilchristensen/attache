@@ -1,13 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ElicitRequest, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
 import { startTestService, type TestService } from "./harness.ts";
 import { callTool, mcpClients, type HarnessClientOptions } from "./mcp-client.ts";
-
-// Some tests start the `jarvis mcp` process from source eight times, which is slow while other suites share the machine.
-vi.setConfig({ testTimeout: 120_000 });
 
 type Saved = { action: "created" | "updated"; path: string; title: string; facts: number; events: number };
 type SaveReply = { outcome: "saved" | "declined" | "proposed"; saved?: Saved[]; proposals?: Array<{ id: string; target: string }> };
@@ -133,13 +130,15 @@ describe("MCP save, confirmed in the Harness", () => {
   it("never changes the identity record, not even when the owner would accept", async () => {
     const before = brainFile("memory/self.md");
     expect(before).toContain("Ada Lovelace");
+    // One client per kind of Harness, reused for every spelling: each connect cold-starts a server process.
+    const accepting = owner("accept");
+    const clients = [await connect({ env: CLAUDE_CODE_SESSION, confirm: accepting.confirm }), await connect({ env: CLAUDE_CODE_SESSION })];
     for (const path of ["memory/self.md", "./memory/self.md", "memory/people/../self.md", "memory/SELF.md"]) {
-      for (const confirm of [owner("accept"), null]) {
-        const client = await connect({ env: CLAUDE_CODE_SESSION, ...(confirm ? { confirm: confirm.confirm } : {}) });
+      for (const client of clients) {
         const r = await callTool<SaveReply>(client, "save", { items: [{ action: "update", path, facts: [{ subject: "Name", value: "Mallory", reason: "Takeover" }] }] });
         expect(r.isError).toBe(true);
         expect(r.text).toContain("identity record");
-        if (confirm) expect(confirm.shown).toEqual([]);
+        expect(accepting.shown).toEqual([]);
       }
     }
     expect(brainFile("memory/self.md")).toBe(before);

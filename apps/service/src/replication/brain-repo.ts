@@ -80,12 +80,24 @@ export class BrainRepo {
   }
 
   private guard(staged: readonly StagedEntry[]): GuardVerdict {
-    const files: StagedFile[] = staged.map((s) => ({ path: s.path, change: s.change, read: () => (s.change === "deleted" ? null : this.git.okSync(["cat-file", "blob", `:${s.path}`])) }));
+    const parents = ["HEAD", ...(existsSync(join(this.root, ".git", "MERGE_HEAD")) ? ["MERGE_HEAD"] : [])];
+    const files: StagedFile[] = staged.map((s) => ({
+      path: s.path,
+      change: s.change,
+      read: () => (s.change === "deleted" ? null : this.git.okSync(["cat-file", "blob", `:${s.path}`])),
+      committed: () => parents.map((ref) => this.blobAt(ref, s.path)).filter((v): v is string => v !== null),
+    }));
     for (const g of this.seams.commitGuards) {
       const v = g.check(files);
       if (!v.ok) return v;
     }
     return { ok: true };
+  }
+
+  /** A file's content in a commit; null when the commit or the file does not exist. */
+  private blobAt(ref: string, path: string): string | null {
+    const r = this.git.runSync(["cat-file", "blob", `${ref}:${path}`]);
+    return r.code === 0 ? r.stdout : null;
   }
 
   private unstage(): void {

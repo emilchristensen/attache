@@ -1,49 +1,9 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { redact, redactDeep } from "./redaction.ts";
 
-/**
- * Patterns for credentials that must never reach logs, evidence or API
- * responses. Known secret values registered at runtime are redacted too.
- */
-const SECRET_PATTERNS: RegExp[] = [
-  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,
-  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g,
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
-  /\bsk-ant-[A-Za-z0-9_-]{16,}\b/g,
-  /\bsk-[A-Za-z0-9_-]{20,}\b/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\bya29\.[A-Za-z0-9_-]{20,}\b/g,
-  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-  /(Bearer|Basic)\s+[A-Za-z0-9+/=._-]{12,}/gi,
-  /\bATATT[A-Za-z0-9_=-]{20,}\b/g,
-];
-
-const knownSecrets = new Set<string>();
-
-export function registerSecret(value: string | undefined | null): void {
-  if (value && value.length >= 8) knownSecrets.add(value);
-}
-
-export function redact(text: string): string {
-  let out = text;
-  for (const secret of knownSecrets) out = out.split(secret).join("[REDACTED]");
-  for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, "[REDACTED]");
-  return out;
-}
-
-export function redactDeep<T>(value: T): T {
-  if (typeof value === "string") return redact(value) as T;
-  if (Array.isArray(value)) return value.map((v) => redactDeep(v)) as T;
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = /token|secret|password|authorization|api[_-]?key/i.test(k) && typeof v === "string" ? "[REDACTED]" : redactDeep(v);
-    }
-    return out as T;
-  }
-  return value;
-}
+/** Redaction lives in `redaction.ts`, shared with the credential scan; these re-exports keep existing imports working. */
+export { redact, redactDeep, registerSecret } from "./redaction.ts";
 
 type Level = "debug" | "info" | "warn" | "error";
 

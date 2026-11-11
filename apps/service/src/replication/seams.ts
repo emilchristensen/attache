@@ -1,11 +1,12 @@
+import { credentialScan } from "./credential-scan.ts";
+import { deletedAndChangedRule } from "./deleted-and-changed.ts";
+
 /**
  * Where later rules plug into Replication without changing the loop:
  * merge rules for files both sides changed, guards that run before every
  * commit and before talking to the remote, and the credentials git uses.
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
-
-import { deletedAndChangedRule } from "./deleted-and-changed.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
@@ -57,6 +58,11 @@ export interface StagedFile {
   change: "added" | "modified" | "deleted";
   /** The content about to be committed; null for a deletion. */
   read(): string | null;
+  /**
+   * The versions of this file in the commits this one builds on (HEAD, and
+   * the other side's tip during a merge): what is in the shared history already.
+   */
+  committed?(): readonly string[];
 }
 
 export type GuardVerdict = { ok: true } | { ok: false; status: "blocked" | "unauthorized"; cause: string };
@@ -94,5 +100,5 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
   // A note deleted on one side and changed on the other comes first: the rules for notes both sides changed need both versions.
-  return { mergeRules: [deletedAndChangedRule], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  return { mergeRules: [deletedAndChangedRule], commitGuards: [credentialScan], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

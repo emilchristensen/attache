@@ -80,7 +80,7 @@ describe("Deleting a note", () => {
 describe("A note deleted on one Machine and changed on another", () => {
   const status = (m: TestMachine, title: string, value: string) =>
     m.post("/memory/save", { items: [{ action: "update", path: `memory/projects/${title}.md`, facts: [{ subject: "Status", value, reason: "news" }] }] });
-  const inbox = async (m: TestMachine) => ((await m.get("/attention")).items as Array<{ title: string; summary: string; sourceKind: string; evidence: Array<{ relPath?: string }> }>).filter((i) => i.sourceKind === "replication");
+  const inbox = async (m: TestMachine) => ((await m.get("/attention")).items as Array<{ title: string; summary: string; sourceKind: string; evidence: Array<{ relPath?: string }> }>).filter((i) => i.sourceKind === "replication_merge");
 
   it("is kept with the change, on both Machines, and one inbox item says so", async () => {
     world = await startMachines(["Mac", "PC"]);
@@ -118,7 +118,7 @@ describe("A note deleted on one Machine and changed on another", () => {
     expect(moa.summary).toMatch(/deleted on PC/);
     expect(moa.summary).toMatch(/changed on Mac/);
 
-    // Later checks do not raise it again.
+    // Later checks neither raise them again nor resolve them (the blocked item's sync once did, on the push after the merge).
     await pc.clock.advance(60_000);
     expect(await inbox(pc)).toHaveLength(2);
   });
