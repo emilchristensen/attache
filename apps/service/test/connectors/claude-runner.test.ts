@@ -163,6 +163,9 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
       process.env.HOME = home;
     }
     claude.mode = "hang";
+    // Cancelled before the session starts (e.g. while Jarvis lists the MCP servers): nothing is spawned.
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: AbortSignal.abort() })).rejects.toThrow(/Cancelled/);
+    expect(claude.sessions).toBe(0);
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
