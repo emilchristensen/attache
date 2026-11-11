@@ -5,6 +5,7 @@ import { registerDataRoutes } from "./routes-data.ts";
 import { registerMeaningRoutes } from "./routes-meaning.ts";
 import { registerRecallRoutes } from "./routes-recall.ts";
 import { registerWorkRoutes } from "./routes-work.ts";
+import { registerWrapUpRoutes } from "./routes-wrap-up.ts";
 
 export function registerRoutes(router: Router, app: App, port: () => number) {
   registerCoreRoutes(router, app, port);
@@ -12,4 +13,5 @@ export function registerRoutes(router: Router, app: App, port: () => number) {
   registerRecallRoutes(router, app);
   registerMeaningRoutes(router, app);
   registerWorkRoutes(router, app, port);
+  registerWrapUpRoutes(router, app);
 }

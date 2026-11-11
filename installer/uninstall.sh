@@ -1,17 +1,21 @@
 #!/bin/sh
 # Remove Jarvis. By default your data folder, service state (settings, jobs,
-# drafts, receipts, backups) and Keychain credentials are KEPT, so reinstalling
+# drafts, receipts, backups) and stored credentials are KEPT, so reinstalling
 # picks up where you left off.
 #
 #   jarvis-uninstall                      remove the app and service, keep data
 #   jarvis-uninstall --delete-data --yes  also delete service state, credentials and the data folder
+#
+# The background service, the secret store and the command-line wrappers are
+# removed by the installed `jarvis` itself, through its platform modules.
 set -eu
 
-PREFIX="${JARVIS_PREFIX:-$HOME/Library/Application Support/Jarvis}"
-INSTANCE="${JARVIS_INSTANCE:-default}"
-if [ "$INSTANCE" = "default" ]; then LABEL="dev.jarvis.service"; else LABEL="dev.jarvis.$INSTANCE"; fi
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+export JARVIS_INSTANCE="${JARVIS_INSTANCE:-default}"
+PREFIX="${JARVIS_PREFIX:-$("$HERE/bin/jarvis" paths installPrefix)}"
 STATE="$PREFIX/state"
+JARVIS="$PREFIX/current/bin/jarvis"
+NODE="$PREFIX/current/runtime/node"
 DELETE=0
 YES=0
 for a in "$@"; do
@@ -22,18 +26,21 @@ for a in "$@"; do
   esac
 done
 
+[ -x "$JARVIS" ] || { printf 'Jarvis is not installed in %s: %s is missing.\n' "$PREFIX" "$JARVIS" >&2; exit 1; }
+LOCKS="$("$JARVIS" paths locksDir)"
+
 DATA_FOLDER=""
 OWNED=""
 CREATED_FOLDER="false"
-if [ "$DELETE" = "1" ] && [ -f "$STATE/jarvis.sqlite" ] && [ -x "$PREFIX/current/runtime/node" ]; then
-  DATA_FOLDER="$("$PREFIX/current/runtime/node" -e '
+if [ "$DELETE" = "1" ] && [ -f "$STATE/jarvis.sqlite" ]; then
+  DATA_FOLDER="$("$NODE" -e '
     const { DatabaseSync } = require("node:sqlite");
     try { const d = new DatabaseSync(process.argv[1], { readOnly: true }); const r = d.prepare("select json from config where id = 1").get(); process.stdout.write(r ? (JSON.parse(r.json).dataFolder ?? "") : ""); } catch {}
   ' "$STATE/jarvis.sqlite" 2>/dev/null || true)"
   if [ -n "$DATA_FOLDER" ] && [ -f "$DATA_FOLDER/.jarvis/owned.json" ]; then
     # Only entries Jarvis created are ever deleted; files the user already had stay.
-    CREATED_FOLDER="$("$PREFIX/current/runtime/node" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(o.createdFolder === true ? "true" : "false")' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || echo false)"
-    OWNED="$("$PREFIX/current/runtime/node" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); for (const e of o.created ?? []) if (/^[A-Za-z.][A-Za-z0-9._-]*$/.test(e)) console.log(e)' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || true)"
+    CREATED_FOLDER="$("$NODE" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(o.createdFolder === true ? "true" : "false")' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || echo false)"
+    OWNED="$("$NODE" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); for (const e of o.created ?? []) if (/^[A-Za-z.][A-Za-z0-9._-]*$/.test(e)) console.log(e)' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || true)"
   fi
 fi
 
@@ -43,25 +50,18 @@ if [ "$DELETE" = "1" ] && [ "$YES" != "1" ]; then
   [ "$answer" = "DELETE" ] || { echo "Cancelled; nothing was deleted."; exit 1; }
 fi
 
-launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-rm -f "$PLIST"
+"$JARVIS" service uninstall >/dev/null || printf 'Could not remove the Jarvis background service; see the message above.\n' >&2
 
-# Coding agents would otherwise keep calling a hook that no longer exists. Only this install's hooks are removed.
-if [ -x "$PREFIX/current/runtime/node" ] && [ -f "$PREFIX/current/service/jarvis-service.mjs" ]; then
-  # Failures are reported per agent on stderr; the uninstall carries on either way.
-  JARVIS_STATE_DIR="$STATE" "$PREFIX/current/runtime/node" "$PREFIX/current/service/jarvis-service.mjs" agent-hooks uninstall --state-dir "$STATE" >/dev/null || true
-fi
+# Harnesses would otherwise keep calling a hook that no longer exists. Only this install's hooks are removed.
+# Failures are reported per Harness on stderr; the uninstall carries on either way.
+JARVIS_STATE_DIR="$STATE" "$JARVIS" agent-hooks uninstall --state-dir "$STATE" >/dev/null || true
 
 if [ "$DELETE" = "1" ]; then
-  if [ -f "$STATE/keychain-index.json" ] && [ -x "$PREFIX/current/runtime/node" ]; then
-    "$PREFIX/current/runtime/node" -e 'for (const k of JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))) console.log(k)' "$STATE/keychain-index.json" | while read -r key; do
-      /usr/bin/security delete-generic-password -s "dev.jarvis.$INSTANCE" -a "$key" >/dev/null 2>&1 || true
-    done
-  fi
+  JARVIS_STATE_DIR="$STATE" "$JARVIS" credentials clear --state-dir "$STATE" >/dev/null || printf 'Could not delete every stored credential; see the message above.\n' >&2
 fi
 
+"$JARVIS" wrappers uninstall >/dev/null || true
 rm -rf "$PREFIX/app" "$PREFIX/current"
-rm -f "$HOME/.local/bin/jarvis" "$HOME/.local/bin/jarvis-uninstall"
 
 if [ "$DELETE" = "1" ]; then
   rm -rf "$STATE"
@@ -76,7 +76,7 @@ if [ "$DELETE" = "1" ]; then
     fi
   fi
   # Writer locks are released when the service stops; the folder is shared by every instance, so only an empty one goes.
-  rmdir "$HOME/Library/Application Support/Jarvis/locks" 2>/dev/null || true
+  rmdir "$LOCKS" 2>/dev/null || true
   rmdir "$PREFIX" 2>/dev/null || true
   echo "Jarvis removed, including its data."
 else

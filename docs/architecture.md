@@ -36,12 +36,12 @@ flowchart LR
 | Runtime | Node.js 24 LTS, bundled in the release artifact | Its built-in `node:sqlite` ships SQLite 3.53 with FTS5, so there is no native addon to rebuild per platform. Node 22.14 lacks FTS5 (verified). One language across service, web and plugin. |
 | Service HTTP | `node:http` with a small router and server-sent events | Few moving parts; SSE gives ordered, resumable events with `Last-Event-ID`. |
 | Contracts | `zod` schemas in `packages/contracts` | Shared by service, web and plugin; validated at the server boundary. |
-| State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, conversations, connection state. WAL mode. |
+| State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Secrets | macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); 0600 file fallback off macOS | Outside the vault and outside frontend storage. |
+| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); a 0600 file elsewhere for now | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
-| Install | Self-extracting installer bundling Node, the service bundle, web assets, launchd agent | One command/double-click; no developer tools required. |
+| Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
 ## Data layout
 
@@ -54,10 +54,12 @@ Data folder (user-chosen, Markdown):
     people/ projects/ decisions/ notes/
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
-    captures/ conversations/
+    captures/
+    conversations/           chat archives from versions that had a chat (kept, never quoted by recall)
     connectors/<kind>/       connector snapshots, one file per day per Machine
     sessions/                coding-agent session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
+    wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts)
 ```
 
@@ -65,9 +67,26 @@ Imported folders stay where they are.
 The import preview lists what will be read, what is skipped and that zero files in the source folder change.
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
-Service state (`~/Library/Application Support/Jarvis/state`): `jarvis.sqlite`, logs, runtime metadata, backups.
-Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>`.
+Service state (`~/Library/Application Support/Jarvis/state` on macOS): `jarvis.sqlite`, logs, runtime metadata, backups.
+Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
+Credentials: Keychain service `dev.jarvis.<instance>` on macOS.
+
+## Platform modules
+
+Everything that differs between macOS, Linux and Windows lives in `apps/service/src/platform/`, so the rest of the service never calls an operating-system tool or hard-codes an operating-system path.
+
+| Module | Interface | macOS | Linux | Windows |
+| --- | --- | --- | --- | --- |
+| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service (not yet) | logon task (not yet) |
+| `secret-store/` | `SecretStore`: get, set, delete, keys | Keychain | owner-only file until Secret Service arrives | owner-only file until Credential Manager arrives |
+| `notifier/` | `Notifier`: notify | Notification Center via `osascript` | none yet | none yet |
+| `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
+| `harness-locations.ts` | each Harness's hooks file, rules and skills folders, executables and install markers | | | |
+| `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
+
+`os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
+The installer and uninstaller are thin shell scripts that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
+`jarvis paths` prints every resolved location for the computer it runs on.
 
 ### Machine identity and per-Machine evidence
 
@@ -75,6 +94,7 @@ Each Machine has an id (a UUID made once) and a name (the hostname without its d
 `GET /machine` returns both; `PATCH /machine` renames (1 to 64 characters, no control characters); Settings shows them.
 Evidence that every Machine appends to is written per Machine, so that Replication never merges two Machines' writes into one file (ADR 0001): session logs go to `evidence/sessions/<date>-<machine>.md` and connector snapshots to `evidence/connectors/<kind>/<date>-<machine>.md`.
 `<machine>` is the name's slug plus the first eight hex digits of the id, so two Machines with the same name still write apart; the frontmatter records `machine` and `machine_id`.
+Wrap-ups are new files rather than appends, and carry the tag too (`evidence/wrap-ups/<date>-<machine>-<title>.md`), so two Machines never create the same file.
 Files written before this change keep their `<date>.md` name; search and the audit index them like any evidence, and the session context reads every file of a day, old or per-Machine, as that day's log.
 
 ## Memory model
@@ -104,7 +124,6 @@ Each chunk is labelled `state`, `history` or `body`; History chunks are down-wei
 Queries are tokenised and every term is quoted before FTS5 `MATCH`, blocking operator injection.
 Ranking uses BM25 with column weights (title 6, heading 3, text 1), fused by reciprocal rank with a prefix-match list (`k = 60`), then adjusted: curated memory above imports, imports above evidence, current state above history.
 No document takes more than half of the results while other documents still have hits, so a long note that matches by title does not crowd out its evidence.
-When the user asks about the note they have open, that note is passed as whole sections (current state first) rather than as search hits, each limited to 6,000 characters.
 A change to how files are chunked ships with a migration that clears every file's stored fingerprint, so the next scan re-chunks the data folder and imported folders while the old chunks stay searchable.
 The index is updated synchronously on every service write, fixing the new build's unscheduled indexer (four weeks stale when inspected).
 Edits made to the data folder outside the service (Obsidian, an editor, a coding agent) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
@@ -130,9 +149,10 @@ Each question runs through the same search a Harness gets (8 results, raw archiv
 The report gives how often the expected fact is first and how often it is in the first three, every question not answered first with the first three results, and, unscored, every question whose note or fact is not in the Brain.
 The owner's set lives in the Brain at `evaluation/recall-questions.json`, as JSON so the indexer never reads it; a synthetic Brain with its own set lives in `apps/service/test/fixtures/recall-brain/` and runs with the test suite.
 
-Answers: the service retrieves first, numbers the evidence `[S1]..[Sn]`, sends it to the model as quoted data with an instruction that documents are untrusted, and maps cited markers back to exact file and line ranges.
-When nothing relevant is retrieved the answer is marked unsupported and the model is told to say so.
-Without a model, chat returns the retrieved evidence directly and says no model is connected.
+Jarvis holds no conversation of its own (ADR 0003): a Harness asks the Brain through search and read.
+Research findings and drafts still use the model: the service retrieves first, numbers the evidence `[S1]..[Sn]`, sends it to the model as quoted data with an instruction that documents are untrusted, and maps cited markers back to exact file and line ranges.
+Without a model, research lists the retrieved evidence instead of written findings.
+Installs from before ADR 0003 drop their stored conversations and messages on upgrade; the chat archives already written to `evidence/conversations/` stay in the Brain, out of recall.
 
 ## Connections and transports
 
@@ -212,7 +232,7 @@ The attention engine follows these rules:
 - Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a 0600 file in the service state directory.
 - `Origin`, when present, must be the service origin. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
-- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The conversation model has no tools, so injected text cannot trigger actions.
+- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The model Jarvis calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
 ## Coding-agent sessions
@@ -279,21 +299,38 @@ It is a client of the running service like `jarvis save`: it pairs as client kin
 Every tool call builds a fresh client from `state/runtime.json`, so a server started before the service works once the service runs, and a stopped service is reported on the call that meets it with how to start it.
 The server starts even when the service is down, because a Harness launches its MCP servers when it starts and would otherwise mark Jarvis as failed.
 
-- `search` calls `GET /api/v1/memory/search?recall=1`, which applies the recall exclusions (`RECALL_EXCLUDE`: raw conversations and session transcripts); without `recall=1` the Dashboard still searches everything.
-  Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, section kind and note title.
+- `search` calls `GET /api/v1/memory/search?recall=1`, which applies the recall exclusions (`RECALL_EXCLUDE`: old chat archives and raw session transcripts); without `recall=1` the Dashboard still searches everything.
+  Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, area, section kind and note title.
+  The area tells curated memory, the only place a current fact can come from, apart from evidence, deliverables and imported notes.
 - `read` calls `GET /api/v1/memory/document`, which also accepts an absolute path inside the Brain or another indexed folder when no `root` is given, and slices the requested 1-based, inclusive line range from the raw file, so lines match search citations.
+- `audit` calls `GET /api/v1/memory/audit` and returns the report with every file named by one path, the same kind `search` returns (`memory/audit-view.ts`, shared with `jarvis audit`, which shows absolute paths instead).
+  It is read-only and marked so (`readOnlyHint`).
+- The `save` and `audit` prompts (`mcp/prompt-text.ts`) carry the procedures of the save and audit skills, with the MCP tools in place of shell commands.
+  Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
+- `save` takes `items` with the `MemorySaveItem` schema of `POST /memory/save`.
+  It checks them with `POST /memory/save/check` (the save's own validation, no write), so an invalid item or the identity record is refused before the owner is asked.
+  It then sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 10-minute limit.
+  Accept writes through `POST /memory/save` as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
+  A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
+  The origin names the Harness and session (`mcp/harness.ts`): from the environment the Harness gives the server (`CLAUDECODE` with `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, `ANTIGRAVITY_CONVERSATION_ID`), otherwise from the client name it reported (`claude-ai` is Claude Desktop), without a session; the folder is the server's working directory.
+- The `wrap-up` prompt (text in `mcp/prompt-text.ts` too) asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.
+  It exists for conversations Jarvis cannot capture, such as Claude Desktop's Chat tab.
+  `wrap_up` calls `POST /api/v1/memory/wrap-up` (`memory/wrap-up.ts`), which writes one evidence document per call with the points under `## Points` in the body, never under Current State, so search returns them as evidence and never as a current fact.
+  The Harness comes from the same mapping as the save origin (`mcp/harness.ts`); the date and the Machine come from the service.
+  The store redacts the title before it names the file and the whole document as it writes it, like all evidence.
+  A call with no points stores nothing and answers that the conversation held nothing durable.
 - The server's instructions, sent once when the Harness connects, carry the owner's identity from the configuration and the titles of the curated notes per type (at most 40 per type), fetched from `/config` and `/memory/documents` with a 5-second limit.
 
 ## Capability registry
 
-`capabilities/registry.ts` is the single definition of features (conversation, recall, capture, attention, drafts, jobs, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
+`capabilities/registry.ts` is the single definition of features (recall, capture, attention, drafts, jobs, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
 The setup checklist, dependency validation, API access checks (`requireFeature`) and scheduler all read it.
 Disabling a feature disables its schedules, rejects its endpoints with `feature_disabled`, and cancels its queued jobs.
 Disconnecting a connection deletes its credentials, stops new requests, cancels queued jobs that depend on it, revokes pending approvals targeting it, and offers to keep or delete its retained observations.
 
 ## Clients
 
-- Browser: React. Home combines the attention inbox and a persistent conversation; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
+- Browser: React. Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
 - Obsidian: no plugin. The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher. (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
 - Electron: not in this release. The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
 

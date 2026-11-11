@@ -1,7 +1,8 @@
-import type { Config, MeaningState, MeaningStatus } from "@jarvis/contracts";
+import type { Config, MeaningState, MeaningStatus, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
 import { meaningNote } from "../meaning/note.ts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
+import { auditView, type AuditView, type PathOf } from "../memory/audit-view.ts";
 
 /** One search result as a Harness sees it: where it is, what kind of section, and the passage itself. */
 export interface Passage {
@@ -9,6 +10,12 @@ export interface Passage {
   path: string;
   startLine: number;
   endLine: number;
+  /**
+   * What kind of document holds it: `memory` (curated notes), `evidence`
+   * (captures, session logs, wrap-ups, snapshots), `deliverables` or `import`.
+   * Only `memory` passages state current facts.
+   */
+  area: string;
   section: "state" | "history" | "body";
   heading: string | null;
   title: string;
@@ -46,6 +53,16 @@ export interface BrainAccess {
   search(query: string, limit: number): Promise<SearchAnswer>;
   read(path: string, range: LineRange): Promise<NoteText>;
   overview(): Promise<BrainOverview>;
+  /** Every current fact with its date, source, flags and newer evidence. Read-only. */
+  audit(): Promise<AuditView>;
+  /** Check a save against the Brain without writing; throws the reason an item is refused. */
+  checkSave(items: MemorySaveInput["items"]): Promise<MemorySaveCheckResult>;
+  /** Write a save the owner confirmed, as the owner. */
+  save(input: MemorySaveInput): Promise<MemorySaveResult>;
+  /** Store a save the owner could not confirm as Proposals. */
+  propose(input: MemorySaveProposalInput): Promise<MemorySaveProposalResult>;
+  /** Store a conversation's durable points as evidence; no points stores nothing. */
+  wrapUp(input: WrapUpInput): Promise<WrapUpResult>;
 }
 
 interface RawHit {
@@ -53,6 +70,7 @@ interface RawHit {
   relPath: string;
   startLine: number;
   endLine: number;
+  area: string;
   section: Passage["section"];
   heading: string | null;
   title: string;
@@ -73,11 +91,12 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
     async search(query, limit) {
       const c = client();
       const { hits, meaning } = await c.get<{ hits: RawHit[]; meaning: MeaningStatus }>(`/memory/search?recall=1&limit=${limit}&q=${encodeURIComponent(query)}`);
-      const roots = hits.some((h) => h.root !== "data") ? new Map((await c.get<Array<{ root: string; path: string }>>("/memory/roots")).map((r) => [r.root, r.path])) : new Map<string, string>();
+      const pathOf = await brainPaths(c, hits.map((h) => h.root));
       const passages = hits.map((h) => ({
-        path: h.root === "data" ? h.relPath : `${(roots.get(h.root) ?? h.root).replace(/\/+$/, "")}/${h.relPath}`,
+        path: pathOf(h.root, h.relPath),
         startLine: h.startLine,
         endLine: h.endLine,
+        area: h.area,
         section: h.section,
         heading: h.heading,
         title: h.title,
@@ -98,7 +117,28 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         notes: docs.filter((d) => d.relPath !== "memory/self.md" && d.title).map((d) => ({ type: d.docType ?? "note", title: d.title })),
       };
     },
+    async audit() {
+      const c = client();
+      const report = await c.get<MemoryAuditReport>("/memory/audit");
+      return auditView(report, await brainPaths(c, report.findings.flatMap((f) => f.entries.flatMap((e) => e.newerEvidence.map((n) => n.root)))));
+    },
+    checkSave: async (items) => client().post<MemorySaveCheckResult>("/memory/save/check", { items }),
+    save: async (input) => client().post<MemorySaveResult>("/memory/save", input),
+    propose: async (input) => client().post<MemorySaveProposalResult>("/memory/save/proposals", input),
+    async wrapUp(input) {
+      return client().post<WrapUpResult>("/memory/wrap-up", input);
+    },
   };
+}
+
+/**
+ * The path a Harness sees for an indexed file: relative for the Brain,
+ * absolute for another folder Jarvis indexes. `read` takes either. The roots
+ * are fetched only when a file outside the Brain is among `used`.
+ */
+async function brainPaths(c: ServiceClient, used: string[]): Promise<PathOf> {
+  const roots = used.some((r) => r !== "data") ? new Map((await c.get<Array<{ root: string; path: string }>>("/memory/roots")).map((r) => [r.root, r.path])) : new Map<string, string>();
+  return (root, relPath) => (root === "data" ? relPath : `${(roots.get(root) ?? root).replace(/\/+$/, "")}/${relPath}`);
 }
 
 /** The whole note, or the inclusive 1-based line range asked for, clamped to the note's end. */

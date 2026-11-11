@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
@@ -8,7 +8,7 @@ import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteAct
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
 import type { MachineIdentity } from "../core/machine.ts";
-import { connectorSnapshotPath, sessionLogPath } from "./evidence-paths.ts";
+import { connectorSnapshotPath, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { WriterLock } from "./writer-lock.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
@@ -77,7 +77,7 @@ Jarvis keeps your knowledge here as plain Markdown. You can read and edit these 
 
 - \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
-- \`evidence/\` is archived evidence: captures, conversation archives, coding-agent sessions and connector observations.
+- \`evidence/\` is archived evidence: captures, coding-agent sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
 
@@ -129,7 +129,7 @@ export class MemoryStore {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
-    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
+    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
       const abs = join(root, d);
       if (!existsSync(abs)) {
         mkdirSync(abs, { recursive: true });
@@ -464,14 +464,6 @@ export class MemoryStore {
     return { relPath: rel };
   }
 
-  archiveConversation(conversationId: string, title: string, messages: Array<{ role: string; content: string; at: string }>): { relPath: string } {
-    const rel = `evidence/conversations/${conversationId}.md`;
-    const fm = { id: conversationId, type: "conversation", title, archived_at: nowIso(), provenance: "conversation-archive" };
-    const body = messages.map((m) => `### ${m.role} · ${m.at}\n\n${m.content.trim()}`).join("\n\n");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body}\n`, "service");
-    return { relPath: rel };
-  }
-
   /**
    * The conversation of one coding-agent session. Rewritten as the session
    * grows (compaction, then the end), so one session is always one file.
@@ -504,6 +496,25 @@ export class MemoryStore {
     const body = lines.length ? lines.join("\n") : "_The last Source refresh returned no items._";
     this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
     return { relPath: rel };
+  }
+
+  /**
+   * The durable points of one Harness conversation, as its agent summed them
+   * up. Evidence, not curated memory: the points sit in the body, never under
+   * Current State, so recall never offers one as a current fact.
+   */
+  recordWrapUp(input: { harness: { id: string; label: string }; title: string; points: string[] }): { relPath: string; title: string; date: string } {
+    const machine = this.opts.machine();
+    const date = today();
+    // Redacted before it names the file: the write redacts only the content.
+    const title = redact(oneLine(input.title));
+    const planned = wrapUpPath(date, title, machine);
+    const rel = this.uniquePath(dirname(planned), basename(planned, ".md"));
+    const fm = { id: randomUUID(), type: "wrap-up", title, date, harness: input.harness.id, harness_label: input.harness.label, machine: machine.name, machine_id: machine.id, recorded_at: nowIso(), provenance: "harness-wrap-up" };
+    const intro = `Evidence: the durable points of a conversation in ${input.harness.label} on ${date}, as its agent summed them up with the wrap-up prompt.\nThey are not curated memory: none is a current fact until it is saved to a note.`;
+    const points = input.points.map((p) => `- ${oneLine(p)}`).join("\n");
+    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${intro}\n\n## Points\n\n${points}\n`, "service");
+    return { relPath: rel, title, date };
   }
 
   /** Protected identity record; only an explicit user settings action writes it. */
@@ -561,6 +572,11 @@ export class MemoryStore {
     if (!existsSync(abs)) return [];
     return readdirSync(abs).filter((f) => f.endsWith(".md"));
   }
+}
+
+/** Text that must stay on one line of Markdown, so it can never open a heading or a section of its own. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function firstWords(text: string): string {

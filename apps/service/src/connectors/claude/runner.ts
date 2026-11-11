@@ -6,12 +6,12 @@
  */
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { promisify } from "node:util";
 import { RemoteError } from "../http.ts";
 import type { Logger } from "../../core/log.ts";
 import { findClaudeCli } from "../../models/providers.ts";
+import { platformLocations } from "../../platform/locations.ts";
 import { preApprovingRules, serverPrefix, type CallOutcome, type PlannedCall } from "./plan.ts";
 import { CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
 
@@ -44,11 +44,8 @@ const SESSION_PER_CALL_MS = 8_000;
 const SESSION_MAX_MS = 240_000;
 
 export function claudeConfigDir(): string {
-  return process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || homedir(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR || join(platformLocations().home, ".claude");
 }
-
-/** macOS location of managed (organization) Claude Code settings, which also apply to headless sessions. */
-export const MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json";
 
 function allowRules(file: string): unknown[] {
   if (!existsSync(file)) return [];
@@ -61,7 +58,7 @@ function allowRules(file: string): unknown[] {
 }
 
 function userAllowRules(): unknown[] {
-  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.JARVIS_MANAGED_SETTINGS ?? MANAGED_SETTINGS)];
+  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.JARVIS_MANAGED_SETTINGS ?? platformLocations().claudeManagedSettings)];
 }
 
 /** Claude Code's project directory name for a working directory: every non-alphanumeric character becomes "-". */

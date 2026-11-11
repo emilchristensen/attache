@@ -120,19 +120,27 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await expect(page.getByText(/stops speech/)).toHaveCount(0);
 });
 
-test("chat: streaming grounded answer, citation opens the exact evidence lines, keyboard", async () => {
+test("home: the inbox only, with no chat box or chat shortcut", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Message Jarvis" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
+  await expect(page.getByRole("separator")).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Main" }).first()).not.toContainText("ask");
+  // `/` used to jump to the chat box; now it does nothing, wherever you are.
+  await page.goto(`${stack.url}/jobs`);
   await page.keyboard.press("/");
-  await expect(page.locator("#composer")).toBeFocused();
-  await page.keyboard.type("When is the cutover plan due for the Orion migration?");
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+});
+
+test("search: a hit opens the exact evidence lines, keyboard", async () => {
+  const page = await open("/memory");
+  const search = page.getByRole("searchbox", { name: "Search memory" });
+  await search.fill("When is the cutover plan due for the Orion migration?");
+  const hit = page.locator(".list-item", { hasText: "Orion" }).first();
+  await expect(hit).toBeVisible();
+  await hit.focus();
   await page.keyboard.press("Enter");
-  const answer = page.locator(".msg.assistant").last();
-  await expect(answer).toHaveAttribute("data-status", "complete");
-  await expect(answer).toContainText("Send the cutover plan to finance");
-  const chip = answer.locator(".source-chip").first();
-  await expect(chip).toContainText("Orion");
-  await answer.locator("button.cite").first().click();
   const drawer = page.getByRole("dialog", { name: /Evidence/ });
   await expect(drawer).toBeVisible();
   const hl = drawer.locator(".line.hl");
@@ -141,9 +149,6 @@ test("chat: streaming grounded answer, citation opens the exact evidence lines, 
   await expect(drawer.getByText(`${stack.vaultDir}/Projects/Orion.md`)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
-  // Persistent conversation: reload keeps history.
-  await page.reload();
-  await expect(page.locator(".msg.user").last()).toContainText("cutover plan");
 });
 
 test("attention: dismiss persists across reload and briefings; briefing reports coverage", async () => {
@@ -162,39 +167,6 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toBeVisible();
   await page.getByRole("button", { name: "Show open" }).click();
   await expect(page.locator(".coverage")).toContainText("GitHub");
-});
-
-test("home: drag the divider to resize the conversation; size persists; keyboard and reset", async () => {
-  const page = await open("/");
-  const chat = page.locator(".home .chat-col");
-  const inbox = page.locator(".home .inbox-col");
-  const divider = page.getByRole("separator", { name: "Resize conversation" });
-  const width = async (l: typeof chat) => Math.round((await l.boundingBox())!.width);
-  // The briefing column is the wide one by default.
-  expect(await width(chat)).toBe(440);
-  expect(await width(inbox)).toBeGreaterThan(440);
-
-  const box = (await divider.boundingBox())!;
-  const grab = { x: box.x + box.width / 2, y: box.y + 300 };
-  await page.mouse.move(grab.x, grab.y);
-  await page.mouse.down();
-  await page.mouse.move(grab.x - 160, grab.y, { steps: 8 });
-  await page.mouse.up();
-  expect(await width(chat)).toBe(600);
-  await page.reload();
-  expect(await width(chat)).toBe(600);
-
-  // It never squeezes either pane below its minimum.
-  await divider.focus();
-  await page.keyboard.press("End");
-  expect(await width(chat)).toBe(320);
-  await page.keyboard.press("ArrowLeft");
-  await expect(divider).toHaveAttribute("aria-valuenow", "344");
-  await page.keyboard.press("Home");
-  expect(await width(inbox)).toBe(360);
-
-  await divider.dblclick();
-  expect(await width(chat)).toBe(440);
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
@@ -304,9 +276,10 @@ test("reconnection: service restart shows a banner, then recovers state", async 
   await expect(page.getByText(/Reconnecting to the Jarvis service|Disconnected from the Jarvis service/)).toBeVisible({ timeout: 20_000 });
   await stack.startService();
   await expect(page.getByText(/Reconnecting to the Jarvis service|Disconnected from the Jarvis service/)).toBeHidden({ timeout: 30_000 });
-  await page.getByRole("textbox", { name: "Message Jarvis" }).fill("Who is Priya Shah?");
-  await page.keyboard.press("Enter");
-  await expect(page.locator(".msg.assistant").last()).toHaveAttribute("data-status", "complete");
+  // The Dashboard reaches the service again without a reload.
+  await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Memory" }).click();
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Priya Shah");
+  await expect(page.locator(".list-item", { hasText: "Priya" }).first()).toBeVisible();
 });
 
 test("narrow screen: bottom navigation, no horizontal overflow, all views reachable", async () => {
@@ -320,16 +293,15 @@ test("narrow screen: bottom navigation, no horizontal overflow, all views reacha
   }
   await page.goto(stack.url);
   await expect(page.getByText("Needs your attention")).toBeVisible();
-  await page.getByRole("button", { name: "Conversation", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Message Jarvis" })).toBeVisible();
-  await expect(page.getByText("Needs your attention")).toBeHidden();
+  // Home is the inbox alone, so there is nothing to switch between.
+  await expect(page.getByRole("button", { name: "Conversation", exact: true })).toHaveCount(0);
   const navFits = await page.locator(".bottom-nav").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
   expect(navFits, "bottom navigation fits without scrolling").toBe(true);
   await page.locator(".bottom-nav").getByRole("link", { name: "Memory" }).click();
   await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
 });
 
-test("memory: capture a decision, correct it, and the next answer changes", async () => {
+test("memory: capture a decision, correct it, and the next search finds the new value", async () => {
   const page = await open("/memory");
   await page.getByRole("button", { name: "Capture" }).click();
   await page.getByRole("textbox", { name: "Title" }).fill("Vendor sync");
@@ -345,13 +317,11 @@ test("memory: capture a decision, correct it, and the next answer changes", asyn
   await page.getByRole("button", { name: "Save correction" }).click();
   await expect(state).toContainText("Switch to Postmark for 2027");
   await expect(page.getByText(/was "Keep Nimbus as email vendor for 2027"/)).toBeVisible();
-  await page.goto(stack.url);
-  await page.getByRole("button", { name: "New", exact: true }).click();
-  await page.getByRole("textbox", { name: "Message Jarvis" }).fill("Which email vendor did we decide on for 2027?");
-  await page.keyboard.press("Enter");
-  const answer = page.locator(".msg.assistant").last();
-  await expect(answer).toHaveAttribute("data-status", "complete");
-  await expect(answer).toContainText("Postmark");
+  await page.goto(`${stack.url}/memory`);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Which email vendor did we decide on for 2027?");
+  const hit = page.locator(".list-item", { hasText: "Vendor sync" }).first();
+  await expect(hit).toContainText("Postmark");
+  await expect(hit).not.toContainText("superseded");
   const file = readFileSync(join(stack.dataDir, "memory/decisions/vendor-sync.md"), "utf8");
   expect(file.split("## History")[1]).toContain("Keep Nimbus");
 });

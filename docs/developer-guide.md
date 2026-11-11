@@ -7,19 +7,21 @@ Developer setup is separate from end-user installation: users run the installer 
 | Path | What |
 | --- | --- |
 | `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
-| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
+| `apps/service` | The local service: memory writer, index, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
 | `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
-Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
+Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
 
 ## Requirements
 
-- macOS on Apple silicon for the full suite (launchd, Keychain, `say`).
-- Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+- macOS or Linux for lint, typecheck, Vitest and the browser journeys.
+  The install test needs macOS (launchd, Keychain).
+- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
 - Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
@@ -42,12 +44,34 @@ node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --ope
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and the background service), `JARVIS_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model).
 
 Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, `~/.agents`, `~/.codex`, `~/.gemini`).
 Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
 `jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS and Linux (`ubuntu-latest` and `macos-latest`).
+Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, with these steps:
+
+| Step | Run it locally |
+| --- | --- |
+| Install | `pnpm install --frozen-lockfile` |
+| Lint | `pnpm lint --max-warnings 0` |
+| Typecheck | `pnpm typecheck` |
+| Unit and integration tests | `pnpm test` |
+| Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
+
+Every check runs even when an earlier one fails, so a run lists all failures at once.
+On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
+Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+
+To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+
+A pull request with a failing check shows the failure on GitHub.
+For the failure to block merging, `main` needs a branch protection rule or ruleset that requires both `checks` jobs, which GitHub offers for private repositories only on a paid plan.
 
 ## Fixtures versus live
 

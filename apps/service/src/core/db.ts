@@ -148,6 +148,12 @@ export const MIGRATIONS: readonly string[] = [
   create index memory_changes_doc on memory_changes(doc_rel_path);
   create index memory_changes_reverts on memory_changes(reverts);
   `,
+  // Jarvis holds no conversation of its own (ADR 0003). Chat archives already written stay in the Brain as evidence.
+  `
+  drop index if exists messages_conv;
+  drop table if exists messages;
+  drop table if exists conversations;
+  `,
   // Meaning-based search, local to this Machine: the text each chunk's vector is made from, and the
   // vectors, keyed by model and that text's hash so text that did not change keeps its vector when its
   // file is re-chunked. Forget every file's fingerprint so the next scan fills in the new columns.

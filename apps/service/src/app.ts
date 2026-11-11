@@ -5,7 +5,8 @@ import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
 import { MachineStore } from "./core/machine.ts";
-import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
+import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
+import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -19,7 +20,6 @@ import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
 import { Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
-import { ConversationService } from "./conversation/service.ts";
 import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
@@ -47,7 +47,7 @@ export class App {
   readonly instance: string;
   readonly db: Db;
   readonly log: Logger;
-  readonly secrets: CredentialStore;
+  readonly secrets: SecretStore;
   readonly config: ConfigStore;
   readonly machine: MachineStore;
   readonly memory: MemoryStore;
@@ -56,7 +56,6 @@ export class App {
   readonly jobs: JobQueue;
   readonly scheduler: Scheduler;
   readonly actions: ActionService;
-  readonly conversations: ConversationService;
   readonly sessions: AgentSessions;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
@@ -78,7 +77,7 @@ export class App {
     this.instance = opts.instance ?? process.env.JARVIS_INSTANCE ?? "default";
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
-    this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
@@ -105,15 +104,11 @@ export class App {
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db);
-    this.conversations = new ConversationService(this.db, this.memory, this.log);
     this.wire();
     registerRunners(this);
   }
 
   private wire() {
-    this.conversations.getModel = () => this.modelSync();
-    this.conversations.getIdentity = () => this.config.get().identity;
-    this.conversations.events.on("event", (ev) => this.bus.emit("event", ev));
     this.jobs.events.on("event", (ev) => this.bus.emit("event", { type: "job.event", event: ev }));
     this.connections.onChange = (id) => {
       this.cachedModel = null;
@@ -154,10 +149,6 @@ export class App {
   }
 
   // ---- model ---------------------------------------------------------------
-
-  private modelSync(): ModelProvider | null {
-    return this.cachedModel?.provider ?? null;
-  }
 
   async refreshModel(): Promise<ModelProvider | null> {
     const rec = this.connections.connected("model")[0];
@@ -251,7 +242,6 @@ export class App {
   }
 
   start() {
-    this.conversations.recoverInterrupted();
     void this.connections.migrateLegacyTransports().catch((e) => this.log.error("connection migration failed", { error: (e as Error).message }));
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {

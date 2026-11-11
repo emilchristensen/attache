@@ -93,13 +93,6 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
       const t = e.target as HTMLElement;
       const typing = t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "/") {
-        e.preventDefault();
-        if (path !== "/") navigate("/");
-        window.dispatchEvent(new CustomEvent("jarvis:focus-chat"));
-        setTimeout(() => document.getElementById("composer")?.focus(), 50);
-        return;
-      }
       if (e.key === "g") {
         const next = (ev: KeyboardEvent) => {
           const n = NAV.find((x) => x.key === ev.key);
@@ -112,7 +105,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [path]);
+  }, []);
   const badge = (to: string) => (to === "/" ? (counts.data?.items.length ?? null) : to === "/drafts" ? (drafts.data?.length ?? null) : null);
   return (
     <div className="shell">
@@ -128,7 +121,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
         ))}
         <div className="spacer" />
         <div className="kbd-hint">
-          <kbd>/</kbd> ask · <kbd>g</kbd> then a letter to jump
+          <kbd>g</kbd> then a letter to jump
         </div>
       </nav>
       <div className="main">

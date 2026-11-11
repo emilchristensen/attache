@@ -2,37 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startTestService, type TestService } from "./harness.ts";
+import { callTool, mcpClients } from "./mcp-client.ts";
 
 type Passage = { path: string; startLine: number; endLine: number; section: string; heading: string | null; title: string; text: string };
 type Note = { path: string; title: string; startLine: number; endLine: number; totalLines: number; text: string };
 
-const MAIN = join(import.meta.dirname, "../../src/main.ts");
-
 let svc: TestService;
-const clients: Client[] = [];
-
-/**
- * Start Jarvis's MCP server the way a Harness does: the `jarvis` executable
- * with `mcp` as a child process over stdio, with no token in its command or
- * environment.
- */
-async function connect(stateDir: string): Promise<Client> {
-  const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !/^(CLAUDECODE|CLAUDE_SESSION_ID|CLAUDE_CODE_|CODEX_|ANTIGRAVITY_)/.test(e[0])));
-  const transport = new StdioClientTransport({ command: process.execPath, args: [MAIN, "mcp", "--state-dir", stateDir], env, stderr: "pipe" });
-  const client = new Client({ name: "test-harness", version: "1.0.0" });
-  await client.connect(transport);
-  clients.push(client);
-  return client;
-}
-
-async function callTool<T>(client: Client, name: string, args: Record<string, unknown>): Promise<{ isError: boolean; text: string; data: T }> {
-  const r = await client.callTool({ name, arguments: args });
-  const content = r.content as Array<{ type: string; text: string }>;
-  return { isError: r.isError === true, text: content.map((c) => c.text).join("\n"), data: r.structuredContent as T };
-}
+const mcp = mcpClients();
+const connect = (stateDir: string) => mcp.connect(stateDir);
 
 /** Write a file into the Brain by hand, as another tool would. */
 function writeBrainFile(rel: string, text: string) {
@@ -71,15 +49,15 @@ beforeAll(async () => {
   await indexed("Orion cutover", ["memory/projects/orion-migration.md", "evidence/conversations/2026-11-01-orion.md", "evidence/sessions/transcripts/claude-code/2026-11-02-orion.md", "evidence/sessions/2026-11-02.md"]);
 });
 afterAll(async () => {
-  await Promise.all(clients.map((c) => c.close()));
+  await mcp.closeAll();
   await svc?.stop();
 });
 
 describe("Jarvis MCP server", () => {
-  it("starts through the jarvis executable and lists search and read", async () => {
+  it("starts through the jarvis executable and lists its tools", async () => {
     const client = await connect(svc.stateDir);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["read", "search"]);
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["audit", "read", "save", "search", "wrap_up"]));
   });
 
   it("searches the Brain and returns passages with path, line range, section kind and note title", async () => {
@@ -184,7 +162,7 @@ describe("Jarvis MCP server while the service is stopped", () => {
     await stopped.stop();
     const client = await connect(stopped.stateDir);
     expect(client.getInstructions()).toContain("Start it with `jarvis start`");
-    for (const [name, args] of [["search", { query: "quokka" }], ["read", { path: "memory/notes/quokka-plan.md" }]] as const) {
+    for (const [name, args] of [["search", { query: "quokka" }], ["read", { path: "memory/notes/quokka-plan.md" }], ["audit", {}]] as const) {
       const r = await callTool(client, name, args);
       expect(r.isError).toBe(true);
       expect(r.text).toContain("Jarvis is not running. Start it with `jarvis start`");

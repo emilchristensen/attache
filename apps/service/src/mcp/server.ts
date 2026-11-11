@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServicePaths } from "../core/paths.ts";
 import { MeaningState } from "@jarvis/contracts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage, type SearchAnswer } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
+import { registerAuditTool } from "./audit-tool.ts";
+import { failure } from "./failure.ts";
+import { registerPrompts } from "./prompts.ts";
+import { registerSaveTool } from "./save-tool.ts";
+import type { ServerContext } from "./harness.ts";
+import { registerWrapUpTool } from "./wrap-up-tool.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -18,6 +23,7 @@ const PassageShape = z.object({
   path: z.string(),
   startLine: z.number().int(),
   endLine: z.number().int(),
+  area: z.string(),
   section: z.enum(["state", "history", "body"]),
   heading: z.string().nullable(),
   title: z.string(),
@@ -26,14 +32,10 @@ const PassageShape = z.object({
 
 const NoteShape = { path: z.string(), title: z.string(), startLine: z.number().int(), endLine: z.number().int(), totalLines: z.number().int(), text: z.string() };
 
-function failure(e: unknown): CallToolResult {
-  return { isError: true, content: [{ type: "text", text: (e as Error).message }] };
-}
-
 function renderPassages(query: string, { passages, meaning }: SearchAnswer): string {
   const note = meaning.note ? `${meaning.note}\n\n` : "";
   if (!passages.length) return `${note}No passages in the Brain match "${query}".`;
-  return note + passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
+  return note + passages.map((p) => `${p.path}:${p.startLine}-${p.endLine} · ${p.title} · ${p.area} · ${SECTION_LABEL[p.section]}${p.heading ? ` › ${p.heading}` : ""}\n${p.text.replace(/^/gm, "    ")}`).join("\n\n");
 }
 
 function renderNote(n: NoteText): string {
@@ -41,13 +43,13 @@ function renderNote(n: NoteText): string {
 }
 
 /** The MCP server a Harness talks to, over any transport. */
-export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string }): McpServer {
+export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext }): McpServer {
   const server = new McpServer({ name: "jarvis", title: "Jarvis", version: info.version }, { instructions: info.instructions });
   server.registerTool(
     "search",
     {
       title: "Search the Brain",
-      description: "Search the owner's Brain by words. Returns passages with their path, line range, section kind (current state, history or body) and note title. Raw chat and session transcripts are left out; their summaries are included.",
+      description: "Search the owner's Brain by words. Returns passages with their path, line range, area, section kind (current state, history or body) and note title. Only passages from area `memory` state current facts; `evidence` records what was observed or said, such as session logs and wrap-ups. Old chat archives and raw session transcripts are left out; session summaries are included.",
       inputSchema: { query: z.string().trim().min(1).max(500).describe("What to look for, in the words the note would use."), limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Most passages to return (default ${DEFAULT_LIMIT}).`) },
       outputSchema: { passages: z.array(PassageShape), meaning: z.object({ state: MeaningState, note: z.string().nullable() }) },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -83,6 +85,10 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       }
     },
   );
+  registerAuditTool(server, brain);
+  registerPrompts(server);
+  registerSaveTool(server, brain, info.context);
+  registerWrapUpTool(server, brain, info.context);
   return server;
 }
 
@@ -110,5 +116,5 @@ export async function runMcpServer(paths: ServicePaths, version: string): Promis
   const brain = serviceBrain(paths);
   const found = await fetchOverview(brain);
   const instructions = "overview" in found ? buildInstructions(found.overview) : buildInstructions(null, found.error);
-  await createMcpServer(brain, { version, instructions }).connect(new StdioServerTransport());
+  await createMcpServer(brain, { version, instructions, context: { env: process.env, cwd: process.cwd() } }).connect(new StdioServerTransport());
 }
