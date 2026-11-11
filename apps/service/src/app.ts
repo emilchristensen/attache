@@ -33,9 +33,9 @@ import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { defaultSeams } from "./replication/seams.ts";
 import type { GitHubAccess } from "./replication/github.ts";
-import { ReplicationProblems } from "./replication/problem-inbox.ts";
 import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
+import { syncReplicationItems } from "./replication/blocked-inbox.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -71,8 +71,6 @@ export class App {
   readonly sessions: AgentSessions;
   readonly clock: Clock;
   readonly replication: Replication;
-  /** The inbox item for a blocked or unauthorized Replication. */
-  private readonly replicationProblems: ReplicationProblems;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -110,12 +108,8 @@ export class App {
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
-      onChange: () => {
-        this.bus.emit("event", { type: "replication.changed" });
-        if (this.replicationProblems.update(this.replication.view())) this.bus.emit("event", { type: "attention.changed" });
-      },
+      onChange: () => this.replicationChanged(),
     });
-    this.replicationProblems = new ReplicationProblems(this.db, () => this.clock.now());
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
@@ -305,6 +299,12 @@ export class App {
       },
       token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
     };
+  }
+
+  /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
+  private replicationChanged() {
+    if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    this.bus.emit("event", { type: "replication.changed" });
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */

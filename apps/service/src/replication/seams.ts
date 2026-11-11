@@ -1,4 +1,5 @@
 import { systemClock, type Clock } from "./clock.ts";
+import { credentialScan } from "./credential-scan.ts";
 import { githubCredentials } from "./github-credentials.ts";
 import { NO_GITHUB, type GitHubAccess } from "./github.ts";
 import { PrivateRemoteGuard } from "./private-remote.ts";
@@ -58,6 +59,11 @@ export interface StagedFile {
   change: "added" | "modified" | "deleted";
   /** The content about to be committed; null for a deletion. */
   read(): string | null;
+  /**
+   * The versions of this file in the commits this one builds on (HEAD, and
+   * the other side's tip during a merge): what is in the shared history already.
+   */
+  committed?(): readonly string[];
 }
 
 export type GuardVerdict = { ok: true } | { ok: false; status: "blocked" | "unauthorized"; cause: string };
@@ -108,5 +114,5 @@ export interface SeamDeps {
 export function defaultSeams(deps: SeamDeps = {}): ReplicationSeams {
   const github = deps.github ?? NO_GITHUB;
   const credentials = deps.install ? githubCredentials({ github, ...deps.install }) : MACHINE_CREDENTIALS;
-  return { mergeRules: [], commitGuards: [], remoteGuards: [new PrivateRemoteGuard({ github, clock: deps.clock ?? systemClock })], credentials };
+  return { mergeRules: [], commitGuards: [credentialScan], remoteGuards: [new PrivateRemoteGuard({ github, clock: deps.clock ?? systemClock })], credentials };
 }
