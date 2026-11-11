@@ -148,6 +148,13 @@ export const MIGRATIONS: readonly string[] = [
   create index memory_changes_doc on memory_changes(doc_rel_path);
   create index memory_changes_reverts on memory_changes(reverts);
   `,
+  // Replication of the Brain through git: local state, never part of the Brain. No row means off.
+  `
+  create table replication (
+    id integer primary key check (id = 1), data_folder text not null, remote text not null, enabled_at text not null,
+    committed_seq integer not null default 0, status text not null, cause text, checked_at text, pushed_at text
+  );
+  `,
 ];
 
 export function openDb(file: string): Db {

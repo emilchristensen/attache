@@ -159,6 +159,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
       version: VERSION,
       instance: app.instance,
       machine: app.machine.get(),
+      replication: app.replication.view(),
       startedAt: app.startedAt,
       pid: process.pid,
       node: process.version,

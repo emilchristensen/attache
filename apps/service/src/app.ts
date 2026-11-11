@@ -25,6 +25,9 @@ import { wakeSnoozed } from "./attention/engine.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
+import { systemClock, type Clock } from "./replication/clock.ts";
+import { Replication } from "./replication/replication.ts";
+import { defaultSeams } from "./replication/seams.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -32,6 +35,8 @@ export interface AppOptions {
   quiet?: boolean;
   schedulerTickMs?: number;
   jobConcurrency?: number;
+  /** Drives Replication's timers; tests pass a clock they move by hand. */
+  clock?: Clock;
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
@@ -52,6 +57,8 @@ export class App {
   readonly actions: ActionService;
   readonly conversations: ConversationService;
   readonly sessions: AgentSessions;
+  readonly clock: Clock;
+  readonly replication: Replication;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -77,7 +84,20 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
-    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get() });
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
+    this.clock = opts.clock ?? systemClock;
+    this.replication = new Replication({
+      db: this.db,
+      log: this.log,
+      clock: this.clock,
+      seams: defaultSeams(),
+      machine: () => this.machine.get(),
+      dataRoot: () => this.memory.dataRoot,
+      changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
+      latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
+      onChange: () => this.bus.emit("event", { type: "replication.changed" }),
+    });
+    this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
@@ -139,7 +159,10 @@ export class App {
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
     };
-    this.scheduler.onResume = (gapMs) => this.bus.emit("event", { type: "service.resumed", gapMs });
+    this.scheduler.onResume = (gapMs) => {
+      this.replication.wake();
+      this.bus.emit("event", { type: "service.resumed", gapMs });
+    };
   }
 
   // ---- model ---------------------------------------------------------------
@@ -234,9 +257,45 @@ export class App {
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
     this.dataWatcher?.stop();
-    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, { onChange: () => this.bus.emit("event", { type: "memory.changed" }) });
+    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
+      onChange: () => {
+        this.replication.noteOutsideEdit();
+        this.bus.emit("event", { type: "memory.changed" });
+      },
+    });
     this.dataWatcher.start();
     return r;
+  }
+
+  /** Make `path` this Machine's data folder: open it, index it and remember it. */
+  useDataFolder(path: string): { created: string[] } {
+    const r = this.openDataFolder(path);
+    this.config.patch({ dataFolder: path });
+    this.bus.emit("event", { type: "config.changed" });
+    return r;
+  }
+
+  /** Re-index the files another Machine changed, as soon as git wrote them. */
+  private reindexPulled(paths: readonly string[]) {
+    const root = this.memory.rootRef;
+    if (!root) return;
+    let changed = false;
+    let scan = false;
+    for (const rel of paths) {
+      try {
+        const r = this.memory.indexer.syncPath(root, rel);
+        if (r === "rescan") scan = true;
+        if (r === "changed") changed = true;
+      } catch (e) {
+        this.log.warn("could not index a file another Machine changed", { path: rel, error: (e as Error).message });
+        scan = true;
+      }
+    }
+    if (scan) {
+      const r = this.memory.indexer.scan(root);
+      if (r.indexed || r.removed) changed = true;
+    }
+    if (changed) this.bus.emit("event", { type: "memory.changed" });
   }
 
   start() {
@@ -260,6 +319,7 @@ export class App {
     this.jobs.start();
     this.scheduler.start();
     this.sessions.start();
+    this.replication.start();
     const housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
@@ -271,6 +331,7 @@ export class App {
 
   async stop() {
     this.dataWatcher?.stop();
+    await this.replication.stop();
     this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();

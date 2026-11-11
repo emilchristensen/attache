@@ -131,6 +131,30 @@ export const MachineRename = z.object({
 export type MachineRename = z.infer<typeof MachineRename>;
 
 // ---------------------------------------------------------------------------
+// Replication
+
+/** off: not set up. offline: the remote cannot be reached; saves carry on and catch up later. */
+export const ReplicationStatus = z.enum(["off", "up_to_date", "offline", "unauthorized", "blocked"]);
+export type ReplicationStatus = z.infer<typeof ReplicationStatus>;
+
+export interface ReplicationView {
+  status: ReplicationStatus;
+  /** The repository's address; never holds a token. */
+  remote: string | null;
+  /** What to fix, when the status is not up to date. */
+  cause: string | null;
+  lastCheckedAt: string | null;
+  lastPushedAt: string | null;
+}
+
+const RepositoryName = z.string().trim().min(1, "Name the repository").max(500);
+export const ReplicationSetupInput = z.object({ remote: RepositoryName });
+export type ReplicationSetupInput = z.infer<typeof ReplicationSetupInput>;
+/** `path`: the empty folder to clone into; the configured data folder when left out. */
+export const ReplicationJoinInput = z.object({ remote: RepositoryName, path: z.string().trim().min(1).max(1000).optional() });
+export type ReplicationJoinInput = z.infer<typeof ReplicationJoinInput>;
+
+// ---------------------------------------------------------------------------
 // Memory
 
 export interface Citation {
