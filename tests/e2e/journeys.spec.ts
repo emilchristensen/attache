@@ -146,7 +146,7 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const hl = drawer.locator(".line.hl");
   await expect(hl.first()).toBeVisible();
   expect(await hl.allTextContents()).toEqual(expect.arrayContaining([expect.stringContaining("Send the cutover plan to finance")]));
-  await expect(drawer.getByText(`${stack.vaultDir}/Projects/Orion.md`)).toBeVisible();
+  await expect(drawer.getByText(join(stack.vaultDir, "Projects", "Orion.md"))).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 });

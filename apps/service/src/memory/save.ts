@@ -78,7 +78,8 @@ export function originSource(app: App, origin: MemorySaveInput["origin"]): Sourc
   if (!origin) return null;
   const agentLabel = harnessLabel(origin.agent);
   const row = origin.sessionId ? (app.db.prepare("select rel_path from agent_sessions where agent = ? and session_id = ?").get(origin.agent, origin.sessionId) as { rel_path: string } | undefined) : undefined;
-  const folder = origin.cwd?.split("/").filter(Boolean).at(-1);
+  // The Harness reports its folder in its own operating system's form, so either separator ends a name.
+  const folder = origin.cwd?.split(/[\\/]/).filter(Boolean).at(-1);
   return {
     kind: "agent-session",
     ref: row?.rel_path ?? `${origin.agent}/${origin.sessionId || "unknown-session"}`,

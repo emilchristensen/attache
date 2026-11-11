@@ -52,7 +52,8 @@ beforeAll(async () => {
   for (const d of [".claude", ".codex", ".gemini/config"]) mkdirSync(join(HOME, d), { recursive: true });
   writeFileSync(join(HOME, ".claude/settings.json"), JSON.stringify(FOREIGN_CLAUDE, null, 2));
   mkdirSync(join(HOME, ".local/bin"), { recursive: true });
-  writeFileSync(join(HOME, ".local/bin/agy"), "");
+  // The Antigravity command-line tool, as this operating system names an executable.
+  writeFileSync(join(HOME, ".local/bin", process.platform === "win32" ? "agy.exe" : "agy"), "");
   fx = await startFixtureServer();
   installFixtureModel(fx);
   svc = await startTestService();
