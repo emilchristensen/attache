@@ -125,6 +125,11 @@ const MIGRATIONS: string[] = [
     primary key (agent, session_id)
   );
   `,
+  // Recall now indexes one chunk per current fact and splits long lists. Forget every file's
+  // fingerprint so the next scan re-chunks it; the old chunks stay searchable until then.
+  `
+  update documents set hash = '', mtime_ms = -1;
+  `,
 ];
 
 export function openDb(file: string): Db {

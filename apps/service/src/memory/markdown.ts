@@ -95,6 +95,12 @@ export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdow
 
 const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})\): (.*?)(?: — source: (.+))?$/;
 
+/** One `- **Subject** (date): value — source: …` line, or null when the line is not a state entry. */
+export function parseStateLine(line: string): Omit<StateEntry, "line"> | null {
+  const m = STATE_RE.exec(line);
+  return m ? { subject: m[1]!, date: m[2]!, value: m[3]!, ...(m[4] ? { source: m[4] } : {}) } : null;
+}
+
 export function parseStateEntries(raw: string): StateEntry[] {
   const lines = raw.split("\n");
   const out: StateEntry[] = [];
@@ -103,8 +109,8 @@ export function parseStateEntries(raw: string): StateEntry[] {
     const h = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
     if (h) inState = h[2]!.trim().toLowerCase() === "current state";
     else if (inState) {
-      const m = STATE_RE.exec(line);
-      if (m) out.push({ subject: m[1]!, date: m[2]!, value: m[3]!, ...(m[4] ? { source: m[4] } : {}), line: i + 1 });
+      const entry = parseStateLine(line);
+      if (entry) out.push({ ...entry, line: i + 1 });
     }
   });
   return out;

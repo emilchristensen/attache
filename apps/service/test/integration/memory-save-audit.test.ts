@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
@@ -117,6 +117,38 @@ describe("auditing memory", () => {
     expect(orion.inSessionIndex).toBe(true);
     expect(audit.counts.stale).toBeGreaterThanOrEqual(1);
     expect(audit.findings.some((f: any) => f.relPath === "memory/self.md")).toBe(false);
+  });
+
+  it("offers as newer evidence only passages that name the note and are dated after the fact", async () => {
+    const dir = join(svc.dataDir, "memory/projects");
+    const source = "evidence/captures/2026-03-01-tamarind-kickoff.md";
+    writeFileSync(join(svc.dataDir, source), "---\ntype: capture\ntitle: Tamarind kickoff\ncaptured_at: 2026-03-01T09:00:00Z\n---\n# Tamarind kickoff\n\n> Tamarind rollout owner is Ingrid.\n");
+    writeFileSync(
+      join(dir, "tamarind-rollout.md"),
+      `---\ntype: project\ntitle: Tamarind rollout\n---\n# Tamarind rollout\n\n## Current State\n- **Owner** (2026-03-01): Ingrid — source: (capture: ${source}, observed 2026-03-01)\n- **Budget** (2026-06-01): 90k EUR\n`,
+    );
+    // An old document copied in today: its file is new, what it says is not.
+    mkdirSync(join(svc.dataDir, "evidence/archive/oldvault"), { recursive: true });
+    writeFileSync(join(svc.dataDir, "evidence/archive/oldvault/tamarind.md"), "# Tamarind rollout\n\nTamarind rollout owner was Ingrid from the start.\n");
+    // Dated before the fact, although the file was written today.
+    writeFileSync(join(svc.dataDir, "evidence/captures/2026-02-10-tamarind-early.md"), "---\ntype: capture\ntitle: Tamarind early talk\ncaptured_at: 2026-02-10T09:00:00Z\n---\n# Tamarind early talk\n\n> Tamarind rollout owner might be Stellan.\n");
+    // Dated after the fact and names the note: a real lead.
+    const later = "evidence/captures/2026-04-20-tamarind-handover.md";
+    writeFileSync(join(svc.dataDir, later), "---\ntype: capture\ntitle: Tamarind handover\ncaptured_at: 2026-04-20T09:00:00Z\n---\n# Tamarind handover\n\n> Tamarind rollout owner is now Bao.\n");
+    // Shares the subject's word but is about something else.
+    writeFileSync(join(svc.dataDir, "evidence/captures/2026-05-01-kiosk.md"), "---\ntype: capture\ntitle: Kiosk refit\ncaptured_at: 2026-05-01T09:00:00Z\n---\n# Kiosk refit\n\n> The owner of the kiosk refit is Dmitri.\n");
+    // Another note's current fact, dated later, is a lead; its undated prose is not.
+    writeFileSync(join(svc.dataDir, "memory/people/bao.md"), "---\ntype: person\ntitle: Bao\n---\n# Bao\n\n## Current State\n- **Role** (2026-04-21): Owner of the Tamarind rollout\n\n## Notes\nBao once asked who the Tamarind rollout owner was.\n");
+    svc.app.memory.indexer.scan(svc.app.memory.rootRef!);
+
+    const audit = await svc.get("/memory/audit");
+    const note = audit.findings.find((f: any) => f.relPath === "memory/projects/tamarind-rollout.md");
+    const owner = note.entries.find((e: any) => e.subject === "Owner");
+    expect(owner.newerEvidence.map((e: any) => `${e.relPath}:${e.startLine}`).sort()).toEqual([`${later}:8`, "memory/people/bao.md:8"]);
+    expect(owner.newerEvidence.find((e: any) => e.relPath === later).modified).toBe("2026-04-20T00:00:00.000Z");
+    // The later capture predates the budget fact, so it cannot overturn it.
+    const budget = note.entries.find((e: any) => e.subject === "Budget");
+    expect(budget.newerEvidence).toEqual([]);
   });
 
   it("reports notes whose titles reduce to the same name", async () => {

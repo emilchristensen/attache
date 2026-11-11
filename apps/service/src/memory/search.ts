@@ -26,6 +26,8 @@ export interface SearchOptions {
   excludePrefixes?: string[];
   /** Drop hits scoring below this fraction of the top hit. */
   relativeCutoff?: number;
+  /** Most hits one document may take while other documents still have hits to show. Defaults to half of `limit`. */
+  maxPerDocument?: number;
 }
 
 const STOPWORDS = new Set(
@@ -103,10 +105,56 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
   const top = hits[0]?.score ?? 0;
   const cutoff = opts.relativeCutoff ?? 0.35;
   hits = hits.filter((h) => h.score >= top * cutoff);
-  return hits.slice(0, limit);
+  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2)));
 }
 
-function termCoverage(text: string, terms: string[]): number {
+/**
+ * The best `limit` hits, with no document taking more than `perDocument` of them
+ * unless nothing else is left. A note is many small chunks (one per fact), so
+ * without this a long note that matches by title would fill every slot.
+ */
+function diversify(sorted: SearchHit[], limit: number, perDocument: number): SearchHit[] {
+  const taken = new Map<string, number>();
+  const picked: SearchHit[] = [];
+  const held: SearchHit[] = [];
+  for (const h of sorted) {
+    const n = taken.get(h.docId) ?? 0;
+    if (n < perDocument) {
+      picked.push(h);
+      taken.set(h.docId, n + 1);
+    } else held.push(h);
+  }
+  const chosen = new Set([...picked.slice(0, limit), ...held.slice(0, Math.max(0, limit - picked.length))]);
+  return sorted.filter((h) => chosen.has(h));
+}
+
+/**
+ * A whole document as evidence: its chunks merged back into one block per run
+ * of the same section, current state first. Used when the user asks about the
+ * note they have open, where the question may not share a word with it.
+ */
+export function documentBlocks(db: Db, root: string, relPath: string, maxBlocks = 4): SearchHit[] {
+  const rows = db
+    .prepare(
+      `select c.id as chunkId, c.heading, c.section, c.start_line as startLine, c.end_line as endLine, c.text,
+              d.id as docId, d.root, d.rel_path as relPath, d.area, d.doc_type as docType, d.title, d.meta
+       from chunks c join documents d on d.id = c.doc_id where d.root = ? and d.rel_path = ? order by c.ordinal`,
+    )
+    .all(root, relPath) as Array<Omit<SearchHit, "score" | "snippet" | "meta"> & { meta: string }>;
+  const blocks: SearchHit[] = [];
+  for (const r of rows) {
+    const last = blocks.at(-1);
+    if (last && last.section === r.section && last.heading === r.heading) {
+      blocks[blocks.length - 1] = { ...last, text: `${last.text}\n${r.text}`, endLine: r.endLine };
+    } else {
+      blocks.push({ ...r, meta: safeJson(r.meta), score: 1e6, snippet: "" });
+    }
+  }
+  return blocks.slice(0, maxBlocks).map((b) => ({ ...b, snippet: b.text.slice(0, 220) }));
+}
+
+/** The share of `terms` found in `text`, forgiving a different word ending. */
+export function termCoverage(text: string, terms: string[]): number {
   const lower = text.toLowerCase();
   const found = terms.filter((t) => lower.includes(t.slice(0, Math.max(3, t.length - 2)))).length;
   return found / terms.length;

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, realpathSync, statSync, lstatSync } from "node:fs";
 import { join, relative, sep, basename } from "node:path";
 import { type Db, nowIso, tx } from "../core/db.ts";
+import { chunkSection } from "./chunker.ts";
 import { parseMarkdown } from "./markdown.ts";
 import { areaOf, type Area } from "./policy.ts";
 
@@ -122,14 +123,10 @@ export class Indexer {
       const insFts = this.db.prepare("insert into chunks_fts (rowid, title, heading, text) values (?,?,?,?)");
       let ordinal = 0;
       for (const s of parsed.sections) {
-        for (const piece of splitLong(s.text, s.contentStartLine)) {
-          if (!piece.text.trim()) continue;
-          const heading = (s.heading ?? "").toLowerCase();
-          const section = heading === "current state" ? "state" : heading === "history" ? "history" : "body";
-          const text = piece.text.replace(/<!--[\s\S]*?-->/g, "").trim();
-          if (!text) continue;
-          const r = insChunk.run(id, ordinal++, s.heading, piece.startLine, Math.max(piece.startLine, Math.min(s.endLine, piece.endLine)), section, text);
-          insFts.run(Number(r.lastInsertRowid), parsed.title, s.heading ?? "", text);
+        const { kind, chunks } = chunkSection(s);
+        for (const c of chunks) {
+          const r = insChunk.run(id, ordinal++, s.heading, c.startLine, c.endLine, kind, c.text);
+          insFts.run(Number(r.lastInsertRowid), parsed.title, [s.heading, c.searchHeading].filter(Boolean).join(" "), c.searchText ?? c.text);
         }
       }
     });
@@ -244,31 +241,4 @@ export class Indexer {
     }
     return total;
   }
-}
-
-/** Split long sections into ~1200-character pieces on paragraph boundaries, keeping line ranges. */
-function splitLong(text: string, firstLine: number): Array<{ text: string; startLine: number; endLine: number }> {
-  const lines = text.split("\n");
-  const out: Array<{ text: string; startLine: number; endLine: number }> = [];
-  let buf: string[] = [];
-  let start = firstLine;
-  let size = 0;
-  lines.forEach((line, i) => {
-    buf.push(line);
-    size += line.length + 1;
-    if (size >= 1200 && line.trim() === "") {
-      out.push({ text: buf.join("\n"), startLine: start, endLine: firstLine + i });
-      buf = [];
-      size = 0;
-      start = firstLine + i + 1;
-    }
-  });
-  if (buf.length) out.push({ text: buf.join("\n"), startLine: start, endLine: firstLine + lines.length - 1 });
-  // Trim leading blank lines from ranges so citations point at content.
-  return out.map((p) => {
-    const ls = p.text.split("\n");
-    let skip = 0;
-    while (skip < ls.length - 1 && ls[skip]!.trim() === "") skip++;
-    return { text: ls.slice(skip).join("\n"), startLine: p.startLine + skip, endLine: p.endLine };
-  });
 }

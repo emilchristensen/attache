@@ -97,7 +97,7 @@ The structure already separates state from events, so the audit is about whether
 
     ${cli} audit
 
-It lists every current fact with its date, age, source and flags, plus newer documents that mention the same note.
+It lists every current fact with its date, age, source and flags, plus newer passages about that fact.
 Notes marked "first fact in every session's index" are the ones every new agent session reads; check those first, because a stale fact there misleads every session.
 Pass \`--stale-days <n>\` to change when a fact counts as stale (60 by default) and \`--json\` for structured output.
 
@@ -107,7 +107,7 @@ The flags are leads, not verdicts:
 - \`unsourced\`: nothing records where the fact came from.
 - \`missing-source\`: the file it cites is gone.
 - \`duplicate-subject\`: the note has two current values for one subject.
-- \`newer:\` lines: documents changed after the fact was dated that mention the note. This is where contradictions show up.
+- \`newer:\` lines: passages dated after the fact that name the note, found by searching for the note and the fact's subject. This is where contradictions show up.
 
 The counts line is deterministic; quote it, so the next audit can be compared with this one.
 

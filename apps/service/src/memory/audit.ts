@@ -3,8 +3,8 @@ import type { MemoryAuditEntry, MemoryAuditReport } from "@jarvis/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
 import { MAX_DETAILED_PER_TYPE } from "../agents/context.ts";
-import { parseStateEntries, slugify, type StateEntry } from "./markdown.ts";
-import { RECALL_EXCLUDE, search } from "./search.ts";
+import { parseStateEntries, parseStateLine, slugify, type StateEntry } from "./markdown.ts";
+import { RECALL_EXCLUDE, queryTerms, search, termCoverage, type SearchHit } from "./search.ts";
 
 export const DEFAULT_STALE_DAYS = 60;
 const EVIDENCE_PER_ENTRY = 3;
@@ -36,10 +36,9 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
       continue;
     }
     const state = parseStateEntries(raw);
-    const evidence = newerMentions(app, d.title, d.relPath);
     const subjects = new Map<string, number>();
     for (const s of state) subjects.set(s.subject.toLowerCase(), (subjects.get(s.subject.toLowerCase()) ?? 0) + 1);
-    const entries = state.map((s) => auditEntry(app, s, now, staleDays, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, evidence));
+    const entries = state.map((s) => auditEntry(app, s, now, staleDays, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
     findings.push({
       relPath: d.relPath,
       absPath: join(root, d.relPath),
@@ -76,21 +75,18 @@ function auditEntry(app: App, s: StateEntry, now: Date, staleDays: number, dupli
   else if (sourceMissing(app, s.source)) flags.push("missing-source");
   if (duplicate) flags.push("duplicate-subject");
   // Evidence from the day the fact was dated is what it was written from; only later documents can overturn it.
-  const after = dated + DAY_MS;
   const newerEvidence = evidence
-    .filter((m) => m.mtimeMs >= after)
+    .filter((m) => m.dated > s.date)
     .slice(0, EVIDENCE_PER_ENTRY)
-    .map(({ mtimeMs, ...m }) => ({ ...m, modified: new Date(mtimeMs).toISOString() }));
+    .map(({ dated, ...m }) => ({ ...m, modified: new Date(`${dated}T00:00:00Z`).toISOString() }));
   return { subject: s.subject, value: s.value, date: s.date, ageDays, source: s.source ?? null, line: s.line, flags, newerEvidence };
 }
 
 /** A source that names a file in the data folder which is no longer there. URLs, imports and sessions not yet archived are not checked. */
 function sourceMissing(app: App, source: string): boolean {
   const m = SOURCE_RE.exec(source);
-  if (!m || !LOCAL_KINDS.has(m[1]!)) return false;
-  const rel = m[2]!.replace(/#L\d+-L\d+$/, "");
-  if (!/^(memory|evidence|deliverables)\/.+\.md$/.test(rel)) return false;
-  return !app.memory.exists(rel);
+  const rel = m && LOCAL_KINDS.has(m[1]!) ? citedPath(source) : null;
+  return rel !== null && !app.memory.exists(rel);
 }
 
 interface Mention {
@@ -100,22 +96,62 @@ interface Mention {
   startLine: number;
   endLine: number;
   snippet: string;
-  mtimeMs: number;
+  /** The day the passage speaks for (YYYY-MM-DD). */
+  dated: string;
 }
 
-/** Other documents that mention a note's title, newest first, one hit per document. */
-function newerMentions(app: App, title: string, ownPath: string): Mention[] {
-  const hits = search(app.db, title, { limit: 30, excludePrefixes: RECALL_EXCLUDE, relativeCutoff: 0.5 });
-  const seen = new Set<string>();
+/** Copies of a retired notes system: their file time is when they were copied, not when they were true. */
+const ARCHIVE_PREFIX = "evidence/archive/";
+const EVIDENCE_AREAS = ["memory", "evidence", "import"];
+const CONTENT_DATE_KEYS = ["observed_at", "captured_at", "date"];
+/** A passage names a note when it holds at least this share of the words in the note's title. */
+const NAME_COVERAGE = 0.5;
+
+/**
+ * Passages elsewhere that speak about one fact, most relevant first, one per document.
+ * The search is for the note's name and the fact's subject, so each fact gets
+ * its own leads. Left out, because they cannot overturn the fact: the document
+ * the fact cites as its source, archives of a retired system, generated
+ * deliverables, and superseded history or undated prose in other notes.
+ */
+function mentions(app: App, title: string, ownPath: string, fact: StateEntry): Mention[] {
+  const cited = citedPath(fact.source);
+  const hits = search(app.db, `${title} ${fact.subject}`, {
+    limit: 30,
+    areas: EVIDENCE_AREAS,
+    excludePrefixes: [...RECALL_EXCLUDE, ARCHIVE_PREFIX, ownPath, ...(cited ? [cited] : [])],
+    relativeCutoff: 0.5,
+    maxPerDocument: 1,
+  });
+  const name = queryTerms(title);
   const out: Mention[] = [];
   for (const h of hits) {
-    const key = `${h.root}:${h.relPath}`;
-    if ((h.root === "data" && h.relPath === ownPath) || seen.has(key)) continue;
-    seen.add(key);
-    const mtime = app.db.prepare("select mtime_ms from documents where id = ?").get(h.docId) as { mtime_ms: number } | undefined;
-    out.push({ root: h.root, relPath: h.relPath, title: h.title, startLine: h.startLine, endLine: h.endLine, snippet: h.snippet, mtimeMs: mtime?.mtime_ms ?? 0 });
+    // Sharing the subject's words is not enough ("ownership", "platform"): the passage must name the note.
+    if (termCoverage(`${h.title} ${h.text}`, name) < NAME_COVERAGE) continue;
+    const dated = passageDate(app, h);
+    if (dated) out.push({ root: h.root, relPath: h.relPath, title: h.title, startLine: h.startLine, endLine: h.endLine, snippet: h.snippet, dated });
   }
-  return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out;
+}
+
+/** The day a passage speaks for: a current fact's own date, a document's stated date, else the file's modification day. */
+function passageDate(app: App, h: SearchHit): string | null {
+  if (h.area === "memory") return h.section === "state" ? (parseStateLine(h.text.split("\n")[0]!)?.date ?? null) : null;
+  for (const key of CONTENT_DATE_KEYS) {
+    const v = h.meta[key];
+    const day = typeof v === "string" ? v.slice(0, 10) : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  }
+  const row = app.db.prepare("select mtime_ms from documents where id = ?").get(h.docId) as { mtime_ms: number } | undefined;
+  return row && row.mtime_ms > 0 ? new Date(row.mtime_ms).toISOString().slice(0, 10) : null;
+}
+
+/** The data-folder file a fact cites as its source, if it cites one. */
+function citedPath(source: string | undefined): string | null {
+  const m = source ? SOURCE_RE.exec(source) : null;
+  if (!m) return null;
+  const rel = m[2]!.replace(/#L\d+-L\d+$/, "");
+  return /^(memory|evidence|deliverables)\/.+\.md$/.test(rel) ? rel : null;
 }
 
 /** The notes whose first fact every new agent session reads (see `buildSessionContext`). */
