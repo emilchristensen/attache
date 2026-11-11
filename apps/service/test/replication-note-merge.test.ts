@@ -63,12 +63,13 @@ describe("note merge rule on either Machine", () => {
     expect(onMac).toContain("## History\n<!-- Append-only. Never edited. -->\n- 2026-11-10 — created by user\n- 2026-11-11 — created by user\n");
   });
 
-  it("leaves a note whose prose both Machines changed for the prose merge, without conflict markers", () => {
+  it("hands a note whose prose both Machines changed to the prose merge, without conflict markers", () => {
     const base = note({ id: "a", updated: "2026-11-01", state: [{ subject: "Status", date: "2026-11-01", value: "Planned" }], history: [created] });
     const withNotes = (text: string) => base.replace("## History", `## Notes\n${text}\n\n## History`);
     const [onMac, onPc] = onEachMachine(base, withNotes("Written on the Mac."), withNotes("Written on the PC."));
-    expect(onMac).toBeNull();
-    expect(onPc).toBeNull();
+    expect(onMac).toBe(onPc);
+    expect(onMac).toContain("### Version from Mac\n\nWritten on the Mac.\n\n### Version from PC\n\nWritten on the PC.");
+    expect(onMac).not.toMatch(/^(<{7}|={7}|>{7})/m);
   });
 
   it("keeps a note one Machine changed and the other deleted", () => {

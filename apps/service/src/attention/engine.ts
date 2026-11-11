@@ -258,10 +258,8 @@ export function forgetItem(db: Db, key: string): boolean {
   return Number(db.prepare("delete from attention_items where item_key = ?").run(key).changes) > 0;
 }
 
-/** A disconnected source no longer reports its items: resolve the ones still waiting. Returns their keys. */
-export function resolveConnection(db: Db, connectionId: string, ctx: InboxContext = SYSTEM): string[] {
+function resolveRows(db: Db, rows: readonly ItemRow[], ctx: InboxContext): string[] {
   const now = ctx.now();
-  const rows = db.prepare("select * from attention_items where connection_id = ? and state in ('open','snoozed')").all(connectionId) as unknown as ItemRow[];
   tx(db, () => {
     for (const r of rows) {
       const rec = recordOfRow(r);
@@ -269,6 +267,23 @@ export function resolveConnection(db: Db, connectionId: string, ctx: InboxContex
     }
   });
   return rows.map((r) => r.item_key);
+}
+
+/** A disconnected source no longer reports its items: resolve the ones still waiting. Returns their keys. */
+export function resolveConnection(db: Db, connectionId: string, ctx: InboxContext = SYSTEM): string[] {
+  const rows = db.prepare("select * from attention_items where connection_id = ? and state in ('open','snoozed')").all(connectionId) as unknown as ItemRow[];
+  return resolveRows(db, rows, ctx);
+}
+
+/** A source's items it has not resolved yet, whatever the owner decided about them. */
+export function unresolvedItems(db: Db, sourceKind: string): AttentionItemView[] {
+  return (db.prepare("select * from attention_items where source_kind = ? and resolved_at is null order by first_seen_at").all(sourceKind) as Array<Record<string, unknown>>).map(toView);
+}
+
+/** Resolve items whose cause is gone, by key. Returns the keys of the items it resolved. */
+export function resolveItems(db: Db, keys: readonly string[], ctx: InboxContext = SYSTEM): string[] {
+  const rows = keys.map((k) => rowByKey(db, k)).filter((r): r is ItemRow => r !== undefined && r.resolved_at === null);
+  return resolveRows(db, rows, ctx);
 }
 
 /** Delete a disconnected source's items, as the owner asked. Returns their keys. */
