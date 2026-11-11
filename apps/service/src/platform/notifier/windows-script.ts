@@ -26,9 +26,17 @@ function Invoke-Request($req) {
   $null = [Windows.UI.Notifications.NotificationSetting, Windows.UI.Notifications, ContentType = WindowsRuntime]
   $null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
   $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier([string]$req.app)
-  # Where Windows cannot say (no setting comes back), the notification is handed over all the same.
-  $setting = $notifier.Setting
-  if ($null -ne $setting -and [string]$setting -ne 'Enabled') { return @{ ok = $true; enabled = $false; setting = [string]$setting } }
+  # Windows answers the setting only for a sender it has listed in Settings, which happens after its first
+  # notification; until then it says 'Element not found' (0x80070490) and shows notifications all the same.
+  $setting = $null
+  try {
+    $setting = [string]$notifier.get_Setting()
+  } catch {
+    $e = $_.Exception
+    while ($e.InnerException) { $e = $e.InnerException }
+    if ($e.HResult -ne -2147023728) { throw }
+  }
+  if ($null -ne $setting -and $setting -ne 'Enabled') { return @{ ok = $true; enabled = $false; setting = $setting } }
   if ([string]$req.op -ne 'show') { return @{ ok = $true; enabled = $true } }
 
   $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
