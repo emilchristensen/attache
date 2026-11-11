@@ -101,12 +101,12 @@ The structure already separates state from events, so the audit is about whether
 ## 1. Get the report
 
 Call the \`audit\` tool.
-It lists every current fact with its date, age, source and flags, plus newer passages about that fact.
+It lists every current fact with its date, Review date, age, source and flags, plus newer passages about that fact.
 Notes marked "first fact in every session's index" are the ones every new agent session reads; check those first, because a stale fact there misleads every session.
 
 The flags are leads, not verdicts:
 
-- \`stale\`: not re-dated for a long time. Old is not the same as wrong.
+- \`stale\`: past its Review date, the day it was due to be checked again. A fact without a Review date is never stale, however old it is.
 - \`unsourced\`: nothing records where the fact came from.
 - \`missing-source\`: the file it cites is gone.
 - \`duplicate-subject\`: the note has two current values for one subject.
@@ -116,7 +116,7 @@ The counts line is deterministic; quote it, so the next audit can be compared wi
 
 ## 2. Judge each fact
 
-For every fact with newer evidence, and every stale fact in the session index, read the newer passages at the cited lines with the \`read\` tool and put the fact in one pile:
+For every fact with newer evidence, and every stale fact, read the newer passages at the cited lines with the \`read\` tool and put the fact in one pile:
 
 - **Contradicted:** something newer disagrees. This is rot, and the headline.
 - **Unsupported:** nothing backs it up. Often it was true once and the evidence was never written down.
@@ -142,6 +142,7 @@ ${CORRECTION_EXAMPLE}
 Make the corrections through the \`save\` tool only after the owner says yes, and only the ones they accept.
 Jarvis then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
 For an unsupported fact, ask the owner for the current value rather than guessing.
+A stale fact the owner confirms is still true is saved again with the same value and a later Review date; a correction without one clears it.
 ${HANDS_OFF}
 The identity record (\`memory/self.md\`) can only be changed in Jarvis Settings; point the owner there.
 Afterwards, call the \`audit\` tool again and report how the counts moved.

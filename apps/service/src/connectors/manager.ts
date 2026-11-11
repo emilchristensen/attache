@@ -14,6 +14,7 @@ import type { ClaudeConnectorRunner } from "./claude/runner.ts";
 import { applyCandidates, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
+import { scanFactReviews } from "../attention/fact-reviews.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
 
@@ -381,9 +382,22 @@ export class ConnectionManager {
     }
     const idx = this.d.memory.indexer.scan(root);
     const docs = (this.d.db.prepare("select rel_path from documents where root = ?").all(root.id) as Array<{ rel_path: string }>).map((r) => r.rel_path).filter((p) => !p.startsWith("evidence/conversations/"));
-    const { observations, errors } = scanDeadlines(root, docs, new Date());
+    const now = new Date();
+    const deadlines = scanDeadlines(root, docs, now);
+    const reviews = rec.settings.builtin ? this.factReviews(root, docs, now) : { observations: [], errors: [] };
+    const observations = [...deadlines.observations, ...reviews.observations];
+    const errors = [...deadlines.errors, ...reviews.errors];
     cov.add(`${docs.length} Markdown files indexed (${idx.indexed} updated, ${idx.removed} removed)`, idx.errors.length || errors.length ? "partial" : observations.length ? "complete" : "empty", observations.length, 1, [...idx.errors.map((e) => `${e.path}: ${e.error}`), ...errors].slice(0, 5).join("; ") || undefined);
     return { coverage: cov.finish(), observations };
+  }
+
+  /**
+   * Inbox items for facts past their Review date, read from the Brain as part of the data folder's Source refresh.
+   * The spec runs them only on the Reader: gate the data folder's whole refresh, never this list alone,
+   * because an item whose fact is no longer observed is resolved.
+   */
+  private factReviews(root: IndexRoot, docs: readonly string[], now: Date) {
+    return scanFactReviews(root.path, docs, now);
   }
 
   private store(rec: ConnectionRecord, result: SyncResult, previous: Coverage | null): ApplyResult {

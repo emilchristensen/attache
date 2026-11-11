@@ -4,9 +4,9 @@ import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
 import { MAX_DETAILED_PER_TYPE } from "../agents/context.ts";
 import { parseStateEntries, parseStateLine, slugify, type StateEntry } from "./markdown.ts";
+import { isPastReview } from "./review-date.ts";
 import { RECALL_EXCLUDE, queryTerms, search, termCoverage, type SearchHit } from "./search.ts";
 
-export const DEFAULT_STALE_DAYS = 60;
 const EVIDENCE_PER_ENTRY = 3;
 const DAY_MS = 86_400_000;
 
@@ -18,13 +18,13 @@ const LOCAL_KINDS = new Set(["capture", "note", "conversation", "agent-session"]
  * The deterministic half of a memory audit: every current fact in curated
  * memory with its age, source and the newer documents that mention its note.
  * It counts and flags; judging whether newer evidence contradicts a fact is
- * left to whoever reads the report. Read-only.
+ * left to whoever reads the report. A fact is stale only when it is past its
+ * Review date: age alone says nothing about whether it still holds. Read-only.
  */
-export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } = {}): MemoryAuditReport {
+export function auditMemory(app: App, opts: { now?: Date } = {}): MemoryAuditReport {
   const root = app.memory.dataRoot;
   if (!root) throw new Error("Choose a data folder first");
   const now = opts.now ?? new Date();
-  const staleDays = opts.staleDays ?? DEFAULT_STALE_DAYS;
   const docs = app.memory.listDocuments({ area: "memory", root: "data", limit: 2000 }).filter((d) => d.relPath !== "memory/self.md");
   const loaded = sessionIndexed(docs);
   const findings: MemoryAuditReport["findings"] = [];
@@ -38,7 +38,7 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
     const state = parseStateEntries(raw);
     const subjects = new Map<string, number>();
     for (const s of state) subjects.set(s.subject.toLowerCase(), (subjects.get(s.subject.toLowerCase()) ?? 0) + 1);
-    const entries = state.map((s) => auditEntry(app, s, now, staleDays, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
+    const entries = state.map((s) => auditEntry(app, s, now, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
     findings.push({
       relPath: d.relPath,
       absPath: join(root, d.relPath),
@@ -57,7 +57,6 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
   return {
     generatedAt: nowIso(),
     dataFolder: root,
-    staleDays,
     notes: findings.length,
     entries: findings.reduce((n, f) => n + f.entries.length, 0),
     counts,
@@ -66,11 +65,11 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
   };
 }
 
-function auditEntry(app: App, s: StateEntry, now: Date, staleDays: number, duplicate: boolean, evidence: Mention[]): MemoryAuditEntry {
+function auditEntry(app: App, s: StateEntry, now: Date, duplicate: boolean, evidence: Mention[]): MemoryAuditEntry {
   const dated = Date.parse(`${s.date}T00:00:00Z`);
   const ageDays = Math.max(0, Math.floor((now.getTime() - dated) / DAY_MS));
   const flags: string[] = [];
-  if (ageDays > staleDays) flags.push("stale");
+  if (isPastReview(s.review, now)) flags.push("stale");
   if (!s.source) flags.push("unsourced");
   else if (sourceMissing(app, s.source)) flags.push("missing-source");
   if (duplicate) flags.push("duplicate-subject");

@@ -20,7 +20,6 @@ const EntryShape = z.object({
 
 const AuditShape = {
   generatedAt: z.string(),
-  staleDays: z.number().int(),
   notes: z.number().int(),
   entries: z.number().int(),
   counts: z.record(z.string(), z.number().int()),
@@ -30,7 +29,7 @@ const AuditShape = {
 
 const DESCRIPTION = [
   "Audit the owner's Brain for facts that may have stopped being true. Writes nothing.",
-  "Returns every current fact in every note with its date, Review date (the day after which it should be checked again, or null), age, source and flags (stale, unsourced, missing-source, duplicate-subject), plus newer passages that name the note: where a contradiction would show up.",
+  "Returns every current fact in every note with its date, Review date (the day after which it should be checked again, or null), age, source and flags (stale: past its Review date; unsourced; missing-source; duplicate-subject), plus newer passages that name the note: where a contradiction would show up.",
   "Notes whose first fact every new session reads come first. The flags are leads, not verdicts: read the newer passages before judging a fact.",
 ].join(" ");
 

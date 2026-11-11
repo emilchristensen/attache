@@ -98,19 +98,19 @@ describe("saving from a coding agent", () => {
 
 describe("auditing memory", () => {
   it("flags stale, unsourced and missing-source facts, and points at newer evidence", async () => {
-    // A fact dated long ago, from a capture that has since been deleted.
+    // A fact past its Review date, from a capture that has since been deleted.
     await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Helios budget", facts: [{ subject: "Budget", value: "40k EUR" }] }] });
     const rel = "memory/projects/helios-budget.md";
     const file = join(svc.dataDir, rel);
-    writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\): 40k EUR/, "**Budget** (2026-01-05): 40k EUR — source: (capture: evidence/captures/2026-01-05-gone.md, observed 2026-01-05)"));
+    writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\): 40k EUR/, "**Budget** (2026-01-05, review 2026-02-01): 40k EUR — source: (capture: evidence/captures/2026-01-05-gone.md, observed 2026-01-05)"));
     svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, rel);
     // Newer evidence that disagrees.
     const captured = "evidence/captures/helios-steering.md";
     writeFileSync(join(svc.dataDir, captured), `---\ntype: capture\ntitle: Helios steering\ncaptured_at: ${new Date().toISOString()}\n---\n# Helios steering\n\n> Helios budget was cut to 25k EUR at the steering meeting.\n`);
     svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, captured);
-    const audit = await svc.get(`/memory/audit?staleDays=60`);
+    const audit = await svc.get("/memory/audit");
     const helios = audit.findings.find((f: any) => f.relPath === rel);
-    expect(helios.entries[0]).toMatchObject({ subject: "Budget", value: "40k EUR", date: "2026-01-05" });
+    expect(helios.entries[0]).toMatchObject({ subject: "Budget", value: "40k EUR", date: "2026-01-05", review: "2026-02-01" });
     expect(helios.entries[0].flags).toEqual(expect.arrayContaining(["stale", "missing-source"]));
     expect(helios.entries[0].newerEvidence.map((e: any) => e.relPath)).toContain(captured);
     // Notes created without a source are unsupported, not contradicted.
@@ -161,10 +161,6 @@ describe("auditing memory", () => {
     const audit = await svc.get("/memory/audit");
     expect(audit.possibleDuplicates).toContainEqual({ title: expect.any(String), relPaths: ["memory/notes/kitchen-renovation-2.md", "memory/notes/kitchen-renovation.md"] });
   });
-
-  it("validates staleDays", async () => {
-    expect((await svc.call("GET", "/memory/audit?staleDays=0")).status).toBe(400);
-  });
 });
 
 describe("the jarvis save and audit commands", () => {
@@ -212,13 +208,20 @@ describe("the jarvis save and audit commands", () => {
 
   it("audit prints a readable report with absolute paths, and JSON on request", async () => {
     const text = (await cli(["audit"])).stdout;
-    expect(text).toMatch(/^Jarvis memory audit: \d+ notes, \d+ current facts, stale after 60 days/);
+    expect(text).toMatch(/^Jarvis memory audit: \d+ notes, \d+ current facts, stale = past its Review date/);
     expect(text).toContain(`## Helios budget [project, first fact in every session's index]`);
-    expect(text).toMatch(/- Budget \(2026-01-05, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);
+    expect(text).toMatch(/- Budget \(2026-01-05, review 2026-02-01, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);
     expect(text).toContain(`newer: ${svc.dataDir}/evidence/captures/`);
-    const json = JSON.parse((await cli(["audit", "--json", "--stale-days", "400"])).stdout);
-    expect(json.staleDays).toBe(400);
+    const json = JSON.parse((await cli(["audit", "--json"])).stdout);
+    expect(json).not.toHaveProperty("staleDays");
     expect(existsSync(json.findings[0].absPath)).toBe(true);
+  });
+
+  it("audit has no day threshold to set", async () => {
+    expect((await cli(["audit", "--help"])).stdout).not.toContain("stale-days");
+    const r = await cli(["audit", "--stale-days", "400"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("Unknown option --stale-days");
   });
 
   it("audit leaves the data folder untouched", async () => {

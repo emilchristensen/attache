@@ -26,7 +26,6 @@ export interface AuditFindingView {
 /** A memory audit report with every file named by one path, so a reader can open it without knowing Jarvis's roots. */
 export interface AuditView {
   generatedAt: string;
-  staleDays: number;
   notes: number;
   entries: number;
   counts: Record<string, number>;
@@ -37,7 +36,6 @@ export interface AuditView {
 export function auditView(r: MemoryAuditReport, pathOf: PathOf): AuditView {
   return {
     generatedAt: r.generatedAt,
-    staleDays: r.staleDays,
     notes: r.notes,
     entries: r.entries,
     counts: { ...r.counts },
@@ -63,7 +61,7 @@ export function renderAudit(v: AuditView, opts: { dataFolder?: string } = {}): s
     .filter(([, n]) => n > 0)
     .map(([k, n]) => `${k} ${n}`)
     .join(" · ");
-  const lines = [`Jarvis memory audit: ${v.notes} notes, ${v.entries} current facts, stale after ${v.staleDays} days`, ...(opts.dataFolder ? [`Data folder: ${opts.dataFolder}`] : []), `Flags: ${counts || "none"}`];
+  const lines = [`Jarvis memory audit: ${v.notes} notes, ${v.entries} current facts, stale = past its Review date`, ...(opts.dataFolder ? [`Data folder: ${opts.dataFolder}`] : []), `Flags: ${counts || "none"}`];
   if (v.possibleDuplicates.length) {
     lines.push("", "Possible duplicate notes:");
     for (const d of v.possibleDuplicates) lines.push(`- ${d.title}: ${d.paths.join(", ")}`);

@@ -475,6 +475,15 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Helix budget");
   const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
   await expect(hit).toContainText("unverified");
+
+  // Refreshing the data folder raises one inbox item for the overdue fact, and none for the other.
+  await page.goto(`${stack.url}/connections`);
+  await page.locator('[data-connection="vault-data"]').getByRole("button", { name: "Refresh now" }).click();
+  await expect(page.getByText("Refresh started")).toBeVisible();
+  await page.goto(`${stack.url}/`);
+  const facts = page.getByRole("region", { name: "Facts to check" });
+  await expect(facts.getByText("Review date passed: “Budget” in Helix rollout")).toBeVisible();
+  await expect(facts.getByText(/“Status” in Helix rollout/)).toHaveCount(0);
 });
 
 test("auto-accept: switched on for one Harness in Settings, kept across reload, and its saves are marked", async () => {

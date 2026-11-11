@@ -99,13 +99,13 @@ The structure already separates state from events, so the audit is about whether
 
     ${cli} audit
 
-It lists every current fact with its date, age, source and flags, plus newer passages about that fact.
+It lists every current fact with its date, Review date, age, source and flags, plus newer passages about that fact.
 Notes marked "first fact in every session's index" are the ones every new agent session reads; check those first, because a stale fact there misleads every session.
-Pass \`--stale-days <n>\` to change when a fact counts as stale (60 by default) and \`--json\` for structured output.
+Pass \`--json\` for structured output.
 
 The flags are leads, not verdicts:
 
-- \`stale\`: not re-dated for longer than the threshold. Old is not the same as wrong.
+- \`stale\`: past its Review date, the day it was due to be checked again. A fact without a Review date is never stale, however old it is.
 - \`unsourced\`: nothing records where the fact came from.
 - \`missing-source\`: the file it cites is gone.
 - \`duplicate-subject\`: the note has two current values for one subject.
@@ -115,7 +115,7 @@ The counts line is deterministic; quote it, so the next audit can be compared wi
 
 ## 2. Judge each fact
 
-For every fact with newer evidence, and every stale fact in the session index, read the newer documents at the cited lines and put it in one pile:
+For every fact with newer evidence, and every stale fact, read the newer documents at the cited lines and put it in one pile:
 
 - **Contradicted:** something newer disagrees. This is rot, and the headline.
 - **Unsupported:** nothing backs it up. Often it was true once and the evidence was never written down.

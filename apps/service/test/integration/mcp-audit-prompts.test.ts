@@ -60,6 +60,9 @@ describe("the MCP audit tool", () => {
     expect(budget).toMatchObject({ value: "90k EUR", date: "2026-06-01", source: null });
     expect(budget.flags).toContain("unsourced");
     expect(r.data.counts["missing-source"]).toBe(1);
+    // Months old, but neither fact has a Review date: neither is stale, and no day threshold is reported.
+    expect([...owner.flags, ...budget.flags]).not.toContain("stale");
+    expect(r.data).not.toHaveProperty("staleDays");
     // The identity record is not audited.
     expect(r.data.findings.map((f) => f.path)).not.toContain("memory/self.md");
 
@@ -133,6 +136,9 @@ describe("the MCP save and audit prompts", () => {
     expect(text).toMatch(/only after the owner says yes/i);
     expect(text).toMatch(/through the `save` tool/i);
     expect(text).toMatch(/call the `audit` tool again/i);
+    expect(text).toContain("`stale`: past its Review date");
+    expect(text).toContain("A fact without a Review date is never stale");
+    expect(text).not.toMatch(/stale-days|60 days/);
     expect(await promptText(client, "audit", { topic: "Tamarind" })).toContain("Limit the audit to: Tamarind");
   });
 

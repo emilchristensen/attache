@@ -13,7 +13,7 @@ import { isPastReview } from "../memory/review-date.ts";
 import { json } from "../core/db.ts";
 import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
 import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
-import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
+import { auditMemory } from "../memory/audit.ts";
 import { expandHome } from "../platform/locations.ts";
 import { recentChanges } from "../memory/recent-changes.ts";
 import { revertChange } from "../memory/revert.ts";
@@ -141,12 +141,10 @@ export function registerDataRoutes(r: Router, app: App) {
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });
-  r.get("/memory/audit", (c) => {
+  r.get("/memory/audit", () => {
     requireFeature(app, "recall");
     requireData(app);
-    const days = Number(c.query("staleDays") ?? DEFAULT_STALE_DAYS);
-    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new HttpError(400, "invalid_request", "staleDays must be a whole number of days between 1 and 3650");
-    return auditMemory(app, { staleDays: days });
+    return auditMemory(app);
   });
   r.get("/memory/recent-changes", (c): RecentChangesResult => {
     requireFeature(app, "recall");

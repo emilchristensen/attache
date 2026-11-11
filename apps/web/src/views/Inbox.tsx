@@ -20,9 +20,10 @@ interface Briefing {
 const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar" };
 const GROUPS: Array<{ id: string; title: string; match: (k: string) => boolean }> = [
   { id: "deadlines", title: "Deadlines", match: (k) => /due|overdue|deadline/.test(k) },
-  { id: "reviews", title: "Review queue", match: (k) => /review/.test(k) },
+  { id: "reviews", title: "Review queue", match: (k) => /review/.test(k) && k !== "fact-review" },
   { id: "meetings", title: "Meetings", match: (k) => /meeting|invite|event/.test(k) },
   { id: "replies", title: "Pending replies", match: (k) => /reply|mention|dm/.test(k) },
+  { id: "facts", title: "Facts to check", match: (k) => k === "fact-review" },
   { id: "other", title: "Other", match: () => true },
 ];
 
