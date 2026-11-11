@@ -93,7 +93,8 @@ Test services keep their state, Brain and Harness home in folders whose names ha
 To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
 A pull request with a failing check shows the failure on GitHub.
-For the failure to block merging, `main` needs a branch protection rule or ruleset that requires every `checks` and `install` job, which GitHub offers for private repositories only on a paid plan.
+Branch protection on `main` requires `checks (ubuntu-latest)`, `checks (macos-latest)` and `checks (windows-latest)` to pass before a pull request can merge.
+The `install` jobs are not required, so a slow or flaky installer run does not hold up a merge; check them before a release.
 
 ## Fixtures versus live
 
