@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { resolvePaths } from "../core/paths.ts";
@@ -8,6 +8,7 @@ import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } f
 import { serviceManagerFor } from "../platform/service-manager/index.ts";
 import { clearSecrets, createSecretStore } from "../platform/secret-store/index.ts";
 import { commandWrappers, type WrapperSpec } from "../platform/wrapper.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Commands the installer and uninstaller run, so that everything that
@@ -60,7 +61,7 @@ function writeExecutable(path: string, text: string, mode: number): void {
   const tmp = `${dirname(path)}/.${randomUUID()}.tmp`;
   writeFileSync(tmp, text, { mode });
   chmodSync(tmp, mode);
-  renameSync(tmp, path);
+  replaceWith(tmp, path);
 }
 
 /** `jarvis wrappers install|uninstall`: the `jarvis` and `jarvis-uninstall` commands on the owner's PATH. */

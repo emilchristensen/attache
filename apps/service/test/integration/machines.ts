@@ -1,9 +1,14 @@
+import { vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
-import { startTestService, type TestService } from "./harness.ts";
+import { startTestService, testFolder, type TestService } from "./harness.ts";
+
+// A test with several Machines runs git dozens of times, one process after another; on Windows each
+// start is slow, and a whole multi-Machine test took over 30 s while the suite ran in parallel there.
+vi.setConfig({ testTimeout: 120_000 });
 
 /** One Machine in a multi-Machine test: a whole service with its own state, Brain copy and clock. */
 export interface TestMachine extends TestService {
@@ -45,7 +50,7 @@ const gitEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: 
  * fails loudly if Jarvis ever tried to rewrite what another Machine pushed.
  */
 export function createRemote(): TestRemote {
-  const dir = mkdtempSync(join(tmpdir(), "jarvis-it-remote-"));
+  const dir = testFolder("remote");
   const url = join(dir, "brain.git");
   const offline = join(dir, "brain.git.offline");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env: gitEnv, encoding: "utf8", stdio: "pipe" }).trim();

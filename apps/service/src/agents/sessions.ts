@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { App } from "../app.ts";
@@ -16,6 +16,8 @@ import { removeContextFiles, writeContextFiles } from "./context-files.ts";
 import { repositoryKey } from "../memory/repositories.ts";
 import { gitRemoteUrls } from "./git-remotes.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
+import { shellPath } from "../platform/shell-command.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 import { queueConsolidation } from "../consolidation/consolidate.ts";
 
 interface SessionRow {
@@ -221,7 +223,7 @@ export class AgentSessions {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
     writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    renameSync(tmp, file);
+    replaceWith(tmp, file);
   }
 
   private userName(): string {
@@ -363,7 +365,7 @@ export class AgentSessions {
   /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
   private searchCommand(): string {
     const entry = process.argv[1] ? resolve(process.argv[1]) : "";
-    const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+    const q = (s: string) => shellPath(s);
     if (!/jarvis-service\.mjs$/.test(entry)) return `jarvis search --state-dir ${q(this.stateDir)}`;
     return `${q(stablePath(process.execPath))} ${q(stablePath(entry))} search --state-dir ${q(this.stateDir)}`;
   }

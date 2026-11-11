@@ -1,6 +1,7 @@
-import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * The hand-off between agent hooks and the service. A hook copies the
@@ -53,7 +54,7 @@ export function spoolCapture(stateDir: string, input: Omit<SpoolRecord, "v" | "i
   const record: SpoolRecord = { v: 1, id, ...input, copy, at: new Date().toISOString(), ...(error ? { error } : {}) };
   const tmp = join(dir, `.${id}.tmp`);
   writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
-  renameSync(tmp, join(dir, `${id}.json`));
+  replaceWith(tmp, join(dir, `${id}.json`));
   return record;
 }
 

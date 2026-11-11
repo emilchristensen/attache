@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { defaultStateDir } from "../core/paths.ts";
 import { platformLocations } from "../platform/locations.ts";
+import { shellPath } from "../platform/shell-command.ts";
 import { HooksFileError, ourHooks, replaceFile, ourNamedHooks, readSettings, sameHooks, withNamedHooks, withOurHooks, withoutNamedHooks, withoutOurHooks, writeSettings, type HookSpec } from "./hooks-config.ts";
 import type { AgentIntegration } from "./integrations.ts";
 import { McpRegistration } from "./mcp-registration.ts";
@@ -14,14 +15,12 @@ export function agentHome(): string {
   return process.env.JARVIS_AGENT_HOME || platformLocations().home;
 }
 
-const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
 /**
  * Prefer the installer's `current` symlink over a versioned app folder, so
  * hooks keep working after an upgrade replaces `app/<version>`.
  */
 export function stablePath(p: string): string {
-  const m = /^(.*)\/app\/([^/]+)\/(.*)$/.exec(p);
+  const m = /^(.*)[\\/]app[\\/]([^\\/]+)[\\/](.*)$/.exec(p);
   if (!m) return p;
   const [, prefix, version, rest] = m as unknown as [string, string, string, string];
   const current = join(prefix, "current");
@@ -106,7 +105,7 @@ export class AgentHooks {
   }
 
   /** Only hooks that point at this Jarvis instance's state folder are ours; another instance's are foreign. */
-  isOurs = (command: string): boolean => command.includes("jarvis-agent-hook") && command.includes(quote(this.stateDir));
+  isOurs = (command: string): boolean => command.includes("jarvis-agent-hook") && command.includes(shellPath(this.stateDir));
 
   /** Owner key for `named` hook files and the MCP server's name: plain "jarvis" for the default install, distinct for any other instance. */
   ownerKey(): string {
@@ -117,7 +116,7 @@ export class AgentHooks {
     if (!a.hooks) return [];
     const node = stablePath(process.execPath);
     const script = stablePath(hookScript());
-    return a.hooks.specs((event) => `${quote(node)} ${quote(script)} ${a.kind} ${event} --state-dir ${quote(this.stateDir)}`);
+    return a.hooks.specs((event) => `${shellPath(node)} ${shellPath(script)} ${a.kind} ${event} --state-dir ${shellPath(this.stateDir)}`);
   }
 
   private installed(a: AgentIntegration, settings: Record<string, unknown>): HookSpec[] {

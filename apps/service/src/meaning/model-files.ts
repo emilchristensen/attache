@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { MODEL_FILE_NAMES, modelBytes, type MeaningModel, type ModelFileRole } from "./model.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * A downloaded model lives in `<state>/models/<model id>/`, never in the Brain.
@@ -64,7 +65,7 @@ export async function downloadModel(modelsDir: string, model: MeaningModel, opts
     writeFileSync(join(staging, MANIFEST), JSON.stringify(manifest, null, 2));
     const dir = modelDir(modelsDir, model);
     rmSync(dir, { recursive: true, force: true });
-    renameSync(staging, dir);
+    replaceWith(staging, dir);
   } catch (e) {
     rmSync(staging, { recursive: true, force: true });
     throw e;

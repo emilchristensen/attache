@@ -8,6 +8,7 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { antigravityTranscript, claudeTranscript, codexRollout } from "../fixtures/agents/transcripts.ts";
 import { spoolDir } from "../../src/agents/spool.ts";
+import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 import { callTool, mcpClients } from "./mcp-client.ts";
 
 const HOME = process.env.JARVIS_AGENT_HOME!;
@@ -28,7 +29,8 @@ function runHook(settingsPath: string, event: string, input: Record<string, unkn
   const command = opts.named
     ? (Object.values(s).flatMap((v: any) => v?.[event] ?? []) as Array<{ command: string }>).find((h) => h.command.includes("jarvis-agent-hook"))!.command
     : (s.hooks[event] as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
-  return execFileSync("/bin/sh", ["-lc", command], { input: JSON.stringify(input), env: { ...process.env, HOME, ...opts.env }, encoding: "utf8" });
+  const harness = settingsPath.includes(".codex") ? "codex" : settingsPath.includes(".gemini") ? "antigravity" : "claude-code";
+  return runInShell(hookShell(harness), command, { input: JSON.stringify(input), env: { ...process.env, ...homeEnv(HOME), ...opts.env } });
 }
 
 async function until<T>(fn: () => T | undefined | null | false, ms = 15_000): Promise<T> {
@@ -49,7 +51,8 @@ beforeAll(async () => {
   for (const d of [".claude", ".codex", ".gemini/config"]) mkdirSync(join(HOME, d), { recursive: true });
   writeFileSync(join(HOME, ".claude/settings.json"), JSON.stringify(FOREIGN_CLAUDE, null, 2));
   mkdirSync(join(HOME, ".local/bin"), { recursive: true });
-  writeFileSync(join(HOME, ".local/bin/agy"), "");
+  // The Antigravity command-line tool, as this operating system names an executable.
+  writeFileSync(join(HOME, ".local/bin", process.platform === "win32" ? "agy.exe" : "agy"), "");
   fx = await startFixtureServer();
   installFixtureModel(fx);
   svc = await startTestService();
@@ -114,8 +117,10 @@ describe("coding-agent sessions", () => {
   it("the agent's deeper-recall command finds the session log, never the raw transcript", async () => {
     const main = join(import.meta.dirname, "../../src/main.ts");
     const hits = JSON.parse(execFileSync(process.execPath, [main, "search", "hook copies transcript budget", "--state-dir", svc.stateDir, "--json"], { encoding: "utf8" })) as Array<{ file: string; lines: [number, number] }>;
-    expect(hits.some((h) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/.test(h.file))).toBe(true);
-    expect(hits.some((h) => h.file.includes("/transcripts/"))).toBe(false);
+    // The CLI prints this operating system's own absolute paths.
+    const files = hits.map((h) => h.file.replace(/\\/g, "/"));
+    expect(files.some((f) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/.test(f))).toBe(true);
+    expect(files.some((f) => f.includes("/transcripts/"))).toBe(false);
     expect(hits[0]!.file.startsWith(svc.dataDir)).toBe(true);
   });
 
@@ -149,8 +154,8 @@ describe("coding-agent sessions", () => {
   it("a session summarised in a project's repository starts that project's next sessions", async () => {
     const repo = join(work, "orion-checkout");
     mkdirSync(repo, { recursive: true });
-    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
-    execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/orion.git"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/orion.git"], { cwd: repo });
     const transcript = join(work, "s-orion.jsonl");
     writeFileSync(transcript, claudeTranscript("s-orion", repo, [["How do we migrate the ledger?", "We decided to migrate the ledger table by table."]]));
     runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: "s-orion", transcript_path: transcript, cwd: repo, reason: "exit" });

@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { repositoryKey } from "../memory/repositories.ts";
 import { gitRemoteUrls } from "./git-remotes.ts";
 import { agentsDir, contextFile } from "./spool.ts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * The session context files the service writes and the session-start hook
@@ -106,5 +107,5 @@ function writeIfChanged(file: string, text: string): void {
   if (existsSync(file) && readFileSync(file, "utf8") === text) return;
   const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
   writeFileSync(tmp, text, { mode: 0o600 });
-  renameSync(tmp, file);
+  replaceWith(tmp, file);
 }

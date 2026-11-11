@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
 
 /**
@@ -132,8 +133,9 @@ function projectLines(p: ProjectSection, shown: Shown, c: ContextInput): string[
   if (sessions.length) {
     out.push("", "#### Recent sessions in this project");
     for (const s of sessions) {
-      // Session logs are their own documents: nest their headings under this one and make links absolute.
-      const body = s.body.replace(/^#{1,5} /gm, "###### ").replace(/\]\(transcripts\//g, `](${c.dataFolder}/evidence/sessions/transcripts/`);
+      // Session logs are their own documents: nest their headings under this one and make links absolute,
+      // in this operating system's form and in angle brackets, so a folder with spaces still makes one link.
+      const body = s.body.replace(/^#{1,5} /gm, "###### ").replace(/\]\(transcripts\/([^)\s]+)\)/g, (_, rest: string) => `](<${join(c.dataFolder, "evidence", "sessions", "transcripts", ...rest.split("/"))}>)`);
       out.push("", `##### ${s.date} ${s.heading}`, "", body);
     }
   }

@@ -13,7 +13,7 @@ import type { Logger } from "../../core/log.ts";
 import { findClaudeCli } from "../../models/providers.ts";
 import { platformLocations } from "../../platform/locations.ts";
 import { preApprovingRules, serverPrefix, type CallOutcome, type PlannedCall } from "./plan.ts";
-import { CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
+import { claudeLaunch, CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
 
 const exec = promisify(execFile);
 
@@ -77,8 +77,9 @@ export function projectSlug(dir: string): string {
  */
 export function resolveSpill(text: string, configDir = claudeConfigDir(), cwd = CONNECTOR_CWD): string {
   if (!text.trimStart().startsWith("<persisted-output>")) return text;
-  const m = /Full output saved to: (\/\S+\/tool-results\/[A-Za-z0-9._-]+\.(?:txt|json))\s/.exec(text);
-  if (!m || m[1]!.split("/").includes("..")) return text;
+  // An absolute path on this line, POSIX or Windows (`C:\…`), which may contain spaces.
+  const m = /Full output saved to: ((?:\/|[A-Za-z]:[\\/]).*?[\\/]tool-results[\\/][A-Za-z0-9._-]+\.(?:txt|json))\s/.exec(text);
+  if (!m || m[1]!.split(/[\\/]/).includes("..")) return text;
   try {
     const root = realpathSync(join(configDir, "projects", projectSlug(realpathSync(cwd))));
     const file = realpathSync(m[1]!);
@@ -179,9 +180,10 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
     async account(signal) {
       const bin = findClaudeCli();
       if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+      const launch = claudeLaunch(bin, ["auth", "status", "--json"]);
       let stdout: string;
       try {
-        ({ stdout } = await exec(bin, ["auth", "status", "--json"], { signal, timeout: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
+        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
       } catch (e) {
         const text = String((e as { stdout?: string }).stdout ?? "") || (e as Error).message;
         if (/"loggedIn"\s*:\s*false/.test(text) || /not logged in/i.test(text)) throw new RemoteError("Claude Code is not signed in. Run `claude` once and sign in with your claude.ai account.", "unauthorized");

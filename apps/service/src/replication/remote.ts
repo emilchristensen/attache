@@ -14,11 +14,13 @@ const WINDOWS_PATH = /^[A-Za-z]:[\\/]/;
 export function normalizeRemote(input: string): string {
   const value = input.trim();
   if (!value) throw new RemoteError("Name the repository, for example owner/jarvis-brain.");
-  if (/[\s\p{Cc}]/u.test(value) || value.startsWith("-")) throw new RemoteError("A repository address cannot start with a dash or hold spaces.");
+  if (/\p{Cc}/u.test(value) || value.startsWith("-")) throw new RemoteError("A repository address cannot start with a dash or hold control characters.");
+  // A folder may have spaces in its name, as owners' folders often do; an address may not.
+  if (isAbsolute(value) || WINDOWS_PATH.test(value)) return value;
+  if (/\s/.test(value)) throw new RemoteError("A repository address cannot hold spaces.");
   const short = GITHUB_SHORT.exec(value);
   if (short) return `https://github.com/${short[1]}/${short[2]!.replace(/\.git$/, "")}.git`;
   if (SCP_LIKE.test(value)) return value;
-  if (isAbsolute(value) || WINDOWS_PATH.test(value)) return value;
   let url: URL;
   try {
     url = new URL(value);

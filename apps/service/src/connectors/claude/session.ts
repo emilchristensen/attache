@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteError } from "../http.ts";
 import { findClaudeCli } from "../../models/providers.ts";
+import { launchTool, UnlaunchableToolError } from "../../platform/launch.ts";
 import { deepEqual, fullToolName, type CallOutcome, type PlannedCall, type ServerInfo } from "./plan.ts";
 
 export const CONNECTOR_MODEL = "claude-haiku-4-5-20251001";
@@ -114,7 +115,8 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
   if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
   const cwd = CONNECTOR_CWD;
   mkdirSync(cwd, { recursive: true });
-  const child = spawn(bin, sessionArgs(req), {
+  const launch = claudeLaunch(bin, sessionArgs(req));
+  const child = spawn(launch.command, launch.args, {
     cwd,
     env: {
       ...process.env,
@@ -129,6 +131,16 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
     stdio: ["pipe", "pipe", "pipe"],
   });
   return drive(child, req);
+}
+
+/** Start the Claude Code CLI; one Jarvis cannot start is not configured, never a crash. */
+export function claudeLaunch(bin: string, args: string[]) {
+  try {
+    return launchTool(bin, args);
+  } catch (e) {
+    if (e instanceof UnlaunchableToolError) throw new RemoteError(e.message, "not_configured");
+    throw e;
+  }
 }
 
 function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Promise<SessionOutput> {

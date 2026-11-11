@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { registerSecret } from "../../core/log.ts";
 import type { SecretStore } from "./types.ts";
+import { replaceWith } from "../replace-file.ts";
 
 /**
  * Secrets in a file only the owner can read (mode 0600) under the service
@@ -28,7 +29,7 @@ export class FileSecretStore implements SecretStore {
     }
     const tmp = `${this.file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
-    renameSync(tmp, this.file);
+    replaceWith(tmp, this.file);
   }
 
   async get(key: string) {

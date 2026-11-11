@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { accessOutsideOwner } from "../helpers.ts";
+import { join, sep } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
 let svc: TestService;
@@ -184,7 +185,7 @@ describe("the terminal commands", () => {
     const r = await cli(["audit", "--json"]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    expect(statSync(join(svc.stateDir, "cli-token")).mode & 0o777).toBe(0o600);
+    expect(accessOutsideOwner(join(svc.stateDir, "cli-token"))).toEqual([]);
     const clients = svc.app.db.prepare("select name, kind from clients where revoked_at is null").all() as Array<{ name: string; kind: string }>;
     expect(clients).toContainEqual({ name: "Jarvis CLI", kind: "cli" });
   });
@@ -215,7 +216,7 @@ describe("the terminal commands", () => {
     expect(text).toContain(`## Orion migration [project, in a project's session context]`);
     expect(text).toContain(`## Helios budget [project]`);
     expect(text).toMatch(/- Budget \(2026-01-05, review 2026-02-01, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);
-    expect(text).toContain(`newer: ${svc.dataDir}/evidence/captures/`);
+    expect(text).toContain(`newer: ${join(svc.dataDir, "evidence", "captures")}${sep}`);
     const json = JSON.parse((await cli(["audit", "--json"])).stdout);
     expect(json).not.toHaveProperty("staleDays");
     expect(existsSync(json.findings[0].absPath)).toBe(true);

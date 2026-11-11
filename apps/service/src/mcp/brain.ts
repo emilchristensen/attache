@@ -1,5 +1,6 @@
 import type { Config, MeaningState, MeaningStatus, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
 import { meaningNote } from "../meaning/note.ts";
+import { join } from "node:path";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 import { auditView, type AuditView, type PathOf } from "../memory/audit-view.ts";
@@ -158,7 +159,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
  */
 async function brainPaths(c: ServiceClient, used: string[]): Promise<PathOf> {
   const roots = used.some((r) => r !== "data") ? new Map((await c.get<Array<{ root: string; path: string }>>("/memory/roots")).map((r) => [r.root, r.path])) : new Map<string, string>();
-  return (root, relPath) => (root === "data" ? relPath : `${(roots.get(root) ?? root).replace(/\/+$/, "")}/${relPath}`);
+  return (root, relPath) => (root === "data" ? relPath : join(roots.get(root) ?? root, ...relPath.split("/")));
 }
 
 /** The whole note, or the inclusive 1-based line range asked for, clamped to the note's end. */

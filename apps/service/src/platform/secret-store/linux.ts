@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Env } from "../locations.ts";
+import { launchTool } from "../launch.ts";
 import { locateTool } from "../tools.ts";
 import { FileSecretStore } from "./file.ts";
 import { SecretServiceStore } from "./secret-service.ts";
@@ -22,7 +23,8 @@ const STORE_TIMEOUT_MS = 30_000;
 const READ_TIMEOUT_MS = 10_000;
 
 function secretTool(tool: string, args: string[], opts: { input?: string; timeoutMs: number }) {
-  const r = spawnSync(tool, args, { encoding: "utf8", input: opts.input ?? "", timeout: opts.timeoutMs, stdio: ["pipe", "pipe", "pipe"] });
+  const launch = launchTool(tool, args);
+  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", input: opts.input ?? "", timeout: opts.timeoutMs, stdio: ["pipe", "pipe", "pipe"] });
   const stderr = (r.stderr ?? "").trim().split("\n")[0] ?? "";
   if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") return { ok: false, stdout: "", why: `the Secret Service did not answer within ${opts.timeoutMs / 1000} seconds` };
   if (r.error) return { ok: false, stdout: "", why: r.error.message };

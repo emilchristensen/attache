@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +8,7 @@ import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureModel, type FixtureModel, type ModelCall } from "../fixtures/fixture-model.ts";
 import { claudeTranscript } from "../fixtures/agents/transcripts.ts";
+import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 
 const HOME = process.env.JARVIS_AGENT_HOME!;
 const ORION = "memory/projects/orion-migration.md";
@@ -36,8 +36,9 @@ function runSessionEnd(service: TestService, sessionId: string, transcript: stri
   const settings = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
   const command = (settings.hooks.SessionEnd as Array<{ hooks: Array<{ command: string }> }>)
     .flatMap((g) => g.hooks)
-    .find((h) => h.command.includes("jarvis-agent-hook") && h.command.includes(service.stateDir))!.command;
-  execFileSync("/bin/sh", ["-lc", command], { input: JSON.stringify({ session_id: sessionId, transcript_path: transcript, cwd: work, reason: "exit" }), env: { ...process.env, HOME }, encoding: "utf8" });
+    // On Windows the command names the state folder with forward slashes.
+    .find((h) => h.command.includes("jarvis-agent-hook") && h.command.replace(/\\/g, "/").includes(service.stateDir.replace(/\\/g, "/")))!.command;
+  runInShell(hookShell("claude-code"), command, { input: JSON.stringify({ session_id: sessionId, transcript_path: transcript, cwd: work, reason: "exit" }), env: { ...process.env, ...homeEnv(HOME) } });
 }
 
 const jobsOf = (service: TestService, kind: string, sessionId: string): JobView[] =>

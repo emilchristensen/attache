@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Review state is the owner's inbox and Proposals with their decisions. It
@@ -77,7 +78,7 @@ export function writeReviewFile(root: string, rel: string, value: unknown): void
   mkdirSync(dirname(abs), { recursive: true });
   const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
   writeFileSync(tmp, encodeReviewFile(value));
-  renameSync(tmp, abs);
+  replaceWith(tmp, abs);
 }
 
 /** The parsed file, or null when it is missing or not JSON. */

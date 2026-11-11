@@ -15,6 +15,8 @@ import { join } from "node:path";
 import { CAPTURE_EVENTS, spoolCapture, type HookEvent } from "./spool.ts";
 import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
+import { currentOs } from "../platform/os.ts";
+import { platformLocations } from "../platform/locations.ts";
 
 const MAX_INPUT_BYTES = 1_000_000;
 
@@ -43,13 +45,13 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
     return existsSync(file) ? profile.sessionStartOutput(readFileSync(file, "utf8")) : "";
   }
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
-    const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, env.HOME ?? "") ?? null;
+    const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;
     spoolCapture(stateDir, { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath });
   }
   return "";
 }
 
-const isMain = process.argv[1] && /jarvis-agent-hook\.mjs$|agents\/jarvis-agent-hook\.ts$/.test(process.argv[1]);
+const isMain = process.argv[1] && /jarvis-agent-hook\.mjs$|agents[\\/]jarvis-agent-hook\.ts$/.test(process.argv[1]);
 if (isMain) {
   try {
     const out = runHook(process.argv.slice(2));

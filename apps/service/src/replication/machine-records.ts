@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { MACHINE_NAME_MAX } from "@jarvis/contracts";
+import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Every Machine's record, kept in the Brain so all Machines read the same:
@@ -50,7 +51,7 @@ function writeAtomic(abs: string, content: string): void {
   mkdirSync(dirname(abs), { recursive: true });
   const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
   writeFileSync(tmp, content);
-  renameSync(tmp, abs);
+  replaceWith(tmp, abs);
 }
 
 function readJson(abs: string): unknown {

@@ -3,7 +3,9 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { startTestService, type TestService } from "./harness.ts";
+import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 
 // Each check runs the session-start hook through a login shell, many times per test, which is slow under load.
 vi.setConfig({ testTimeout: 120_000 });
@@ -20,7 +22,7 @@ const ORION = "memory/projects/orion-migration.md";
 let svc: TestService;
 let stopped = false;
 
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" });
 
 /** A local repository whose remotes are `remotes`; nothing is ever fetched. */
 function repo(name: string, remotes: Record<string, string>): string {
@@ -35,7 +37,7 @@ function repo(name: string, remotes: Record<string, string>): string {
 function sessionStart(cwd: string, env: Record<string, string> = {}): string {
   const s = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
   const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
-  const out = execFileSync("/bin/sh", ["-lc", command], { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, HOME, ...env }, encoding: "utf8" });
+  const out = runInShell(hookShell("claude-code"), command, { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, ...homeEnv(HOME), ...env } });
   return out.trim() ? (JSON.parse(out).hookSpecificOutput.additionalContext as string) : "";
 }
 
@@ -198,7 +200,7 @@ globalThis.fetch = async () => { note("fetch"); throw new Error("offline"); };
 `,
     );
     const atlas = repo("atlas-offline", { origin: "https://gitlab.example.com/platform/atlas.git" });
-    const ctx = sessionStart(atlas, { NODE_OPTIONS: `--import=${probe}`, NETWORK_LOG: log });
+    const ctx = sessionStart(atlas, { NODE_OPTIONS: `--import=${pathToFileURL(probe).href}`, NETWORK_LOG: log });
     expect(ctx).toContain("### This session's project: Atlas");
     expect(readFileSync(log, "utf8")).toBe("loaded\n");
   });

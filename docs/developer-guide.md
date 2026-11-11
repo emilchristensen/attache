@@ -18,8 +18,10 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
 
 ## Requirements
 
-- macOS or Linux for lint, typecheck, Vitest and the browser journeys.
+- macOS, Linux or Windows for lint, typecheck, Vitest and the browser journeys.
   The install test needs macOS on Apple silicon, or Linux on x86_64 with a systemd user manager.
+- On Windows, Git for Windows: the tests run Claude Code's hook commands through Git Bash, as Claude Code does, and Codex's through cmd.exe.
+  `JARVIS_TEST_GIT_BASH` points the tests at a Git Bash outside `C:\Program Files\Git`.
 - `apps/service/test/linux-desktop.test.ts` runs the Linux secret store and notifications anywhere, against stand-ins for `secret-tool` and `notify-send`.
   `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `JARVIS_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
 - Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
@@ -55,8 +57,8 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS and Linux (`ubuntu-latest` and `macos-latest`).
-Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, with these steps:
+`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
+Each platform is one job, `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)`, with these steps:
 
 | Step | Run it locally |
 | --- | --- |
@@ -71,17 +73,20 @@ A separate job, `install (ubuntu-latest)`, runs the install test (see "Install t
 Every check runs even when an earlier one fails, so a run lists all failures at once.
 On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
 Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+`.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
+Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
+Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
 
 To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
 A pull request with a failing check shows the failure on GitHub.
-For the failure to block merging, `main` needs a branch protection rule or ruleset that requires both `checks` jobs, which GitHub offers for private repositories only on a paid plan.
+For the failure to block merging, `main` needs a branch protection rule or ruleset that requires every `checks` and `install` job, which GitHub offers for private repositories only on a paid plan.
 
 ## Fixtures versus live
 
 Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
 The service talks to it only when `JARVIS_TEST_ENDPOINTS=1` and `JARVIS_FIXTURE_URL` are set; normal operation never reads those variables.
-The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
+The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` (on Windows `fake-claude.cmd`, an npm-style shim around it, as `npm install -g` installs Claude Code there) through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
 

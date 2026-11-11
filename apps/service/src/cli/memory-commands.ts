@@ -2,6 +2,7 @@ import type { MemoryAuditReport } from "@jarvis/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "./client.ts";
 import { auditView, renderAudit } from "../memory/audit-view.ts";
+import { join } from "node:path";
 
 /**
  * What the read-only memory commands need from the terminal. There is no save
@@ -27,7 +28,7 @@ export async function auditCommand(argv: string[], paths: ServicePaths, io: CliI
   const report = await client.get<MemoryAuditReport>("/memory/audit");
   if (argv.includes("--json")) return io.out(JSON.stringify(report));
   const roots = new Map((await client.get<Array<{ root: string; path: string }>>("/memory/roots")).map((r) => [r.root, r.path]));
-  io.out(renderAudit(auditView(report, (root, rel) => `${(roots.get(root) ?? root).replace(/\/+$/, "")}/${rel}`), { dataFolder: report.dataFolder }));
+  io.out(renderAudit(auditView(report, (root, rel) => join(roots.get(root) ?? root, ...rel.split("/"))), { dataFolder: report.dataFolder }));
 }
 
 /** The first argument `jarvis audit` does not take, if any; `--state-dir <folder>` is the global option every command takes. */

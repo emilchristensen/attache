@@ -6,11 +6,13 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tempDir } from "../helpers.ts";
 import { startFixtureServer, type FixtureServer } from "./fixture-server.ts";
 
 export const MAIN = join(import.meta.dirname, "../../src/main.ts");
-export const FAKE_PLATFORM = join(import.meta.dirname, "fake-platform.mjs");
+/** A URL, because `--import` reads a Windows path's drive letter as a URL scheme. */
+export const FAKE_PLATFORM = pathToFileURL(join(import.meta.dirname, "fake-platform.mjs")).href;
 
 export type EnvChanges = Record<string, string | undefined>;
 
