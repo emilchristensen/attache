@@ -27,12 +27,14 @@ const SCRIPT = /\.(?:c|m)?js$/i;
 /**
  * How to start a command-line tool found on disk, without a shell.
  *
- * On Windows, npm installs tools as `.cmd` batch files, which Node starts only
- * through cmd.exe. cmd.exe cannot pass arguments with line breaks and expands
- * `%` inside them, so a shim is resolved to the script it wraps and that
- * script runs with this Node instead.
+ * A Node script runs with this Node, so it needs no executable bit or `#!`
+ * line, which Windows ignores. On Windows, npm installs tools as `.cmd` batch
+ * files, which Node starts only through cmd.exe; cmd.exe cannot pass
+ * arguments with line breaks and expands `%` inside them, so a shim is
+ * resolved to the script it wraps and that script runs with this Node instead.
  */
 export function launchTool(path: string, args: string[], os: Os = currentOs()): Launch {
+  if (SCRIPT.test(path)) return { command: process.execPath, args: [path, ...args] };
   if (os !== "windows" || !/\.(?:cmd|bat)$/i.test(path)) return { command: path, args };
   const { dirname, join } = pathFor("windows");
   let text: string;

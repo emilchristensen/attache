@@ -13,7 +13,9 @@ set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export JARVIS_INSTANCE="${JARVIS_INSTANCE:-default}"
 PREFIX="${JARVIS_PREFIX:-$("$HERE/bin/jarvis" paths installPrefix)}"
-STATE="$PREFIX/state"
+# The same state folder the installer chose: `jarvis-uninstall` passes it on.
+STATE="${JARVIS_STATE_DIR:-${JARVIS_PREFIX:+$JARVIS_PREFIX/state}}"
+[ -n "$STATE" ] || STATE="$("$HERE/bin/jarvis" paths stateDir)"
 JARVIS="$PREFIX/current/bin/jarvis"
 NODE="$PREFIX/current/runtime/node"
 DELETE=0

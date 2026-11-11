@@ -145,11 +145,41 @@ export interface ReplicationView {
   cause: string | null;
   lastCheckedAt: string | null;
   lastPushedAt: string | null;
+  /** The last time this Machine had the other Machines' changes and had sent its own; setup and join count. */
+  upToDateAt: string | null;
 }
 
 const RepositoryName = z.string().trim().min(1, "Name the repository").max(500);
 export const ReplicationSetupInput = z.object({ remote: RepositoryName });
 export type ReplicationSetupInput = z.infer<typeof ReplicationSetupInput>;
+/**
+ * A Machine as every Machine sees it: its record in the Brain. Standby and the
+ * Preferred Reader live in the Brain, so they read the same everywhere.
+ */
+export interface ReplicatedMachineView {
+  id: string;
+  name: string;
+  /** May take over as Reader when the Reader goes silent. */
+  standby: boolean;
+  /** The Machine whose Dashboard is asking. */
+  thisMachine: boolean;
+  /** When this Machine's last change reached the Brain's history here; null when none has yet. */
+  lastChangeAt: string | null;
+}
+
+export interface ReplicationMachinesView {
+  /** This Machine first. With Replication off, only this Machine. */
+  machines: ReplicatedMachineView[];
+  /** The id of the Machine that should be the Reader whenever it is online; null when none is chosen. */
+  preferredReader: string | null;
+}
+
+export const ReplicationStandbyInput = z.object({ standby: z.boolean() });
+export type ReplicationStandbyInput = z.infer<typeof ReplicationStandbyInput>;
+/** `machine`: a listed Machine's id, or null for no Preferred Reader. */
+export const PreferredReaderInput = z.object({ machine: z.uuid("Choose one of the listed Machines").nullable() });
+export type PreferredReaderInput = z.infer<typeof PreferredReaderInput>;
+
 /** `path`: the empty folder to clone into; the configured data folder when left out. */
 export const ReplicationJoinInput = z.object({ remote: RepositoryName, path: z.string().trim().min(1).max(1000).optional() });
 export type ReplicationJoinInput = z.infer<typeof ReplicationJoinInput>;
@@ -390,7 +420,7 @@ export interface MemoryAuditEntry {
   ageDays: number;
   source: string | null;
   line: number;
-  /** Deterministic problems with this entry: `stale`, `unsourced`, `missing-source`, `duplicate-subject`. */
+  /** Deterministic problems with this entry: `stale` (past its Review date), `unsourced`, `missing-source`, `duplicate-subject`. */
   flags: string[];
   /** Documents that mention the note and changed after this entry was dated: where a contradiction would show up. */
   newerEvidence: Array<{ root: string; relPath: string; title: string; startLine: number; endLine: number; snippet: string; modified: string }>;
@@ -399,7 +429,6 @@ export interface MemoryAuditEntry {
 export interface MemoryAuditReport {
   generatedAt: string;
   dataFolder: string;
-  staleDays: number;
   notes: number;
   entries: number;
   /** Counts per flag, so two runs can be compared. */

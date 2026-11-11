@@ -4,6 +4,7 @@ import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
+import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
 import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
@@ -20,11 +21,19 @@ interface Status {
   node: string;
   stateDir: string;
   dataFolder: string | null;
-  credentialStore: string;
+  credentialStore: "keychain" | "secret-service" | "file";
+  /** Why this store is in use when it is not the operating system's own. */
+  credentialStoreNote: string | null;
   documents: number;
   jobs: Array<{ status: string; n: number }>;
   schedules: Array<{ id: string; label: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
 }
+
+const CREDENTIAL_STORES: Record<Status["credentialStore"], string> = {
+  keychain: "macOS Keychain",
+  "secret-service": "Secret Service (desktop keyring)",
+  file: "Local file (0600)",
+};
 
 function Schedules({ config, onSaved }: { config: Config; onSaved: () => void }) {
   const [s, setS] = useState(config.schedules);
@@ -99,7 +108,7 @@ function ThisMachine() {
   return (
     <div className="card stack">
       <h3>This Machine</h3>
-      <p className="small muted">Session logs and connector snapshots written here carry this name, so you can tell which computer they came from.</p>
+      <p className="small muted">Session logs and connector snapshots written here carry this name, and with Replication on the other Machines list this one by it, so you can tell which computer a change came from.</p>
       {machine.loading && !machine.data && <Loading lines={1} />}
       <ErrorState error={machine.error} retry={machine.reload} />
       {machine.data && (
@@ -171,7 +180,7 @@ function Backups() {
   return (
     <div className="card stack">
       <h3>Backup and export</h3>
-      <p className="small muted">A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts). Credentials stay in the Keychain and are not exported; reconnect them after a restore.</p>
+      <p className="small muted">A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts). Credentials stay in the secret store and are not exported; reconnect them after a restore.</p>
       <div>
         <button disabled={busy !== null} onClick={() => run("bk", () => post("/backups").then(list.reload), "Backup created")}>
           {busy ? "Creating…" : "Create backup now"}
@@ -217,6 +226,7 @@ export function SettingsView() {
           </>
         )}
         <ThisMachine />
+        <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
         <AutoAccept />
         <MeaningSearchCard />
         <Clients />
@@ -237,7 +247,10 @@ export function SettingsView() {
               <dt>Service state</dt>
               <dd className="mono">{status.data.stateDir}</dd>
               <dt>Credentials</dt>
-              <dd>{status.data.credentialStore === "keychain" ? "macOS Keychain" : "Local file (0600)"}</dd>
+              <dd data-credential-store={status.data.credentialStore}>
+                {CREDENTIAL_STORES[status.data.credentialStore]}
+                {status.data.credentialStoreNote && <div className="small muted">{status.data.credentialStoreNote}</div>}
+              </dd>
               <dt>Indexed files</dt>
               <dd>{status.data.documents}</dd>
               <dt>Jobs</dt>

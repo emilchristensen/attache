@@ -19,7 +19,7 @@ flowchart LR
     Actions[Drafts, approvals, execution]
     Conn[Connector adapters]
     Models[Model adapters]
-    Creds[(Keychain credential store)]
+    Creds[(System secret store)]
   end
   API --> Registry --> Sched --> Jobs
   Jobs --> Conn & Models & Memory
@@ -39,7 +39,7 @@ flowchart LR
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); a 0600 file elsewhere for now | Outside the vault and outside frontend storage. |
+| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool` (values on stdin and stdout, never argv); a 0600 file where none is reachable and on Windows for now | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
 | Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
@@ -70,9 +70,10 @@ Imported folders stay where they are.
 The import preview lists what will be read, what is skipped and that zero files in the source folder change.
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
-Service state (`~/Library/Application Support/Jarvis/state` on macOS): `jarvis.sqlite`, logs, runtime metadata, backups.
+Service state (`~/Library/Application Support/Jarvis/state` on macOS, `~/.local/state/jarvis` on Linux): `jarvis.sqlite`, logs, runtime metadata, backups.
 Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>` on macOS.
+Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux.
+Both system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
 
 ## Platform modules
 
@@ -80,19 +81,25 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
-| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service (not yet) | logon task (not yet) |
-| `secret-store/` | `SecretStore`: get, set, delete, keys | Keychain | owner-only file until Secret Service arrives | owner-only file until Credential Manager arrives |
-| `notifier/` | `Notifier`: notify | Notification Center via `osascript` | none yet | none yet |
+| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | logon task (not yet) |
+| `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | owner-only file until Credential Manager arrives |
+| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | none yet |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
 | `shell-command.ts` | `shellPath`: a path quoted for the command lines a Harness runs (hooks, the search command in the session context) | single quotes | single quotes | double quotes and forward slashes, which Git Bash (Claude Code) and cmd.exe (Codex) read alike |
-| `launch.ts` | `launchTool`: how to start a tool found on disk without a shell | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
+| `launch.ts` | `launchTool`: how to start a tool found on disk without a shell; a Node script runs with Jarvis's Node | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
 The installer and uninstaller are thin shell scripts that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
+
+The Linux service is a systemd user unit in `~/.config/systemd/user`.
+`Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
+Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Jarvis wrote it to (an `XDG_CONFIG_HOME` the login does not share).
+`systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Jarvis tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
+The service's output goes to `service.out.log` and `service.err.log` in the state folder's `logs`, as launchd's does on macOS.
 
 ### Machine identity and per-Machine evidence
 
@@ -106,10 +113,13 @@ Files written before this change keep their `<date>.md` name; search and the aud
 ## Replication
 
 Replication keeps every Machine's copy of the Brain the same through a git repository (ADR 0001); the whole Brain replicates (ADR 0002).
-The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication` and `POST /replication/check` expose it (`jarvis replication` calls them).
+The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication`, `POST /replication/check` and `POST /replication/off` expose it (`jarvis replication` calls them).
+The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.tsx`) and the join option on the first setup screen use the same endpoints and refresh on the `replication.changed` event.
 
-- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, and the last status.
+- **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, the last status, and when a check last left the Machine up to date (`upToDateAt`).
   No row means off.
+  Switching off deletes the row and nothing else: the data folder, its `.git` and the remote stay as they are.
+  Setup on a Jarvis-managed repository whose history the remote shares (fetched into a scratch ref, `refs/jarvis/candidate`) resumes instead of refusing, and the next check merges both sides.
   A data folder other than the one Replication was set up for reads as blocked.
 - **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
   It refuses a remote whose `main` already has commits.
@@ -144,6 +154,11 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
 - **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<jarvis> git-credential --state-dir <state> --connection <id>`.
   The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `JARVIS_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
   Other remotes use the Machine's own git setup (ssh keys, or nothing for a folder).
+- **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
+  They are JSON, so search never indexes them, and they replicate like any file.
+  `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
+  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
+  Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
@@ -285,6 +300,9 @@ The attention engine follows these rules:
   Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
   The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
+- Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
+  A correction or a later Review date drops the fact from the next refresh, which resolves its item.
+  The spec runs these items only on the Reader; until the Reader exists every Machine raises them.
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery
@@ -387,7 +405,7 @@ Proposals live in the Brain, one file each under `review/proposals/`, so they re
 The file records the item, the reason, the evidence, the Harness session, the Machine it was made on and every decision made on it; the `proposals` table is only this Machine's index of those files (`memory/proposal-index.ts`), refreshed from `Replication.onPulled` and rebuilt when the data folder is opened.
 Proposals that earlier versions kept as `memory_changes` rows with `change = 'proposal'` are written as files the first time the data folder is opened (`memory/proposal-legacy.ts`), then dropped from the change log; one-fact rows (`{ value, newDoc }`) become the equivalent one-fact item, so they still apply and reject.
 The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID` in the environment the Harness gives the MCP server (`mcp/agent-env.ts`).
-`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
+`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale` (past its Review date, `isPastReview`; there is no age threshold), `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
 The document a fact cites as its source, archives under `evidence/archive/`, generated deliverables, and history or undated prose in other notes are never offered, because none of them can overturn the fact.
 It counts; the audit prompt has the agent judge contradictions and propose corrections through the MCP `save` tool, which the owner confirms.

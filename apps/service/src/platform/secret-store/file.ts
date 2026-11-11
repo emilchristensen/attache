@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { registerSecret } from "../../core/log.ts";
 import type { SecretStore } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
@@ -6,13 +6,15 @@ import { replaceWith } from "../replace-file.ts";
 /**
  * Secrets in a file only the owner can read (mode 0600) under the service
  * state folder. The fallback where no operating-system secret store is
- * reachable, and what tests use.
+ * reachable, and what tests use. The file is removed once it holds nothing.
  */
 export class FileSecretStore implements SecretStore {
   readonly kind = "file" as const;
+  readonly note: string | null;
   private readonly file: string;
-  constructor(file: string) {
+  constructor(file: string, note: string | null = null) {
     this.file = file;
+    this.note = note;
   }
 
   private read(): Record<string, string> {
@@ -21,6 +23,10 @@ export class FileSecretStore implements SecretStore {
   }
 
   private write(data: Record<string, string>): void {
+    if (!Object.keys(data).length) {
+      rmSync(this.file, { force: true });
+      return;
+    }
     const tmp = `${this.file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
     replaceWith(tmp, this.file);
@@ -36,7 +42,9 @@ export class FileSecretStore implements SecretStore {
     this.write({ ...this.read(), [key]: value });
   }
   async delete(key: string) {
-    const { [key]: _removed, ...rest } = this.read();
+    const data = this.read();
+    if (!(key in data)) return;
+    const { [key]: _removed, ...rest } = data;
     this.write(rest);
   }
   async keys() {

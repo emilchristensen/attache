@@ -50,6 +50,12 @@ describe("jarvis replication", () => {
     expect(existsSync(join(folder, "README.md"))).toBe(true);
     const status = JSON.parse((await cli(pc, ["replication", "status", "--json"])).stdout);
     expect(status).toMatchObject({ status: "up_to_date", remote: remote.url });
+    expect((await cli(pc, ["replication", "status"])).stdout).toContain("Last up to date: ");
+
+    const off = await cli(pc, ["replication", "off"]);
+    expect(off.stderr).toBe("");
+    expect(off.stdout).toContain("Replication is off");
+    expect(existsSync(join(folder, "README.md"))).toBe(true);
   });
 
   it("says what to change when the repository address holds a token", async () => {

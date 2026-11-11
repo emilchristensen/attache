@@ -12,6 +12,8 @@ export interface ReplicationSettings {
   readonly cause: string | null;
   readonly checkedAt: string | null;
   readonly pushedAt: string | null;
+  /** The last check that left this Machine up to date; setup and join count as one. */
+  readonly upToDateAt: string | null;
 }
 
 interface Row {
@@ -23,6 +25,7 @@ interface Row {
   cause: string | null;
   checked_at: string | null;
   pushed_at: string | null;
+  up_to_date_at: string | null;
 }
 
 export class ReplicationSettingsStore {
@@ -33,7 +36,7 @@ export class ReplicationSettingsStore {
   }
 
   get(): ReplicationSettings | null {
-    const r = this.db.prepare("select data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at from replication where id = 1").get() as Row | undefined;
+    const r = this.db.prepare("select data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at, up_to_date_at from replication where id = 1").get() as Row | undefined;
     if (!r) return null;
     return Object.freeze({
       dataFolder: r.data_folder,
@@ -44,6 +47,7 @@ export class ReplicationSettingsStore {
       cause: r.cause,
       checkedAt: r.checked_at,
       pushedAt: r.pushed_at,
+      upToDateAt: r.up_to_date_at,
     });
   }
 
@@ -51,11 +55,11 @@ export class ReplicationSettingsStore {
   enable(s: Pick<ReplicationSettings, "dataFolder" | "remote" | "enabledAt" | "committedSeq" | "pushedAt">): ReplicationSettings {
     this.db
       .prepare(
-        `insert into replication (id, data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at) values (1, ?, ?, ?, ?, 'up_to_date', null, ?, ?)
+        `insert into replication (id, data_folder, remote, enabled_at, committed_seq, status, cause, checked_at, pushed_at, up_to_date_at) values (1, ?, ?, ?, ?, 'up_to_date', null, ?, ?, ?)
          on conflict(id) do update set data_folder = excluded.data_folder, remote = excluded.remote, enabled_at = excluded.enabled_at, committed_seq = excluded.committed_seq,
-           status = excluded.status, cause = null, checked_at = excluded.checked_at, pushed_at = excluded.pushed_at`,
+           status = excluded.status, cause = null, checked_at = excluded.checked_at, pushed_at = excluded.pushed_at, up_to_date_at = excluded.up_to_date_at`,
       )
-      .run(s.dataFolder, s.remote, s.enabledAt, s.committedSeq, s.enabledAt, s.pushedAt);
+      .run(s.dataFolder, s.remote, s.enabledAt, s.committedSeq, s.enabledAt, s.pushedAt, s.enabledAt);
     return this.get()!;
   }
 
@@ -65,6 +69,13 @@ export class ReplicationSettingsStore {
 
   /** Record the outcome of a check. */
   report(outcome: { status: ReplicationSettings["status"]; cause: string | null; at: string; pushed: boolean }): void {
-    this.db.prepare("update replication set status = ?, cause = ?, checked_at = ?, pushed_at = case when ? then ? else pushed_at end where id = 1").run(outcome.status, outcome.cause, outcome.at, outcome.pushed ? 1 : 0, outcome.at);
+    this.db
+      .prepare("update replication set status = ?, cause = ?, checked_at = ?, pushed_at = case when ? then ? else pushed_at end, up_to_date_at = case when ? = 'up_to_date' then ? else up_to_date_at end where id = 1")
+      .run(outcome.status, outcome.cause, outcome.at, outcome.pushed ? 1 : 0, outcome.at, outcome.status, outcome.at);
+  }
+
+  /** Switch Replication off on this Machine: forget the setup, keep the data folder and its history as they are. */
+  disable(): void {
+    this.db.prepare("delete from replication where id = 1").run();
   }
 }

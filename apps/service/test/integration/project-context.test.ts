@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +6,9 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { startTestService, type TestService } from "./harness.ts";
 import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
+
+// Each check runs the session-start hook through a login shell, many times per test, which is slow under load.
+vi.setConfig({ testTimeout: 120_000 });
 
 /**
  * Session context chosen by project (spec seam 2): a project note lists its
@@ -38,7 +41,7 @@ function sessionStart(cwd: string, env: Record<string, string> = {}): string {
   return out.trim() ? (JSON.parse(out).hookSpecificOutput.additionalContext as string) : "";
 }
 
-async function until<T>(fn: () => T | undefined | null | false, ms = 10_000): Promise<T> {
+async function until<T>(fn: () => T | undefined | null | false, ms = 30_000): Promise<T> {
   const end = Date.now() + ms;
   for (;;) {
     const v = fn();

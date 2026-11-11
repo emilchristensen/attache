@@ -8,8 +8,10 @@ import { Git, GitError, gitVersion } from "./git.ts";
 import { authorEnv, BrainRepo } from "./brain-repo.ts";
 import { commitMessage, machineTrailer } from "./commit-message.ts";
 import { normalizeRemote, RemoteError } from "./remote.ts";
-import { cloneBrain, isEmptyFolder, prepareRepository, remoteFailure, remoteHasBrain, ReplicationSetupError } from "./setup.ts";
+import { cloneBrain, isEmptyFolder, prepareRepository, remoteFailure, remoteHasBrain, ReplicationSetupError, sharesHistoryWith } from "./setup.ts";
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
+import { ReplicatedMachines } from "./machines.ts";
+import { isMachineRecordPath } from "./machine-records.ts";
 import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
 
 /** A save is committed and pushed this long after the last write, so a burst of writes makes one commit. */
@@ -42,7 +44,7 @@ export interface ReplicationDeps {
 
 type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean };
 
-const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null });
+const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null, upToDateAt: null });
 
 /**
  * Keeps this Machine's copy of the Brain the same as the others through a git
@@ -52,6 +54,8 @@ const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause:
  */
 export class Replication {
   readonly settings: ReplicationSettingsStore;
+  /** The Machines sharing the Brain, standby flags and the Preferred Reader, as recorded in the Brain. */
+  readonly machines: ReplicatedMachines;
   private readonly deps: ReplicationDeps;
   private started = false;
   /** Wall-clock time the service started, compared with lock files' times (not the Clock, which drives timers). */
@@ -70,6 +74,27 @@ export class Replication {
   constructor(deps: ReplicationDeps) {
     this.deps = deps;
     this.settings = new ReplicationSettingsStore(deps.db);
+    this.machines = new ReplicatedMachines({
+      root: () => this.activeRoot(),
+      machine: deps.machine,
+      clock: deps.clock,
+      lastChangeBy: (root, id) => this.repo(root).lastChangeBy(id),
+      written: () => {
+        this.noteWrite();
+        this.deps.onChange?.();
+      },
+    });
+  }
+
+  /** The data folder Replication is on for, unless it is off or the data folder moved. */
+  private activeRoot(): string | null {
+    const s = this.settings.get();
+    return s && !this.folderMoved(s) ? s.dataFolder : null;
+  }
+
+  /** This Machine was renamed: its record in the Brain says the new name from the next commit on. */
+  machineRenamed(): void {
+    this.machines.recordThisMachine();
   }
 
   // ---- what other parts of the service plug in ------------------------------
@@ -90,7 +115,7 @@ export class Replication {
     const s = this.settings.get();
     if (!s) return OFF;
     const moved = this.folderMoved(s);
-    return { status: moved ? "blocked" : s.status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt };
+    return { status: moved ? "blocked" : s.status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt };
   }
 
   // ---- triggers ---------------------------------------------------------------
@@ -99,6 +124,7 @@ export class Replication {
     this.started = true;
     this.startedAtMs = Date.now();
     if (!this.settings.get()) return;
+    this.machines.recordThisMachine();
     this.soon();
     this.arm();
   }
@@ -106,12 +132,16 @@ export class Replication {
   /** Stop the timers and let a running check finish, without waiting long on a remote that does not answer. */
   async stop(): Promise<void> {
     this.started = false;
-    for (const t of [this.commitTimer, this.checkTimer, this.soonTimer, this.retryTimer]) if (t) this.deps.clock.clearTimeout(t);
-    this.commitTimer = this.checkTimer = this.soonTimer = this.retryTimer = null;
+    this.clearTimers();
     if (!this.running) return;
     let timer: NodeJS.Timeout | undefined;
     await Promise.race([this.running, new Promise<void>((done) => (timer = setTimeout(done, STOP_WAIT_MS)).unref())]);
     clearTimeout(timer);
+  }
+
+  private clearTimers(): void {
+    for (const t of [this.commitTimer, this.checkTimer, this.soonTimer, this.retryTimer]) if (t) this.deps.clock.clearTimeout(t);
+    this.commitTimer = this.checkTimer = this.soonTimer = this.retryTimer = null;
   }
 
   /** The service wrote to the Brain: commit and push once writes have been quiet for a while. */
@@ -288,6 +318,8 @@ export class Replication {
   }
 
   private announce(changed: readonly string[], notices: readonly MergeNotice[]): void {
+    // Another Machine's name, standby flag or the Preferred Reader changed: the Dashboard lists them.
+    if (changed.some(isMachineRecordPath)) this.deps.onChange?.();
     for (const l of this.pulledListeners) {
       try {
         l(changed);
@@ -353,8 +385,12 @@ export class Replication {
       const remote = this.remote(remoteInput);
       await this.refuseRemote(remote);
       const git = new Git({ cwd: root });
-      if (await remoteHasBrain(git, remote, this.deps.seams)) throw new ReplicationSetupError(409, "remote_has_brain", "That repository already holds a Brain. Join it from this Machine instead, into an empty folder.");
+      if (await remoteHasBrain(git, remote, this.deps.seams)) {
+        if (!(await sharesHistoryWith(git, remote, this.deps.seams))) throw new ReplicationSetupError(409, "remote_has_brain", "That repository already holds a Brain. Join it from this Machine instead, into an empty folder.");
+        return this.resume(git, root, remote);
+      }
       prepareRepository(git, remote);
+      this.machines.recordThisMachine(root);
       const repo = new BrainRepo(git, this.deps.seams);
       const machine = this.machineRef();
       const latest = this.deps.latestSeq();
@@ -372,6 +408,22 @@ export class Replication {
   }
 
   /**
+   * Switch Replication on again on a Machine that had it before: this copy and
+   * the repository share their history, so the next check merges what changed
+   * on either side while it was off, like any other check.
+   */
+  private async resume(git: Git, root: string, remote: string): Promise<ReplicationView> {
+    prepareRepository(git, remote);
+    this.machines.recordThisMachine(root);
+    const at = this.deps.clock.now().toISOString();
+    // Saves made while off are committed by file, as git sees them: the change log has no mark of where Replication stopped.
+    this.settings.enable({ dataFolder: root, remote, enabledAt: at, committedSeq: this.deps.latestSeq(), pushedAt: null });
+    this.switchedOn();
+    await this.cycle();
+    return this.view();
+  }
+
+  /**
    * Join a Brain another Machine set up: clone it into `target`, which must be
    * empty, then `open` it as this Machine's data folder (which builds the index).
    */
@@ -384,7 +436,10 @@ export class Replication {
       open(target);
       const at = this.deps.clock.now().toISOString();
       this.settings.enable({ dataFolder: target, remote, enabledAt: at, committedSeq: this.deps.latestSeq(), pushedAt: null });
-      return this.switchedOn();
+      const view = this.switchedOn();
+      // Sent with the next commit, so the other Machines list this one.
+      this.machines.recordThisMachine(target);
+      return view;
     });
   }
 
@@ -402,6 +457,22 @@ export class Replication {
       this.deps.log.error("could not back up a folder a join refused", { folder: target, error: (e as Error).message });
       return new ReplicationSetupError(409, "not_empty", `${refusal} Backing it up failed too (${(e as Error).message}); nothing in it was changed.`);
     }
+  }
+
+  /**
+   * Switch Replication off on this Machine. The data folder, its notes and its
+   * history stay exactly as they are, and saves carry on locally; nothing is
+   * sent or fetched until Replication is set up again.
+   */
+  async switchOff(): Promise<ReplicationView> {
+    if (this.busy) throw new ReplicationSetupError(409, "busy", "Replication is being set up. Wait for it to finish.");
+    if (!this.settings.get()) return this.view();
+    this.clearTimers();
+    this.settings.disable();
+    this.failures = 0;
+    await this.running;
+    this.deps.onChange?.();
+    return this.view();
   }
 
   private switchedOn(): ReplicationView {

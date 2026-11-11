@@ -1,5 +1,7 @@
-import { test, expect, type Page, type ConsoleMessage, type BrowserContext } from "@playwright/test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { test, expect, type Page, type ConsoleMessage, type BrowserContext, type Locator } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -18,6 +20,13 @@ function watch(page: Page) {
 }
 
 test.describe.configure({ mode: "serial" });
+
+/** An empty bare repository standing in for the owner's private GitHub repository. */
+function createBareRemote(): string {
+  const url = join(mkdtempSync(join(tmpdir(), "jarvis-e2e-remote-")), "brain.git");
+  execFileSync("git", ["init", "--bare", "--quiet", "-b", "main", url]);
+  return url;
+}
 
 test.beforeAll(async ({ browser }) => {
   buildAll();
@@ -260,6 +269,15 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
   await expect(card.locator(".mono")).toHaveText(id!);
 });
 
+test("credentials: Settings says which secret store holds them and why", async () => {
+  const page = await open("/settings");
+  // The stack forces the private file, as an install without a system secret store would use.
+  const store = page.locator("[data-credential-store]");
+  await expect(store).toHaveAttribute("data-credential-store", "file");
+  await expect(store).toContainText("Local file (0600)");
+  await expect(store).toContainText("JARVIS_CREDENTIAL_STORE=file chose the file.");
+});
+
 test("meaning-based search: search says it matches keywords only until the owner downloads the model in Settings", async () => {
   const page = await open("/memory");
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
@@ -480,6 +498,15 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Helix budget");
   const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
   await expect(hit).toContainText("unverified");
+
+  // Refreshing the data folder raises one inbox item for the overdue fact, and none for the other.
+  await page.goto(`${stack.url}/connections`);
+  await page.locator('[data-connection="vault-data"]').getByRole("button", { name: "Refresh now" }).click();
+  await expect(page.getByText("Refresh started")).toBeVisible();
+  await page.goto(`${stack.url}/`);
+  const facts = page.getByRole("region", { name: "Facts to check" });
+  await expect(facts.getByText("Review date passed: “Budget” in Helix rollout")).toBeVisible();
+  await expect(facts.getByText(/“Status” in Helix rollout/)).toHaveCount(0);
 });
 
 test("auto-accept: switched on for one Harness in Settings, kept across reload, and its saves are marked", async () => {
@@ -545,6 +572,91 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
   await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
   await expect(page.getByText("Reconnected")).toBeVisible();
+});
+
+/** Select Check now and wait until the check has finished: the button reads "Checking…" meanwhile. */
+async function checkNow(card: Locator) {
+  await card.getByRole("button", { name: "Check now" }).click();
+  await expect(card.getByRole("button", { name: "Check now" })).toBeEnabled();
+}
+
+test("replication: set up in Settings, joined from another Machine's setup, watched, blocked with its cause, and switched off", async ({ browser }) => {
+  const remote = createBareRemote();
+  const page = await open("/settings");
+  const card = page.getByRole("region", { name: "Replication" });
+  await expect(card.getByText("off", { exact: true })).toBeVisible();
+  await card.getByRole("textbox", { name: "Repository" }).fill(remote);
+  await card.getByRole("button", { name: "Set up Replication" }).click();
+  await expect(card.getByText("up to date", { exact: true })).toBeVisible();
+  await expect(card.locator("[data-up-to-date]")).toHaveText("just now");
+  await expect(card.locator(".machine-row")).toHaveCount(1);
+  await expect(card.locator('[data-machine="Home PC"]')).toContainText("this Machine");
+
+  // A second Machine joins from its own setup screen, into an empty folder.
+  const other = await startStack({ port: 7612 });
+  const otherCtx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  try {
+    const second = await otherCtx.newPage();
+    watch(second);
+    await second.goto(other.pairUrl());
+    await second.getByRole("textbox", { name: /Data folder/ }).fill(other.dataDir);
+    await second.getByText("Already use Jarvis on another Machine?").click();
+    await second.getByRole("textbox", { name: "Repository" }).fill(remote);
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(second.getByRole("heading", { name: "Choose what Jarvis does" })).toBeVisible();
+    expect(readFileSync(join(other.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
+    await second.evaluate(() => fetch("/api/v1/setup/complete", { method: "POST", credentials: "same-origin", headers: { "x-jarvis-client": "1" } }));
+    await second.goto(`${other.url}/settings`);
+    const machineCard = second.locator(".card", { has: second.getByRole("heading", { name: "This Machine" }) });
+    await machineCard.getByRole("textbox", { name: "Name" }).fill("Work Mac");
+    await machineCard.getByRole("button", { name: "Rename" }).click();
+    const theirs = second.getByRole("region", { name: "Replication" });
+    await expect(theirs.getByText("up to date", { exact: true })).toBeVisible();
+    await expect(theirs.locator('[data-machine="Work Mac"]')).toContainText("this Machine");
+    await expect(theirs.locator('[data-machine="Home PC"]')).toBeVisible();
+    // Standby and the Preferred Reader are chosen here and recorded in the Brain.
+    await theirs.getByRole("checkbox", { name: /Standby/ }).click();
+    await expect(theirs.getByRole("checkbox", { name: /Standby/ })).toBeChecked();
+    await expect(theirs.locator('[data-machine="Work Mac"]')).toContainText("standby");
+    await theirs.getByRole("combobox", { name: "Preferred Reader" }).selectOption({ label: "Home PC" });
+    await expect(theirs.locator('[data-machine="Home PC"]')).toContainText("Preferred Reader");
+    await checkNow(theirs);
+    await expect(theirs.getByText("up to date", { exact: true })).toBeVisible();
+
+    // The first Machine sees the second, its standby flag and the Preferred Reader.
+    await checkNow(card);
+    await expect(card.locator('[data-machine="Work Mac"]')).toContainText("standby");
+    await expect(card.locator('[data-machine="Home PC"]')).toContainText("Preferred Reader");
+    await expect(card.getByRole("combobox", { name: "Preferred Reader" })).toHaveValue(/[0-9a-f-]{36}/);
+
+    // A file both Machines changed with no merge rule blocks Replication; the Dashboard says why and what to do.
+    writeFileSync(join(other.dataDir, "plan.txt"), "from the Work Mac\n");
+    await checkNow(theirs);
+    await expect(theirs.getByText("up to date", { exact: true })).toBeVisible();
+    writeFileSync(join(stack.dataDir, "plan.txt"), "from the Home PC\n");
+    await checkNow(card);
+    await expect(card.getByText("blocked", { exact: true })).toBeVisible();
+    const problem = card.locator("[data-replication-problem]");
+    await expect(problem).toContainText("Replication is blocked");
+    await expect(problem).toContainText("plan.txt");
+    await expect(problem).toContainText("What to do:");
+    writeFileSync(join(stack.dataDir, "plan.txt"), "from the Work Mac\n");
+    await checkNow(card);
+    await expect(card.getByText("up to date", { exact: true })).toBeVisible();
+    await expect(problem).toHaveCount(0);
+  } finally {
+    await otherCtx.close();
+    await other.stop();
+  }
+
+  // Switching off asks first, then leaves the Brain in the data folder.
+  await card.getByRole("button", { name: "Switch off" }).click();
+  await expect(card.getByText("Switch Replication off on this Machine?")).toBeVisible();
+  await card.getByRole("group", { name: "Switch Replication off" }).getByRole("button", { name: "Switch off" }).click();
+  await expect(card.getByText("off", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Set up Replication" })).toBeVisible();
+  expect(readFileSync(join(stack.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
+  expect(existsSync(join(stack.dataDir, ".git"))).toBe(true);
 });
 
 test("wording: no view says sync for reading sources; a source offers Refresh now", async () => {

@@ -4,6 +4,7 @@ import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
+import { JoinForm } from "./Replication.tsx";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
@@ -133,6 +134,15 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
           </div>
         )}
       </div>
+      <details className="card join-brain">
+        <summary>
+          <strong>Already use Jarvis on another Machine?</strong>
+          <span className="small muted"> Join its Brain instead of starting a new one.</span>
+        </summary>
+        <div className="join-brain-body">
+          <JoinForm folder={path} primary={false} intro="With Replication set up on your other Machine, Jarvis clones that Brain into the data folder above, which must be empty or new. Leave the import and identity below as they are: they come with the Brain." onDone={onNext} />
+        </div>
+      </details>
       <div className="card stack">
         <h3>Import an existing Markdown folder or Obsidian vault (optional)</h3>
         <p className="small muted">Jarvis reads it in place and cites it. It does not copy, change or move anything in that folder.</p>

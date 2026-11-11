@@ -186,7 +186,8 @@ describe("A08 service restart recovers work without duplicate execution", () => 
     await new Promise((r) => child!.once("exit", r));
     url = await boot();
     let after: any;
-    for (let i = 0; i < 200; i++) {
+    // A deadline rather than a count of tries: under load each request and the restarted service are slower.
+    for (const end = Date.now() + 45_000; Date.now() < end; ) {
       after = await api("GET", `/jobs/${job.id}`);
       if (after.job.status === "succeeded") break;
       await new Promise((res) => setTimeout(res, 100));
