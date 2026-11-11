@@ -159,6 +159,16 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
   `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
   Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
+- **The Reader** (`reader/`, `replication/reader-lease.ts`, `replication/lease-ref.ts`): exactly one Machine runs scheduled Source refresh, briefings and with them the Review-date inbox items.
+  With Replication off, the Machine is its own Reader and nothing changes.
+  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the ref `refs/jarvis/reader` in the Brain's repository, never on a branch.
+  Each write is a commit with an empty tree whose message holds the record, made on top of the previous one, so the ref only moves forward: the push is a compare-and-swap, and a rejected push means another Machine wrote first, so the Machine fetches and decides again.
+  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*`.
+  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); otherwise the lease is left alone.
+  A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
+  The scheduler enqueues scheduled `sync` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
+  A Source refresh the owner starts by hand runs on the Machine they are on.
+  `GET /reader` (and `/status`) returns the Reader as this Machine last heard it, whether it is silent, and `lastRefreshAt`, the last finished Source refresh of every source (an all-sources `sync` job or a briefing), which the holder carries in the lease to the other Machines; `reader.changed` tells the Dashboard.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
@@ -302,7 +312,7 @@ The attention engine follows these rules:
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
-  The spec runs these items only on the Reader; until the Reader exists every Machine raises them.
+  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery

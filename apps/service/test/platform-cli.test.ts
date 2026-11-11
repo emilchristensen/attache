@@ -6,10 +6,10 @@ import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
 
-const MAIN = join(import.meta.dirname, "../src/main.ts");
-// Each test starts the jarvis CLI from source up to a dozen times, one after another, which is slow while other suites share the machine.
+// Each test starts the `jarvis` executable from source several times, which is slow while the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 120_000 });
 
+const MAIN = join(import.meta.dirname, "../src/main.ts");
 /** A URL, because `--import` reads a Windows path's drive letter as a URL scheme. */
 const FAKE_PLATFORM = pathToFileURL(join(import.meta.dirname, "fixtures/fake-platform.mjs")).href;
 

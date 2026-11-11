@@ -1,15 +1,18 @@
-import type { ReplicatedMachineView, ReplicationMachinesView } from "@jarvis/contracts";
+import type { ReaderView, ReplicatedMachineView, ReplicationMachinesView } from "@jarvis/contracts";
 import { put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { READER_EVENTS } from "./ReaderLine.tsx";
 
-function MachineRow({ m, preferred, busy, onStandby }: { m: ReplicatedMachineView; preferred: boolean; busy: boolean; onStandby: (on: boolean) => void }) {
+function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMachineView; preferred: boolean; reader: "active" | "silent" | null; busy: boolean; onStandby: (on: boolean) => void }) {
   return (
     <li className="machine-row" data-machine={m.name}>
       <div className="machine-head">
         <strong className="machine-name">{m.name}</strong>
         {m.thisMachine && <span className="pill accent">this Machine</span>}
-        {preferred && <span className="pill ok">Preferred Reader</span>}
+        {reader === "active" && <span className="pill ok">Reader</span>}
+        {reader === "silent" && <span className="pill warn">Reader, silent</span>}
+        {preferred && <span className="pill">Preferred Reader</span>}
         {m.standby && <span className="pill">standby</span>}
       </div>
       <p className="small muted">
@@ -37,6 +40,7 @@ function MachineRow({ m, preferred, busy, onStandby }: { m: ReplicatedMachineVie
 /** The Machines sharing the Brain, this Machine's standby flag and the Preferred Reader, all recorded in the Brain. */
 export function ReplicationMachines() {
   const list = useResource<ReplicationMachinesView>("/replication/machines", ["replication.changed", "config.changed"]);
+  const reader = useResource<ReaderView>("/reader", READER_EVENTS).data;
   const { busy, run } = useAction();
   const data = list.data;
   const setStandby = (on: boolean) => void run("standby", () => put<ReplicationMachinesView>("/replication/standby", { standby: on }).then(list.setData), on ? "This Machine is on standby" : "This Machine is no longer on standby");
@@ -52,7 +56,7 @@ export function ReplicationMachines() {
         <>
           <ul className="machine-list">
             {data.machines.map((m) => (
-              <MachineRow key={m.id} m={m} preferred={m.id === data.preferredReader} busy={busy !== null} onStandby={setStandby} />
+              <MachineRow key={m.id} m={m} preferred={m.id === data.preferredReader} reader={reader?.machine?.id === m.id ? (reader.silent ? "silent" : "active") : null} busy={busy !== null} onStandby={setStandby} />
             ))}
           </ul>
           <label className="field preferred-reader">
