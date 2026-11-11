@@ -166,9 +166,12 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
 
+`jarvis paths` prints every one of these locations for the computer it runs on, and `jarvis service status` says whether the background service is loaded.
+
 ## Troubleshooting
 
 - *Jarvis service is not reachable:* run `jarvis status`.
+  `jarvis service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
   Logs: `~/Library/Application Support/Jarvis/state/logs`.
 - *Pairing code expired:* run `jarvis pair --open`.

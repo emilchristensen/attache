@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { redact } from "../core/log.ts";
+import { platformLocations } from "../platform/locations.ts";
+import { harnessInstalls } from "../platform/harness-locations.ts";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -37,8 +39,7 @@ export const DEFAULT_MODELS = {
 } as const;
 
 export function findClaudeCli(): string | null {
-  const home = process.env.HOME || homedir();
-  const candidates = [process.env.JARVIS_CLAUDE_BIN, join(home, ".local/bin/claude"), join(home, ".claude/local/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].filter(Boolean) as string[];
+  const candidates = [process.env.JARVIS_CLAUDE_BIN, ...harnessInstalls(platformLocations())["claude-code"].executables].filter(Boolean) as string[];
   return candidates.find((c) => existsSync(c)) ?? null;
 }
 

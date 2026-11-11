@@ -4,7 +4,8 @@ import type { ConnectionKind, FeatureId, JobView } from "@jarvis/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { resolvePaths, type ServicePaths } from "./core/paths.ts";
-import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
+import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
+import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
@@ -41,7 +42,7 @@ export class App {
   readonly instance: string;
   readonly db: Db;
   readonly log: Logger;
-  readonly secrets: CredentialStore;
+  readonly secrets: SecretStore;
   readonly config: ConfigStore;
   readonly memory: MemoryStore;
   readonly connections: ConnectionManager;
@@ -71,7 +72,7 @@ export class App {
     this.instance = opts.instance ?? process.env.JARVIS_INSTANCE ?? "default";
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
-    this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
     this.config = new ConfigStore(this.db);
     this.memory = new MemoryStore(this.db, null, this.instance);
     this.bus.setMaxListeners(500);

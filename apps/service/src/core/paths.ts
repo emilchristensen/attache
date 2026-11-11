@@ -1,6 +1,6 @@
-import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { platformLocations } from "../platform/locations.ts";
 
 /**
  * Service-owned locations. User knowledge lives in the chosen data folder;
@@ -8,7 +8,7 @@ import { mkdirSync } from "node:fs";
  * never inside the vault.
  */
 export interface ServicePaths {
-  /** Root of service state, e.g. ~/Library/Application Support/Jarvis */
+  /** Root of service state, e.g. ~/Library/Application Support/Jarvis/state on macOS. */
   stateDir: string;
   dbFile: string;
   logDir: string;
@@ -18,12 +18,9 @@ export interface ServicePaths {
   modelsDir: string;
 }
 
+/** `JARVIS_STATE_DIR` when set, otherwise this operating system's default (`platform/locations.ts`). */
 export function defaultStateDir(): string {
-  if (process.env.JARVIS_STATE_DIR) return process.env.JARVIS_STATE_DIR;
-  const home = process.env.HOME || homedir();
-  if (platform() === "darwin") return join(home, "Library", "Application Support", "Jarvis", "state");
-  const xdg = process.env.XDG_STATE_HOME || join(home, ".local", "state");
-  return join(xdg, "jarvis");
+  return process.env.JARVIS_STATE_DIR || platformLocations().stateDir;
 }
 
 export function resolvePaths(stateDir = defaultStateDir()): ServicePaths {

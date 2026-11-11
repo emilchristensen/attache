@@ -5,6 +5,7 @@ import { RemoteError } from "./http.ts";
 import { planScan } from "../memory/indexer.ts";
 import { splitFrontmatter } from "../memory/markdown.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
+import { expandHome } from "../platform/locations.ts";
 
 /**
  * Deadlines from Markdown: open tasks with a due date (Obsidian Tasks `📅
@@ -73,7 +74,6 @@ export function scanDeadlines(root: { id: string; path: string }, relPaths: stri
   return { observations, errors };
 }
 
-
 export const vaultAdapter: ConnectorAdapter = {
   kind: "vault",
   secretNames: [],
@@ -88,7 +88,7 @@ export const vaultAdapter: ConnectorAdapter = {
     unavoidableSteps: [],
   },
   async configure(_ctx, fields) {
-    const path = resolve((fields.path ?? "").replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+    const path = resolve(expandHome(fields.path ?? ""));
     if (!fields.path || !existsSync(path) || !statSync(path).isDirectory()) throw new RemoteError(`Folder not found: ${path}`, "error");
     return { path };
   },
