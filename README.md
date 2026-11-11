@@ -15,7 +15,8 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
   Jarvis has no chat box of its own; you ask the Brain from your Harness.
 - The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Claude Desktop and other Harnesses search and read your notes with file and line citations, and save facts and events you confirm inside the Harness, with no token in their configuration.
   A wrap-up prompt records the durable points of a conversation Jarvis cannot capture, such as Claude Desktop's Chat tab, as evidence.
-- Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
+- Memory: import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
+  The Dashboard shows the Brain read-only and takes one-click decisions; notes are added and corrected from a Harness.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
 - Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
 - Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.

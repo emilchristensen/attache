@@ -1,5 +1,4 @@
-import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -105,43 +104,9 @@ export function registerDataRoutes(r: Router, app: App) {
       area: doc?.area ?? (root === "data" ? rel.split("/")[0] : "import"),
       docType: doc?.docType ?? null,
       indexedAt: doc?.indexedAt ?? null,
-      editable: root === "data" && rel.startsWith("memory/") && rel !== "memory/self.md",
       protected: root === "data" && rel === "memory/self.md",
       changes: root === "data" ? app.memory.listChanges({ relPath: rel, limit: 50 }) : [],
     };
-  });
-  r.post("/memory/capture", async (c) => {
-    requireFeature(app, "capture");
-    requireData(app);
-    const input = await c.body(CaptureInput);
-    const source = { ...input.source, label: input.source.label ?? `via ${c.client?.name ?? "client"}` };
-    const cap = app.memory.capture({ text: input.text, ...(input.title ? { title: input.title } : {}), source, ...(input.tags ? { tags: input.tags } : {}) });
-    let decision: { relPath: string } | null = null;
-    if (input.decision) {
-      decision = app.memory.recordDecision({ title: input.decision.title, decision: input.decision.decision, source: { kind: "capture", ref: cap.relPath, observedAt: new Date().toISOString(), label: input.title ?? "capture" }, ...(input.decision.project ? { project: input.decision.project } : {}) });
-    }
-    app.bus.emit("event", { type: "memory.changed" });
-    return { capture: cap, decision };
-  });
-  r.post("/memory/notes", async (c) => {
-    requireFeature(app, "capture");
-    requireData(app);
-    const input = await c.body(MemoryCreateInput);
-    const out = app.memory.createMemory(
-      {
-        type: input.type,
-        title: input.title,
-        state: input.state.map((e) => ({ subject: e.subject, value: e.value, ...(e.date ? { date: e.date } : {}), ...(e.source ? { source: e.source } : {}) })),
-        ...(input.notes ? { notes: input.notes } : {}),
-        ...(input.sources ? { sources: input.sources } : {}),
-        ...(input.history ? { history: input.history } : {}),
-        ...(input.provenance ? { provenance: input.provenance } : {}),
-        ...(input.tags ? { tags: input.tags } : {}),
-      },
-      "user",
-    );
-    app.bus.emit("event", { type: "memory.changed" });
-    return out;
   });
   r.post("/memory/archive", async (c) => {
     requireFeature(app, "capture");
@@ -152,15 +117,6 @@ export function registerDataRoutes(r: Router, app: App) {
     const out = app.memory.archiveFolder({ path, label: input.label, exclude: input.exclude, ...(input.origin ? { origin: input.origin } : {}) });
     app.bus.emit("event", { type: "memory.changed" });
     return out;
-  });
-  r.post("/memory/correct", async (c) => {
-    requireFeature(app, "capture");
-    requireData(app);
-    const input = await c.body(CorrectionInput);
-    if (!input.relPath.startsWith("memory/")) throw new HttpError(400, "not_memory", "Only curated memory notes can be corrected. Capture a new note for evidence.");
-    const change = app.memory.correct(input.relPath, { subject: input.subject, value: input.value, reason: input.reason }, "user");
-    app.bus.emit("event", { type: "memory.changed" });
-    return { change, document: app.memory.describe(input.relPath) };
   });
   r.post("/memory/save", async (c) => {
     requireFeature(app, "capture");
@@ -190,13 +146,6 @@ export function registerDataRoutes(r: Router, app: App) {
     const days = Number(c.query("staleDays") ?? DEFAULT_STALE_DAYS);
     if (!Number.isInteger(days) || days < 1 || days > 3650) throw new HttpError(400, "invalid_request", "staleDays must be a whole number of days between 1 and 3650");
     return auditMemory(app, { staleDays: days });
-  });
-  r.put("/memory/notes-body", async (c) => {
-    requireFeature(app, "capture");
-    const input = await c.body(z.object({ relPath: z.string().startsWith("memory/"), notes: z.string().max(100_000) }));
-    app.memory.replaceNotes(input.relPath, input.notes);
-    app.bus.emit("event", { type: "memory.changed" });
-    return app.memory.describe(input.relPath);
   });
   r.get("/memory/recent-changes", (c): RecentChangesResult => {
     requireFeature(app, "recall");

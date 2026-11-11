@@ -61,6 +61,11 @@ test("screens", async ({ browser }) => {
     }
     // Below the fold of the settings screenshot.
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
+    // A note opened read-only, below the review lists.
+    await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+    await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `test-results/screens/${scheme}-memory-note.png` });
   }
   await page.goto(`${stack.url}/memory`);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("When is the cutover plan due for the Orion migration?");
@@ -70,9 +75,13 @@ test("screens", async ({ browser }) => {
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"]] as const) {
+  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });
   }
+  await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+  await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "test-results/screens/narrow-memory-note.png" });
 });

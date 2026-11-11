@@ -104,7 +104,8 @@ A correction replaces the Current State entry and appends the superseded value, 
 This is the state-versus-event rule from the old vault's 2026-08-13 repair, enforced by the writer rather than by instructions.
 
 Write policy (deterministic, in `memory/policy.ts`):
-- Only the service writes. Clients submit captures and corrections through the API.
+- Only the service writes.
+  A Harness submits saves through the MCP server or `jarvis save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
 - Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
@@ -130,7 +131,7 @@ Edits made to the data folder outside the service (Obsidian, an editor, a coding
 Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
 The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
 If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
-Imported vaults are not watched; they are rescanned when their connection syncs.
+Imported vaults are not watched; they are rescanned on each Source refresh of their connection.
 Vector search is deliberately not in this release: no embedding model is guaranteed on a clean install, and lexical recall with exact citations is verifiable.
 
 Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
@@ -259,7 +260,7 @@ Skills call this install's CLI through the `current` path with `JARVIS_STATE_DIR
 `jarvis save` and `jarvis audit` are clients of the running service (`cli/`), because the service holds the data folder's writer lock.
 The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
-Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
+Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
 A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
