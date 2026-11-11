@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ourHooks, ourNamedHooks, readSettings, sameHooks, withNamedHooks, withOurHooks, withoutNamedHooks, withoutOurHooks, writeSettings, HooksFileError, type HookSpec } from "../src/agents/hooks-config.ts";
-import { tempDir } from "./helpers.ts";
+import { accessOutsideOwner, permissions, tempDir } from "./helpers.ts";
 
 const isOurs = (c: string) => c.includes("jarvis-agent-hook");
 const ours: HookSpec[] = [
@@ -85,16 +85,18 @@ describe("named hooks format (Antigravity)", () => {
 
 describe("review fixes: never damage the user's own agent setup", () => {
   it("writes through a symlinked settings file and keeps its permissions", async () => {
-    const { symlinkSync, lstatSync, statSync, chmodSync } = await import("node:fs");
+    const { symlinkSync, lstatSync, chmodSync } = await import("node:fs");
     const dir = tempDir();
     const real = join(dir, "dotfiles-settings.json");
     writeFileSync(real, JSON.stringify(foreign));
     chmodSync(real, 0o600);
+    const before = permissions(real);
     const link = join(dir, "settings.json");
     symlinkSync(real, link);
     writeSettings(link, withOurHooks(readSettings(link), ours, isOurs), join(dir, "backups"));
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(statSync(real).mode & 0o777).toBe(0o600);
+    expect(permissions(real)).toBe(before);
+    expect(accessOutsideOwner(real)).toEqual([]);
     expect(JSON.stringify(readSettings(real))).toContain("jarvis-agent-hook");
   });
 

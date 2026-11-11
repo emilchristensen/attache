@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { antigravityTranscript, claudeTranscript, codexRollout } from "../fixtures/agents/transcripts.ts";
 import { spoolDir } from "../../src/agents/spool.ts";
+import { homeEnv, hookShell, runInShell, spawnInShell, toolShell } from "../fixtures/harness-shell.ts";
 
 const HOME = process.env.JARVIS_AGENT_HOME!;
 const FOREIGN_CLAUDE = { model: "opus", hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }], SessionStart: [{ matcher: "", hooks: [{ type: "command", command: "bash snapshot.sh", timeout: 5 }] }] } };
@@ -24,20 +25,13 @@ function runHook(settingsPath: string, event: string, input: Record<string, unkn
   const command = opts.named
     ? (Object.values(s).flatMap((v: any) => v?.[event] ?? []) as Array<{ command: string }>).find((h) => h.command.includes("jarvis-agent-hook"))!.command
     : (s.hooks[event] as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
-  return execFileSync("/bin/sh", ["-lc", command], { input: JSON.stringify(input), env: { ...process.env, HOME, ...opts.env }, encoding: "utf8" });
+  const harness = settingsPath.includes(".codex") ? "codex" : settingsPath.includes(".gemini") ? "antigravity" : "claude-code";
+  return runInShell(hookShell(harness), command, { input: JSON.stringify(input), env: { ...process.env, ...homeEnv(HOME), ...opts.env } });
 }
 
 /** Run a command through a shell the way an agent's Bash tool does. Asynchronous: the service it calls runs in this process. */
 function shell(script: string, env: Record<string, string> = {}): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("/bin/sh", ["-c", script], { cwd: work, env: { ...process.env, HOME, ...env } });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-    child.on("error", reject);
-    child.on("close", (status) => resolve({ status, stdout, stderr }));
-  });
+  return spawnInShell(toolShell(), script, { cwd: work, env: { ...process.env, ...homeEnv(HOME), ...env } });
 }
 
 async function until<T>(fn: () => T | undefined | null | false, ms = 15_000): Promise<T> {
@@ -124,8 +118,10 @@ describe("coding-agent sessions", () => {
   it("the agent's deeper-recall command finds the session log, never the raw transcript", async () => {
     const main = join(import.meta.dirname, "../../src/main.ts");
     const hits = JSON.parse(execFileSync(process.execPath, [main, "search", "hook copies transcript budget", "--state-dir", svc.stateDir, "--json"], { encoding: "utf8" })) as Array<{ file: string; lines: [number, number] }>;
-    expect(hits.some((h) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/.test(h.file))).toBe(true);
-    expect(hits.some((h) => h.file.includes("/transcripts/"))).toBe(false);
+    // The CLI prints this operating system's own absolute paths.
+    const files = hits.map((h) => h.file.replace(/\\/g, "/"));
+    expect(files.some((f) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/.test(f))).toBe(true);
+    expect(files.some((f) => f.includes("/transcripts/"))).toBe(false);
     expect(hits[0]!.file.startsWith(svc.dataDir)).toBe(true);
   });
 

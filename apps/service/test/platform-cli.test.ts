@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
 
 const MAIN = join(import.meta.dirname, "../src/main.ts");
-const FAKE_PLATFORM = join(import.meta.dirname, "fixtures/fake-platform.mjs");
+/** A URL, because `--import` reads a Windows path's drive letter as a URL scheme. */
+const FAKE_PLATFORM = pathToFileURL(join(import.meta.dirname, "fixtures/fake-platform.mjs")).href;
 
 /** Run the `jarvis` executable from source, optionally as if on another operating system. */
 function jarvis(args: string[], opts: { platform?: string; env?: Record<string, string | undefined> } = {}) {

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { accessOutsideOwner } from "../helpers.ts";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
@@ -175,7 +176,7 @@ describe("the jarvis save and audit commands", () => {
     expect(r.stdout).toContain(join(svc.dataDir, "memory/notes/pairing-the-cli.md"));
     expect(readFileSync(join(svc.dataDir, "memory/notes/pairing-the-cli.md"), "utf8")).toContain("ref: claude-code/cli-sess");
     const token = join(svc.stateDir, "cli-token");
-    expect(statSync(token).mode & 0o777).toBe(0o600);
+    expect(accessOutsideOwner(token)).toEqual([]);
     const clients = svc.app.db.prepare("select name, kind from clients where revoked_at is null").all() as Array<{ name: string; kind: string }>;
     expect(clients).toContainEqual({ name: "Jarvis CLI", kind: "cli" });
   });

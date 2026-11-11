@@ -71,7 +71,8 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
   });
 
   it("a stalled read session is started once more; a stalled write is never repeated", async () => {
-    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 300 });
+    // The base also bounds the server listing each new runner starts with; 300 ms let it time out on a loaded machine, so the write session never began.
+    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 2_000 });
     claude.nextModes = ["hang"];
     const out = await quick().run(SLACK, [read("a", "C1")], { signal: signal() });
     expect(out.get("a")!.status).toBe("ok");

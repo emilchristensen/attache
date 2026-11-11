@@ -11,6 +11,8 @@ import { join, resolve } from "node:path";
 export const ROOT = resolve(import.meta.dirname, "../..");
 const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
 const NODE = process.execPath;
+/** Vite's own entry, run with this Node: `npx` is a batch file on Windows, which Node does not start without a shell. */
+const VITE = join(ROOT, "apps/web/node_modules/vite/bin/vite.js");
 
 export interface Stack {
   url: string;
@@ -44,7 +46,7 @@ function waitForLine(child: ChildProcess, re: RegExp, timeoutMs = 15_000): Promi
 
 export function buildAll() {
   execFileSync(NODE, [join(ROOT, "apps/service/build.mjs")], { stdio: "ignore" });
-  if (!existsSync(join(ROOT, "apps/web/dist/index.html")) || process.env.JARVIS_E2E_REBUILD_WEB !== "0") execFileSync("npx", ["vite", "build"], { cwd: join(ROOT, "apps/web"), stdio: "ignore" });
+  if (!existsSync(join(ROOT, "apps/web/dist/index.html")) || process.env.JARVIS_E2E_REBUILD_WEB !== "0") execFileSync(NODE, [VITE, "build"], { cwd: join(ROOT, "apps/web"), stdio: "ignore" });
 }
 
 export function makeVault(dir: string) {
@@ -68,7 +70,7 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const fixture = spawn(NODE, [join(ROOT, "apps/service/test/fixtures/run-fixture-server.ts"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
   // claude.ai connectors go through the fixture CLI with an empty Claude config: journeys never reach a real account.
-  const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures/fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
+  const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures", process.platform === "win32" ? "fake-claude.cmd" : "fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
   const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
   const startService = async () => {

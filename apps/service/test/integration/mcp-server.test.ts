@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { accessOutsideOwner } from "../helpers.ts";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -140,7 +141,7 @@ describe("Jarvis MCP server", () => {
     const tokenFile = join(svc.stateDir, "cli-token");
     const token = readFileSync(tokenFile, "utf8").trim();
     expect(token.length).toBeGreaterThan(10);
-    expect(statSync(tokenFile).mode & 0o077).toBe(0);
+    expect(accessOutsideOwner(tokenFile)).toEqual([]);
     for (const file of filesUnder(process.env.JARVIS_AGENT_HOME!)) expect(readFileSync(file, "utf8")).not.toContain(token);
   });
 });

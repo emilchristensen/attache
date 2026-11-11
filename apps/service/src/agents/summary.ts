@@ -50,8 +50,8 @@ export function parseSummary(reply: string): string[] {
 /** A readable project name: the repository for worktree checkouts, else the folder. */
 export function projectLabel(cwd: string | null): string | null {
   if (!cwd) return null;
-  const wt = /\/worktrees\/([^/]+)\/[^/]+\/?$/.exec(cwd);
-  return wt ? wt[1]! : basename(cwd.replace(/\/+$/, "")) || cwd;
+  const wt = /[\\/]worktrees[\\/]([^\\/]+)[\\/][^\\/]+[\\/]?$/.exec(cwd);
+  return wt ? wt[1]! : basename(cwd.replace(/[\\/]+$/, "")) || cwd;
 }
 
 export function localDate(iso: string | null, now = new Date()): string {

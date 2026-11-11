@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import { stringify as stringifyYaml } from "yaml";
 import { HooksFileError } from "./hooks-config.ts";
@@ -151,8 +151,9 @@ export class AgentSkills {
   }
 }
 
+/** Every file under `dir`, relative to it with `/` separators, as `render` names them. */
 function listFiles(dir: string, base = dir): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? listFiles(join(dir, e.name), base) : [relative(base, join(dir, e.name))]));
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? listFiles(join(dir, e.name), base) : [relative(base, join(dir, e.name)).split(sep).join("/")]));
 }
 
 function sameFolder(folder: string, files: Record<string, string>): boolean {

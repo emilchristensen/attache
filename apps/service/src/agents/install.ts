@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { defaultStateDir } from "../core/paths.ts";
 import { platformLocations } from "../platform/locations.ts";
+import { shellPath } from "../platform/shell-command.ts";
 import { HooksFileError, ourHooks, replaceFile, ourNamedHooks, readSettings, sameHooks, withNamedHooks, withOurHooks, withoutNamedHooks, withoutOurHooks, writeSettings, type HookSpec } from "./hooks-config.ts";
 import type { AgentIntegration } from "./integrations.ts";
 import { AgentSkills } from "./skills.ts";
@@ -13,14 +14,12 @@ export function agentHome(): string {
   return process.env.JARVIS_AGENT_HOME || platformLocations().home;
 }
 
-const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
 /**
  * Prefer the installer's `current` symlink over a versioned app folder, so
  * hooks keep working after an upgrade replaces `app/<version>`.
  */
 export function stablePath(p: string): string {
-  const m = /^(.*)\/app\/([^/]+)\/(.*)$/.exec(p);
+  const m = /^(.*)[\\/]app[\\/]([^\\/]+)[\\/](.*)$/.exec(p);
   if (!m) return p;
   const [, prefix, version, rest] = m as unknown as [string, string, string, string];
   const current = join(prefix, "current");
@@ -47,8 +46,8 @@ export function hookScript(): string {
  */
 export function cliCommand(stateDir: string): string {
   const script = process.env.JARVIS_CLI_SCRIPT || (process.argv[1] && /jarvis-service\.mjs$/.test(process.argv[1]) ? process.argv[1] : "");
-  const env = `JARVIS_STATE_DIR=${quote(stateDir)}`;
-  return script ? `${env} ${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : `${env} jarvis`;
+  const env = `JARVIS_STATE_DIR=${shellPath(stateDir)}`;
+  return script ? `${env} ${shellPath(stablePath(process.execPath))} ${shellPath(stablePath(script))}` : `${env} jarvis`;
 }
 
 const RULE_MARKER = "<!-- managed by Jarvis: this file is rewritten when your memory changes, and removed when you disconnect -->";
@@ -80,7 +79,7 @@ export class AgentHooks {
   }
 
   /** Only hooks that point at this Jarvis instance's state folder are ours; another instance's are foreign. */
-  isOurs = (command: string): boolean => command.includes("jarvis-agent-hook") && command.includes(quote(this.stateDir));
+  isOurs = (command: string): boolean => command.includes("jarvis-agent-hook") && command.includes(shellPath(this.stateDir));
 
   /** Owner key for `named` hook files: plain "jarvis" for the default install, distinct for any other instance. */
   ownerKey(): string {
@@ -90,7 +89,7 @@ export class AgentHooks {
   expected(a: AgentIntegration): HookSpec[] {
     const node = stablePath(process.execPath);
     const script = stablePath(hookScript());
-    return a.hookSpecs((event) => `${quote(node)} ${quote(script)} ${a.kind} ${event} --state-dir ${quote(this.stateDir)}`);
+    return a.hookSpecs((event) => `${shellPath(node)} ${shellPath(script)} ${a.kind} ${event} --state-dir ${shellPath(this.stateDir)}`);
   }
 
   private installed(a: AgentIntegration, settings: Record<string, unknown>): HookSpec[] {

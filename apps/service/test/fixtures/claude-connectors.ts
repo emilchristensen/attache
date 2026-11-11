@@ -26,7 +26,12 @@ export interface ClaudeFixture {
   calls: Array<{ server: string; tool: string; args: Record<string, unknown> }>;
 }
 
-export const FAKE_CLAUDE = resolve(import.meta.dirname, "fake-claude.mjs");
+/**
+ * The fixture CLI as Claude Code is installed on this operating system: the
+ * script itself, or on Windows an npm command shim around it, as `npm install
+ * -g` creates.
+ */
+export const FAKE_CLAUDE = resolve(import.meta.dirname, process.platform === "win32" ? "fake-claude.cmd" : "fake-claude.mjs");
 
 const key = (server: string, tool: string) => `${server}\0${tool}`;
 

@@ -7,7 +7,7 @@ import { RECALL_EXCLUDE, search } from "../memory/search.ts";
 import { decide, getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
@@ -50,11 +50,11 @@ export function memoryRoots(app: App): Array<{ root: string; path: string; label
 
 /** Map an absolute file path (e.g. a note open in an editor) to an indexed root and relative path. */
 export function resolveAbsolute(app: App, absPath: string): { root: string; relPath: string } | null {
-  const norm = absPath.replace(/\\/g, "/");
   const roots = memoryRoots(app).sort((a, b) => b.path.length - a.path.length);
   for (const r of roots) {
-    const base = r.path.replace(/\/+$/, "") + "/";
-    if (norm.startsWith(base)) return { root: r.root, relPath: norm.slice(base.length) };
+    // `relative` knows the separators and, on Windows, that case does not matter.
+    const rel = relative(r.path, absPath);
+    if (rel && !rel.startsWith("..") && !isAbsolute(rel)) return { root: r.root, relPath: rel.split(sep).join("/") };
   }
   return null;
 }

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { redact } from "../core/log.ts";
 import { platformLocations } from "../platform/locations.ts";
 import { harnessInstalls } from "../platform/harness-locations.ts";
+import { launchTool, UnlaunchableToolError } from "../platform/launch.ts";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -65,7 +66,14 @@ export function claudeCliProvider(model: string, bin = findClaudeCli()): ModelPr
       const cwd = join(tmpdir(), "jarvis-model-cwd");
       mkdirSync(cwd, { recursive: true });
       const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--system-prompt", req.system, "--model", model || DEFAULT_MODELS["claude-cli"]];
-      const child = spawn(bin, args, { cwd, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" }, stdio: ["pipe", "pipe", "pipe"] });
+      let launch;
+      try {
+        launch = launchTool(bin, args);
+      } catch (e) {
+        if (e instanceof UnlaunchableToolError) throw new ModelError("not_configured", e.message);
+        throw e;
+      }
+      const child = spawn(launch.command, launch.args, { cwd, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" }, stdio: ["pipe", "pipe", "pipe"] });
       const onAbort = () => child.kill("SIGTERM");
       req.signal?.addEventListener("abort", onAbort);
       child.stdin.end(transcript(req.messages));

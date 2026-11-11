@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { AgentSkills } from "../src/agents/skills.ts";
 import { antigravity, claudeCode, codex } from "../src/agents/integrations.ts";
@@ -24,7 +24,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 describe("user-invoked Jarvis skills", () => {
   it("installs save and audit skills that only the user can invoke, in every agent's format", () => {
     const folders = skills().install(claudeCode);
-    expect(folders.map((f) => f.split("/").at(-1))).toEqual(["jarvis-save", "jarvis-audit"]);
+    expect(folders.map((f) => basename(f))).toEqual(["jarvis-save", "jarvis-audit"]);
     for (const name of ["jarvis-save", "jarvis-audit"]) {
       const { frontmatter, body } = splitFrontmatter(skillMd(`.claude/skills/${name}`));
       expect(frontmatter).toMatchObject({ name, "disable-model-invocation": true });

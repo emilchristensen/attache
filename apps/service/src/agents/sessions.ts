@@ -16,6 +16,7 @@ import { buildSessionContext, type ContextInput } from "./context.ts";
 import { projectSlug, removeContextFiles, writeContextFiles, type ProjectContext } from "./context-files.ts";
 import { listedRepositories } from "../memory/repositories.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
+import { shellPath } from "../platform/shell-command.ts";
 
 interface SessionRow {
   agent: string;
@@ -372,7 +373,7 @@ export class AgentSessions {
   /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
   private searchCommand(): string {
     const entry = process.argv[1] ? resolve(process.argv[1]) : "";
-    const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+    const q = (s: string) => shellPath(s);
     if (!/jarvis-service\.mjs$/.test(entry)) return `jarvis search --state-dir ${q(this.stateDir)}`;
     return `${q(stablePath(process.execPath))} ${q(stablePath(entry))} search --state-dir ${q(this.stateDir)}`;
   }
