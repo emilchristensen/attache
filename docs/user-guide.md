@@ -305,6 +305,19 @@ What happens on its own:
 - Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
 - A note is never left with conflict markers.
   Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+- While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
+  It resolves by itself once Replication is up to date again.
+
+### Credential scan
+
+Before every commit, setup and merges included, Jarvis scans the files about to be committed for credentials.
+It looks for exactly what it redacts from logs and evidence: GitHub, Slack, Atlassian, AWS, Google and Anthropic tokens, API keys, JSON web tokens, private keys, authorization headers, and the secrets of your connections.
+A finding stops the commit and the push: the status reads blocked, and the cause and the inbox item name the file and line, never the credential itself.
+Saves and search keep working on this Machine meanwhile, and the other Machines keep replicating with each other.
+Everything already committed stays in the repository and on the other Machines.
+Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
+If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
+A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to.
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
