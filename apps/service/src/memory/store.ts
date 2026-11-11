@@ -1,18 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type Db, nowIso, json, tx } from "../core/db.ts";
+import { type Db, json, nowIso, tx } from "../core/db.ts";
+import { redact } from "../core/log.ts";
+import type { MachineIdentity } from "../core/machine.ts";
+import { replaceWith } from "../platform/replace-file.ts";
+import { REVIEW_STATE_DIR } from "../review-state/files.ts";
+import { ChangeLog, type ChangeMeta, type ListChangesOptions, type MemoryChange, type NewChange } from "./change-log.ts";
+import { agentSessionFile, archiveManifest, captureFile, captureTitle, connectorSnapshotFile, deliverableFile, formatSource, oneLine, sourceToYaml, sessionLogHead, withFrontmatter, wrapUpFile, type AgentSessionMeta } from "./evidence-files.ts";
+import { connectorSnapshotPath, deliverableName, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter, toLf } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
-import { stringify as stringifyYaml } from "yaml";
-import { redact } from "../core/log.ts";
-import type { MachineIdentity } from "../core/machine.ts";
-import { connectorSnapshotPath, deliverableName, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
-import { WriterLock } from "./writer-lock.ts";
-import { replaceWith } from "../platform/replace-file.ts";
 import { factDay } from "./review-date.ts";
-import { REVIEW_STATE_DIR } from "../review-state/files.ts";
+import { WriterLock } from "./writer-lock.ts";
+
+/** Kept here as well, where callers have always imported them from. */
+export type { ChangeMeta, MemoryChange } from "./change-log.ts";
+export { formatSource } from "./evidence-files.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -40,53 +45,13 @@ export interface IndexedDocument {
   mtimeMs: number;
 }
 
-export interface MemoryChange {
-  id: string;
-  /** Insertion order: a later change has a higher number, even within one millisecond. */
-  seq: number;
-  docRelPath: string;
-  change: "create" | "correct" | "append" | "proposal" | "delete";
-  subject: string | null;
-  beforeValue: string | null;
-  afterValue: string | null;
-  /** For a correction: the fact's Review date before and after it, null when it had none. */
-  beforeReview: string | null;
-  afterReview: string | null;
-  reason: string | null;
-  source: string | null;
-  actor: string;
-  status: "applied" | "proposed" | "rejected";
-  createdAt: string;
-  decidedAt: string | null;
-  /** The Harness (integration kind) and session a save came from, when it came from one. */
-  harness: string | null;
-  sessionId: string | null;
-  /** Shared by every change one save made, so a created note's own events do not block reverting it. */
-  batchId: string | null;
-  /** The change this one reverted. */
-  reverts: string | null;
-  /** SHA-256 of the note right after this change, to tell whether anything touched it since. */
-  docHash: string | null;
-  /** Written without asking the owner, because auto-accept was on for the Harness. */
-  autoAccepted: boolean;
-}
-
-/** Where a change came from, recorded with it in the change log. */
-export interface ChangeMeta {
-  harness?: string | null;
-  sessionId?: string | null;
-  batchId?: string | null;
-  reverts?: string | null;
-  autoAccepted?: boolean;
-}
-
 const README = `# Jarvis data folder
 
 Jarvis keeps your knowledge here as plain Markdown. You can read and edit these files in any editor, including Obsidian.
 
 - \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
-- \`evidence/\` is archived evidence: captures, coding-agent sessions and connector observations (and chat archives from earlier versions).
+- \`evidence/\` is archived evidence: captures, Harness sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
 - \`review/\` holds what waits for your decision: the inbox (with its dismiss and snooze decisions) and Proposals, one small JSON file per item, so every Machine shows the same.
@@ -111,6 +76,7 @@ export interface MemoryStoreOptions {
 
 export class MemoryStore {
   readonly indexer: Indexer;
+  private readonly changes: ChangeLog;
   private lock: WriterLock | null = null;
 
   private readonly db: Db;
@@ -122,6 +88,7 @@ export class MemoryStore {
     this.root = root;
     this.opts = opts;
     this.indexer = new Indexer(db);
+    this.changes = new ChangeLog(db);
   }
 
   /** The store's clock: the service clock when the App gives one, else the system clock. */
@@ -231,18 +198,11 @@ export class MemoryStore {
   }
 
   private recordChange(
-    c: Omit<MemoryChange, "id" | "seq" | "createdAt" | "decidedAt" | keyof ChangeMeta | "docHash" | "beforeReview" | "afterReview"> & { decidedAt?: string | null; beforeReview?: string | null; afterReview?: string | null },
+    c: NewChange,
     meta: ChangeMeta = {},
   ): MemoryChange {
-    const id = randomUUID();
     const docHash = c.status === "applied" && this.exists(c.docRelPath) ? noteHash(this.read(c.docRelPath)) : null;
-    this.db
-      .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, before_review, after_review, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash, auto_accepted)
-         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.beforeReview ?? null, c.afterReview ?? null, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash, meta.autoAccepted ? 1 : 0);
-    return this.getChange(id)!;
+    return this.changes.record(c, meta, docHash);
   }
 
   // ---- memory notes ----------------------------------------------------------
@@ -371,62 +331,34 @@ export class MemoryStore {
 
   /** Proposals this Machine stored in its change log before Proposals became files in the Brain, oldest first. */
   legacyProposals(): MemoryChange[] {
-    const rows = this.db.prepare("select rowid as seq, * from memory_changes where change = 'proposal' order by rowid").all() as Array<Record<string, string | number | null>>;
-    return rows.map(rowToChange);
+    return this.changes.legacyProposals();
   }
 
   /** Drop change-log Proposals once they are files in the Brain. */
   forgetLegacyProposals(ids: readonly string[]): void {
-    const del = this.db.prepare("delete from memory_changes where id = ? and change = 'proposal'");
-    for (const id of ids) del.run(id);
+    this.changes.forgetLegacyProposals(ids);
   }
 
   /** Every change one save or approval made, newest first. */
   changesInBatch(batchId: string): MemoryChange[] {
-    const rows = this.db.prepare("select rowid as seq, * from memory_changes where batch_id = ? order by rowid desc").all(batchId) as Array<Record<string, string | number | null>>;
-    return rows.map(rowToChange);
+    return this.changes.inBatch(batchId);
   }
 
   getChange(id: string): MemoryChange | null {
-    const r = this.db.prepare("select rowid as seq, * from memory_changes where id = ?").get(id) as Record<string, string | number | null> | undefined;
-    return r ? rowToChange(r) : null;
+    return this.changes.get(id);
   }
 
   /** Newest first. `after` keeps only changes recorded after the change with that `seq`. */
-  listChanges(opts: { relPath?: string; status?: string; after?: number; limit?: number } = {}): MemoryChange[] {
-    const where: string[] = [];
-    const args: Array<string | number> = [];
-    if (opts.relPath) {
-      where.push("doc_rel_path = ?");
-      args.push(opts.relPath);
-    }
-    if (opts.after !== undefined) {
-      where.push("rowid > ?");
-      args.push(opts.after);
-    }
-    if (opts.status) {
-      where.push("status = ?");
-      args.push(opts.status);
-    }
-    const rows = this.db
-      .prepare(`select rowid as seq, * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by rowid desc limit ${Math.min(opts.limit ?? 100, 500)}`)
-      .all(...args) as Array<Record<string, string | number | null>>;
-    return rows.map(rowToChange);
+  listChanges(opts: ListChangesOptions = {}): MemoryChange[] {
+    return this.changes.list(opts);
   }
 
   // ---- captures, evidence, deliverables -----------------------------------------------
 
   capture(input: { text: string; title?: string; source: SourceRef; tags?: string[] }, actor: WriteActor = "user"): { relPath: string } {
-    const title = input.title?.trim() || firstWords(input.text);
+    const title = captureTitle(input.text, input.title);
     const rel = this.uniquePath("evidence/captures", `${this.today()}-${slugify(title)}`);
-    const fm = { id: randomUUID(), type: "capture", title, captured_at: nowIso(), provenance: "captured", source: sourceToYaml(input.source), ...(input.tags?.length ? { tags: input.tags } : {}) };
-    const quoted = input.text
-      .trim()
-      .split("\n")
-      .map((l) => `> ${l}`)
-      .join("\n");
-    const body = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${quoted}\n\nSource: ${formatSource(input.source)}\n`;
-    this.writeFile(rel, body, actor === "user" ? "user" : "connector");
+    this.writeFile(rel, captureFile({ ...input, title }), actor === "user" ? "user" : "connector");
     return { relPath: rel };
   }
 
@@ -459,29 +391,22 @@ export class MemoryStore {
       }
       rows.push(`| ${rel} | ${Buffer.byteLength(content)} | ${hash.slice(0, 16)} |`);
     }
-    const origin = input.origin ?? input.path;
-    const fm = { type: "archive", title: `Archive of ${origin}`, source_path: input.path, ...(input.origin ? { origin: input.origin } : {}), archived_at: nowIso(), files: rows.length, excluded: input.exclude, provenance: "archived-verbatim" };
-    const manifest = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# Archive of ${origin}\n\nVerbatim copies of ${rows.length} Markdown files, at the same relative paths, so citations keep their line numbers.\n\n| File | Bytes | SHA-256 (first 16) |\n| --- | --- | --- |\n${rows.join("\n")}\n`;
-    this.writeFile(`${base}/ARCHIVE.md`, manifest, "user");
+    this.writeFile(`${base}/ARCHIVE.md`, archiveManifest({ ...input, rows }), "user");
     return { relPath: `${base}/ARCHIVE.md`, written, unchanged, excluded: skipped, files: rows.length };
   }
 
   writeDeliverable(kind: "briefings" | "research" | "drafts", title: string, body: string, meta: Record<string, unknown> = {}): { relPath: string } {
     const rel = this.uniquePath(`deliverables/${kind}`, deliverableName(this.today(), title, this.opts.machine()));
-    const fm = { id: randomUUID(), type: kind.replace(/s$/, ""), title, generated_at: nowIso(), provenance: "generated", ...meta };
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body.trim()}\n`, "service");
+    this.writeFile(rel, deliverableFile(kind, title, body, meta), "service");
     return { relPath: rel };
   }
 
   /**
-   * The conversation of one coding-agent session. Rewritten as the session
+   * The conversation of one Harness session. Rewritten as the session
    * grows (compaction, then the end), so one session is always one file.
    */
-  archiveAgentSession(rel: string, meta: { agent: string; agentLabel: string; sessionId: string; title: string; cwd: string | null; startedAt: string | null }, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
-    const fm = { id: meta.sessionId, type: "agent-session", title: meta.title, agent: meta.agent, cwd: meta.cwd, started_at: meta.startedAt, archived_at: nowIso(), provenance: "agent-session-archive" };
-    const body = turns.map((t) => `### ${t.role === "user" ? userName : meta.agentLabel}${t.at ? ` · ${t.at}` : ""}\n\n${t.text.trim()}`).join("\n\n");
-    const where = [meta.agentLabel, meta.cwd ? `in \`${meta.cwd}\`` : null, meta.startedAt ? `started ${meta.startedAt}` : null].filter(Boolean).join(" · ");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${meta.title}\n\n${where}\n\n${body}\n`, "service");
+  archiveAgentSession(rel: string, meta: AgentSessionMeta, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
+    this.writeFile(rel, agentSessionFile(meta, turns, userName), "service");
     return { relPath: rel };
   }
 
@@ -489,9 +414,7 @@ export class MemoryStore {
   appendSessionLog(date: string, section: string): { relPath: string } {
     const machine = this.opts.machine();
     const rel = sessionLogPath(date, machine);
-    const title = `Agent sessions on ${date} (${machine.name})`;
-    const head = `---\n${stringifyYaml({ type: "session-log", title, date, machine: machine.name, machine_id: machine.id, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n`;
-    const existing = this.exists(rel) ? this.read(rel).trimEnd() : head.trimEnd();
+    const existing = this.exists(rel) ? this.read(rel).trimEnd() : sessionLogHead(date, machine).trimEnd();
     this.writeFile(rel, `${existing}\n\n${section.trim()}\n`, "service");
     return { relPath: rel };
   }
@@ -500,10 +423,7 @@ export class MemoryStore {
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
     const machine = this.opts.machine();
     const rel = connectorSnapshotPath(kind, this.today(), machine);
-    const title = `${label} on ${this.today()} (${machine.name})`;
-    const fm = { type: "connector-snapshot", title, source: kind, machine: machine.name, machine_id: machine.id, observed_at: nowIso(), provenance: "connector" };
-    const body = lines.length ? lines.join("\n") : "_The last Source refresh returned no items._";
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
+    this.writeFile(rel, connectorSnapshotFile({ kind, label, day: this.today(), machine, lines }), "connector");
     return { relPath: rel };
   }
 
@@ -519,10 +439,7 @@ export class MemoryStore {
     const title = redact(oneLine(input.title));
     const planned = wrapUpPath(date, title, machine);
     const rel = this.uniquePath(dirname(planned), basename(planned, ".md"));
-    const fm = { id: randomUUID(), type: "wrap-up", title, date, harness: input.harness.id, harness_label: input.harness.label, machine: machine.name, machine_id: machine.id, recorded_at: nowIso(), provenance: "harness-wrap-up" };
-    const intro = `Evidence: the durable points of a conversation in ${input.harness.label} on ${date}, as its agent summed them up with the wrap-up prompt.\nThey are not curated memory: none is a current fact until it is saved to a note.`;
-    const points = input.points.map((p) => `- ${oneLine(p)}`).join("\n");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${intro}\n\n## Points\n\n${points}\n`, "service");
+    this.writeFile(rel, wrapUpFile({ harness: input.harness, title, date, machine, points: input.points }), "service");
     return { relPath: rel, title, date };
   }
 
@@ -583,25 +500,6 @@ export class MemoryStore {
   }
 }
 
-/** Text that must stay on one line of Markdown, so it can never open a heading or a section of its own. */
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-function firstWords(text: string): string {
-  const words = text.replace(/[#>*_`]/g, " ").trim().split(/\s+/).slice(0, 8).join(" ");
-  return words || "Capture";
-}
-
-export function formatSource(s: SourceRef): string {
-  const lines = s.lines ? `#L${s.lines[0]}-L${s.lines[1]}` : "";
-  const where = s.url ?? `${s.root && s.root !== "data" ? s.root + ":" : ""}${s.ref}${lines}`;
-  return `${s.label ? s.label + " " : ""}(${s.kind}: ${where}, observed ${s.observedAt.slice(0, 10)})`;
-}
-
-function sourceToYaml(s: SourceRef): Record<string, unknown> {
-  return { kind: s.kind, ref: s.ref, ...(s.root ? { root: s.root } : {}), ...(s.lines ? { lines: s.lines } : {}), ...(s.url ? { url: s.url } : {}), observed_at: s.observedAt, ...(s.label ? { label: s.label } : {}) };
-}
 
 /** A History line for an event that happened today. */
 function eventLine(day: string, text: string): string {
@@ -611,7 +509,7 @@ function eventLine(day: string, text: string): string {
 function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {
   const { frontmatter, body } = splitFrontmatter(raw);
   if (!Object.keys(frontmatter).length) return raw;
-  return `---\n${stringifyYaml({ ...frontmatter, ...patch }, { lineWidth: 0 }).trimEnd()}\n---\n${body}`;
+  return withFrontmatter({ ...frontmatter, ...patch }, body);
 }
 
 /** Fingerprint of a note's text, comparable with `MemoryChange.docHash`. */
@@ -619,29 +517,3 @@ export function noteHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-function rowToChange(raw: Record<string, string | number | null>): MemoryChange {
-  const r = raw as Record<string, string | null>;
-  return {
-    id: r.id!,
-    seq: Number(raw.seq),
-    docRelPath: r.doc_rel_path!,
-    change: r.change as MemoryChange["change"],
-    subject: r.subject ?? null,
-    beforeValue: r.before_value ?? null,
-    afterValue: r.after_value ?? null,
-    beforeReview: r.before_review ?? null,
-    afterReview: r.after_review ?? null,
-    reason: r.reason ?? null,
-    source: r.source ?? null,
-    actor: r.actor!,
-    status: r.status as MemoryChange["status"],
-    createdAt: r.created_at!,
-    decidedAt: r.decided_at ?? null,
-    harness: r.harness ?? null,
-    sessionId: r.session_id ?? null,
-    batchId: r.batch_id ?? null,
-    reverts: r.reverts ?? null,
-    docHash: r.doc_hash ?? null,
-    autoAccepted: Number(raw.auto_accepted) === 1,
-  };
-}
