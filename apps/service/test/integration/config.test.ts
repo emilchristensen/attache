@@ -38,7 +38,7 @@ describe("A03 onboarding and persistence", () => {
     expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { refreshEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     expect(cfg.features).toMatchObject({ sessions: false, drafts: false, attention: true });
     // Search works before any model is connected.
-    await again.post("/memory/save", { items: [{ action: "create", type: "note", title: "Espresso machine", facts: [{ subject: "Upkeep", value: "Needs descaling every Friday" }] }] });
+    await again.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Espresso machine", facts: [{ subject: "Upkeep", value: "Needs descaling every Friday" }] }] });
     expect((await again.get("/memory/search?q=espresso descaling")).hits.length).toBeGreaterThan(0);
   });
 });
@@ -141,7 +141,7 @@ describe("A13 security boundaries", () => {
     expect(trav.status).toBe(400);
     // Protected identity cannot be written through memory endpoints.
     await svc.post("/setup/identity", { name: "Test User", email: "t@example.com", confirm: true });
-    const prot = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Name", value: "Mallory", reason: "x" }] }] });
+    const prot = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Name", value: "Mallory", reason: "x" }] }] });
     expect(prot.status).toBe(403);
     expect(readFileSync(join(svc.dataDir, "memory/self.md"), "utf8")).not.toContain("Mallory");
   });

@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 describe("Replication as the Dashboard shows it", () => {
   it("reports the last time this Machine was up to date, which an offline spell does not move", async () => {

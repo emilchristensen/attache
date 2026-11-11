@@ -38,7 +38,7 @@ function filesUnder(dir: string): string[] {
 beforeAll(async () => {
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
-  await svc.post("/memory/save", {
+  await svc.post("/memory/save", { confirmed: true,
     items: [
       { action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for November" }, { subject: "Owner", value: "Grace" }], events: ["Kick-off held"] },
       { action: "create", type: "person", title: "Grace Hopper", facts: [{ subject: "Role", value: "Leads the Orion cutover" }] },
@@ -159,7 +159,7 @@ describe("Jarvis MCP server", () => {
 describe("Jarvis MCP server while the service is stopped", () => {
   it("still starts, each tool says how to start Jarvis, and the tools work once it runs", async () => {
     const stopped = await startTestService();
-    await stopped.post("/memory/save", { items: [{ action: "create", type: "note", title: "Quokka plan", facts: [{ subject: "Start", value: "The quokka rollout starts in March" }] }] });
+    await stopped.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Quokka plan", facts: [{ subject: "Start", value: "The quokka rollout starts in March" }] }] });
     await stopped.stop();
     const client = await connect(stopped.stateDir);
     expect(client.getInstructions()).toContain("Start it with `jarvis start`");

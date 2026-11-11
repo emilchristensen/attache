@@ -467,6 +467,8 @@ The MCP prompts replace those skills, and there is no `jarvis save` command any 
 `jarvis audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
 Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
+Only a save marked `confirmed: true` (the owner accepted it when the MCP server asked) or `autoAccept: true` (checked against the setting) writes as the owner; any other save is stored as Proposals, one per item, and the response lists them under `proposals`.
+Only a client paired as `cli`, which the MCP server uses, may call it: the Dashboard's browser session gets 403 `dashboard_cannot_save` (ADR 0003).
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
@@ -516,7 +518,7 @@ The server starts even when the service is down, because a Harness launches its 
   Every change an auto-accepted save makes is marked in the change log (`memory_changes.auto_accepted`) beside its Harness and session, and Recent saves shows the mark.
   It never applies to the identity record, which no save can change.
   It then sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 10-minute limit.
-  Accept writes through `POST /memory/save` as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
+  Accept writes through `POST /memory/save` with `confirmed: true`, as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
   A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
   The origin names the Harness and session (`mcp/harness.ts`): from the environment the Harness gives the server (`CLAUDECODE` with `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, `ANTIGRAVITY_CONVERSATION_ID`), otherwise from the client name it reported (`claude-ai` is Claude Desktop), without a session; the folder is the server's working directory.
 - The `wrap-up` prompt (text in `mcp/prompt-text.ts` too) asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.

@@ -25,7 +25,7 @@ afterAll(async () => {
 
 describe("a fact with a Review date", () => {
   it("is written after the fact's own date and read back with it", async () => {
-    await svc.post("/memory/save", {
+    await svc.post("/memory/save", { confirmed: true,
       items: [{ action: "create", type: "project", title: "Vega launch", facts: [{ subject: "Status", value: "Beta opens to customers", review: IN_A_MONTH }, { subject: "Owner", value: "Ada" }] }],
     });
     const note = brainFile("memory/projects/vega-launch.md");
@@ -41,12 +41,12 @@ describe("a fact with a Review date", () => {
 
   it("is refused when it is not after the fact's own date or not a real day, writing nothing", async () => {
     for (const review of [TODAY, dayFromToday(-3)]) {
-      const r = await svc.call("POST", "/memory/save", { items: [{ action: "create", type: "note", title: `Too early ${review}`, facts: [{ subject: "Plan", value: "x", review }] }] });
+      const r = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: `Too early ${review}`, facts: [{ subject: "Plan", value: "x", review }] }] });
       expect(r.status).toBe(400);
       expect(r.body.error.message).toContain(`Review date ${review}`);
     }
     for (const review of ["2026-02-30", "next week"]) {
-      const r = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "memory/projects/vega-launch.md", facts: [{ subject: "Owner", value: "Grace", reason: "handover", review }] }] });
+      const r = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/projects/vega-launch.md", facts: [{ subject: "Owner", value: "Grace", reason: "handover", review }] }] });
       expect(r.status).toBe(400);
     }
     expect(lineOf(brainFile("memory/projects/vega-launch.md"), "**Owner**")).toContain("Ada");
@@ -54,14 +54,14 @@ describe("a fact with a Review date", () => {
 
   it("is cleared by a correction that gives none, and replaced by one that gives a new one", async () => {
     const rel = "memory/projects/vega-launch.md";
-    await svc.post("/memory/save", { items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Beta extended by two weeks", reason: "feedback backlog" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Beta extended by two weeks", reason: "feedback backlog" }] }] });
     let note = brainFile(rel);
     expect(lineOf(note, "Beta extended")).toMatch(new RegExp(`^- \\*\\*Status\\*\\* \\(${TODAY}\\): Beta extended`));
     // History keeps the old value with the Review date it had.
     expect(lineOf(note, 'was "Beta opens to customers"')).toContain(`(dated ${TODAY}, review ${IN_A_MONTH})`);
     expect((await docState(rel)).find((s) => s.subject === "Status")?.review).toBeUndefined();
 
-    await svc.post("/memory/save", { items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "General availability planned", reason: "beta closed", review: IN_TWO_MONTHS }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "General availability planned", reason: "beta closed", review: IN_TWO_MONTHS }] }] });
     note = brainFile(rel);
     expect(lineOf(note, "General availability")).toContain(`(${TODAY}, review ${IN_TWO_MONTHS}): General availability planned`);
   });
@@ -136,11 +136,11 @@ describe("reverting a change to a fact with a Review date", () => {
     return changes.find((c: { relPath: string; subject: string | null; newValue: string | null }) => c.relPath === rel && c.subject === "Status" && c.newValue === value);
   };
   beforeAll(async () => {
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Draco upgrade", facts: [{ subject: "Status", value: "Waiting for the vendor", review: IN_A_MONTH }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Draco upgrade", facts: [{ subject: "Status", value: "Waiting for the vendor", review: IN_A_MONTH }] }] });
   });
 
   it("brings back the old value with the Review date it had", async () => {
-    await svc.post("/memory/save", { items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Vendor delivered", reason: "delivery arrived" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Vendor delivered", reason: "delivery arrived" }] }] });
     const change = await statusChange("Vendor delivered");
     expect(change).toMatchObject({ oldValue: "Waiting for the vendor", oldReview: IN_A_MONTH, newReview: null });
     await svc.post(`/memory/changes/${change.id}/revert`);
@@ -148,7 +148,7 @@ describe("reverting a change to a fact with a Review date", () => {
   });
 
   it("puts back the Review date the value had before, and refuses once the Review date was edited by hand", async () => {
-    await svc.post("/memory/save", { items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Upgrade scheduled", reason: "date agreed", review: IN_TWO_MONTHS }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Upgrade scheduled", reason: "date agreed", review: IN_TWO_MONTHS }] }] });
     const scheduled = await statusChange("Upgrade scheduled");
     expect(scheduled).toMatchObject({ newReview: IN_TWO_MONTHS, revert: { allowed: true } });
 

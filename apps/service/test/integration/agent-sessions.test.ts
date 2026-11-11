@@ -57,7 +57,7 @@ beforeAll(async () => {
   installFixtureModel(fx);
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }, { subject: "Repositories", value: "acme/orion" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }, { subject: "Repositories", value: "acme/orion" }] }] });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture-model" } });
 });
 afterAll(async () => {

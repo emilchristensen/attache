@@ -25,7 +25,7 @@ const pending = async (m: TestService) => (await m.get("/memory/proposals")).pro
 const withStatus = async (m: TestService, status: string) => (await m.get(`/memory/proposals?status=${status}`)).proposals as Array<Record<string, any>>;
 
 async function seedNote(m: TestService) {
-  await m.post("/memory/save", { items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }] }] });
+  await m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }] }] });
 }
 
 function propose(m: TestService, value: string) {

@@ -171,7 +171,7 @@ async function main() {
   await http("POST", "/setup/data-folder", { path: DATA }, token);
   await http("PUT", "/features", { changes: { drafts: false }, cascade: true }, token);
   await http("PATCH", "/config", { schedules: { refreshEveryMinutes: 55 } }, token);
-  await http("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
+  await http("POST", "/memory/save", { confirmed: true, origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
   await http("POST", "/setup/complete", {}, token);
   check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
   const meaning = await http("GET", "/memory/meaning", undefined, token);

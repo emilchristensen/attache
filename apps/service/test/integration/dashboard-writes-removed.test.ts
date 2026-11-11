@@ -8,7 +8,7 @@ const NOTE = "memory/projects/orion-migration.md";
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }], notes: "Moves billing to the ledger." }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }], notes: "Moves billing to the ledger." }] });
 });
 afterAll(() => svc.stop());
 

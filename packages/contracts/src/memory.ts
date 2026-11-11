@@ -99,11 +99,19 @@ export const MemorySaveInput = z.object({
    * the origin's Harness on this Machine. Refused when it is off.
    */
   autoAccept: z.boolean().optional(),
+  /**
+   * The owner accepted this save when Jarvis's MCP server asked them in the
+   * Harness. A save that is neither confirmed nor auto-accepted is stored as
+   * Proposals instead of being written.
+   */
+  confirmed: z.literal(true).optional(),
 });
 export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
+/** What a save did: written as the owner (`saved`), or stored for review because nobody confirmed it (`proposals`). */
 export interface MemorySaveResult {
   saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
+  proposals: ProposalView[];
 }
 
 /** What a save would change, checked against the Brain without writing: one entry per item, in order. */
@@ -126,7 +134,7 @@ export const HarnessAutoAcceptInput = z.object({ autoAccept: z.boolean() });
 export type HarnessAutoAcceptInput = z.infer<typeof HarnessAutoAcceptInput>;
 
 /** A save the owner could not confirm, stored as one Proposal per item for review in the Dashboard. */
-export const MemorySaveProposalInput = MemorySaveInput.omit({ autoAccept: true }).extend({
+export const MemorySaveProposalInput = MemorySaveInput.omit({ autoAccept: true, confirmed: true }).extend({
   /** Why the save waits for review, shown beside each Proposal. */
   reason: z.string().trim().min(1).max(1000),
 });

@@ -59,7 +59,7 @@ async function machine(opts: { github?: string | false; setup?: boolean } = {}):
 
 const connectGitHub = (svc: TestService, token: string) => svc.post("/connections/github/configure", { method: "token", fields: { token, apiBaseUrl: github.apiBase } });
 
-const saveNote = (m: TestService, title: string) => m.post("/memory/save", { items: [{ action: "create", type: "note", title, facts: [{ subject: "Fact", value: `${title} is replicated` }] }] });
+const saveNote = (m: TestService, title: string) => m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title, facts: [{ subject: "Fact", value: `${title} is replicated` }] }] });
 
 const pushedFiles = (repo: { owner: string; name: string }) => github.git(repo.owner, repo.name, "ls-tree", "-r", "--name-only", "main");
 

@@ -37,7 +37,7 @@ const proseItems = async (m: TestMachine, state = "open"): Promise<InboxItem[]> 
   ((await m.get(`/attention?state=${state}`)).items as InboxItem[]).filter((i) => i.kind === "replication_prose_versions");
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 8_000): Promise<T> {
   const end = Date.now() + timeoutMs;

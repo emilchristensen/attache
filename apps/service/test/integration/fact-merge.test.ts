@@ -17,7 +17,7 @@ afterEach(async () => {
 
 const read = (m: TestMachine, rel: string) => readFileSync(join(m.dataDir, rel), "utf8");
 
-const save = (m: TestMachine, items: unknown[]) => m.post("/memory/save", { items });
+const save = (m: TestMachine, items: unknown[]) => m.post("/memory/save", { confirmed: true, items });
 
 const correct = (m: TestMachine, path: string, facts: Array<{ subject: string; value: string; review?: string }>, events: string[] = []) =>
   save(m, [{ action: "update", path, facts: facts.map((f) => ({ ...f, reason: "changed while apart" })), ...(events.length ? { events } : {}) }]);

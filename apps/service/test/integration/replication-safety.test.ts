@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 const git = (m: TestMachine, ...args: string[]) =>
   execFileSync("git", ["-C", m.dataDir, ...args], { encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
@@ -79,7 +79,7 @@ describe("Deleting a note", () => {
 
 describe("A note deleted on one Machine and changed on another", () => {
   const status = (m: TestMachine, title: string, value: string) =>
-    m.post("/memory/save", { items: [{ action: "update", path: `memory/projects/${title}.md`, facts: [{ subject: "Status", value, reason: "news" }] }] });
+    m.post("/memory/save", { confirmed: true, items: [{ action: "update", path: `memory/projects/${title}.md`, facts: [{ subject: "Status", value, reason: "news" }] }] });
   const inbox = async (m: TestMachine) => ((await m.get("/attention")).items as Array<{ title: string; summary: string; sourceKind: string; evidence: Array<{ relPath?: string }> }>).filter((i) => i.sourceKind === "replication_merge");
 
   it("is kept with the change, on both Machines, and one inbox item says so", async () => {

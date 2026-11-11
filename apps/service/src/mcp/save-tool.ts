@@ -44,7 +44,7 @@ export function registerSaveTool(server: McpServer, brain: BrainAccess, context:
         const answer = await askOwner(server.server, confirmationMessage(harness, items, check), extra.requestId);
         if (answer === "unsupported") return proposed(await brain.propose({ origin, items, reason: `${harness} asked to save this but cannot ask you to confirm, so it waits for your review.` }));
         if (answer !== "accept") return declined(answer);
-        return saved(await brain.save({ origin, items }), null);
+        return saved(await brain.save({ origin, items, confirmed: true }), null);
       } catch (e) {
         return { isError: true, content: [{ type: "text", text: `Nothing was saved. ${(e as Error).message}` }] };
       }

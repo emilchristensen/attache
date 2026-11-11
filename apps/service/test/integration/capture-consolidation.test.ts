@@ -103,7 +103,7 @@ async function connectModel(service: TestService) {
 
 async function setUp(service: TestService) {
   await service.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await service.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
+  await service.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
 }
 
 beforeAll(async () => {

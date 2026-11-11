@@ -526,13 +526,14 @@ test("auto-accept: switched on for one Harness in Settings, kept across reload, 
   await page.reload();
   await expect(page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ })).toBeChecked();
 
-  // What the MCP save tool sends when auto-accept is on.
-  const status = await page.evaluate(async () => {
-    const body = { origin: { agent: "claude-code", sessionId: "sess-auto" }, autoAccept: true, items: [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }] };
+  // A save from Claude Code goes through without asking now. The Dashboard itself cannot save.
+  await harnessSave(stack, [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }], { agent: "claude-code", session: "sess-auto" });
+  const dashboardSave = await page.evaluate(async () => {
+    const body = { items: [{ action: "create", type: "note", title: "Typed in the Dashboard", facts: [{ subject: "Idea", value: "x" }] }] };
     const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
     return res.status;
   });
-  expect(status).toBe(200);
+  expect(dashboardSave).toBe(403);
   await page.goto(`${stack.url}/memory`);
   const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
   await expect(created).toContainText("Claude Code, session sess-auto");

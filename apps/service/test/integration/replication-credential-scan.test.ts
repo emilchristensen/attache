@@ -20,7 +20,7 @@ afterEach(async () => {
 const pushedFiles = (w: TestWorld) => w.remote.git("ls-tree", "-r", "--name-only", "main").split("\n");
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 describe("Credential scan before every commit", () => {
   it("does not commit or push a note holding a token, and the status names the file and line without the secret", async () => {
@@ -69,12 +69,12 @@ describe("Credential scan before every commit", () => {
   it("continues by itself once the credential is removed, and resolves the inbox item", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];
-    await mac.post("/memory/save", { items: [{ action: "create", type: "project", title: "Kestrel deploy", facts: [{ subject: "Token", value: GITHUB_TOKEN }] }] });
+    await mac.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Kestrel deploy", facts: [{ subject: "Token", value: GITHUB_TOKEN }] }] });
     await mac.clock.advance(AFTER_WRITE);
     expect((await mac.get("/replication")).status).toBe("blocked");
     expect(pushedFiles(world)).not.toContain("memory/projects/kestrel-deploy.md");
 
-    await mac.post("/memory/save", { items: [{ action: "update", path: "memory/projects/kestrel-deploy.md", facts: [{ subject: "Token", value: "kept in the password manager", reason: "never store tokens in notes" }] }] });
+    await mac.post("/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/projects/kestrel-deploy.md", facts: [{ subject: "Token", value: "kept in the password manager", reason: "never store tokens in notes" }] }] });
     // The correction moves the old value to History, so the note still holds the token: remove it by hand.
     const file = join(mac.dataDir, "memory/projects/kestrel-deploy.md");
     writeFileSync(file, readFileSync(file, "utf8").split(GITHUB_TOKEN).join("(removed)"));

@@ -14,7 +14,7 @@ async function recent(): Promise<any[]> {
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { origin, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }] }] });
+  await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
@@ -22,7 +22,7 @@ afterAll(async () => {
 
 describe("recent saves", () => {
   it("lists each change with its note, subject, old and new value, Harness, session and time", async () => {
-    await svc.post("/memory/save", { origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }] });
+    await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }] });
     const [latest, created] = await recent();
     expect(latest).toMatchObject({
       relPath: ORION,
@@ -56,7 +56,7 @@ describe("recent saves", () => {
   });
 
   it("reverts a newly created note by removing it from the Brain and from search, and can bring it back", async () => {
-    const { saved } = await svc.post("/memory/save", { origin, items: [{ action: "create", type: "decision", title: "Use Kestrel for queues", facts: [{ subject: "Decision", value: "Kestrel replaces the zephyrine broker" }], events: ["Agreed in the queue review"] }] });
+    const { saved } = await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "create", type: "decision", title: "Use Kestrel for queues", facts: [{ subject: "Decision", value: "Kestrel replaces the zephyrine broker" }], events: ["Agreed in the queue review"] }] });
     const relPath = saved[0].relPath;
     const search = async () => (await svc.get(`/memory/search?q=zephyrine`)).hits.filter((h: any) => h.relPath === relPath);
     expect(await search()).not.toHaveLength(0);
@@ -80,8 +80,8 @@ describe("recent saves", () => {
 
   it("refuses to revert a change that a later change overwrote, and says why", async () => {
     const path = "memory/projects/orion-migration.md";
-    await svc.post("/memory/save", { origin, items: [{ action: "update", path, facts: [{ subject: "Owner", value: "Grace", reason: "handover" }] }] });
-    await svc.post("/memory/save", { origin: { agent: "codex", sessionId: "sess-2" }, items: [{ action: "update", path, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }] });
+    await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "update", path, facts: [{ subject: "Owner", value: "Grace", reason: "handover" }] }] });
+    await svc.post("/memory/save", { confirmed: true, origin: { agent: "codex", sessionId: "sess-2" }, items: [{ action: "update", path, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }] });
     const [newest, older] = await recent();
     expect(newest).toMatchObject({ subject: "Owner", newValue: "Linus", source: { harnessLabel: "Codex", sessionId: "sess-2" }, revert: { allowed: true } });
     expect(older).toMatchObject({ subject: "Owner", newValue: "Grace", revert: { allowed: false, reason: "A later change overwrote “Owner”. Revert that change first." } });
@@ -98,7 +98,7 @@ describe("recent saves", () => {
   });
 
   it("refuses a revert after an edit made outside Jarvis, and for events", async () => {
-    const { saved } = await svc.post("/memory/save", { origin, items: [{ action: "create", type: "person", title: "Ada Byron", facts: [{ subject: "Role", value: "Analyst" }] }, { action: "update", path: ORION, facts: [{ subject: "Budget", value: "40k", reason: "new estimate" }], events: ["Budget agreed"] }] });
+    const { saved } = await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "create", type: "person", title: "Ada Byron", facts: [{ subject: "Role", value: "Analyst" }] }, { action: "update", path: ORION, facts: [{ subject: "Budget", value: "40k", reason: "new estimate" }], events: ["Budget agreed"] }] });
     const ada = saved[0].relPath;
     writeFileSync(join(svc.dataDir, ada), readFileSync(join(svc.dataDir, ada), "utf8").replace("Analyst", "Lead analyst"));
     writeFileSync(join(svc.dataDir, ORION), readFileSync(join(svc.dataDir, ORION), "utf8").replace("): 40k", "): 45k"));
@@ -132,7 +132,7 @@ describe("recent saves", () => {
   });
 
   it("gives every change one save made the same batch id, and each save its own", async () => {
-    await svc.post("/memory/save", { origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Region", value: "EU", reason: "chosen" }], events: ["Region chosen"] }, { action: "create", type: "note", title: "Region checklist", facts: [{ subject: "Step", value: "Move DNS" }] }] });
+    await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Region", value: "EU", reason: "chosen" }], events: ["Region chosen"] }, { action: "create", type: "note", title: "Region checklist", facts: [{ subject: "Step", value: "Move DNS" }] }] });
     const [a, b, c] = (await svc.get("/memory/changes?status=applied&limit=3")) as any[];
     expect(new Set([a.batchId, b.batchId, c.batchId]).size).toBe(1);
     expect(a).toMatchObject({ harness: "claude-code", sessionId: "sess-revert-1" });
@@ -141,7 +141,7 @@ describe("recent saves", () => {
   });
 
   it("reverts a fact a save added by taking it out of Current State and keeping it in History", async () => {
-    await svc.post("/memory/save", { origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Sponsor", value: "Margaret", reason: "named in steering" }] }] });
+    await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "update", path: ORION, facts: [{ subject: "Sponsor", value: "Margaret", reason: "named in steering" }] }] });
     const [added] = await recent();
     expect(added).toMatchObject({ subject: "Sponsor", oldValue: null, newValue: "Margaret" });
     const { change } = await svc.post(`/memory/changes/${added.id}/revert`);

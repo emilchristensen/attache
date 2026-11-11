@@ -122,7 +122,7 @@ describe("evidence written before the change", () => {
 
   it("a project's session context reads every Machine's log of a day", async () => {
     const svc = await start({ features: { sessions: true } });
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Quasar rollout", facts: [{ subject: "Repositories", value: "acme/quasar" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Quasar rollout", facts: [{ subject: "Repositories", value: "acme/quasar" }] }] });
     const date = today();
     const other = `---\ntype: session-log\ntitle: Agent sessions on ${date}\ndate: ${date}\nmachine: Desk\nprovenance: agent-session-summary\n---\n# Agent sessions on ${date}\n\n## 08:00 · Claude Code · quasar\n\n**Before lunch**\n\nRepository: github.com/acme/quasar\n\n- Written on the other Machine.\n`;
     writeFileSync(join(svc.dataDir, "evidence/sessions", `${date}-desk-12345678.md`), other);
