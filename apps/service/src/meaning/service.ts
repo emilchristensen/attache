@@ -5,6 +5,7 @@ import { VectorBuilder } from "./builder.ts";
 import type { Embedder, LoadEmbedder } from "./embedder.ts";
 import { downloadModel, isInstalled, modelDir, removeModel, type DownloadProgress } from "./model-files.ts";
 import { modelBytes, type MeaningModel } from "./model.ts";
+import { nearestChunks } from "./nearest.ts";
 import { meaningStateOf, rankingOf } from "./status.ts";
 import { vectorCoverage } from "./vectors.ts";
 
@@ -75,6 +76,23 @@ export class MeaningSearch {
 
   private state(): MeaningState {
     return meaningStateOf({ downloading: this.download !== null, failed: this.error !== null, installed: this.installed, vectors: vectorCoverage(this.deps.db, this.model.id) });
+  }
+
+  /**
+   * The chunks nearest `query` by meaning, best first: the list search fuses
+   * with its two keyword lists. Empty unless every passage has a vector, so
+   * search ranks by meaning exactly when `status()` says it does. A model that
+   * stops working is reported as failed and search goes on with keywords.
+   */
+  async nearest(query: string, limit: number): Promise<number[]> {
+    if (this.stopped || this.state() !== "ready") return [];
+    try {
+      const vector = await (await this.embedder()).embedQuery(query);
+      return nearestChunks(this.deps.db, this.model.id, vector, limit);
+    } catch (e) {
+      this.fail("could not rank by meaning", e as Error);
+      return [];
+    }
   }
 
   /** Build vectors for whatever the index holds now, if the model is here. */

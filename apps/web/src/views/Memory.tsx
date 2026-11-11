@@ -159,14 +159,13 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
 
 /** Why search results match keywords only, for as long as search does not rank by meaning on this Machine. */
 function KeywordsOnly({ meaning }: { meaning: MeaningStatus }) {
-  const why: Record<MeaningStatus["state"], string> = {
+  if (meaning.ranking === "meaning" || meaning.state === "ready") return null;
+  const why: Record<Exclude<MeaningStatus["state"], "ready">, string> = {
     missing: "the meaning model is not downloaded",
     downloading: "the meaning model is downloading",
     failed: "meaning-based search stopped with an error",
     building: `search vectors are being built (${meaning.vectors.embedded} of ${meaning.vectors.chunks})`,
-    ready: "every passage has a meaning vector, but search does not rank by meaning yet",
   };
-  if (meaning.ranking === "meaning") return null;
   const reason = why[meaning.state];
   return (
     <p className="small muted" data-keywords-only>

@@ -4,6 +4,8 @@ import { cpSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
+import { installFixtureMeaningModel } from "../fixtures/fixture-meaning-model.ts";
 
 const MAIN = join(import.meta.dirname, "../../src/main.ts");
 const SYNTHETIC_BRAIN = join(import.meta.dirname, "../fixtures/recall-brain");
@@ -48,6 +50,8 @@ afterAll(async () => {
  * A search change may raise these, never lower them; raise them when it does.
  */
 const BASELINE = { top1: 16, top3: 18 };
+/** The synthetic set with meaning-based search, on the fixture meaning model. Raise it when a search change does. */
+const MEANING_BASELINE = { top1: 19, top3: 20 };
 
 function writeSet(name: string, content: unknown): string {
   const file = join(scratch, name);
@@ -93,6 +97,7 @@ describe("recall evaluation against the synthetic Brain", () => {
     const text = await jarvis(["evaluate-recall", "--set", set]);
     expect(text.status).toBe(0);
     expect(text.stdout).toContain("2 questions from the supplied set");
+    expect(text.stdout).toContain("Ranked by keywords only: meaning-based search is not ready on this Machine");
     expect(text.stdout).toContain("First result: 1 of 2 (50%)");
     expect(text.stdout).toContain("In the first three: 1 of 2 (50%)");
     expect(text.stdout).toMatch(/Not found: Who owns the Orion migration\?\n  expected: memory\/people\/mia-jensen\.md · role\n  1\. memory\/projects\/orion-migration\.md:14-14 · Owner /);
@@ -155,5 +160,60 @@ describe("recall evaluation against the synthetic Brain", () => {
     } finally {
       writeFileSync(kept, original);
     }
+  });
+});
+
+describe("recall evaluation with meaning-based search", () => {
+  let fx: FixtureServer;
+  let ranked: TestService;
+
+  beforeAll(async () => {
+    fx = await startFixtureServer();
+    const model = installFixtureMeaningModel(fx);
+    const brain = join(mkdtempSync(join(tmpdir(), "jarvis-recall-meaning-")), "brain");
+    cpSync(SYNTHETIC_BRAIN, brain, { recursive: true });
+    ranked = await startTestService({ dataDir: brain, meaning: { model: model.description() } });
+    await ranked.post("/memory/meaning/download");
+    const end = Date.now() + 15_000;
+    while ((await ranked.get("/memory/meaning")).state !== "ready") {
+      if (Date.now() > end) throw new Error("meaning-based search never became ready");
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  });
+  afterAll(async () => {
+    await ranked?.stop();
+    await fx?.close();
+  });
+
+  const evaluateOn = (service: TestService, questions?: unknown[]) => service.post("/memory/recall-evaluation", questions ? { set: { questions } } : {});
+
+  it("finds the fact for a question worded unlike the note, and for a Danish question about an English note, which keywords alone miss", async () => {
+    const questions = [
+      { question: "What do we use for web statistics?", note: "memory/projects/website-relaunch.md", fact: "Analytics" },
+      { question: "Hvornår holder vi morgenmøde?", note: "memory/notes/team-rituals.md", fact: "Standup" },
+    ];
+    const keywordsOnly = await evaluateOn(svc, questions);
+    expect(keywordsOnly).toMatchObject({ ranking: "keywords", top1: 0 });
+    const withMeaning = await evaluateOn(ranked, questions);
+    expect(withMeaning).toMatchObject({ ranking: "meaning", questions: 2, top1: 2, top3: 2, misses: [] });
+  });
+
+  it("keeps exact lookups of ticket numbers, repositories and names first", async () => {
+    const report = await evaluateOn(ranked, [
+      { question: "ORION-412", note: "memory/projects/orion-migration.md", fact: "Ticket" },
+      { question: "northwind/orion-infra", note: "memory/projects/orion-migration.md", fact: "Repository" },
+      { question: "Lars Holm", note: "memory/people/ada-okafor.md", fact: "Manager" },
+      { question: "Plausible", note: "memory/projects/website-relaunch.md", fact: "Analytics" },
+    ]);
+    expect(report).toMatchObject({ questions: 4, top1: 4, misses: [] });
+  });
+
+  it("scores the Brain's own set above keywords alone", async () => {
+    const report = await evaluateOn(ranked);
+    expect(report.ranking).toBe("meaning");
+    expect(report.top1).toBeGreaterThanOrEqual(MEANING_BASELINE.top1);
+    expect(report.top3).toBeGreaterThanOrEqual(MEANING_BASELINE.top3);
+    expect(MEANING_BASELINE.top1).toBeGreaterThan(BASELINE.top1);
+    expect(MEANING_BASELINE.top3).toBeGreaterThan(BASELINE.top3);
   });
 });

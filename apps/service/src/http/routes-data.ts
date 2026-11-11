@@ -2,7 +2,7 @@ import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInp
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
-import { RECALL_EXCLUDE, search } from "../memory/search.ts";
+import { RECALL_EXCLUDE, searchByMeaning } from "../memory/search.ts";
 import { getItem, listItems } from "../attention/engine.ts";
 import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
@@ -69,14 +69,16 @@ function documentTarget(app: App, root: string | null | undefined, path: string 
 
 export function registerDataRoutes(r: Router, app: App) {
   // ---- memory ------------------------------------------------------------------
-  r.get("/memory/search", (c) => {
+  r.get("/memory/search", async (c) => {
     requireFeature(app, "recall");
     const q = c.query("q") ?? "";
     const area = c.query("area");
     const type = c.query("type");
     // `recall=1` searches the way recall does: old chat archives and session transcripts stay out, their summaries stay in.
     const recall = c.query("recall") === "1";
-    return { query: q, meaning: app.meaning.status(), hits: search(app.db, q, { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) }) };
+    const hits = await searchByMeaning(app.db, q, (query, n) => app.meaning.nearest(query, n), { limit: Math.min(Number(c.query("limit") ?? 20), 50), ...(area ? { areas: [area] } : {}), ...(type ? { docTypes: [type] } : {}), ...(recall ? { excludePrefixes: RECALL_EXCLUDE } : {}) });
+    // Read after searching, so a model that failed while ranking is reported with these results.
+    return { query: q, meaning: app.meaning.status(), hits };
   });
   r.get("/memory/documents", (c) => {
     requireFeature(app, "recall");

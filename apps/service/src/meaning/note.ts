@@ -14,6 +14,6 @@ export function meaningNote(status: MeaningStatus): string | null {
     case "building":
       return `Results match keywords only while search vectors are built (${status.vectors.embedded} of ${status.vectors.chunks} passages).`;
     case "ready":
-      return status.ranking === "meaning" ? null : "Results match keywords only: every passage has a meaning vector, but search does not rank by meaning yet.";
+      return null;
   }
 }

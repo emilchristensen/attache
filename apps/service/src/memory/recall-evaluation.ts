@@ -1,11 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
-import { RecallQuestionSet, type RecallEvaluationHit, type RecallEvaluationReport, type RecallQuestion } from "@jarvis/contracts";
+import { RecallQuestionSet, type MeaningRanking, type RecallEvaluationHit, type RecallEvaluationReport, type RecallQuestion } from "@jarvis/contracts";
 import type { Db } from "../core/db.ts";
 import { nowIso } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";
 import { parseStateEntries, parseStateLine } from "./markdown.ts";
 import { resolveInside } from "./policy.ts";
-import { RECALL_EXCLUDE, search, type SearchHit } from "./search.ts";
+import { RECALL_EXCLUDE, searchByMeaning, type NearestChunks, type SearchHit } from "./search.ts";
+
+/** How search ranks while a set is scored: the chunks nearest each question by meaning, and whether there are any. */
+export interface RecallRanking {
+  ranking: MeaningRanking;
+  nearest: NearestChunks;
+}
 
 /** Where a Brain keeps its own question set. JSON, so the indexer never reads it and its questions never match themselves. */
 export const RECALL_SET_PATH = "evaluation/recall-questions.json";
@@ -39,7 +45,7 @@ export function describeIssues(issues: ReadonlyArray<{ path: ReadonlyArray<Prope
  * first result, and how often it is in the first three. Search runs exactly as
  * it does for a Harness, so a change to ranking shows up here.
  */
-export function evaluateRecall(db: Db, dataRoot: string, set: RecallQuestionSet, source: RecallEvaluationReport["set"]): RecallEvaluationReport {
+export async function evaluateRecall(db: Db, dataRoot: string, set: RecallQuestionSet, source: RecallEvaluationReport["set"], meaning: RecallRanking): Promise<RecallEvaluationReport> {
   const invalid: RecallEvaluationReport["invalid"] = [];
   const scored: Array<RecallQuestion & { rank: number | null; returned: RecallEvaluationHit[] }> = [];
   for (const q of set.questions) {
@@ -48,7 +54,7 @@ export function evaluateRecall(db: Db, dataRoot: string, set: RecallQuestionSet,
       invalid.push({ ...q, problem });
       continue;
     }
-    const hits = search(db, q.question, { limit: RESULTS_SEARCHED, excludePrefixes: RECALL_EXCLUDE }).map(describeHit);
+    const hits = (await searchByMeaning(db, q.question, meaning.nearest, { limit: RESULTS_SEARCHED, excludePrefixes: RECALL_EXCLUDE })).map(describeHit);
     const index = hits.findIndex((h) => isExpected(h, q));
     scored.push({ ...q, rank: index < 0 ? null : index + 1, returned: hits.slice(0, RESULTS_SHOWN) });
   }
@@ -58,6 +64,7 @@ export function evaluateRecall(db: Db, dataRoot: string, set: RecallQuestionSet,
   return {
     generatedAt: nowIso(),
     set: source,
+    ranking: meaning.ranking,
     questions: scored.length,
     top1,
     top3,

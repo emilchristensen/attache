@@ -22,6 +22,9 @@ const CONCEPTS: readonly string[][] = [
   ["daughter", "datter", "child", "barn"],
   ["meeting", "meetings", "møde", "call"],
   ["coffee", "kaffe", "tea", "te"],
+  ["standup", "morgenmøde"],
+  ["statistics", "statistik", "analytics", "tracking"],
+  ["why", "hvorfor", "reason", "because"],
 ];
 
 const UNKNOWN = "[UNK]";
@@ -44,7 +47,8 @@ function buildFiles(): Record<FixtureModelFile, Buffer> {
     padding: null,
     added_tokens: [{ id: 0, content: UNKNOWN, single_word: false, lstrip: false, rstrip: false, normalized: false, special: true }],
     normalizer: { type: "Lowercase" },
-    pre_tokenizer: { type: "Whitespace" },
+    // Split on spaces and punctuation, not on letters outside ASCII, so Danish words such as "møde" stay whole.
+    pre_tokenizer: { type: "Sequence", pretokenizers: [{ type: "WhitespaceSplit" }, { type: "Punctuation", behavior: "Isolated" }] },
     post_processor: null,
     decoder: null,
     model: { type: "WordPiece", unk_token: UNKNOWN, continuing_subword_prefix: "##", max_input_chars_per_word: 100, vocab },

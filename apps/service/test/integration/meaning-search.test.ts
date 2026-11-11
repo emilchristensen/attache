@@ -194,6 +194,25 @@ describe("after the download", () => {
   });
 });
 
+describe("a model that stops working while ranking", () => {
+  it("is reported as failed, and that search and the next ones answer on keywords", async () => {
+    const broken: LoadEmbedder = async (dir, m) => {
+      const real = await loadOnnxEmbedder(dir, m);
+      return { ...real, embedQuery: () => Promise.reject(new Error("the model ran out of memory")) };
+    };
+    const svc = await start({ loadEmbedder: broken });
+    await svc.post("/memory/meaning/download");
+    await meaningState(svc, "ready");
+
+    const first = await svc.get("/memory/search?q=Aarhus%20office");
+    expect(first.meaning).toMatchObject({ state: "failed", ranking: "keywords", error: expect.stringContaining("ran out of memory") });
+    expect(first.hits.map((h: { relPath: string }) => h.relPath)).toContain("memory/people/mia-jensen.md");
+    const next = await svc.get(`/memory/search?q=${encodeURIComponent("Hvornår holder vi morgenmøde?")}`);
+    expect(next.meaning.state).toBe("failed");
+    expect(next.hits).toEqual([]);
+  });
+});
+
 describe("a download that goes wrong", () => {
   it("reports the failure, keeps answering on keywords and can be started again", async () => {
     const svc = await start();
@@ -214,33 +233,44 @@ describe("a download that goes wrong", () => {
   });
 });
 
-describe("once every passage has a vector, while search does not rank by meaning yet", () => {
+describe("once every passage has a vector, search ranks by meaning", () => {
   const mcp = mcpClients();
   afterAll(() => mcp.closeAll());
 
-  it("still says results match keywords only, in the API, the MCP server, the CLI and the model's status", async () => {
+  const DANISH = "Hvornår holder vi morgenmøde?";
+  const STANDUP = "Daily standup at 09:15 in the Copenhagen office";
+
+  it("finds the English fact for a Danish question in the API, the MCP server and the CLI, with no keywords-only note", async () => {
     const svc = await start();
+    const missing = await svc.get(`/memory/search?recall=1&q=${encodeURIComponent(DANISH)}`);
+    expect(missing.meaning.ranking).toBe("keywords");
+    expect(missing.hits).toEqual([]);
+
     await svc.post("/memory/meaning/download");
     const ready = await meaningState(svc, "ready");
-    expect(ready.ranking).toBe("keywords");
+    expect(ready.ranking).toBe("meaning");
 
-    const api = await svc.get("/memory/search?q=Aarhus%20office");
-    expect(api.meaning).toMatchObject({ state: "ready", ranking: "keywords" });
+    const api = await svc.get(`/memory/search?recall=1&q=${encodeURIComponent(DANISH)}`);
+    expect(api.meaning).toMatchObject({ state: "ready", ranking: "meaning" });
+    expect(api.hits[0]).toMatchObject({ relPath: "memory/notes/team-rituals.md", section: "state" });
+    expect(api.hits[0].text).toContain(STANDUP);
 
     const client = await mcp.connect(svc.stateDir);
-    const r = await callTool<{ meaning: { state: string; note: string | null } }>(client, "search", { query: "Aarhus office" });
-    expect(r.data.meaning.note).toMatch(/keywords only.*does not rank by meaning yet/);
-    expect(r.text.split("\n")[0]).toBe(r.data.meaning.note);
+    const r = await callTool<{ meaning: { state: string; note: string | null }; passages: Array<{ text: string }> }>(client, "search", { query: DANISH });
+    expect(r.data.meaning).toEqual({ state: "ready", note: null });
+    expect(r.data.passages[0]!.text).toContain(STANDUP);
+    expect(r.text).not.toMatch(/keywords only/);
 
     const modelFile = join(mkdtempSync(join(tmpdir(), "jarvis-meaning-model-")), "model.json");
     writeFileSync(modelFile, JSON.stringify(model.description()));
     const env = { ...process.env, JARVIS_MEANING_MODEL: modelFile };
-    const text = execFileSync(process.execPath, [MAIN, "search", "Aarhus office", "--state-dir", svc.stateDir], { encoding: "utf8", env });
-    expect(text.split("\n")[0]).toBe(r.data.meaning.note);
-    // The JSON form stays a list of hits for scripts; the note goes to stderr.
-    const json = spawnSync(process.execPath, [MAIN, "search", "Aarhus office", "--state-dir", svc.stateDir, "--json"], { encoding: "utf8", env });
-    expect(Array.isArray(JSON.parse(json.stdout))).toBe(true);
-    expect(json.stderr.trim()).toBe(r.data.meaning.note);
+    const text = execFileSync(process.execPath, [MAIN, "search", DANISH, "--state-dir", svc.stateDir], { encoding: "utf8", env });
+    expect(text).not.toMatch(/keywords only/);
+    expect(text.split("\n")[0]).toMatch(/team-rituals\.md:\d+-\d+ {2}Team rituals$/);
+    expect(text.split("\n")[1]).toContain("Daily standup");
+    const json = spawnSync(process.execPath, [MAIN, "search", DANISH, "--state-dir", svc.stateDir, "--json"], { encoding: "utf8", env });
+    expect(json.stderr).toBe("");
+    expect(JSON.parse(json.stdout)[0].file).toBe(join(svc.dataDir, "memory", "notes", "team-rituals.md"));
   });
 
   it("the CLI says why when the model is not downloaded", async () => {
