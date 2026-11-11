@@ -7,6 +7,7 @@ import { search } from "../memory/search.ts";
 import { ProposalIndex } from "../memory/proposal-index.ts";
 import { proposalHeadline } from "../memory/proposal-record.ts";
 import { complete, type ModelProvider } from "../models/providers.ts";
+import { latestReplicatedBriefing } from "./replicated-briefing.ts";
 
 export interface SourceCoverage {
   id: string;
@@ -150,7 +151,19 @@ export function saveBriefing(db: Db, b: Briefing, jobId: string | null) {
   db.prepare("insert into briefings (id, created_at, kind, summary, items, coverage, job_id, deliverable_path) values (?,?,?,?,?,?,?,?)").run(b.id, b.createdAt, b.kind, b.summary, JSON.stringify({ sections: b.sections, counts: b.counts, since: b.since }), JSON.stringify(b.coverage), jobId, b.deliverablePath);
 }
 
+/**
+ * The newest briefing this Machine knows: its own, or one another Machine (the
+ * Reader) made and Replication brought in as a deliverable.
+ */
 export function latestBriefing(db: Db): Briefing | null {
+  const own = latestOwnBriefing(db);
+  const replicated = latestReplicatedBriefing(db);
+  if (!own || !replicated) return own ?? replicated;
+  return replicated.createdAt > own.createdAt ? replicated : own;
+}
+
+/** The newest briefing this Machine made itself. */
+function latestOwnBriefing(db: Db): Briefing | null {
   const r = db.prepare("select * from briefings order by created_at desc limit 1").get() as Record<string, unknown> | undefined;
   if (!r) return null;
   const items = json<{ sections: BriefingSection[]; counts: Briefing["counts"]; since: string | null }>(r.items, { sections: [], counts: { open: 0, new: 0, changed: 0, drafts: 0, proposals: 0, failedSources: 0 }, since: null });

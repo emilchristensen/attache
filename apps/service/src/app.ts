@@ -162,6 +162,10 @@ export class App {
     this.replication.onPulled((paths) => this.captures.pulled(paths));
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.replication.onPulled((paths) => this.inbox.pulled(paths));
+    // The Reader's briefing arrives as a deliverable; Dashboards show the newest one (`latestBriefing`).
+    this.replication.onPulled((paths) => {
+      if (paths.some((p) => p.startsWith("deliverables/briefings/"))) this.bus.emit("event", { type: "briefing.created" });
+    });
     this.replication.onMergeNotice((notices) => {
       if (raiseMergeNotices(this.db, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
     });

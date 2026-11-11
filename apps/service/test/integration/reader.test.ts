@@ -66,6 +66,22 @@ describe("the Reader's Source refresh", () => {
     expect((await readerOn(pc)).lastRefreshAt).toBe(finishedAt);
   });
 
+  it("shows the Reader's latest briefing on every Machine's Dashboard", async () => {
+    world = await startMachines(["Work Mac", "Home PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await waitUntilIdle(mac);
+    const briefing = tickAllDue(mac).find((r) => r.id === "attention:briefing")!;
+    await waitForJobs(mac, [briefing.jobId!]);
+    const onMac = (await mac.get("/briefings/latest")).briefing;
+    expect(onMac).not.toBeNull();
+    expect((await pc.get("/briefings/latest")).briefing).toBeNull();
+
+    await mac.clock.advance(AFTER_WRITE);
+    await pc.clock.advance(CHECK);
+    await waitUntilIdle(pc);
+    expect((await pc.get("/briefings/latest")).briefing).toEqual(onMac);
+  });
+
   it("still runs on the Machine the owner is on when started by hand", async () => {
     world = await startMachines(["Work Mac", "Home PC"]);
     const [, pc] = world.machines as [TestMachine, TestMachine];

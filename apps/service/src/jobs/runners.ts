@@ -2,6 +2,7 @@ import type { App } from "../app.ts";
 import type { JobContext } from "./queue.ts";
 import { EffectCheckError, JobBlockedError } from "./queue.ts";
 import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
+import { briefingFrontmatter } from "../attention/replicated-briefing.ts";
 import { getItem } from "../attention/engine.ts";
 import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
 import { complete } from "../models/providers.ts";
@@ -81,7 +82,7 @@ async function runBriefing(app: App, ctx: JobContext) {
   const briefing: Briefing = { ...base, summary, deliverablePath: null };
   const saved = await ctx.effect(`briefing:${ctx.job.id}`, async () => {
     const title = kind === "away" ? `Away summary since ${String(base.since ?? "").slice(0, 10)}` : `Briefing ${base.createdAt.slice(0, 10)}`;
-    const { relPath } = app.memory.writeDeliverable("briefings", title, renderBriefingMarkdown(briefing), { briefing_kind: kind });
+    const { relPath } = app.memory.writeDeliverable("briefings", title, renderBriefingMarkdown(briefing), { briefing_kind: kind, ...briefingFrontmatter(briefing) });
     return { relPath };
   });
   briefing.deliverablePath = saved.relPath;
