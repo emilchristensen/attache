@@ -8,6 +8,11 @@ import { mergeByRules, type GuardVerdict, type MachineRef, type MergeNotice, typ
 export const BRANCH = "main";
 export const REMOTE = "origin";
 const TRACKING = `refs/remotes/${REMOTE}/${BRANCH}`;
+/**
+ * The remote's `refs/jarvis/*` (the Reader lease), fetched with the Brain. A
+ * glob, so a remote without them is no error. They are never part of the Brain's history.
+ */
+export const JARVIS_REFS_FETCH = `+refs/jarvis/*:refs/remotes/${REMOTE}/jarvis/*`;
 const MACHINE_EMAIL_DOMAIN = "machine.jarvis.invalid";
 /** Locks, under `.git`, that the git commands Replication runs take while they change the repository. */
 const LOCK_FILES = ["index.lock", "HEAD.lock", "ORIG_HEAD.lock", `refs/heads/${BRANCH}.lock`, `${TRACKING}.lock`];
@@ -158,7 +163,7 @@ export class BrainRepo {
   }
 
   async fetch(remote: string): Promise<void> {
-    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`]);
+    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, JARVIS_REFS_FETCH]);
   }
 
   /** Push this Machine's commits. Only ever a fast-forward: a rejection means another Machine pushed first. */
