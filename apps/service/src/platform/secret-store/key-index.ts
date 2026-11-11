@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { replaceWith } from "../replace-file.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { writePrivateFile } from "../private-file.ts";
 
 /**
  * The keys this install has put in a system secret store, kept by Jarvis in
@@ -26,8 +26,6 @@ export class KeyIndex {
   }
 
   private write(keys: string[]): void {
-    const tmp = `${this.file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify([...new Set(keys)].sort()), { mode: 0o600 });
-    replaceWith(tmp, this.file);
+    writePrivateFile(this.file, JSON.stringify([...new Set(keys)].sort()));
   }
 }

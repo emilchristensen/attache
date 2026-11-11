@@ -3,24 +3,20 @@ import type { Env } from "../locations.ts";
 import type { Os } from "../os.ts";
 import { linuxNotifier } from "./linux.ts";
 import { macosNotifier } from "./macos.ts";
+import { windowsNotifier } from "./windows.ts";
 import type { Notifier, NotifierState } from "./types.ts";
 
 export type { Notifier, NotifierState } from "./types.ts";
 
-/** Windows notifications arrive with its release; until then nothing is shown there. */
-const notOnWindows: Notifier = {
-  check: async () => ({ available: false, reason: "Jarvis does not show notifications on Windows yet" }),
-  notify: async () => ({ available: false, reason: "Jarvis does not show notifications on Windows yet" }),
-};
-
-export function notifierFor(os: Os, env: Env = process.env): Notifier {
+/** The desktop notifications of this operating system; on Windows, `instance` keeps a test install's sender apart from the owner's. */
+export function notifierFor(os: Os, instance: string, env: Env = process.env): Notifier {
   switch (os) {
     case "macos":
       return macosNotifier;
     case "linux":
       return linuxNotifier(env);
     case "windows":
-      return notOnWindows;
+      return windowsNotifier(instance, env);
   }
 }
 

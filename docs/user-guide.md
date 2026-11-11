@@ -323,6 +323,9 @@ Urgent inbox items raise a desktop notification when that is switched on in Sett
 On macOS they appear in Notification Center.
 On Linux they go to the desktop's notification service (GNOME, KDE Plasma, mako, dunst and others) through `notify-send`, which comes with libnotify (`libnotify-bin` on Debian and Ubuntu, `libnotify` on Arch and Fedora).
 Without `notify-send` or a running notification service, Jarvis keeps working and its log says `desktop notifications are off` with the reason; it says `desktop notifications are on again` once one answers.
+On Windows they are Windows notifications from *Jarvis*, and they stay in the notification center like any other app's.
+If notifications are turned off for Jarvis or for your account in Windows Settings (System > Notifications), or by your organisation's policy, Jarvis keeps working and its log says why.
+Uninstalling removes Jarvis from the list of apps that send notifications.
 
 ## Credentials on Linux
 
@@ -334,11 +337,22 @@ When no Secret Service is reachable as Jarvis starts, for example on a computer 
 **Settings → Service health → Credentials** shows which store is in use and, for the file, why.
 The next time Jarvis starts with a Secret Service reachable, it moves the credentials from the file into it and deletes the file.
 
+## Credentials on Windows
+
+On Windows, Jarvis keeps credentials in Credential Manager, under **Windows Credentials** as generic credentials named `dev.jarvis.default/<name>`.
+They stay on this computer and do not roam with your account.
+A credential longer than Credential Manager holds in one entry continues in entries ending `#2`, `#3` and so on.
+
+When Credential Manager does not work as Jarvis starts, for example in a logon without a loaded user profile or where your organisation blocks the tools Jarvis uses, credentials go to `secrets.json` in the service state folder.
+That file, like the command line's `cli-token`, gets its own access list that lets only you in, even when the state folder is somewhere others can read, such as `D:\Jarvis`.
+**Settings → Service health → Credentials** shows which store is in use and, for the file, why.
+The next time Jarvis starts with Credential Manager working, it moves the credentials from the file into it and deletes the file.
+
 ## Backup, restore and uninstall
 
 - **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in Terminal.
   A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts).
-  Credentials stay in your Keychain (on Linux, the Secret Service) and are not included; after restoring elsewhere, reconnect your accounts.
+  Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
 - **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
@@ -491,7 +505,7 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 | Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name, the search index and its vectors) | `~/Library/Application Support/Jarvis/state` | `~/.local/state/jarvis` | `%LOCALAPPDATA%\Jarvis\state` |
 | Meaning model, once downloaded | `models` in the service state folder | `models` in the service state folder | `models` in the service state folder |
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` | `~/.local/state/jarvis/locks` | `%LOCALAPPDATA%\Jarvis\locks` |
-| Credentials | macOS Keychain, service `dev.jarvis.default` | Secret Service, service `dev.jarvis.default`; `secrets.json` in the service state folder, readable only by you, when none is reachable (see [Credentials on Linux](#credentials-on-linux)) | `secrets.json` in the service state folder |
+| Credentials | macOS Keychain, service `dev.jarvis.default` | Secret Service, service `dev.jarvis.default`; `secrets.json` in the service state folder, readable only by you, when none is reachable (see [Credentials on Linux](#credentials-on-linux)) | Credential Manager, generic credentials `dev.jarvis.default/<name>`; `secrets.json` in the service state folder, readable only by you, when it cannot be used (see [Credentials on Windows](#credentials-on-windows)) |
 | App | `~/Library/Application Support/Jarvis/current` | `~/.local/share/jarvis/current` | `%LOCALAPPDATA%\Jarvis\current` |
 | Command line | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `~/.local/bin/jarvis`, `~/.local/bin/jarvis-uninstall` | `%LOCALAPPDATA%\Jarvis\bin\jarvis.cmd`, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall.cmd` |
 | Background service | `~/Library/LaunchAgents/dev.jarvis.service.plist` | `~/.config/systemd/user/jarvis.service` | the task `Jarvis` in Task Scheduler |

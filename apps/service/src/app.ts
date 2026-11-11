@@ -113,7 +113,7 @@ export class App {
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
-    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs()), log: this.log });
+    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs(), this.instance), log: this.log });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);

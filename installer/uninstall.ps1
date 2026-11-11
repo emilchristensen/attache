@@ -84,6 +84,10 @@ if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not remove the Jarv
 $env:JARVIS_STATE_DIR = $State
 $null = Jarvis agent-hooks uninstall --state-dir $State
 
+# The notification sender Jarvis registered for itself goes with the app.
+$null = Jarvis notifications forget
+if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not remove the Jarvis notification sender; see the message above.') }
+
 if ($Delete) {
   $null = Jarvis credentials clear --state-dir $State
   if ($LASTEXITCODE -ne 0) { [Console]::Error.WriteLine('Could not delete every stored credential; see the message above.') }

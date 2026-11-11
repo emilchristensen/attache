@@ -8,6 +8,7 @@ import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } f
 import { serviceManagerFor } from "../platform/service-manager/index.ts";
 import { superviseService } from "../platform/service-manager/supervisor.ts";
 import { clearSecrets, createSecretStore } from "../platform/secret-store/index.ts";
+import { notifierFor } from "../platform/notifier/index.ts";
 import { commandWrappers, type WrapperSpec } from "../platform/wrapper.ts";
 import { replaceWith } from "../platform/replace-file.ts";
 
@@ -126,6 +127,13 @@ export async function credentialsCommand(sub: string | undefined, io: PlatformCl
   const store = createSecretStore({ os: currentOs(), stateDir: paths.stateDir, secretsFile: paths.secretsFile, instance: instance() });
   const removed = await clearSecrets(store);
   io.out(JSON.stringify({ store: store.kind, removed }));
+}
+
+/** `jarvis notifications forget`: remove what Jarvis registered to show notifications (its sender on Windows; nothing elsewhere). */
+export async function notificationsCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
+  if (sub !== "forget") throw new Error("Usage: jarvis notifications forget");
+  await notifierFor(currentOs(), instance()).forget();
+  io.out("Jarvis's notification registration removed.");
 }
 
 /** Everything `platform/` resolves for this operating system, as JSON; with a key, just that value (for installer scripts). */

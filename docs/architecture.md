@@ -39,7 +39,7 @@ flowchart LR
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool` (values on stdin and stdout, never argv); a 0600 file where none is reachable and on Windows for now | Outside the vault and outside frontend storage. |
+| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool`, Windows Credential Manager via Windows PowerShell (values on stdin and stdout, never argv); a private file (0600, or an owner-only access-control list on Windows) where none works | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
 | Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
@@ -72,8 +72,8 @@ Imported files are indexed read-only as area `import` and cited by their real pa
 
 Service state (`~/Library/Application Support/Jarvis/state` on macOS, `~/.local/state/jarvis` on Linux): `jarvis.sqlite`, logs, runtime metadata, backups.
 Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux.
-Both system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
+Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux; generic credentials with the target `dev.jarvis.<instance>/<key>` (persisted for this computer, not roamed; values over 2,560 bytes continue in `<target>#2`, `#3` and so on) on Windows.
+The system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
 
 ## Platform modules
 
@@ -82,18 +82,19 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
 | `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | Task Scheduler logon task `Jarvis-<instance>` (`Jarvis` by default) |
-| `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | owner-only file until Credential Manager arrives |
-| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | none yet |
+| `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | Credential Manager via Windows PowerShell when a throwaway credential can be written, read back and removed at start, else the owner-only file; secrets left in the file move in on a later start |
+| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | Windows notifications via Windows PowerShell, from the sender `dev.jarvis.<instance>` registered under `HKCU\Software\Classes\AppUserModelId`; `forget` removes it |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | plain-ASCII `.cmd` in the install's `bin` folder, finding the install from its own folder (`%~dp0`), because cmd.exe reads batch files in the console's code page |
-| `powershell.ts` | `runPowerShell`: a script run as `-EncodedCommand`, its inputs in environment variables, a failure as one line on stderr | | | Windows PowerShell 5.1 |
 | `shell-command.ts` | `shellPath`: a path quoted for the command lines a Harness runs (hooks, the search command in the session context) | single quotes | single quotes | double quotes and forward slashes, which Git Bash (Claude Code) and cmd.exe (Codex) read alike |
 | `launch.ts` | `launchTool`: how to start a tool found on disk without a shell; a Node script runs with Jarvis's Node | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
+| `powershell.ts` | `runPowerShell`: a script with one JSON request on stdin and one JSON answer on stdout, the script passed as `-EncodedCommand`, so no script file or execution policy is involved | | | Windows PowerShell 5.1 (also drives the logon task) |
+| `private-file.ts` | `writePrivateFile`: write a file only its owner can read, made private while still empty | mode 0600 | mode 0600 | an access-control list of its own, inheritance removed, with only the current user (`icacls`, the user from `whoami /user`) |
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
-The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
+The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis paths`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
@@ -357,7 +358,7 @@ The attention engine follows these rules:
 ## Security
 
 - The service binds `127.0.0.1` only. The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
-- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a 0600 file in the service state directory.
+- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
 - `Origin`, when present, must be the service origin. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The model Jarvis calls has no tools, so injected text cannot trigger actions.
@@ -439,7 +440,7 @@ When the service starts, it re-registers the server for connected Harnesses whos
 The MCP prompts replace those skills, and there is no `jarvis save` command any more, because a save must be confirmed by the owner inside a Harness, which a shell cannot do.
 
 `jarvis audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
-Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
+Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.

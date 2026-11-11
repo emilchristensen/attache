@@ -67,7 +67,9 @@ function interpret(out: { stdout: string; stderr: string; code: number | null; t
   if (!reply || typeof reply !== "object") return { ok: false, why: "Windows PowerShell gave an answer Jarvis does not understand" };
   const r = reply as Record<string, unknown>;
   if (r.ok === true) return { ok: true, reply: r };
-  return { ok: false, why: typeof r.error === "string" && r.error ? r.error : "Windows PowerShell reported a failure without a reason" };
+  // Some failures (a compiler error, for one) run over several lines; the first says what happened.
+  const said = typeof r.error === "string" ? r.error.trim().split(/\r?\n/)[0] : "";
+  return { ok: false, why: said || "Windows PowerShell reported a failure without a reason" };
 }
 
 function missing(path: string): PowerShellReply | null {
