@@ -32,6 +32,7 @@ import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { defaultSeams } from "./replication/seams.ts";
+import { syncBlockedItem } from "./replication/blocked-inbox.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -104,7 +105,7 @@ export class App {
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
-      onChange: () => this.bus.emit("event", { type: "replication.changed" }),
+      onChange: () => this.replicationChanged(),
     });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.bus.setMaxListeners(500);
@@ -234,7 +235,7 @@ export class App {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
       // No hooks may keep spooling or injecting memory for a feature that is off.
-      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
+      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (a.hooks && this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
     }
     this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
@@ -281,6 +282,12 @@ export class App {
     this.config.patch({ dataFolder: path });
     this.bus.emit("event", { type: "config.changed" });
     return r;
+  }
+
+  /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
+  private replicationChanged() {
+    if (syncBlockedItem(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    this.bus.emit("event", { type: "replication.changed" });
   }
 
   /** Re-index the files another Machine changed, as soon as git wrote them. */

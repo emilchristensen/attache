@@ -1,5 +1,5 @@
 import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@jarvis/contracts";
-import { AGENT_KINDS } from "../agents/integrations.ts";
+import { HOOK_AGENT_KINDS } from "../agents/integrations.ts";
 
 /**
  * The single server-side definition of what Jarvis can do. The setup
@@ -36,8 +36,8 @@ export const FEATURES: FeatureDefinition[] = [
   },
   {
     id: "capture",
-    label: "Capture and memory",
-    description: "Import a Markdown folder, capture notes and source-linked decisions, and correct what Jarvis remembers.",
+    label: "Saving to memory",
+    description: "Import a Markdown folder, save notes and decisions from a Harness, and review Proposals and recent saves.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["recall"],
@@ -65,7 +65,7 @@ export const FEATURES: FeatureDefinition[] = [
     requiresFeatures: ["jobs"],
     connections: [{ kinds: SOURCE_KINDS, label: "At least one source (your data folder counts)", required: true, missingEffect: "Nothing to watch." }],
     schedules: [
-      { id: "sync", label: "Refresh sources", jobKind: "sync" },
+      { id: "sync", label: "Source refresh", jobKind: "sync" },
       { id: "briefing", label: "Daily briefing", jobKind: "briefing" },
     ],
     jobKinds: ["sync", "briefing"],
@@ -89,7 +89,7 @@ export const FEATURES: FeatureDefinition[] = [
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
-      { kinds: AGENT_KINDS, label: "A coding agent (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
+      { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
       { kinds: ["model"], label: "A model to summarise sessions and propose changes", required: false, missingEffect: "Sessions are saved without a summary, and no Proposals are made from them." },
     ],
     schedules: [],

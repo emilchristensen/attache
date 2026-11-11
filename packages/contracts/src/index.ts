@@ -10,7 +10,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -182,30 +182,6 @@ export const SourceRefInput = z.object({
   label: z.string().max(200).optional(),
 });
 
-export const CaptureInput = z.object({
-  text: z.string().min(1).max(100_000),
-  title: z.string().max(200).optional(),
-  source: SourceRefInput,
-  decision: z.object({ title: z.string().min(1).max(200), decision: z.string().min(1).max(5000), project: z.string().max(200).optional() }).optional(),
-  tags: z.array(z.string().max(50)).max(20).optional(),
-});
-
-export const MemoryCreateInput = z.object({
-  type: z.enum(["person", "project", "decision", "note"]),
-  title: z.string().min(1).max(200),
-  /** A migrated entry keeps the date it was true and its own source line; new entries default to today. */
-  state: z
-    .array(z.object({ subject: z.string().min(1).max(100), value: z.string().min(1).max(5000), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), source: SourceRefInput.optional() }))
-    .max(80),
-  notes: z.string().max(100_000).optional(),
-  sources: z.array(SourceRefInput).max(40).optional(),
-  /** History carried over from an earlier system, oldest first; Jarvis appends its own creation entry. */
-  history: z.array(z.string().min(1).max(2000)).max(300).optional(),
-  /** "migrated": distilled from another notes system and reviewed by the user before writing. */
-  provenance: z.enum(["user-stated", "migrated"]).optional(),
-  tags: z.array(z.string().min(1).max(50)).max(20).optional(),
-});
-
 /** Copy a Markdown folder verbatim into evidence/archive/<label>/ so it outlives the original. */
 export const ArchiveInput = z.object({
   path: z.string().min(1),
@@ -214,13 +190,6 @@ export const ArchiveInput = z.object({
   exclude: z.array(z.string().min(1).max(200)).max(50).default([]),
   /** Where the files really come from when archiving a frozen copy, e.g. "~/OldNotes at commit 0c6becc". */
   origin: z.string().min(1).max(500).optional(),
-});
-
-export const CorrectionInput = z.object({
-  relPath: z.string().min(1),
-  subject: z.string().min(1).max(100),
-  value: z.string().min(1).max(5000),
-  reason: z.string().min(1).max(1000),
 });
 
 /** A calendar day written YYYY-MM-DD, as the Brain dates facts. */
@@ -266,12 +235,12 @@ export const MemorySaveItem = z.discriminatedUnion("action", [
 export type MemorySaveItem = z.infer<typeof MemorySaveItem>;
 
 /**
- * What the user asked a coding agent to save (`jarvis save`). State goes into
+ * What the owner asked a Harness to save (the MCP `save` tool). State goes into
  * `facts` (one current value per subject, replacing the old one), events into
  * `events` (appended to History). Validated as a whole before anything is written.
  */
 export const MemorySaveInput = z.object({
-  /** The coding-agent session the items were distilled from. */
+  /** The Harness session the items were distilled from. */
   origin: z
     .object({
       agent: z.string().trim().min(1).max(40),
