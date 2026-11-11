@@ -96,7 +96,7 @@ export function revertChange(store: MemoryStore, id: string, why: RevertReason =
   switch (change.change) {
     case "correct":
       if (change.beforeValue === null) return store.removeFact(change.docRelPath, { subject: change.subject!, reason }, "user", meta);
-      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, review: change.beforeReview, reason, source: { kind: "user", ref: "dashboard", label: why.label, observedAt: new Date().toISOString() } }, "user", {}, meta);
+      return store.correct(change.docRelPath, { subject: change.subject!, value: change.beforeValue, review: change.beforeReview, reason, source: { kind: "user", ref: "dashboard", label: why.label, observedAt: store.now().toISOString() } }, "user", {}, meta);
     case "create":
       return store.deleteMemory(change.docRelPath, { reason }, "user", meta);
     case "delete":
