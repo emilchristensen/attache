@@ -1,5 +1,12 @@
 # Jarvis
 
+## Navigation
+
+- Code map, module boundaries and data flow: `docs/architecture.md`.
+- Setup, every check command and CI: `docs/developer-guide.md`.
+- Review rules: `CODING_STANDARDS.md`.
+- Building a spec with several agents (`/implement-spec`): `docs/agents/implementing-specs.md`.
+
 ## Agent skills
 
 ### Issue tracker

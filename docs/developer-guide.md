@@ -92,6 +92,7 @@ On failure a job runs `node scripts/collect-service-logs.mjs`, which copies the 
 pnpm comes from `packageManager` in `package.json`, so CI and a local checkout use the same pnpm.
 `.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
 Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
+The e2e stack (`tests/e2e/stack.ts`) starts its services and fixture server on ports the OS picks, so several checkouts on one computer can run `pnpm e2e` at the same time.
 Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
 
 To reproduce a Linux failure on a Mac, run the same commands in a container with the Node of the failing job, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.0-bookworm bash` for the minimum, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
@@ -193,5 +194,6 @@ Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e
 - Every remote call goes through `connectors/http.ts` and records coverage per scope; a failure must never look like an empty result.
 - External side effects run inside `ctx.effect(key, run, find)` so restarts cannot repeat them.
 - Features are defined once in `capabilities/registry.ts`; endpoints check them with `requireFeature`.
+- Service code starts tools with `run`, `spawnTool` or `launchTool` and replaces files with `replaceWith` from `platform/`, and `pnpm lint` rejects a `node:child_process` import or an fs `rename` outside `platform/`, so Windows shims, console windows and locked files are handled in one place.
 - Database migrations are append-only in `core/db.ts`.
 - Code runs under Node type stripping: no enums, no parameter properties (`erasableSyntaxOnly`).

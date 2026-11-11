@@ -612,7 +612,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
   await expect(card.locator('[data-machine="Home PC"]')).toContainText("this Machine");
 
   // A second Machine joins from its own setup screen, into an empty folder.
-  const other = await startStack({ port: 7612 });
+  const other = await startStack();
   const otherCtx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   try {
     const second = await otherCtx.newPage();
