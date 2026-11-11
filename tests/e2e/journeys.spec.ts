@@ -51,10 +51,23 @@ async function open(path = "/"): Promise<Page> {
 test("onboarding: pair, choose folder, preview import, features, connections, model, finish", async () => {
   const page = await shared.newPage();
   watch(page);
+  // The suggested folder arrives only once the owner has started typing their own, and must not mix into it.
+  let suggest = () => {};
+  const suggested = new Promise<void>((r) => (suggest = r));
+  await page.route("**/api/v1/setup/defaults", async (route) => {
+    await suggested;
+    await route.continue();
+  });
   await page.goto(stack.pairUrl());
   await expect(page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" })).toBeVisible();
   const folder = page.getByRole("textbox", { name: /Data folder/ });
-  await folder.fill(stack.dataDir);
+  await folder.click();
+  const answered = page.waitForResponse("**/api/v1/setup/defaults");
+  suggest();
+  await answered;
+  await folder.pressSequentially(stack.dataDir);
+  await expect(folder).toHaveValue(stack.dataDir);
+  await page.unroute("**/api/v1/setup/defaults");
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText(`New folder: ${stack.dataDir}`)).toBeVisible();
   await expect(page.getByText("Will modify: nothing")).toBeVisible();
