@@ -104,9 +104,10 @@ export function labelOf(server: string): string {
   return server.replace(/^claude\.ai\s+/, "");
 }
 
-export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number } = {}): ClaudeConnectorRunner {
+export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number; sessionPerCallMs?: number } = {}): ClaudeConnectorRunner {
   const pendingDelayMs = config.pendingDelayMs ?? PENDING_DELAY_MS;
-  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * SESSION_PER_CALL_MS);
+  // The time a session's calls get, counted from Claude Code's init: starting has a budget of its own (`runSession`).
+  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * (config.sessionPerCallMs ?? SESSION_PER_CALL_MS));
   let active = 0;
   const waiting: Array<() => void> = [];
   const knownServers = new Set<string>();

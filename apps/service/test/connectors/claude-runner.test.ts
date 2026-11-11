@@ -70,10 +70,19 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     }
   });
 
+  it("a session's time for its calls starts once Claude Code has started, however long that takes", async () => {
+    // Starting takes longer than the whole time the calls get, as on a busy computer.
+    const quick = createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 300, sessionPerCallMs: 300 });
+    claude.nextModes = ["slow-start"];
+    const out = await quick.run(SLACK, [read("a", "C1")], { signal: signal() });
+    expect(out.get("a")!.status).toBe("ok");
+    expect(claude.sessions).toBe(1);
+  });
+
   it("a stalled read session is started once more; a stalled write is never repeated", async () => {
-    // A stalled session is cut after the session time, so keep it short, but long enough that the
-    // healthy retry (several seconds to start while other suites load the machine) is not cut too.
-    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 8_000 });
+    // A stalled session is cut once its calls take longer than the session time, which starts after
+    // Claude Code has started, so a short time does not cut a healthy session that was slow to start.
+    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 2_000, sessionPerCallMs: 1_000 });
     claude.nextModes = ["hang"];
     const out = await quick().run(SLACK, [read("a", "C1")], { signal: signal() });
     expect(out.get("a")!.status).toBe("ok");
