@@ -424,6 +424,40 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await expect(hit).toContainText("unverified");
 });
 
+test("auto-accept: switched on for one Harness in Settings, kept across reload, and its saves are marked", async () => {
+  const page = await open("/settings");
+  const card = page.getByRole("region", { name: "Auto-accept saves" });
+  // Only connected Harnesses are listed: Claude Code was connected in onboarding, Codex was not found.
+  const claude = card.getByRole("checkbox", { name: /Claude Code/ });
+  await expect(claude).not.toBeChecked();
+  await expect(card.getByRole("checkbox", { name: /Codex/ })).toHaveCount(0);
+  await claude.click();
+  await expect(page.getByText("Claude Code saves without asking on this Machine")).toBeVisible();
+  await expect(claude).toBeChecked();
+  await expect(card.getByText("Saves without asking.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ })).toBeChecked();
+
+  // What the MCP save tool sends when auto-accept is on.
+  const status = await page.evaluate(async () => {
+    const body = { origin: { agent: "claude-code", sessionId: "sess-auto" }, autoAccept: true, items: [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }] };
+    const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+    return res.status;
+  });
+  expect(status).toBe(200);
+  await page.goto(`${stack.url}/memory`);
+  const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
+  await expect(created).toContainText("Claude Code, session sess-auto");
+  await expect(created).toContainText("auto-accepted");
+
+  // Switched off again, the Harness asks before every save.
+  await page.goto(`${stack.url}/settings`);
+  const again = page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ });
+  await again.click();
+  await expect(page.getByText("Claude Code asks before every save")).toBeVisible();
+  await expect(again).not.toBeChecked();
+});
+
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
   const setServer = (status: string) =>
     fetch(`${stack.fixtureUrl}/__control/claude-server`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "claude.ai Slack", status }) });

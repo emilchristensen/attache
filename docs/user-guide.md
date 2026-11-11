@@ -161,6 +161,13 @@ Other Harnesses take the same command and argument in their MCP server settings.
   Decline or close the request, and nothing is written; the agent is told so.
   A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
+- **Auto-accept** skips the confirmation for a Harness you trust.
+  In Settings, under **Auto-accept saves**, each connected Harness has a switch, off by default.
+  With it on, a save from that Harness is written without asking; every other Harness still asks.
+  The setting belongs to this Machine only: it is kept in Jarvis's local state, not in your Brain, so another Machine asks until you switch it on there too.
+  Disconnecting a Harness switches its auto-accept off.
+  An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
+  Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
@@ -239,6 +246,37 @@ Renaming the Machine affects files written from then on; earlier files keep thei
 Only one Jarvis service can use a data folder at a time.
 The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks`.
 
+## Replication
+
+Replication keeps the Brain the same on every Machine you run Jarvis on, through a private git repository.
+It is off until you switch it on; a Brain on one Machine works exactly as before.
+Each Machine needs git installed.
+
+- **Switch it on** on the Machine that has your Brain: `jarvis replication setup owner/jarvis-brain`.
+  Name an empty repository: `owner/name` on GitHub, an `https://` or `ssh://` address, or a folder path.
+  Jarvis makes the data folder a git repository, commits everything in it and pushes it.
+  A repository that already holds a Brain is refused, so two Brains are never mixed.
+- **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
+  The folder must be empty or not exist yet.
+  Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
+- **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
+  `jarvis replication check` replicates now instead of waiting for the next check.
+
+What happens on its own:
+
+- A save is committed and pushed 30 seconds after the last write, so a burst of saves becomes one commit.
+- Edits you make by hand in an editor are committed and pushed too.
+- Every minute, at start and when the Machine wakes, Jarvis fetches the other Machines' changes and merges them; search includes them as soon as they arrive.
+- Each commit message names the files that changed, what changed in them (for example `corrected Status, added an event`) and the Machine.
+- Offline, saves and search carry on as usual; the status reads offline, and the Machine catches up by itself when the repository can be reached again.
+- A failing Replication never fails a save.
+- Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
+- A note is never left with conflict markers.
+  Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+
+The repository holds the whole Brain in plain text, so keep it private.
+Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
+
 ## Where things live
 
 | What | Where |
@@ -248,7 +286,7 @@ The lock that enforces this lives outside the data folder, in `~/Library/Applica
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
 | Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |

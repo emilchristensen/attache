@@ -65,6 +65,8 @@ export interface MemoryChange {
   reverts: string | null;
   /** SHA-256 of the note right after this change, to tell whether anything touched it since. */
   docHash: string | null;
+  /** Written without asking the owner, because auto-accept was on for the Harness. */
+  autoAccepted: boolean;
 }
 
 /** Where a change came from, recorded with it in the change log. */
@@ -73,6 +75,7 @@ export interface ChangeMeta {
   sessionId?: string | null;
   batchId?: string | null;
   reverts?: string | null;
+  autoAccepted?: boolean;
 }
 
 const README = `# Jarvis data folder
@@ -98,6 +101,8 @@ export interface MemoryStoreOptions {
   locksDir: string;
   /** The Machine this service runs on, read at each write so a rename applies at once. */
   machine: () => MachineIdentity;
+  /** Told after every file the store writes or removes, e.g. so Replication commits it. */
+  onWrite?: (relPath: string) => void;
 }
 
 export class MemoryStore {
@@ -198,6 +203,7 @@ export class MemoryStore {
     writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
     renameSync(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
+    this.opts.onWrite?.(n);
   }
 
   private uniquePath(dir: string, base: string): string {
@@ -215,10 +221,10 @@ export class MemoryStore {
     const docHash = c.status === "applied" && this.exists(c.docRelPath) ? noteHash(this.read(c.docRelPath)) : null;
     this.db
       .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, before_review, after_review, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash)
-         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, before_review, after_review, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash, auto_accepted)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.beforeReview ?? null, c.afterReview ?? null, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash);
+      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.beforeReview ?? null, c.afterReview ?? null, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash, meta.autoAccepted ? 1 : 0);
     return this.getChange(id)!;
   }
 
@@ -332,6 +338,7 @@ export class MemoryStore {
     const raw = this.read(n);
     unlinkSync(resolveInside(this.requireRoot(), n));
     this.indexer.removeFile(this.rootRef!.id, n);
+    this.opts.onWrite?.(n);
     return this.recordChange({ docRelPath: n, change: "delete", subject: null, beforeValue: raw, afterValue: null, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
@@ -646,5 +653,6 @@ function rowToChange(raw: Record<string, string | number | null>): MemoryChange 
     batchId: r.batch_id ?? null,
     reverts: r.reverts ?? null,
     docHash: r.doc_hash ?? null,
+    autoAccepted: Number(raw.auto_accepted) === 1,
   };
 }

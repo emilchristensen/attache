@@ -18,8 +18,10 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
 
 ## Requirements
 
-- macOS on Apple silicon for the full suite (launchd, Keychain).
-- Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+- macOS or Linux for lint, typecheck, Vitest and the browser journeys.
+  The install test needs macOS (launchd, Keychain).
+- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
 - Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
@@ -49,6 +51,28 @@ Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
 `jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS and Linux (`ubuntu-latest` and `macos-latest`).
+Each platform is one job, `checks (ubuntu-latest)` and `checks (macos-latest)`, with these steps:
+
+| Step | Run it locally |
+| --- | --- |
+| Install | `pnpm install --frozen-lockfile` |
+| Lint | `pnpm lint --max-warnings 0` |
+| Typecheck | `pnpm typecheck` |
+| Unit and integration tests | `pnpm test` |
+| Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
+
+Every check runs even when an earlier one fails, so a run lists all failures at once.
+On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
+Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+
+To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+
+A pull request with a failing check shows the failure on GitHub.
+For the failure to block merging, `main` needs a branch protection rule or ruleset that requires both `checks` jobs, which GitHub offers for private repositories only on a paid plan.
+
 ## Fixtures versus live
 
 Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
@@ -57,6 +81,15 @@ The claude.ai connectors are reached through the Claude Code CLI, which tests re
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
+
+## Several Machines in one test
+
+`apps/service/test/integration/machines.ts` starts several Machines in one Vitest process, each a whole service with its own state folder, Brain copy and `ManualClock` (`apps/service/test/fixtures/manual-clock.ts`).
+`startMachines(["Mac", "PC"])` creates a local bare repository as the remote, sets Replication up on the first Machine and joins the others into empty folders; `world.addMachine(name, { join: false })` adds one that stays apart.
+Nothing replicates until a test moves a Machine's clock: `await mac.clock.advance(30_000)` runs the commit due after a save, `advance(60_000)` the one-minute check, and `advance` waits for the check it started.
+`world.remote.goOffline()` and `goOnline()` make the remote unreachable and back; `world.remote.git(...)` inspects what was pushed.
+The bare repository refuses any push that is not a fast-forward, so a test fails if Replication ever rewrote history.
+`JARVIS_GIT_BIN` points Replication at another git executable.
 
 ## Recall evaluation
 
