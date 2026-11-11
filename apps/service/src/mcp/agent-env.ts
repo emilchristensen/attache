@@ -1,6 +1,6 @@
 /**
- * Which coding agent ran a command, from the environment it gives its shell.
- * Lets `jarvis save` cite the session without the skill having to know.
+ * Which Harness started a process, from the environment it gives the processes it starts.
+ * Lets an MCP save cite the session without the agent having to name it.
  */
 export function agentFromEnv(env: NodeJS.ProcessEnv): { agent: string; sessionId?: string } | null {
   const session = (agent: string, id: string | undefined) => ({ agent, ...(id ? { sessionId: id } : {}) });

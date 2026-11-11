@@ -30,7 +30,7 @@ function heading(item: MemorySaveItem, checked: MemorySaveCheckResult["items"][n
 }
 
 function details(item: MemorySaveItem): string[] {
-  const facts = (item.facts ?? []).map((f) => `${f.subject}: ${f.value}${"reason" in f ? ` (why: ${f.reason})` : ""}`);
+  const facts = (item.facts ?? []).map((f) => `${f.subject}: ${f.value}${f.review ? ` (review after ${f.review})` : ""}${"reason" in f ? ` (why: ${f.reason})` : ""}`);
   const events = (item.events ?? []).map((e) => `Event: ${e}`);
   if (item.action === "update") return [...facts, ...events];
   const notes = item.notes?.trim();

@@ -69,9 +69,9 @@ export function renderAudit(v: AuditView, opts: { dataFolder?: string } = {}): s
     for (const d of v.possibleDuplicates) lines.push(`- ${d.title}: ${d.paths.join(", ")}`);
   }
   for (const f of v.findings) {
-    lines.push("", `## ${f.title} [${f.type}${f.inSessionIndex ? ", first fact in every session's index" : ""}]${f.flags.length ? ` {${f.flags.join(", ")}}` : ""}`, `   ${f.path}`);
+    lines.push("", `## ${f.title} [${f.type}${f.inSessionIndex ? ", in a project's session context" : ""}]${f.flags.length ? ` {${f.flags.join(", ")}}` : ""}`, `   ${f.path}`);
     for (const e of f.entries) {
-      lines.push(`- ${e.subject} (${e.date}, ${e.ageDays} days, line ${e.line}): ${e.value}${e.source ? ` — source: ${e.source}` : ""}${e.flags.length ? ` {${e.flags.join(", ")}}` : ""}`);
+      lines.push(`- ${e.subject} (${e.date}${e.review ? `, review ${e.review}` : ""}, ${e.ageDays} days, line ${e.line}): ${e.value}${e.source ? ` — source: ${e.source}` : ""}${e.flags.length ? ` {${e.flags.join(", ")}}` : ""}`);
       for (const n of e.newerEvidence) lines.push(`    newer: ${n.path}:${n.startLine}-${n.endLine} (${n.modified.slice(0, 10)}) ${n.snippet}`);
     }
   }

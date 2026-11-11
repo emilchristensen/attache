@@ -10,6 +10,7 @@ const EntryShape = z.object({
   subject: z.string(),
   value: z.string(),
   date: z.string(),
+  review: z.string().nullable(),
   ageDays: z.number().int(),
   source: z.string().nullable(),
   line: z.number().int(),
@@ -29,8 +30,8 @@ const AuditShape = {
 
 const DESCRIPTION = [
   "Audit the owner's Brain for facts that may have stopped being true. Writes nothing.",
-  "Returns every current fact in every note with its date, age, source and flags (stale, unsourced, missing-source, duplicate-subject), plus newer passages that name the note: where a contradiction would show up.",
-  "Notes whose first fact every new session reads come first. The flags are leads, not verdicts: read the newer passages before judging a fact.",
+  "Returns every current fact in every note with its date, Review date (the day after which it should be checked again, or null), age, source and flags (stale, unsourced, missing-source, duplicate-subject), plus newer passages that name the note: where a contradiction would show up.",
+  "Notes whose facts a project's session context carries come first. The flags are leads, not verdicts: read the newer passages before judging a fact.",
 ].join(" ");
 
 /** `audit`: the deterministic half of a memory audit, for the agent to judge. */

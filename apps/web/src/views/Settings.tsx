@@ -24,7 +24,7 @@ interface Status {
   credentialStore: string;
   documents: number;
   jobs: Array<{ status: string; n: number }>;
-  schedules: Array<{ id: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
+  schedules: Array<{ id: string; label: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
 }
 
 function Schedules({ config, onSaved }: { config: Config; onSaved: () => void }) {
@@ -248,7 +248,7 @@ export function SettingsView() {
               <dd>
                 {status.data.schedules.map((s) => (
                   <div key={s.id}>
-                    {s.id}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
+                    {s.label}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
                   </div>
                 ))}
               </dd>

@@ -177,6 +177,11 @@ export const MIGRATIONS: readonly string[] = [
   create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
   // When this Machine was last up to date with the others, for the Dashboard. Setup and join count.
   `
   alter table replication add column up_to_date_at text;

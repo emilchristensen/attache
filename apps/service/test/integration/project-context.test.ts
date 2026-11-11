@@ -144,7 +144,8 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
     const note = join(svc.dataDir, ORION);
     writeFileSync(note, readFileSync(note, "utf8").replace(/^- \*\*Repositories\*\*.*\n/m, ""));
     await until(() => !sessionStart(orion).includes(PROJECT_HEADING));
-    expect(sessionStart(orion)).toContain("Cutover moved to November");
+    // The session gets the global index, which still names the project.
+    expect(sessionStart(orion)).toContain("Orion migration");
 
     // Reverting the save that named Atlas's repository takes its project context away again.
     const named = (await svc.get("/memory/recent-changes")).changes.find((c: { relPath: string; subject: string | null }) => c.relPath === "memory/projects/atlas.md" && c.subject === "Repositories");
@@ -155,6 +156,26 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
     const proposal = await svc.post("/memory/proposals", { item: { action: "update", path: "memory/projects/atlas.md", facts: [{ subject: "Repositories", value: "gitlab.example.com/platform/atlas", reason: "named again" }] }, reason: "named again" });
     await svc.post(`/memory/proposals/${proposal.id}/apply`);
     expect(await until(() => sessionStart(atlas).includes("### This session's project: Atlas"))).toBe(true);
+  });
+
+  it("marks the project's facts past their Review date as unverified", async () => {
+    const dir = repo("atlas-review", { origin: "git@gitlab.example.com:platform/atlas.git" });
+    const note = join(svc.dataDir, "memory/projects/atlas.md");
+    const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+    writeFileSync(
+      note,
+      readFileSync(note, "utf8")
+        .replace(/^- \*\*Status\*\* \(([\d-]+)\): Discovery/m, "- **Status** ($1, review 2026-01-15): Discovery")
+        .replace(/^(- \*\*Repositories\*\* \([\d-]+)\)/m, `$1, review ${inAMonth})`),
+    );
+    const ctx = await until(() => {
+      const c = sessionStart(dir);
+      return c.includes("unverified") && c;
+    });
+    const lines = ctx.split("\n");
+    // The project's own facts: the overdue one is marked, the one not yet due is not.
+    expect(lines.find((l) => l.startsWith("- **Status**"))).toMatch(/Discovery \(unverified: Review date 2026-01-15 passed\)$/);
+    expect(lines.find((l) => l.startsWith("- **Repositories**"))).not.toContain("unverified");
   });
 
   it("the hook makes no network call and works while the service is stopped", async () => {

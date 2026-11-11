@@ -1,44 +1,46 @@
-import type { ConnectorAdapter } from "./types.ts";
+import type { ConnectorAdapter, TestResult } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import type { AgentIntegration } from "../agents/integrations.ts";
-import { agentHome, type AgentHooks } from "../agents/install.ts";
+import { agentHome, type AgentHooks, type HarnessStatus } from "../agents/install.ts";
 import { HooksFileError } from "../agents/hooks-config.ts";
 
 /**
- * A coding agent as a connection. Connecting installs this Jarvis's hooks in
- * the agent's settings; disconnecting removes them (see App wiring). The test
- * checks that the hooks are present and point at this install.
+ * A Harness as a connection. Connecting registers Jarvis's MCP server in the
+ * Harness's configuration and, for a Harness with hooks, installs this
+ * Jarvis's hooks; disconnecting removes both (see App wiring). The test checks
+ * that everything is present and points at this install.
  */
 export function agentAdapter(a: AgentIntegration, hooks: AgentHooks, context: () => string): ConnectorAdapter {
+  const notFound = `${a.label} was not found on this Machine.`;
   return {
     kind: a.kind,
     secretNames: [],
     definition: {
       kind: a.kind,
       label: a.label,
-      description: `Save your ${a.label} sessions in your data folder, give each new session your Jarvis memory${a.skills ? `, and add the ${skillNames(a, hooks)} skills` : ""}.`,
-      authMethods: [{ id: "hooks", label: `Hooks in ~/${a.configFile}`, fields: [] }],
+      description: a.hooks
+        ? `Reach your Brain from ${a.label} through Jarvis's MCP server, save your ${a.label} sessions in the Brain, and give each new session your Jarvis memory.`
+        : `Reach your Brain from ${a.label} through Jarvis's MCP server: search, read, save and audit, and the save, audit and wrap-up prompts.`,
+      authMethods: [a.hooks ? { id: "hooks", label: "MCP server and hooks", fields: [] } : { id: "mcp", label: "MCP server", fields: [] }],
       scopes: [],
       writeActions: [],
-      setupHelp: `${a.setupNote}${a.skills ? ` Also adds two skills that only you can run, ${skillNames(a, hooks)}, in ~/${a.skills.dir}; other skills there are left alone.` : ""}`,
+      setupHelp: a.setupNote,
       unavoidableSteps: [],
     },
     async configure() {
-      if (!a.detect(agentHome())) throw new RemoteError(`${a.label} was not found on this Mac. Install it, then connect it here.`, "not_configured");
+      if (!a.detect(agentHome())) throw new RemoteError(`${notFound} Install it, then connect it here.`, "not_configured");
       try {
         const r = hooks.install(a, context());
-        return { authMethod: "hooks", configPath: r.path, backup: r.backup };
+        return { authMethod: a.hooks ? "hooks" : "mcp", configPath: r.path ?? r.mcp.path, mcpConfigPath: r.mcp.path, backup: r.backup, mcpBackup: r.mcp.backup };
       } catch (e) {
-        // A settings file Jarvis cannot safely edit is the user's to fix; say exactly which and why.
-        throw new RemoteError(e instanceof HooksFileError ? e.message : `Could not add the hooks: ${(e as Error).message}`, "error");
+        // A configuration file Jarvis cannot safely edit is the owner's to fix; say exactly which and why.
+        throw new RemoteError(e instanceof HooksFileError ? e.message : `Could not set up ${a.label}: ${(e as Error).message}`, "error");
       }
     },
     async test() {
-      if (!a.detect(agentHome())) return { ok: false, state: "not_configured", account: null, message: `${a.label} was not found on this Mac.` };
+      if (!a.detect(agentHome())) return { ok: false, state: "not_configured", account: null, message: notFound };
       try {
-        const s = hooks.status(a);
-        if (s.current) return { ok: true, state: "complete", account: s.path, message: `${s.installed.length} Jarvis hook${s.installed.length === 1 ? "" : "s"} in ${s.path}${s.rules ? `, memory rule ${s.rules}` : ""}${s.skills.length ? `, and the ${skillNames(a, hooks)} skills` : ""}` };
-        return { ok: false, state: "error", account: s.path, message: s.installed.length ? `The Jarvis hooks in ${s.path} are out of date. Set up again to update them.` : `No Jarvis hooks in ${s.path}. Set up again to add them.` };
+        return describe(hooks.status(a));
       } catch (e) {
         return { ok: false, state: "error", account: null, message: (e as Error).message };
       }
@@ -46,9 +48,20 @@ export function agentAdapter(a: AgentIntegration, hooks: AgentHooks, context: ()
   };
 }
 
-/** How the user types this install's skills in agent `a`: `/jarvis-save and /jarvis-audit`. */
-const skillNames = (a: AgentIntegration, hooks: AgentHooks) =>
-  hooks.skills
-    .names()
-    .map((n) => a.skillInvocation(n))
-    .join(" and ");
+/** "a, b and c". */
+const list = (parts: string[]) => (parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : (parts[0] ?? ""));
+
+function describe(s: HarnessStatus): TestResult {
+  const account = s.path ?? s.mcp.path;
+  if (s.current) {
+    const n = s.installed.length;
+    const parts = [...(s.path ? [`${n} Jarvis hook${n === 1 ? "" : "s"} in ${s.path}`] : []), ...(s.rules ? [`memory rule ${s.rules}`] : []), `Jarvis's MCP server in ${s.mcp.path}`];
+    return { ok: true, state: "complete", account, message: list(parts) };
+  }
+  const missing = [
+    ...(s.hooksCurrent ? [] : s.installed.length ? [`the Jarvis hooks in ${s.path} are out of date`] : [`no Jarvis hooks in ${s.path}`]),
+    ...(s.mcp.registered ? (s.mcp.current ? [] : [`Jarvis's MCP server in ${s.mcp.path} is out of date`]) : [`Jarvis's MCP server is not in ${s.mcp.path}`]),
+  ];
+  const what = missing.length ? list(missing) : `the memory rule ${s.rules} is missing`;
+  return { ok: false, state: "error", account, message: `${what.charAt(0).toUpperCase()}${what.slice(1)}. Set up again to fix it.` };
+}

@@ -81,7 +81,7 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | `secret-store/` | `SecretStore`: get, set, delete, keys | Keychain | owner-only file until Secret Service arrives | owner-only file until Credential Manager arrives |
 | `notifier/` | `Notifier`: notify | Notification Center via `osascript` | none yet | none yet |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
-| `harness-locations.ts` | each Harness's hooks file, rules and skills folders, executables and install markers | | | |
+| `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
@@ -128,6 +128,11 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
   `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
   Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
+- **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
+  Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
+  A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
+- **Blocked in the inbox** (`replication/blocked-inbox.ts`): whenever the status changes, `App` keeps one attention item, source `replication`, key `replication:blocked`, fingerprinted by the cause, open while the status is blocked and resolved when it is not.
+  It is this Machine's own item.
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
 - **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
@@ -136,10 +141,18 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
 
 Every memory note has frontmatter (`id`, `type`, `title`, `provenance`, `sources`, `created`, `updated`), a `## Current State` section with one dated entry per subject, optional `## Notes`, and an append-only `## History`.
 A correction replaces the Current State entry and appends the superseded value, its date, source and the reason to History.
+
+An entry may carry a Review date after its own date: `- **Status** (2026-11-10, review 2026-11-13): value — source: …`.
+The parser (`memory/markdown.ts`) also reads hand edits that vary the spacing, write `Review` or add a colon after it; the writer always writes the form above.
+A save or Proposal sets it per fact (`review`, `YYYY-MM-DD`, checked in `memory/save-items.ts` to be after today, the new entry's date).
+A correction writes only the Review date it is given, so a date set for the old value never follows the new one; the superseded History line keeps the old Review date.
+Days are UTC calendar days, the same days facts are dated with (`memory/review-date.ts`).
+Past its Review date a fact stays in the Brain and is shown as unverified: search hits (`review`, `unverified`), the document view's `state` entries, MCP `search` and `read`, the terminal search, the session context files and the Dashboard all mark it, computed when they are read.
 This is the state-versus-event rule from the old vault's 2026-08-13 repair, enforced by the writer rather than by instructions.
 
 Write policy (deterministic, in `memory/policy.ts`):
-- Only the service writes. Clients submit captures and corrections through the API.
+- Only the service writes.
+  A Harness submits saves through the MCP server or `jarvis save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
 - Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
@@ -152,7 +165,7 @@ Write policy (deterministic, in `memory/policy.ts`):
 
 Chunks are pieces of Markdown sections with exact line ranges (`memory/chunker.ts`).
 Every entry under `## Current State` is its own chunk, cited at its own line, so a question retrieves the one fact that answers it however long the note is.
-A fact's source stays in the cited text but is left out of the search index, so a query never matches a fact because of the file it was imported from; the fact's subject is indexed with the heading.
+A fact's source and Review date stay in the cited text but are left out of the search index, so a query never matches a fact because of the file it was imported from or the day it is due for review; the fact's subject is indexed with the heading.
 Other sections are cut into pieces of about 1,200 characters after a blank line or before a top-level list item, and never grow past 2,400 characters, so long lists and transcripts without blank lines still give narrow citations.
 A single line longer than that stays whole, because a citation is a range of whole lines.
 Each chunk is labelled `state`, `history` or `body`; History chunks are down-weighted and presented to the model as superseded.
@@ -165,7 +178,7 @@ Edits made to the data folder outside the service (Obsidian, an editor, a coding
 Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
 The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
 If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
-Imported vaults are not watched; they are rescanned when their connection syncs.
+Imported vaults are not watched; they are rescanned on each Source refresh of their connection.
 
 Meaning-based search (`meaning/`) runs a small multilingual sentence-embedding model on the Machine: multilingual-e5-small with 8-bit weights, 384 dimensions, pinned to one Hugging Face revision (`meaning/model.ts`).
 It runs on ONNX Runtime's WebAssembly build (`onnxruntime-web`) with the pure-JavaScript Hugging Face tokenizer (`@huggingface/tokenizers`), so one set of files works on macOS, Linux and Windows with no native module to build or ship per platform; the release carries `ort-wasm-simd-threaded.wasm` and `.mjs` next to the service bundle.
@@ -270,10 +283,10 @@ The attention engine follows these rules:
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The model Jarvis calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
-## Coding-agent sessions
+## Harness sessions
 
-Claude Code, Codex and Antigravity are connections (`connectors/agent.ts`, `agents/integrations.ts`).
-Connecting one adds hooks to that agent's settings file, through an editor that only adds, replaces or removes entries whose command names `jarvis-agent-hook` and this install's `--state-dir`, so other tools' hooks and other Jarvis instances are never touched (`agents/hooks-config.ts`, `agents/install.ts`).
+Claude Code, Codex, Antigravity and Claude Desktop are connections (`connectors/agent.ts`, `agents/integrations.ts`).
+Connecting one with hooks adds them to that Harness's settings file, through an editor that only adds, replaces or removes entries whose command names `jarvis-agent-hook` and this install's `--state-dir`, so other tools' hooks and other Jarvis instances are never touched (`agents/hooks-config.ts`, `agents/install.ts`).
 The file is backed up before every write, and a file Jarvis cannot parse is refused rather than overwritten.
 Hook commands go through the installer's `current` symlink, so upgrades do not break them.
 
@@ -282,29 +295,43 @@ On session end, compaction, or (Antigravity) a fully idle turn, it clones the tr
 The service ingests the spool on change, every minute and at start, so a session ends up in the data folder even if Jarvis was stopped when it ended.
 Ingest parses each agent's transcript format down to user and assistant text, dropping tool calls, tool output, thinking, injected reminders and developer-role context (where Jarvis's own memory block lands in Codex), archives it, and queues a `session-distill` job.
 That job asks the model for durable decisions and lessons, appends one entry per session (or per continuation) to the day's session log, and records how many turns are summarised so a compaction followed by the end adds only new turns.
+An entry for a session that ran in a git repository carries a `Repository: <host/owner/name>` line, read from the folder's git config when the job runs, which ties it to the project that lists that repository.
 Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
-The global context, `state/agents/session-context.md`, holds identity, an index of memory titles, the last two session logs, and the `jarvis search` command for deeper recall from the agent's shell.
+The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
-For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the global context with that project's current state first, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
+For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the project's context, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
+A project's context (`agents/context.ts`, read from the Brain by `agents/context-sources.ts`) holds the project's full current state, the decisions and people linked to it, its session-log entries from the latest 14 days of logs, and then the global index.
+A decision or person note is linked to a project when either note names the other in its current facts or its prose, by title or by file name, so a wiki link or a Markdown link counts (`memory/note-links.ts`).
+A session-log entry belongs to a project when its `Repository:` line names one of the project's repositories; entries from before that line existed belong to no project.
+Every context stays within 8 KB (`CONTEXT_BUDGET_BYTES`).
+What does not fit is cut in this order: index titles, longest list first, down to a count per type; then the oldest session-log entries; then the facts of the least recently updated linked notes; then those notes.
+The project's own facts are never cut, and the context ends with a line that says what was cut.
+Every fact shown that is past its Review date carries `(unverified: Review date <day> passed)`.
 The hook reads the remotes of the session's folder from the repository's own git config, following a worktree's `gitdir` and `commondir` (`agents/git-remotes.ts`), runs no `git` process, and prints the first matching project's file, or the global one.
 A save or a Proposal that sets a project's `Repositories` fact to anything that is not a list of repositories is refused (`memory/save-items.ts`, the validation both share).
 Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Jarvis's own model calls run with `--setting-sources ""`, so neither recurses.
-Turning the feature off disconnects every agent; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first.
+Turning the feature off disconnects every Harness with hooks; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first, which also removes the MCP server.
 
-### Save and audit skills
+### MCP server in each Harness
 
-Connecting an agent also installs two user-level skills, `jarvis-save` and `jarvis-audit` (`agents/skills.ts`, text in `agents/skill-text.ts`), in `~/.claude/skills`, `~/.agents/skills` (Codex) or `~/.gemini/config/skills` (Antigravity).
-Only the user can invoke them: every skill folder carries `disable-model-invocation: true` (Claude Code, Antigravity) and `agents/openai.yaml` with `allow_implicit_invocation: false` (Codex, which ignores the frontmatter key), because an agent Jarvis is not connected to may read a shared folder, for example when `~/.claude/skills` is a symlink to `~/.agents/skills`.
-A `.jarvis-skill.json` marker records the state folder and the connected agents a folder serves; Jarvis never writes or removes a folder without its own marker, removes a shared folder only when the last agent reading it disconnects, and rewrites the skills on each context refresh so upgrades reach them.
-Skills call this install's CLI through the `current` path with `JARVIS_STATE_DIR` pinned, so they need nothing on `PATH`.
+Connecting a Harness also registers Jarvis's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).
+Claude Desktop is a Harness with the MCP server only; its Code tab runs Claude Code, whose hooks already save those sessions.
+The entry is named `jarvis` for the default install (`jarvis-<hash>` for another instance) and runs `jarvis mcp --state-dir <state>` through the bundled runtime and the `current` path; an entry is Jarvis's when its arguments run `mcp` for this state folder, whatever its name.
+JSON files are edited as JSON (`agents/mcp-config-json.ts`); Codex's TOML is edited as text, taking out Jarvis's `[mcp_servers.<name>]` tables and appending a fresh one, and a TOML parser checks before and after that nothing but Jarvis's entry changed, so comments and layout survive and any other outcome is refused (`agents/mcp-config-toml.ts`).
+An entry under Jarvis's name that Jarvis did not add is refused, as is a file that does not parse.
+Every change across the hooks file, the MCP file and the rule file is worked out before the first write, so a refused file leaves the Harness untouched.
+Disconnecting removes the hooks, the rule and the server, trying each even when another fails, and reports the failures together.
 
-`jarvis save` and `jarvis audit` are clients of the running service (`cli/`), because the service holds the data folder's writer lock.
-The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
+When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.jarvis-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
+The MCP prompts replace those skills, and there is no `jarvis save` command any more, because a save must be confirmed by the owner inside a Harness, which a shell cannot do.
+
+`jarvis audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
+Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
-Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
+Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
 A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
@@ -312,25 +339,25 @@ A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason 
 Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
 Rejecting writes nothing.
 Proposals are rows in `memory_changes` with `change = 'proposal'`; rows made before Proposals carried save items (one fact in `{ value, newDoc }`) are read as the equivalent one-fact item, so they still apply and reject.
-The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID`.
-`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
+The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID` in the environment the Harness gives the MCP server (`mcp/agent-env.ts`).
+`GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
 The document a fact cites as its source, archives under `evidence/archive/`, generated deliverables, and history or undated prose in other notes are never offered, because none of them can overturn the fact.
-It counts; the audit skill judges contradictions and proposes corrections through `jarvis save` for the user to approve.
+It counts; the audit prompt has the agent judge contradictions and propose corrections through the MCP `save` tool, which the owner confirms.
 
 ### Recent saves and revert
 
 Every write to the Brain is recorded in the change log (`memory_changes`) with the Harness and session it came from, a batch id shared by all changes one save or one applied Proposal made, and a SHA-256 of the note right after the write.
 `GET /api/v1/memory/recent-changes` (`memory/recent-changes.ts`) lists applied changes newest first, leaving out Proposal rows (an applied Proposal shows as the change it made), each with whether it can be reverted and, if not, why.
 `POST /api/v1/memory/changes/:id/revert` (`memory/revert.ts`) undoes one change as the user and records the undo as a change of its own whose `reverts` names the original.
-A corrected fact is corrected back to its previous value, a fact that had no previous value is moved from Current State into History, a created note is deleted from the data folder and the index, and a deleted note is restored from the copy its delete change keeps.
-A change is revertible only while it is the last word: no later change touched the same fact (a later change and its own revert cancel out, so undo works like a stack), no later save touched a created note, and the file still matches what the change wrote (the fact's value, or the note's hash for a created note), so a hand edit or a change from elsewhere is never thrown away.
+A corrected fact is corrected back to its previous value and the Review date that value had (the change log keeps both, `before_review` and `after_review`), a fact that had no previous value is moved from Current State into History, a created note is deleted from the data folder and the index, and a deleted note is restored from the copy its delete change keeps.
+A change is revertible only while it is the last word: no later change touched the same fact (a later change and its own revert cancel out, so undo works like a stack), no later save touched a created note, and the file still matches what the change wrote (the fact's value and Review date, or the note's hash for a created note), so a hand edit or a change from elsewhere is never thrown away.
 Events are append-only History and are never reverted.
 
 ## MCP server
 
 `jarvis mcp` (`mcp/`) is an MCP server a Harness starts as a local process over stdio, built on `@modelcontextprotocol/sdk`.
-It is a client of the running service like `jarvis save`: it pairs as client kind `cli` and keeps the token in `state/cli-token`, so a Harness's configuration holds only the command.
+It is a client of the running service like `jarvis audit`: it pairs as client kind `cli` and keeps the token in `state/cli-token`, so a Harness's configuration holds only the command.
 Every tool call builds a fresh client from `state/runtime.json`, so a server started before the service works once the service runs, and a stopped service is reported on the call that meets it with how to start it.
 The server starts even when the service is down, because a Harness launches its MCP servers when it starts and would otherwise mark Jarvis as failed.
 
@@ -340,7 +367,7 @@ The server starts even when the service is down, because a Harness launches its 
 - `read` calls `GET /api/v1/memory/document`, which also accepts an absolute path inside the Brain or another indexed folder when no `root` is given, and slices the requested 1-based, inclusive line range from the raw file, so lines match search citations.
 - `audit` calls `GET /api/v1/memory/audit` and returns the report with every file named by one path, the same kind `search` returns (`memory/audit-view.ts`, shared with `jarvis audit`, which shows absolute paths instead).
   It is read-only and marked so (`readOnlyHint`).
-- The `save` and `audit` prompts (`mcp/prompt-text.ts`) carry the procedures of the save and audit skills, with the MCP tools in place of shell commands.
+- The `save` and `audit` prompts (`mcp/prompt-text.ts`) carry the procedures of the save and audit skills earlier versions installed, with the MCP tools in place of shell commands.
   Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
 - `save` takes `items` with the `MemorySaveItem` schema of `POST /memory/save`.
   It checks them with `POST /memory/save/check` (the save's own validation, no write), so an invalid item or the identity record is refused before the owner is asked.
