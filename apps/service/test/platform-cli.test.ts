@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
+
+// Each test starts the `jarvis` executable from source several times, which is slow while the whole suite runs in parallel.
+vi.setConfig({ testTimeout: 120_000 });
 
 const MAIN = join(import.meta.dirname, "../src/main.ts");
 const FAKE_PLATFORM = join(import.meta.dirname, "fixtures/fake-platform.mjs");
