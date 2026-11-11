@@ -19,7 +19,7 @@ flowchart LR
     Actions[Drafts, approvals, execution]
     Conn[Connector adapters]
     Models[Model adapters]
-    Creds[(Keychain credential store)]
+    Creds[(System secret store)]
   end
   API --> Registry --> Sched --> Jobs
   Jobs --> Conn & Models & Memory
@@ -39,7 +39,7 @@ flowchart LR
 | State | One SQLite database in the service state directory | Jobs, events, approvals, attention decisions, connection state. WAL mode. |
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Web client | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
-| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i` (values on stdin, never argv); a 0600 file elsewhere for now | Outside the vault and outside frontend storage. |
+| Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool` (values on stdin and stdout, never argv); a 0600 file where none is reachable and on Windows for now | Outside the vault and outside frontend storage. |
 | Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
 | Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
@@ -72,7 +72,8 @@ Imported files are indexed read-only as area `import` and cited by their real pa
 
 Service state (`~/Library/Application Support/Jarvis/state` on macOS, `~/.local/state/jarvis` on Linux): `jarvis.sqlite`, logs, runtime metadata, backups.
 Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>` on macOS.
+Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux.
+Both system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
 
 ## Platform modules
 
@@ -81,8 +82,8 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
 | `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | logon task (not yet) |
-| `secret-store/` | `SecretStore`: get, set, delete, keys | Keychain | owner-only file until Secret Service arrives | owner-only file until Credential Manager arrives |
-| `notifier/` | `Notifier`: notify | Notification Center via `osascript` | none yet | none yet |
+| `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | owner-only file until Credential Manager arrives |
+| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | none yet |
 | `locations.ts` | install prefix, state folder, command folder, service definition folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
 | `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
 | `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | `.cmd` |
@@ -155,6 +156,16 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
   `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
   Whatever chooses the Reader reads standby and the Preferred Reader from `app.replication.machines.view()`.
+- **The Reader** (`reader/`, `replication/reader-lease.ts`, `replication/lease-ref.ts`): exactly one Machine runs scheduled Source refresh, briefings and with them the Review-date inbox items.
+  With Replication off, the Machine is its own Reader and nothing changes.
+  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the ref `refs/jarvis/reader` in the Brain's repository, never on a branch.
+  Each write is a commit with an empty tree whose message holds the record, made on top of the previous one, so the ref only moves forward: the push is a compare-and-swap, and a rejected push means another Machine wrote first, so the Machine fetches and decides again.
+  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*`.
+  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); otherwise the lease is left alone.
+  A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
+  The scheduler enqueues scheduled `sync` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
+  A Source refresh the owner starts by hand runs on the Machine they are on.
+  `GET /reader` (and `/status`) returns the Reader as this Machine last heard it, whether it is silent, and `lastRefreshAt`, the last finished Source refresh of every source (an all-sources `sync` job or a briefing), which the holder carries in the lease to the other Machines; `reader.changed` tells the Dashboard.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
@@ -298,7 +309,7 @@ The attention engine follows these rules:
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
-  The spec runs these items only on the Reader; until the Reader exists every Machine raises them.
+  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
 - Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery

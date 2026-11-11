@@ -17,6 +17,9 @@ export interface ScheduleRow {
   lastJobId: string | null;
 }
 
+/** What `Scheduler.enqueue` returns to keep a schedule due: it runs at a later tick, as a catch-up if it waited long. */
+export const LATER: unique symbol = Symbol("later");
+
 /** Next local time-of-day occurrence strictly after `from`. */
 export function nextDaily(from: Date, hhmm: string): Date {
   const [h, m] = hhmm.split(":").map(Number) as [number, number];
@@ -50,8 +53,11 @@ export class Scheduler {
   private firstTick: NodeJS.Timeout | null = null;
   private lastTick = Date.now();
   readonly tickMs: number;
-  /** Enqueue a job for a due schedule; returns the job id (or null if nothing was enqueued). */
-  enqueue: (row: ScheduleRow, reason: "due" | "catch_up") => string | null = () => null;
+  /**
+   * Enqueue a job for a due schedule; returns the job id, null when nothing
+   * was enqueued, or `LATER` to leave the schedule due and ask again at the next tick.
+   */
+  enqueue: (row: ScheduleRow, reason: "due" | "catch_up") => string | null | typeof LATER = () => null;
   onResume: (gapMs: number) => void = () => {};
 
   constructor(db: Db, log: Logger, opts: { tickMs?: number } = {}) {
@@ -133,7 +139,9 @@ export class Scheduler {
       const reason = resumed || missedMultiple ? "catch_up" : "due";
       let jobId: string | null = null;
       try {
-        jobId = this.enqueue(s, reason);
+        const queued = this.enqueue(s, reason);
+        if (queued === LATER) continue;
+        jobId = queued;
       } catch (e) {
         this.log.warn("schedule enqueue failed", { id: s.id, error: (e as Error).message });
       }
