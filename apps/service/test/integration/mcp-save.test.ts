@@ -1,10 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ElicitRequest, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
 import { startTestService, type TestService } from "./harness.ts";
 import { callTool, mcpClients, type HarnessClientOptions } from "./mcp-client.ts";
+
+// Some tests start the `jarvis mcp` process from source eight times, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 type Saved = { action: "created" | "updated"; path: string; title: string; facts: number; events: number };
 type SaveReply = { outcome: "saved" | "declined" | "proposed"; saved?: Saved[]; proposals?: Array<{ id: string; target: string }> };
