@@ -137,6 +137,17 @@ export const MIGRATIONS: readonly string[] = [
     created_at text not null, updated_at text not null
   );
   `,
+  // Recent saves with revert: which Harness and session made each change, which changes one save
+  // made together, which change a revert undid, and a fingerprint of the note right after the write.
+  `
+  alter table memory_changes add column harness text;
+  alter table memory_changes add column session_id text;
+  alter table memory_changes add column batch_id text;
+  alter table memory_changes add column reverts text;
+  alter table memory_changes add column doc_hash text;
+  create index memory_changes_doc on memory_changes(doc_rel_path);
+  create index memory_changes_reverts on memory_changes(reverts);
+  `,
   // Jarvis holds no conversation of its own (ADR 0003). Chat archives already written stay in the Brain as evidence.
   `
   drop index if exists messages_conv;

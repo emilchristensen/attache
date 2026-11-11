@@ -12,6 +12,15 @@ export interface ContextInput {
   memory: Array<{ type: string; title: string; gist?: string }>;
   recentLogs: Array<{ date: string; body: string }>;
   searchCommand: string;
+  /** The project whose repository the session runs in; absent in the global context. */
+  project?: ProjectSection;
+}
+
+export interface ProjectSection {
+  title: string;
+  /** Absolute path of the project note. */
+  path: string;
+  state: Array<{ subject: string; date: string; value: string }>;
 }
 
 /** Notes per type whose first fact (the gist) every new session reads. */
@@ -23,6 +32,11 @@ export const TYPE_LABEL: Record<string, string> = { person: "People", project: "
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
+function projectSection(p: ProjectSection): string[] {
+  const facts = p.state.map((f) => `- **${f.subject}** (${f.date}): ${f.value.replace(/\s+/g, " ").trim()}`);
+  return [`### This session's project: ${p.title}`, "", `This session runs in one of the project's repositories. Its note: ${p.path}`, ...(facts.length ? ["", ...facts] : [])];
+}
+
 export function buildSessionContext(c: ContextInput): string {
   const out: string[] = [`## Jarvis memory`, "", `Data folder: ${c.dataFolder}`, `Now: ${c.now.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`];
   if (c.identity) {
@@ -30,6 +44,7 @@ export function buildSessionContext(c: ContextInput): string {
     if (c.identity.email) out.push(`- Email: ${c.identity.email}`);
     if (c.identity.role) out.push(`- Role: ${c.identity.role}`);
   }
+  if (c.project) out.push("", ...projectSection(c.project));
   const byType = new Map<string, ContextInput["memory"]>();
   for (const m of c.memory) byType.set(m.type, [...(byType.get(m.type) ?? []), m]);
   if (byType.size) {

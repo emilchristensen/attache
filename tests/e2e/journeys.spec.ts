@@ -1,7 +1,7 @@
 import { test, expect, type Page, type ConsoleMessage, type BrowserContext } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildAll, startStack, type Stack } from "./stack.ts";
+import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 let shared: BrowserContext;
@@ -355,6 +355,52 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   expect(existsSync(join(stack.dataDir, "memory/people/lena-berg.md"))).toBe(false);
   await page.goto(`${stack.url}/memory?path=${encodeURIComponent("memory/decisions/vendor-sync.md")}&tab=decision`);
   await expect(page.locator('[data-subject="Decision"]')).toContainText("Use Postmark from January 2027");
+});
+
+test("recent saves: each save shows its Harness and session, and one click reverts it", async () => {
+  const save = (items: unknown[], agent: string, session: string) => harnessSave(stack, items, { agent, session });
+  const atlas = "memory/projects/atlas-launch.md";
+  save([{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "14 October" }, { subject: "Owner", value: "Ada" }] }], "claude-code", "sess-e2e-1");
+  save([{ action: "update", path: atlas, facts: [{ subject: "Launch date", value: "21 October", reason: "vendor slip" }, { subject: "Owner", value: "Grace", reason: "handover" }] }], "claude-code", "sess-e2e-2");
+  save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
+  save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
+
+  const page = await open("/memory");
+  const recent = page.getByRole("region", { name: "Recent saves" });
+  const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
+  await expect(recent).toBeVisible();
+  // The newest few show first; the rest are one click away.
+  await expect(recent.getByRole("listitem")).toHaveCount(4);
+  await recent.getByRole("button", { name: /Show all \d+/ }).click();
+  const launchId = await row("21 October").getAttribute("data-change");
+  const launch = recent.locator(`[data-change="${launchId}"]`);
+  await expect(launch).toContainText("Launch date");
+  await expect(launch.locator("del")).toHaveText("14 October");
+  await expect(launch).toContainText("Claude Code, session sess-e2e-2");
+  await expect(launch.locator("time")).toBeVisible();
+
+  // A change a later change overwrote cannot be reverted, and the Dashboard says why.
+  const grace = row(/→\s*Grace/);
+  await expect(grace).toContainText("A later change overwrote “Owner”. Revert that change first.");
+  await expect(grace.getByRole("button", { name: "Revert" })).toHaveCount(0);
+
+  await launch.getByRole("button", { name: "Revert" }).click();
+  await expect(page.getByText("Reverted. The revert is listed as a change of its own.")).toBeVisible();
+  const revert = recent.getByRole("listitem").first();
+  await expect(revert).toContainText("revert");
+  await expect(revert).toContainText("Revert in the Dashboard");
+  await expect(revert.locator("ins")).toHaveText("14 October");
+  await expect(launch).toContainText("reverted");
+  const note = readFileSync(join(stack.dataDir, atlas), "utf8");
+  expect(note).toMatch(/- \*\*Launch date\*\* \(\d{4}-\d{2}-\d{2}\): 14 October/);
+  expect(note.split("## History")[1]).toMatch(/was "14 October"[\s\S]*was "21 October"/);
+
+  // Reverting a created note removes it from the Brain and from search.
+  await row("Created the note").filter({ hasText: "Quasar pricing idea" }).getByRole("button", { name: "Revert" }).click();
+  await expect(row("Removed the note").filter({ hasText: "Quasar pricing idea" })).toBeVisible();
+  expect(existsSync(join(stack.dataDir, "memory/notes/quasar-pricing-idea.md"))).toBe(false);
+  await page.getByRole("searchbox", { name: "Search memory" }).fill("Quasar");
+  await expect(page.getByText("No matches")).toBeVisible();
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
