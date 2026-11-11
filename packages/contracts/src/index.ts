@@ -272,6 +272,39 @@ export interface ProposalView {
   decidedAt: string | null;
 }
 
+/**
+ * One change to the Brain in the recent-saves list. `create` and `delete` are
+ * whole notes, `correct` is one fact (a `null` value means the subject had or
+ * has no value), `append` is an event or a prose edit.
+ */
+export interface RecentChangeView {
+  id: string;
+  relPath: string;
+  /** The note's title, also for a note that no longer exists. */
+  title: string;
+  kind: "create" | "correct" | "append" | "delete";
+  subject: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  source: {
+    /** Harness integration kind, e.g. `claude-code`. */
+    harness: string | null;
+    harnessLabel: string | null;
+    sessionId: string | null;
+    /** What to show: the Harness and session, or who else made the change. */
+    label: string;
+  };
+  at: string;
+  /** The change this one reverted, and the change that reverted this one. */
+  revertOf: string | null;
+  revertedBy: string | null;
+  revert: { allowed: true; reason: null } | { allowed: false; reason: string };
+}
+
+export interface RecentChangesResult {
+  changes: RecentChangeView[];
+}
+
 export interface MemoryAuditEntry {
   subject: string;
   value: string;

@@ -1,6 +1,6 @@
 /** Captures every view in light, dark and narrow layouts for visual review (test-results/screens). */
 import { test, expect } from "@playwright/test";
-import { buildAll, startStack, type Stack } from "./stack.ts";
+import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -50,6 +50,11 @@ test("screens", async ({ browser }) => {
     const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in jarvis" } }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
+  // Recent saves on the Memory screen: a correction, a reverted one, and one a later save overwrote.
+  harnessSave(stack, [{ action: "create", type: "person", title: "Priya Shah", facts: [{ subject: "Role", value: "Engineering manager for billing" }, { subject: "Prefers", value: "Written updates on Mondays" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion" }] }], { agent: "codex", session: "thread-visual-2" });
+  harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Fridays", reason: "new rhythm" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "A short call on Fridays", reason: "changed again" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
@@ -66,7 +71,7 @@ test("screens", async ({ browser }) => {
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [name, path] of [["home", "/"], ["drafts", "/drafts"], ["settings", "/settings"]] as const) {
+  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"]] as const) {
     await page.goto(`${stack.url}${path}`);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });
