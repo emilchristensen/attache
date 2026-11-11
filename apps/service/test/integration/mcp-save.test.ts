@@ -130,9 +130,13 @@ describe("MCP save, confirmed in the Harness", () => {
   it("never changes the identity record, not even when the owner would accept", async () => {
     const before = brainFile("memory/self.md");
     expect(before).toContain("Ada Lovelace");
+    // One Harness that would accept and one that cannot ask; each process is reused for every path,
+    // since starting `jarvis mcp` per attempt made this test outlast its timeout under full-suite load.
+    const harnesses = await Promise.all(
+      [owner("accept"), null].map(async (confirm) => ({ confirm, client: await connect({ env: CLAUDE_CODE_SESSION, ...(confirm ? { confirm: confirm.confirm } : {}) }) })),
+    );
     for (const path of ["memory/self.md", "./memory/self.md", "memory/people/../self.md", "memory/SELF.md"]) {
-      for (const confirm of [owner("accept"), null]) {
-        const client = await connect({ env: CLAUDE_CODE_SESSION, ...(confirm ? { confirm: confirm.confirm } : {}) });
+      for (const { confirm, client } of harnesses) {
         const r = await callTool<SaveReply>(client, "save", { items: [{ action: "update", path, facts: [{ subject: "Name", value: "Mallory", reason: "Takeover" }] }] });
         expect(r.isError).toBe(true);
         expect(r.text).toContain("identity record");
