@@ -1,5 +1,6 @@
 # The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
-# on macOS and Linux. The job names are the required status checks on `main`.
+# on macOS and Linux, and the install test on Linux.
+# The job names are the required status checks on `main`.
 name: CI
 
 on:
@@ -67,5 +68,57 @@ jobs:
         with:
           name: test-results-${{ matrix.os }}
           path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Builds two releases for this computer and installs, upgrades, backs up,
+  # restores and uninstalls them in a clean profile (scripts/test-install.mjs).
+  install:
+    name: install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The test opens the installer's pairing link in the installed Google Chrome channel.
+      - name: Google Chrome
+        run: npx playwright install chrome
+
+      # A CI job has no login session, so it has no systemd user manager.
+      # Lingering starts one for the runner user, as logging in would.
+      - name: systemd user manager
+        if: runner.os == 'Linux'
+        run: |
+          sudo loginctl enable-linger "$USER"
+          for i in $(seq 1 30); do
+            [ -S "/run/user/$(id -u)/bus" ] && exit 0
+            sleep 1
+          done
+          echo "the systemd user manager did not start" >&2
+          exit 1
+
+      - name: Install test
+        run: node scripts/test-install.mjs --from 0.1.0 --to 0.1.1
+
+      - name: Upload install results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-results-${{ matrix.os }}
+          path: test-results/install-results.json
           retention-days: 7
           if-no-files-found: ignore
