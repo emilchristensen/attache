@@ -416,7 +416,7 @@ export interface MemoryAuditEntry {
   ageDays: number;
   source: string | null;
   line: number;
-  /** Deterministic problems with this entry: `stale`, `unsourced`, `missing-source`, `duplicate-subject`. */
+  /** Deterministic problems with this entry: `stale` (past its Review date), `unsourced`, `missing-source`, `duplicate-subject`. */
   flags: string[];
   /** Documents that mention the note and changed after this entry was dated: where a contradiction would show up. */
   newerEvidence: Array<{ root: string; relPath: string; title: string; startLine: number; endLine: number; snippet: string; modified: string }>;
@@ -425,7 +425,6 @@ export interface MemoryAuditEntry {
 export interface MemoryAuditReport {
   generatedAt: string;
   dataFolder: string;
-  staleDays: number;
   notes: number;
   entries: number;
   /** Counts per flag, so two runs can be compared. */

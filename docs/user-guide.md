@@ -59,7 +59,7 @@ Jarvis has no chat box: you ask the Brain from your Harness (see Using the Brain
   **Away summary** covers the last three days.
 - **Sources** shows each source's last successful refresh and whether its last Source refresh was complete, partial or failed.
   An item list is never shown as "nothing to do" when a source failed.
-- Items are grouped into deadlines, review queue, meetings and pending replies.
+- Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Jarvis to write a reply or review comment with the item's context.
@@ -172,6 +172,7 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
   An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
+  A fact is flagged stale only when it is past its Review date; a fact without one is never stale, however old it is.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
   In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
@@ -197,7 +198,12 @@ You can also add or change one by hand in your editor, and Jarvis reads it.
 Facts that stay true, such as a repository's name, need none, and Jarvis never adds Review dates in bulk.
 
 Past its Review date a fact stays in your Brain, marked unverified: in the Dashboard, in search results, in what a Harness reads, and in the context a new agent session starts with.
-To clear the mark, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+Each such fact also raises one item under **Facts to check** in the inbox, naming the note and the fact, when your data folder is next refreshed.
+Dismissing the item keeps it dismissed until the fact or its Review date changes.
+The audit flags these facts, and only these, as stale.
+
+To clear the mark and the item, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
+To confirm a fact is still true, save the same value with a later Review date.
 The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
 
 ## Editing notes in Obsidian
