@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { ATLASSIAN_SITE, installScenarios } from "../fixtures/scenarios.ts";
 import { useFakeClaude } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code CLI processes, which is slow on a busy machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let svc: TestService;
 let fx: FixtureServer;

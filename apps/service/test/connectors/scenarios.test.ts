@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionKind } from "@jarvis/contracts";
 import { githubAdapter } from "../../src/connectors/github.ts";
 import { jiraAdapter } from "../../src/connectors/jira.ts";
@@ -10,6 +10,9 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { ATLASSIAN_SITE, ATLASSIAN_TOKEN, FIXTURE_PREFIX, addJiraOverdue, installScenarios, setPrHeadSha, type ScenarioState } from "../fixtures/scenarios.ts";
 import { useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code CLI processes, which is slow on a busy machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let state: ScenarioState;

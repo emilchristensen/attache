@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,9 @@ import { deepEqual, fullToolName, preApprovingRules } from "../../src/connectors
 import { createLogger } from "../../src/core/log.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { mountClaude, onTool, useFakeClaude, jsonAnswer, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code CLI processes, which is slow on a busy machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let claude: ClaudeFixture;
@@ -29,8 +32,7 @@ beforeEach(() => {
 
 const read = (id: string, channel: string) => ({ id, tool: "slack_read_channel", args: { channel_id: channel, limit: 5 } });
 
-// Each test starts up to 15 fixture CLI processes; on a busy machine one can take seconds to start.
-describe("claude.ai connector runner (Claude Code session gate)", { timeout: 120_000 }, () => {
+describe("claude.ai connector runner (Claude Code session gate)", () => {
   it("runs planned calls with exactly the planned arguments and returns the raw tool results", async () => {
     const out = await runner().run(SLACK, [read("a", "C1"), read("b", "C2")], { signal: signal() });
     expect(out.get("a")).toEqual({ status: "ok", text: JSON.stringify({ messages: "read C1" }) });
