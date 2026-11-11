@@ -174,6 +174,22 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
 Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Jarvis's MCP server; Claude Desktop stays connected.
 Uninstalling Jarvis removes them all.
 
+## Meeting captures
+
+A meeting capture is a Markdown file in your data folder's `evidence/captures/` folder whose frontmatter `tags` include `meeting` or `meeting-transcript`, for example the notes and transcript of a meeting that an export routine writes there.
+When a new one arrives, Jarvis reads it, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*, the same way it does for a Harness session.
+This needs a model connection; without one, the capture is kept and no Proposals are made from it.
+
+- Each Proposal names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
+- A capture yields at most five Proposals, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+- A capture is read once.
+  Editing it afterwards, or restarting Jarvis, does not read it again.
+  A capture written while Jarvis was stopped is read when Jarvis starts.
+- The captures already in a data folder when you choose it, or when a Machine joins your Brain, are not read: only captures that arrive afterwards are.
+- With Replication on, a capture is read on the Machine where it arrived; the Machines that receive it do not read it again.
+- Snapshots that Source refresh writes from Slack, mail, Jira and your calendar (`evidence/connectors/`) are never read this way, and neither are captures without a meeting tag.
+- The Proposals always wait for your click.
+
 ## The Brain in any Harness (MCP)
 
 Every Harness you connect reaches your Brain through Jarvis's MCP server, including Claude Desktop, which has no shell and no hooks.

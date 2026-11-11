@@ -37,13 +37,14 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "capture",
     label: "Saving to memory",
-    description: "Import a Markdown folder, save notes and decisions from a Harness, and review Proposals and recent saves.",
+    description: "Import a Markdown folder, save notes and decisions from a Harness, propose what the Brain should change because of a meeting capture (with a model), and review Proposals and recent saves.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["recall"],
+    // A model is only needed to propose changes from meeting captures; saving works without one, so it is not listed here.
     connections: [],
     schedules: [],
-    jobKinds: ["import"],
+    jobKinds: ["import", "capture-consolidate"],
   },
   {
     id: "jobs",
