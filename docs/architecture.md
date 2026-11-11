@@ -54,7 +54,7 @@ Data folder (user-chosen, Markdown):
     people/ projects/ decisions/ notes/
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
-    captures/
+    captures/                captures, such as meeting notes and transcripts (a new one tagged as a meeting is consolidated)
     conversations/           chat archives from versions that had a chat (kept, never quoted by recall)
     connectors/<kind>/       connector snapshots, one file per day per Machine
     sessions/                coding-agent session logs, one file per day per Machine (searchable)
@@ -356,6 +356,20 @@ Facts the note already holds with the same value, events already in the note, an
 A session has room for five Proposals from Consolidation in total, counted across every run for it.
 What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
 Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
+
+#### Meeting captures
+
+A meeting capture is a Markdown file under `evidence/captures/` whose frontmatter `tags` include `meeting` or `meeting-transcript` (`consolidation/capture-text.ts`).
+Connector snapshots live under `evidence/connectors/`, so no snapshot is ever a meeting capture, whatever its tags.
+`consolidation/arrivals.ts` (`App.captures`) notices captures that arrive on this Machine and records every capture it has seen in two local tables, `capture_watch` (since when a data folder is watched) and `capture_arrivals` (`present`, `pulled` or `arrived`, per data folder and path); neither is part of the Brain.
+A data folder the owner adopts (`App.useDataFolder`: setup, a change of folder, or a join) has its captures recorded as `present`, so existing captures are never consolidated; a folder opened at start that was watched before is checked for captures written while the service was stopped.
+After that a check runs whenever the file watcher indexes an outside edit and whenever the store writes a file under `evidence/captures/`; each meeting capture not seen before is recorded as `arrived` and queues one `capture-consolidate` job (`consolidation/capture.ts`, input `{ path }`, idempotency key per data folder and path).
+Files Replication brings are recorded as `pulled` by the first `onPulled` listener, before any check can see them, so a capture is consolidated only on the Machine where it arrived.
+The job belongs to the `capture` feature.
+It reads the capture with its frontmatter dropped, the quote markers stripped and secrets redacted, one entry per line of the file, and searches related notes for its title, headings and first points.
+The prompts are the session's, naming a meeting instead (`consolidationSystemPrompt(..., "meeting")`), and the reply goes through the same parsing and screening.
+The five-Proposal cap is counted per capture, from the Proposals `proposedBy: "Consolidation"` whose source is that capture (`Proposals.citing`).
+Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `lines` is the shortest run of the file's lines that holds the quoted evidence.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.

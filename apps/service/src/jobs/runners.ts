@@ -12,6 +12,7 @@ import { SOURCE_KINDS } from "../capabilities/registry.ts";
 import { nowIso } from "../core/db.ts";
 import { notifyDesktop } from "../platform/notifier/index.ts";
 import { CONSOLIDATION_JOB, runConsolidation } from "../consolidation/consolidate.ts";
+import { CAPTURE_CONSOLIDATION_JOB, runCaptureConsolidation } from "../consolidation/capture.ts";
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -298,4 +299,5 @@ export function registerRunners(app: App) {
   app.jobs.register("demo-long", (ctx) => runDiagnostics(app, ctx));
   app.jobs.register("session-distill", (ctx) => app.sessions.distill(ctx));
   app.jobs.register(CONSOLIDATION_JOB, (ctx) => runConsolidation(app, ctx));
+  app.jobs.register(CAPTURE_CONSOLIDATION_JOB, (ctx) => runCaptureConsolidation(app, ctx));
 }

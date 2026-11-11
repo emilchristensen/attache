@@ -107,6 +107,14 @@ export class Proposals {
       .map(toProposalView);
   }
 
+  /** The Proposals, whatever their status, that `proposedBy` made from one file of the Brain, such as a meeting capture, newest first. */
+  citing(proposedBy: string, kind: SourceRef["kind"], ref: string): ProposalView[] {
+    return this.index
+      .list({ limit: 500 })
+      .filter((r) => r.proposedBy === proposedBy && !r.origin && r.source?.kind === kind && r.source.ref === ref)
+      .map(toProposalView);
+  }
+
   /**
    * Apply or reject a pending Proposal. Applying checks the item again, because
    * the Brain may have changed since it was proposed, then writes it as one

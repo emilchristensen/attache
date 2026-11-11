@@ -552,7 +552,7 @@ export const AttentionDecision = z.object({
 // ---------------------------------------------------------------------------
 // Jobs
 
-export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate"]);
+export const JobKind = z.enum(["research", "briefing", "draft", "sync", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate", "capture-consolidate"]);
 export type JobKind = z.infer<typeof JobKind>;
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";
