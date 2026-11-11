@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import type { ConnectionKind, FeatureId, JobView } from "@jarvis/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
-import { resolvePaths, type ServicePaths } from "./core/paths.ts";
+import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
+import { MachineStore } from "./core/machine.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
 import { ConfigStore } from "./core/config.ts";
@@ -44,6 +45,7 @@ export class App {
   readonly log: Logger;
   readonly secrets: SecretStore;
   readonly config: ConfigStore;
+  readonly machine: MachineStore;
   readonly memory: MemoryStore;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
@@ -74,7 +76,9 @@ export class App {
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
-    this.memory = new MemoryStore(this.db, null, this.instance);
+    this.machine = new MachineStore(this.db);
+    this.machine.get();
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get() });
     this.bus.setMaxListeners(500);
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.

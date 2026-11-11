@@ -115,6 +115,21 @@ export const ConfigPatch = z.object({
 });
 export type ConfigPatch = z.infer<typeof ConfigPatch>;
 
+/** The computer this service runs on. The id never changes; the owner can rename it. */
+export const MACHINE_NAME_MAX = 64;
+export const MachineView = z.object({ id: z.string(), name: z.string() });
+export type MachineView = z.infer<typeof MachineView>;
+
+export const MachineRename = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the Machine a name")
+    .max(MACHINE_NAME_MAX, `Keep the Machine's name to ${MACHINE_NAME_MAX} characters`)
+    .refine((n) => !/\p{Cc}/u.test(n), "A Machine's name cannot hold control characters"),
+});
+export type MachineRename = z.infer<typeof MachineRename>;
+
 // ---------------------------------------------------------------------------
 // Memory
 
@@ -188,6 +203,29 @@ const SaveFact = z.object({ subject: z.string().trim().min(1).max(100), value: z
 const SaveEvent = z.string().trim().min(1).max(2000);
 
 /**
+ * One change to one note: a new note with its facts, or an update to an existing
+ * note. A save carries several; a Proposal carries exactly one.
+ */
+export const MemorySaveItem = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("create"),
+    type: z.enum(["person", "project", "decision", "note"]),
+    title: z.string().trim().min(1).max(200),
+    facts: z.array(SaveFact).min(1).max(50),
+    notes: z.string().max(20_000).optional(),
+    events: z.array(SaveEvent).max(20).optional(),
+    tags: z.array(z.string().max(50)).max(20).optional(),
+  }),
+  z.object({
+    action: z.literal("update"),
+    path: z.string().trim().min(1).max(500),
+    facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
+    events: z.array(SaveEvent).max(20).optional(),
+  }),
+]);
+export type MemorySaveItem = z.infer<typeof MemorySaveItem>;
+
+/**
  * What the user asked a coding agent to save (`jarvis save`). State goes into
  * `facts` (one current value per subject, replacing the old one), events into
  * `events` (appended to History). Validated as a whole before anything is written.
@@ -201,33 +239,37 @@ export const MemorySaveInput = z.object({
       cwd: z.string().max(2000).optional(),
     })
     .optional(),
-  items: z
-    .array(
-      z.discriminatedUnion("action", [
-        z.object({
-          action: z.literal("create"),
-          type: z.enum(["person", "project", "decision", "note"]),
-          title: z.string().trim().min(1).max(200),
-          facts: z.array(SaveFact).min(1).max(50),
-          notes: z.string().max(20_000).optional(),
-          events: z.array(SaveEvent).max(20).optional(),
-          tags: z.array(z.string().max(50)).max(20).optional(),
-        }),
-        z.object({
-          action: z.literal("update"),
-          path: z.string().trim().min(1).max(500),
-          facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
-          events: z.array(SaveEvent).max(20).optional(),
-        }),
-      ]),
-    )
-    .min(1)
-    .max(20),
+  items: z.array(MemorySaveItem).min(1).max(20),
 });
 export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
 export interface MemorySaveResult {
   saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
+}
+
+/** Suggest one save item for the owner to apply or reject in the Dashboard. */
+export const ProposalInput = z.object({
+  item: MemorySaveItem,
+  /** Why the change is suggested, shown beside it in the review list. */
+  reason: z.string().trim().min(1).max(1000),
+  /** The evidence the suggestion came from. */
+  source: SourceRefInput.optional(),
+});
+export type ProposalInput = z.infer<typeof ProposalInput>;
+
+export interface ProposalView {
+  id: string;
+  status: "proposed" | "applied" | "rejected";
+  /** The whole change; null when a stored Proposal can no longer be read, so it can only be rejected. */
+  item: MemorySaveItem | null;
+  /** The note it changes, the note it created once applied, or "(new <type>: <title>)" before that. */
+  target: string;
+  reason: string | null;
+  /** The cited evidence, formatted as in the note. */
+  source: string | null;
+  proposedBy: string;
+  createdAt: string;
+  decidedAt: string | null;
 }
 
 export interface MemoryAuditEntry {

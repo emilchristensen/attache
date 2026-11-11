@@ -14,6 +14,13 @@ export interface PlatformLocations {
   installPrefix: string;
   /** Default service state folder, used when neither `JARVIS_STATE_DIR` nor `--state-dir` is given. */
   stateDir: string;
+  /**
+   * Writer locks: one folder per user, shared by every Jarvis service of that
+   * user whatever its state folder, so two services cannot both open one data
+   * folder. It ignores XDG variables on purpose, because a login service and a
+   * terminal can see different values for them.
+   */
+  locksDir: string;
   /** Folder for the command-line entry points `jarvis` and `jarvis-uninstall`. */
   binDir: string;
   /** Folder of per-user service definitions (LaunchAgents, systemd user units); null where the service manager keeps none on disk. */
@@ -44,6 +51,7 @@ function macos(env: Env): PlatformLocations {
     home,
     installPrefix,
     stateDir: join(installPrefix, "state"),
+    locksDir: join(installPrefix, "locks"),
     binDir: join(home, ".local", "bin"),
     serviceDefinitionDir: join(home, "Library", "LaunchAgents"),
     tar: "/usr/bin/tar",
@@ -60,6 +68,7 @@ function linux(env: Env): PlatformLocations {
     home,
     installPrefix: join(env.XDG_DATA_HOME || join(home, ".local", "share"), "jarvis"),
     stateDir: join(env.XDG_STATE_HOME || join(home, ".local", "state"), "jarvis"),
+    locksDir: join(home, ".local", "state", "jarvis", "locks"),
     binDir: join(home, ".local", "bin"),
     serviceDefinitionDir: join(env.XDG_CONFIG_HOME || join(home, ".config"), "systemd", "user"),
     tar: "tar",
@@ -79,6 +88,7 @@ function windows(env: Env): PlatformLocations {
     home,
     installPrefix,
     stateDir: join(installPrefix, "state"),
+    locksDir: join(installPrefix, "locks"),
     binDir: join(installPrefix, "bin"),
     // The per-user logon task lives in Task Scheduler, not in a file.
     serviceDefinitionDir: null,

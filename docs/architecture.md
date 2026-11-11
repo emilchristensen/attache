@@ -54,8 +54,9 @@ Data folder (user-chosen, Markdown):
     people/ projects/ decisions/ notes/
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
-    captures/ conversations/ connectors/
-    sessions/                coding-agent session logs, one file per day (searchable)
+    captures/ conversations/
+    connectors/<kind>/       connector snapshots, one file per day per Machine
+    sessions/                coding-agent session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
   deliverables/             generated work products (briefings, research, drafts)
 ```
@@ -65,6 +66,7 @@ The import preview lists what will be read, what is skipped and that zero files 
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
 Service state (`~/Library/Application Support/Jarvis/state` on macOS): `jarvis.sqlite`, logs, runtime metadata, backups.
+Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
 Credentials: Keychain service `dev.jarvis.<instance>` on macOS.
 
 ## Platform modules
@@ -84,6 +86,14 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 The installer and uninstaller are thin shell scripts that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis paths`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
 
+### Machine identity and per-Machine evidence
+
+Each Machine has an id (a UUID made once) and a name (the hostname without its domain until the owner renames it), kept in the `machine` table of the service database, never in the Brain.
+`GET /machine` returns both; `PATCH /machine` renames (1 to 64 characters, no control characters); Settings shows them.
+Evidence that every Machine appends to is written per Machine, so that Replication never merges two Machines' writes into one file (ADR 0001): session logs go to `evidence/sessions/<date>-<machine>.md` and connector snapshots to `evidence/connectors/<kind>/<date>-<machine>.md`.
+`<machine>` is the name's slug plus the first eight hex digits of the id, so two Machines with the same name still write apart; the frontmatter records `machine` and `machine_id`.
+Files written before this change keep their `<date>.md` name; search and the audit index them like any evidence, and the session context reads every file of a day, old or per-Machine, as that day's log.
+
 ## Memory model
 
 Every memory note has frontmatter (`id`, `type`, `title`, `provenance`, `sources`, `created`, `updated`), a `## Current State` section with one dated entry per subject, optional `## Notes`, and an append-only `## History`.
@@ -93,8 +103,11 @@ This is the state-versus-event rule from the old vault's 2026-08-13 repair, enfo
 Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes. Clients submit captures and corrections through the API.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
-- Model output never writes memory directly. Suggested memory changes are stored as proposals that the user applies or rejects.
-- Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder (a lock file with the owner pid prevents a second writer).
+- Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
+  A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
+- Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
+  A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
+  A `.jarvis/writer.lock` left inside the data folder by an earlier version is honoured the same way and then removed.
 - Paths are resolved and confined to the data folder; symlinks out of it are refused.
 
 ## Retrieval
@@ -233,6 +246,13 @@ Skills call this install's CLI through the `current` path with `JARVIS_STATE_DIR
 The CLI pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (mode 0600), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
 Facts go through the same correction path as the UI, so the old value moves to History; events are appended to History.
+Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
+
+A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
+`POST /api/v1/memory/proposals` runs the save's validation before recording it, `GET /api/v1/memory/proposals?status=proposed` lists pending ones with the whole item, and `POST /api/v1/memory/proposals/:id/apply|reject` decides one.
+Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
+Rejecting writes nothing.
+Proposals are rows in `memory_changes` with `change = 'proposal'`; rows made before Proposals carried save items (one fact in `{ value, newDoc }`) are read as the equivalent one-fact item, so they still apply and reject.
 The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID`.
 `GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age and source, the flags `stale`, `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether the note's first fact is in the session index, and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.

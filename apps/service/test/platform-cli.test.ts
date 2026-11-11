@@ -28,6 +28,7 @@ describe("paths and Harness locations per operating system", () => {
       os: "macos",
       installPrefix: "/Users/owner/Library/Application Support/Jarvis",
       stateDir: "/Users/owner/Library/Application Support/Jarvis/state",
+      locksDir: "/Users/owner/Library/Application Support/Jarvis/locks",
       binDir: "/Users/owner/.local/bin",
       serviceDefinitionDir: "/Users/owner/Library/LaunchAgents",
       tar: "/usr/bin/tar",
@@ -44,12 +45,13 @@ describe("paths and Harness locations per operating system", () => {
       os: "linux",
       installPrefix: "/home/owner/.local/share/jarvis",
       stateDir: "/home/owner/.local/state/jarvis",
+      locksDir: "/home/owner/.local/state/jarvis/locks",
       binDir: "/home/owner/.local/bin",
       serviceDefinitionDir: "/home/owner/.config/systemd/user",
       claudeManagedSettings: "/etc/claude-code/managed-settings.json",
     });
     const custom = paths("linux", { HOME: "/home/owner", XDG_DATA_HOME: "/data", XDG_STATE_HOME: "/state", XDG_CONFIG_HOME: "/config" });
-    expect(custom).toMatchObject({ installPrefix: "/data/jarvis", stateDir: "/state/jarvis", serviceDefinitionDir: "/config/systemd/user" });
+    expect(custom).toMatchObject({ installPrefix: "/data/jarvis", stateDir: "/state/jarvis", locksDir: "/home/owner/.local/state/jarvis/locks", serviceDefinitionDir: "/config/systemd/user" });
     expect(custom.harnesses.codex.executables).toEqual(["/home/owner/.local/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]);
   });
 
@@ -60,6 +62,7 @@ describe("paths and Harness locations per operating system", () => {
       home: "C:\\Users\\owner",
       installPrefix: "C:\\Users\\owner\\AppData\\Local\\Jarvis",
       stateDir: "C:\\Users\\owner\\AppData\\Local\\Jarvis\\state",
+      locksDir: "C:\\Users\\owner\\AppData\\Local\\Jarvis\\locks",
       binDir: "C:\\Users\\owner\\AppData\\Local\\Jarvis\\bin",
       serviceDefinitionDir: null,
       tar: "C:\\Windows\\System32\\tar.exe",

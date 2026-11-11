@@ -99,7 +99,8 @@ describe("coding-agent sessions", () => {
     expect(ctx).toMatch(/search --state-dir/);
   });
 
-  it("an ended session is archived and summarised into the day's session log", async () => {
+  it("an ended session is archived and summarised into this Machine's session log for the day", async () => {
+    await svc.call("PATCH", "/machine", { name: "Work Laptop" });
     const transcript = join(work, "s1.jsonl");
     writeFileSync(transcript, claudeTranscript("s1", join(work, "jarvis"), [["Should the hook call the API?", "We decided the hook only copies the transcript, because the SessionEnd budget is short."]]));
     runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: "s1", transcript_path: transcript, cwd: work, reason: "exit" });
@@ -111,7 +112,10 @@ describe("coding-agent sessions", () => {
     expect(archived).toContain("### Alex");
     expect(archived).not.toMatch(/system-reminder|tool output|private reasoning/);
     const logs = readdirSync(join(svc.dataDir, "evidence/sessions")).filter((f) => f.endsWith(".md"));
+    // Each Machine writes its own session log, named after it.
+    expect(logs).toEqual([expect.stringMatching(/^\d{4}-\d{2}-\d{2}-work-laptop-[0-9a-f]{8}\.md$/)]);
     const log = readFileSync(join(svc.dataDir, "evidence/sessions", logs[0]!), "utf8");
+    expect(log).toContain("machine: Work Laptop");
     expect(log).toContain("We decided the hook only copies the transcript");
     expect(log).toContain("](transcripts/claude-code/");
     expect(readdirSync(spoolDir(svc.stateDir)).filter((f) => !f.startsWith("."))).toEqual([]);
@@ -120,7 +124,7 @@ describe("coding-agent sessions", () => {
   it("the agent's deeper-recall command finds the session log, never the raw transcript", async () => {
     const main = join(import.meta.dirname, "../../src/main.ts");
     const hits = JSON.parse(execFileSync(process.execPath, [main, "search", "hook copies transcript budget", "--state-dir", svc.stateDir, "--json"], { encoding: "utf8" })) as Array<{ file: string; lines: [number, number] }>;
-    expect(hits.some((h) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}\.md$/.test(h.file))).toBe(true);
+    expect(hits.some((h) => /\/evidence\/sessions\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/.test(h.file))).toBe(true);
     expect(hits.some((h) => h.file.includes("/transcripts/"))).toBe(false);
     expect(hits[0]!.file.startsWith(svc.dataDir)).toBe(true);
   });

@@ -23,6 +23,11 @@ export function defaultStateDir(): string {
   return process.env.JARVIS_STATE_DIR || platformLocations().stateDir;
 }
 
+/** `JARVIS_LOCK_DIR` when set, otherwise this operating system's writer-lock folder (`platform/locations.ts`). */
+export function defaultLocksDir(): string {
+  return process.env.JARVIS_LOCK_DIR || platformLocations().locksDir;
+}
+
 export function resolvePaths(stateDir = defaultStateDir()): ServicePaths {
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const paths: ServicePaths = {

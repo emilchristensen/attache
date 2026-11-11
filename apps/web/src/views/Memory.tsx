@@ -3,6 +3,7 @@ import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
+import { ProposalReview } from "../components/ProposalReview.tsx";
 
 interface Hit {
   chunkId: number;
@@ -45,17 +46,6 @@ interface Doc {
   protected: boolean;
   frontmatter: Record<string, unknown>;
   changes: Array<{ id: string; change: string; subject: string | null; beforeValue: string | null; afterValue: string | null; reason: string | null; actor: string; status: string; createdAt: string }>;
-}
-interface Change {
-  id: string;
-  docRelPath: string;
-  subject: string | null;
-  afterValue: string | null;
-  reason: string | null;
-  source: string | null;
-  actor: string;
-  status: string;
-  createdAt: string;
 }
 
 const TABS: Array<{ id: string; label: string; query: string }> = [
@@ -238,45 +228,6 @@ function Capture({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ReviewQueue() {
-  const q = useResource<Change[]>("/memory/changes?status=proposed", ["memory.changed"]);
-  const { run } = useAction();
-  if (!q.data?.length) return null;
-  return (
-    <div className="card stack-sm">
-      <h3>Memory changes to review ({q.data.length})</h3>
-      {q.data.map((c) => {
-        const v = (() => {
-          try {
-            return (JSON.parse(c.afterValue ?? "{}") as { value: string }).value;
-          } catch {
-            return c.afterValue;
-          }
-        })();
-        return (
-          <div key={c.id} className="item" data-proposal={c.id}>
-            <div className="title">
-              {c.subject}: {v}
-            </div>
-            <div className="summary">
-              For {c.docRelPath} · proposed by {c.actor} · {c.reason}
-              {c.source ? ` · source: ${c.source}` : ""}
-            </div>
-            <div className="item-actions">
-              <button className="small primary" onClick={() => run("apply", () => post(`/memory/proposals/${c.id}/apply`).then(q.reload), "Applied")}>
-                Apply
-              </button>
-              <button className="small" onClick={() => run("reject", () => post(`/memory/proposals/${c.id}/reject`).then(q.reload), "Rejected")}>
-                Reject
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function MemoryView() {
   const loc = useLocation();
   const [tab, setTab] = useState(loc.search.get("tab") ?? "decision");
@@ -309,7 +260,7 @@ export function MemoryView() {
         </div>
       </div>
       {capturing && <Capture onDone={() => { setCapturing(false); list.reload(); }} />}
-      <ReviewQueue />
+      <ProposalReview />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search memory and notes" aria-label="Search memory" />

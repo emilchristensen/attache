@@ -27,6 +27,7 @@ for a in "$@"; do
 done
 
 [ -x "$JARVIS" ] || { printf 'Jarvis is not installed in %s: %s is missing.\n' "$PREFIX" "$JARVIS" >&2; exit 1; }
+LOCKS="$("$JARVIS" paths locksDir)"
 
 DATA_FOLDER=""
 OWNED=""
@@ -74,6 +75,8 @@ if [ "$DELETE" = "1" ]; then
       echo "Kept your own files in $DATA_FOLDER; removed only what Jarvis created there."
     fi
   fi
+  # Writer locks are released when the service stops; the folder is shared by every instance, so only an empty one goes.
+  rmdir "$LOCKS" 2>/dev/null || true
   rmdir "$PREFIX" 2>/dev/null || true
   echo "Jarvis removed, including its data."
 else

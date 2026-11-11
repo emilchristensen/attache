@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Db, nowIso, json } from "../core/db.ts";
+import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
 import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
+import type { MachineIdentity } from "../core/machine.ts";
+import { connectorSnapshotPath, sessionLogPath } from "./evidence-paths.ts";
+import { WriterLock } from "./writer-lock.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -65,18 +68,27 @@ Service state (jobs, approvals, settings) and credentials live outside this fold
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+export interface MemoryStoreOptions {
+  /** Install name; a live service of another instance on the same folder is refused. */
+  instance: string;
+  /** Where writer locks live, outside every data folder. */
+  locksDir: string;
+  /** The Machine this service runs on, read at each write so a rename applies at once. */
+  machine: () => MachineIdentity;
+}
+
 export class MemoryStore {
   readonly indexer: Indexer;
-  private lockFile: string | null = null;
+  private lock: WriterLock | null = null;
 
   private readonly db: Db;
   private root: string | null;
-  private readonly instance: string;
+  private readonly opts: MemoryStoreOptions;
 
-  constructor(db: Db, root: string | null, instance: string) {
+  constructor(db: Db, root: string | null, opts: MemoryStoreOptions) {
     this.db = db;
     this.root = root;
-    this.instance = instance;
+    this.opts = opts;
     this.indexer = new Indexer(db);
   }
 
@@ -115,38 +127,22 @@ export class MemoryStore {
       const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
-    this.acquireLock(root);
-    this.releaseLockIfDifferent(root);
+    this.takeLock(root);
     this.root = root;
     return { created };
   }
 
-  private acquireLock(root: string) {
-    const lock = join(root, ".jarvis", "writer.lock");
-    if (existsSync(lock)) {
-      const owner = json<{ pid: number; instance: string }>(readFileSync(lock, "utf8"), { pid: 0, instance: "" });
-      const alive = owner.pid > 0 && owner.pid !== process.pid && isAlive(owner.pid);
-      if (alive && owner.instance !== this.instance) {
-        throw new PolicyError(`Another Jarvis service (pid ${owner.pid}) owns this data folder`, "actor_denied");
-      }
-    }
-    writeFileSync(lock, JSON.stringify({ pid: process.pid, instance: this.instance, at: nowIso() }));
-  }
-
-  private releaseLockIfDifferent(newRoot: string) {
-    if (this.lockFile && this.lockFile !== join(newRoot, ".jarvis", "writer.lock")) this.releaseLock();
-    this.lockFile = join(newRoot, ".jarvis", "writer.lock");
+  /** Hold the writer lock on `root`, and let go of the one on the previous folder. */
+  private takeLock(root: string) {
+    if (this.lock?.covers(root)) return;
+    const next = WriterLock.acquire(root, { instance: this.opts.instance, locksDir: this.opts.locksDir });
+    this.lock?.release();
+    this.lock = next;
   }
 
   releaseLock() {
-    if (!this.lockFile) return;
-    try {
-      const owner = json<{ pid: number }>(readFileSync(this.lockFile, "utf8"), { pid: 0 });
-      if (owner.pid === process.pid) unlinkSync(this.lockFile);
-    } catch {
-      // Already gone.
-    }
-    this.lockFile = null;
+    this.lock?.release();
+    this.lock = null;
   }
 
   close() {
@@ -202,7 +198,7 @@ export class MemoryStore {
   // ---- memory notes ----------------------------------------------------------
 
   createMemory(
-    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[] },
+    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[]; events?: string[] },
     actor: WriteActor,
     opts: { approvedProposal?: boolean } = {},
   ): { relPath: string } {
@@ -223,10 +219,17 @@ export class MemoryStore {
       title: input.title,
       state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? today(), value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)), `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
+      history: [
+        ...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)),
+        `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`,
+        ...(input.events ?? []).map(eventLine),
+      ],
     });
     this.writeFile(rel, doc, actor, opts);
-    this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+    tx(this.db, () => {
+      this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+      for (const e of input.events ?? []) this.recordChange({ docRelPath: rel, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" });
+    });
     return { relPath: rel };
   }
 
@@ -235,30 +238,40 @@ export class MemoryStore {
    * date and source; the index is updated immediately so the next answer sees it.
    */
   correct(rel: string, input: { subject: string; value: string; reason: string; source?: SourceRef }, actor: WriteActor, opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {}): MemoryChange {
+    const { subject, value, reason, source } = input;
+    return this.update(rel, { facts: [{ subject, value, reason }], events: [], ...(source ? { source } : {}) }, actor, opts)[0]!;
+  }
+
+  /**
+   * Correct several facts and append several events to one note in a single
+   * write, so either every part lands or none does. Each superseded value
+   * moves to History with its date and source.
+   */
+  update(
+    rel: string,
+    input: { facts: Array<{ subject: string; value: string; reason: string }>; events: string[]; source?: SourceRef },
+    actor: WriteActor,
+    opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {},
+  ): MemoryChange[] {
     const n = normalizeRel(rel);
-    const raw = this.read(n);
     const sourceLabel = input.source ? formatSource(input.source) : actor === "user" ? "user correction" : undefined;
-    const { text, previous } = applyStateCorrection(raw, { subject: input.subject, date: today(), value: input.value, source: sourceLabel }, input.reason || "corrected");
-    const withUpdated = bumpFrontmatter(text, { updated: today() });
-    this.writeFile(n, withUpdated, actor, opts);
-    return this.recordChange({
-      docRelPath: n,
-      change: "correct",
-      subject: input.subject,
-      beforeValue: previous?.value ?? null,
-      afterValue: input.value,
-      reason: input.reason,
-      source: sourceLabel ?? null,
-      actor,
-      status: "applied",
-    });
+    let text = this.read(n);
+    const corrections: Array<{ subject: string; before: string | null; value: string; reason: string }> = [];
+    for (const f of input.facts) {
+      const out = applyStateCorrection(text, { subject: f.subject, date: today(), value: f.value, source: sourceLabel }, f.reason || "corrected");
+      text = out.text;
+      corrections.push({ subject: f.subject, before: out.previous?.value ?? null, value: f.value, reason: f.reason });
+    }
+    for (const e of input.events) text = appendHistory(text, eventLine(e));
+    this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: today() }) : text, actor, opts);
+    return tx(this.db, () => [
+      ...corrections.map((c) => this.recordChange({ docRelPath: n, change: "correct", subject: c.subject, beforeValue: c.before, afterValue: c.value, reason: c.reason, source: sourceLabel ?? null, actor, status: "applied" })),
+      ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" })),
+    ]);
   }
 
   appendEvent(rel: string, text: string, actor: WriteActor): void {
-    const n = normalizeRel(rel);
-    const raw = this.read(n);
-    this.writeFile(n, appendHistory(raw, `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`), actor);
-    this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: text, reason: null, source: null, actor, status: "applied" });
+    this.update(rel, { facts: [], events: [text] }, actor);
   }
 
   /** Edit a note's free-text body (Notes section) as the user. */
@@ -283,37 +296,22 @@ export class MemoryStore {
 
   // ---- proposals -----------------------------------------------------------------
 
-  propose(input: { docRelPath: string | null; subject: string; value: string; reason: string; source: string; actor: WriteActor; newDoc?: { type: MemoryType; title: string } }): MemoryChange {
-    return this.recordChange({
-      docRelPath: input.docRelPath ?? `(new ${input.newDoc?.type ?? "note"}: ${input.newDoc?.title ?? input.subject})`,
-      change: "proposal",
-      subject: input.subject,
-      beforeValue: null,
-      afterValue: JSON.stringify({ value: input.value, newDoc: input.newDoc ?? null }),
-      reason: input.reason,
-      source: input.source,
-      actor: input.actor,
-      status: "proposed",
-    });
+  /** Record a Proposal. What it holds is opaque here; `memory/proposals.ts` gives it meaning. */
+  propose(input: { target: string; subject: string; payload: unknown; reason: string; source: string | null; actor: string }): MemoryChange {
+    return this.recordChange({ docRelPath: input.target, change: "proposal", subject: input.subject, beforeValue: null, afterValue: JSON.stringify(input.payload), reason: input.reason, source: input.source, actor: input.actor, status: "proposed" });
   }
 
-  decideProposal(id: string, decision: "apply" | "reject"): MemoryChange {
-    const row = this.db.prepare("select * from memory_changes where id = ? and status = 'proposed'").get(id) as Record<string, string> | undefined;
-    if (!row) throw new PolicyError("Proposal not found or already decided", "invalid_path");
-    if (decision === "reject") {
-      this.db.prepare("update memory_changes set status = 'rejected', decided_at = ? where id = ?").run(nowIso(), id);
-      return this.getChange(id)!;
-    }
-    const payload = json<{ value: string; newDoc: { type: MemoryType; title: string } | null }>(row.after_value, { value: "", newDoc: null });
-    const source: SourceRef = { kind: "user", ref: row.source ?? "proposal", observedAt: row.created_at!, label: row.source ?? undefined };
-    if (payload.newDoc) {
-      const { relPath } = this.createMemory({ type: payload.newDoc.type, title: payload.newDoc.title, state: [{ subject: row.subject!, value: payload.value }], sources: [source], provenance: "user-approved" }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ?, doc_rel_path = ? where id = ?").run(nowIso(), relPath, id);
-    } else {
-      if (isProtected(row.doc_rel_path!)) throw new PolicyError("Proposals cannot change protected records", "protected");
-      this.correct(row.doc_rel_path!, { subject: row.subject!, value: payload.value, reason: row.reason ?? "approved proposal", source }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ? where id = ?").run(nowIso(), id);
-    }
+  listProposals(opts: { status?: string; limit?: number } = {}): MemoryChange[] {
+    const rows = this.db
+      .prepare(`select * from memory_changes where change = 'proposal' ${opts.status ? "and status = ?" : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`)
+      .all(...(opts.status ? [opts.status] : [])) as Array<Record<string, string | null>>;
+    return rows.map(rowToChange);
+  }
+
+  /** Mark a pending Proposal decided; `target` records the note an applied new-note Proposal created. */
+  settleProposal(id: string, status: "applied" | "rejected", target?: string): MemoryChange {
+    const r = this.db.prepare("update memory_changes set status = ?, decided_at = ?, doc_rel_path = coalesce(?, doc_rel_path) where id = ? and change = 'proposal' and status = 'proposed'").run(status, nowIso(), target ?? null, id);
+    if (!r.changes) throw new PolicyError("Proposal not found or already decided", "invalid_path");
     return this.getChange(id)!;
   }
 
@@ -427,8 +425,10 @@ export class MemoryStore {
 
   /** Append one section to the session log for `date` (YYYY-MM-DD), creating the day's file when needed. */
   appendSessionLog(date: string, section: string): { relPath: string } {
-    const rel = `evidence/sessions/${date}.md`;
-    const head = `---\n${stringifyYaml({ type: "session-log", title: `Agent sessions on ${date}`, date, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# Agent sessions on ${date}\n`;
+    const machine = this.opts.machine();
+    const rel = sessionLogPath(date, machine);
+    const title = `Agent sessions on ${date} (${machine.name})`;
+    const head = `---\n${stringifyYaml({ type: "session-log", title, date, machine: machine.name, machine_id: machine.id, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n`;
     const existing = this.exists(rel) ? this.read(rel).trimEnd() : head.trimEnd();
     this.writeFile(rel, `${existing}\n\n${section.trim()}\n`, "service");
     return { relPath: rel };
@@ -436,10 +436,12 @@ export class MemoryStore {
 
   /** Daily evidence snapshot of what a connector observed, so recall can cite it. */
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
-    const rel = `evidence/connectors/${slugify(kind)}/${today()}.md`;
-    const fm = { type: "connector-snapshot", title: `${label} on ${today()}`, source: kind, observed_at: nowIso(), provenance: "connector" };
-    const body = lines.length ? lines.join("\n") : "_The last sync returned no items._";
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${label} on ${today()}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
+    const machine = this.opts.machine();
+    const rel = connectorSnapshotPath(kind, today(), machine);
+    const title = `${label} on ${today()} (${machine.name})`;
+    const fm = { type: "connector-snapshot", title, source: kind, machine: machine.name, machine_id: machine.id, observed_at: nowIso(), provenance: "connector" };
+    const body = lines.length ? lines.join("\n") : "_The last Source refresh returned no items._";
+    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
     return { relPath: rel };
   }
 
@@ -500,15 +502,6 @@ export class MemoryStore {
   }
 }
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function firstWords(text: string): string {
   const words = text.replace(/[#>*_`]/g, " ").trim().split(/\s+/).slice(0, 8).join(" ");
   return words || "Capture";
@@ -522,6 +515,11 @@ export function formatSource(s: SourceRef): string {
 
 function sourceToYaml(s: SourceRef): Record<string, unknown> {
   return { kind: s.kind, ref: s.ref, ...(s.root ? { root: s.root } : {}), ...(s.lines ? { lines: s.lines } : {}), ...(s.url ? { url: s.url } : {}), observed_at: s.observedAt, ...(s.label ? { label: s.label } : {}) };
+}
+
+/** A History line for an event that happened today. */
+function eventLine(text: string): string {
+  return `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`;
 }
 
 function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {

@@ -44,6 +44,12 @@ test("screens", async ({ browser }) => {
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Prepare briefing" }).click();
   await page.waitForTimeout(1500);
+  // A pending Proposal, so the Memory screens show the review list.
+  await page.evaluate(async () => {
+    const item = { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }, { subject: "Team", value: "Vendor management" }], notes: "Met on the vendor call.\nPrefers email.", events: ["Introduced in the vendor call"], tags: ["vendor"] };
+    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in jarvis" } }) });
+    if (!res.ok) throw new Error(`propose failed: ${res.status}`);
+  });
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
@@ -51,6 +57,8 @@ test("screens", async ({ browser }) => {
       await page.waitForTimeout(600);
       await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png`, fullPage: false });
     }
+    // Below the fold of the settings screenshot.
+    await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
   }
   await page.goto(stack.url);
   await page.locator(".msg.assistant button.cite").first().click();
