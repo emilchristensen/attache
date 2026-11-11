@@ -78,6 +78,12 @@ describe("MCP save, confirmed in the Harness", () => {
     expect(role).toContain("Claude Code session");
     expect(person).toContain("Prefers mornings.");
     expect(person).toContain("Joined the Orion team");
+
+    // The change log names the Harness and session, one batch for the whole save.
+    const { changes } = await svc.get("/memory/recent-changes?limit=20");
+    const mine = changes.filter((c: { relPath: string; newValue: string | null }) => ["memory/people/grace-hopper.md"].includes(c.relPath) || c.newValue === "Cutover moved to December");
+    expect(mine.length).toBeGreaterThanOrEqual(2);
+    for (const c of mine) expect(c.source).toMatchObject({ harness: "claude-code", harnessLabel: "Claude Code", sessionId: "5f0c2a1e-session-orion" });
   });
 
   it("writes nothing when the owner declines or closes the confirmation, and says so", async () => {
@@ -174,6 +180,8 @@ describe("MCP save from a Harness that cannot ask the owner", () => {
     const update = mine.find((p: { target: string }) => p.target === "memory/projects/orion-migration.md");
     await svc.post(`/memory/proposals/${update.id}/apply`, {});
     expect(brainFile("memory/projects/orion-migration.md")).toContain("Two million");
+    const { changes } = await svc.get("/memory/recent-changes?limit=20");
+    expect(changes.find((c: { newValue: string | null }) => c.newValue === "Two million").source).toMatchObject({ harness: "claude-desktop", sessionId: null });
   });
 
   it("stores Proposals when the Harness claims the confirmation request but cannot answer it", async () => {

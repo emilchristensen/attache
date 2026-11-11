@@ -80,6 +80,20 @@ Each Proposal shows the whole change before you decide: the new note or the note
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
 
+**Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
+Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, a Proposal you approved, or you) and when.
+**Revert** undoes one change with one click:
+
+- A corrected fact gets its previous value back as a new correction, so the note's *History* shows both the change and its revert.
+- A fact a save added is taken out of *Current state* and kept in *History*.
+- A note a save created is removed from your Brain and from search, together with the events and facts that same save wrote into it.
+- A removed note can be brought back by reverting the removal.
+
+Every revert is listed as a change of its own, so you can revert a revert.
+A change can be reverted only while it is still the last word on what it changed.
+When a later change overwrote the same fact, or the note was edited outside Jarvis since, the row says why and offers no **Revert**; revert the later change first.
+Events stay in *History*, which only grows, so they cannot be reverted.
+
 **Drafts** shows each draft with its context and evidence.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
@@ -99,10 +113,15 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   Your other settings and hooks are kept, the file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
-- **Session log:** each session gets an entry in `evidence/sessions/<date>.md` with what was decided and learned, written by your model.
+- **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
+  Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Jarvis named Machines keep their `<date>.md` name and are still searched and shown.
   Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  A session started inside one of a project's repositories also gets that project's current state first.
+  A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
+  The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
+  Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/jarvis-memory.md`.
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
@@ -155,6 +174,22 @@ Your data folder is plain Markdown, so you can open it as an Obsidian vault or i
 Jarvis picks up your edits within a few seconds.
 There is no Obsidian plugin; use Jarvis in the browser to ask, capture and review attention items.
 
+## Measuring search
+
+`jarvis evaluate-recall` scores search against a set of questions you keep in your Brain at `evaluation/recall-questions.json`.
+Each question names the note and the current fact that should answer it:
+
+```json
+{ "questions": [{ "question": "When is the Orion cutover?", "note": "memory/projects/orion-migration.md", "fact": "Status" }] }
+```
+
+`note` is the note's path inside the Brain and `fact` is the subject written in bold in its Current State.
+The report says how often the expected fact is the first result and how often it is in the first three, and lists every question that missed with the first three results search returned instead.
+A question whose note or fact is no longer in the Brain is not scored; the report lists it with the reason so you can correct the set.
+Use `--set <file>` to score another set and `--json` for the full report.
+Jarvis must be running, because the command scores the search the service runs.
+The set is JSON, not Markdown, so search never finds the questions themselves.
+
 ## Sleep, offline and notifications
 
 The service runs only while your Mac is awake.
@@ -171,15 +206,27 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 - **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app and service, removes Jarvis's hooks from your coding agents, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
 
+## This Machine
+
+Jarvis gives the computer it runs on an id and a name.
+The name starts as the computer's hostname; change it in **Settings → This Machine**.
+The id never changes.
+Session logs and connector snapshots carry the name in their file name, for example `evidence/sessions/2026-11-11-work-mac-3f9a2c1d.md`, so you can tell which computer wrote them.
+Renaming the Machine affects files written from then on; earlier files keep their name.
+
+Only one Jarvis service can use a data folder at a time.
+The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks`.
+
 ## Where things live
 
 | What | Where |
 | --- | --- |
 | Your knowledge (Markdown) | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name) | `~/Library/Application Support/Jarvis/state` |
+| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
 | Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
 | Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |

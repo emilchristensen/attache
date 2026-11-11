@@ -25,7 +25,9 @@ Reads the items to save as JSON from stdin (or --file):
       { "action": "create", "type": "decision", "title": "…", "facts": [{ "subject": "Decision", "value": "…" }], "notes": "why", "events": ["…"] },
       { "action": "update", "path": "memory/projects/x.md", "facts": [{ "subject": "Status", "value": "…", "reason": "…" }], "events": ["…"] }
   ] }
-Facts are current state and replace the subject's old value (kept in History); events are appended to History.`;
+Facts are current state and replace the subject's old value (kept in History); events are appended to History.
+A project's "Repositories" fact lists its git repositories (owner/name, host/owner/name or remote addresses, separated by commas);
+sessions started in one of them get that project's context.`;
 
 /** `jarvis save`: send distilled items to the running service, which validates them all and writes them as curated memory. */
 export async function saveCommand(argv: string[], paths: ServicePaths, io: CliIo) {

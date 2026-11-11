@@ -69,7 +69,7 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
   // claude.ai connectors go through the fixture CLI with an empty Claude config: journeys never reach a real account.
   const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures/fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
-  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, ...claude };
+  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
@@ -102,6 +102,11 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
       fixture.kill("SIGTERM");
     },
   };
+}
+
+/** Save items the way a Harness does today: through the jarvis executable, citing its session. */
+export function harnessSave(stack: Stack, items: unknown[], origin: { agent: string; session: string }) {
+  execFileSync(NODE, [BUNDLE, "save", "--agent", origin.agent, "--session", origin.session, "--state-dir", stack.stateDir], { input: JSON.stringify({ items }), env: { ...process.env, JARVIS_CREDENTIAL_STORE: "file" } });
 }
 
 export function readRuntime(stateDir: string) {

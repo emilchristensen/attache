@@ -42,9 +42,10 @@ node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --ope
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value).
 
 Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, `~/.agents`, `~/.codex`, `~/.gemini`).
+Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
 `jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
 
@@ -56,6 +57,14 @@ The claude.ai connectors are reached through the Claude Code CLI, which tests re
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
+
+## Recall evaluation
+
+A change to search ships only when it improves recall evaluation.
+`apps/service/test/fixtures/recall-brain/` is a synthetic Brain with its own question set in `evaluation/recall-questions.json`, mixing exact lookups (ticket numbers, repository names), paraphrases and Danish questions.
+`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` and fails if it drops below the recorded baseline (`BASELINE`: first result 16 of 22, first three 18 of 22, keyword search only).
+When a change improves the score, raise the baseline in the same commit.
+The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare.
 
 ## Release
 
