@@ -174,7 +174,7 @@ export function registerDataRoutes(r: Router, app: App) {
     requireFeature(app, "capture");
     requireData(app);
     const input = await c.body(MemorySaveInput);
-    return checkSave(app, input.items);
+    return checkSave(app, input);
   });
   r.post("/memory/save/proposals", async (c) => {
     requireFeature(app, "capture");

@@ -82,6 +82,15 @@ It speaks the same stream-json and permission-control protocol as the real CLI a
 Fixture results are never reported as live results.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
 
+## Several Machines in one test
+
+`apps/service/test/integration/machines.ts` starts several Machines in one Vitest process, each a whole service with its own state folder, Brain copy and `ManualClock` (`apps/service/test/fixtures/manual-clock.ts`).
+`startMachines(["Mac", "PC"])` creates a local bare repository as the remote, sets Replication up on the first Machine and joins the others into empty folders; `world.addMachine(name, { join: false })` adds one that stays apart.
+Nothing replicates until a test moves a Machine's clock: `await mac.clock.advance(30_000)` runs the commit due after a save, `advance(60_000)` the one-minute check, and `advance` waits for the check it started.
+`world.remote.goOffline()` and `goOnline()` make the remote unreachable and back; `world.remote.git(...)` inspects what was pushed.
+The bare repository refuses any push that is not a fast-forward, so a test fails if Replication ever rewrote history.
+`JARVIS_GIT_BIN` points Replication at another git executable.
+
 ## Recall evaluation
 
 A change to search ships only when it improves recall evaluation.

@@ -16,6 +16,7 @@ import { currentOs } from "./platform/os.ts";
 import { openUrl } from "./platform/open-url.ts";
 import { runMcpServer } from "./mcp/server.ts";
 import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
+import { replicationCommand } from "./cli/replication-commands.ts";
 
 export const DEFAULT_PORT = 7427;
 
@@ -159,6 +160,8 @@ async function main() {
       return auditCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "mcp":
       return runMcpServer(resolvePaths(arg("state-dir", argv)), VERSION);
+    case "replication":
+      return replicationCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "evaluate-recall":
       return evaluateRecallCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":
@@ -190,7 +193,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, paths`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, paths`);
   }
 }
 

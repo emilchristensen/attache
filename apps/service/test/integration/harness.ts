@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { App } from "../../src/app.ts";
 import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
+import type { Clock } from "../../src/replication/clock.ts";
 
 process.env.JARVIS_CREDENTIAL_STORE = "file";
 process.env.JARVIS_NO_NOTIFY = "1";
@@ -27,10 +28,19 @@ export interface TestService {
   stop(): Promise<void>;
 }
 
-export async function startTestService(opts: { stateDir?: string; dataDir?: string; setup?: boolean; features?: Record<string, boolean> } = {}): Promise<TestService> {
+export interface TestServiceOptions {
+  stateDir?: string;
+  dataDir?: string;
+  setup?: boolean;
+  features?: Record<string, boolean>;
+  /** Drives Replication's timers; the real clock when left out. */
+  clock?: Clock;
+}
+
+export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? mkdtempSync(join(tmpdir(), "jarvis-it-state-"));
   const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "jarvis-it-data-")), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}` });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `jarvis serve` writes, so the CLI finds this service.
