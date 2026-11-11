@@ -58,12 +58,20 @@ const SAFE_CONFIG = ["core.hooksPath=.git/jarvis-no-hooks", "commit.gpgsign=fals
 
 const SAFE_ENV = { GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C", LANGUAGE: "C" };
 
-/** Replication merges and fast-forwards; it never rewrites history, here or on the remote. */
+/** The refs the Reader lease lives on, one per generation (`replication/lease-ref.ts`); never a branch. */
+export const READER_LEASE_REFS = "refs/jarvis/reader-lease";
+/** The one deletion Replication pushes: a lease generation nobody writes any more, which keeps the lease's history bounded. */
+const RETIRED_LEASE = new RegExp(`^:${READER_LEASE_REFS}/[1-9][0-9]*$`);
+
+/**
+ * Replication merges and fast-forwards; it never rewrites history, here or on
+ * the remote. Its only deleting push retires an old Reader lease generation.
+ */
 export function assertNoRewrite(args: readonly string[]): void {
   const [cmd, ...rest] = args;
   if (cmd === "rebase" || cmd === "pull" || cmd === "filter-branch" || cmd === "replace") throw new Error(`Replication never runs git ${cmd}`);
   if (cmd === "reset" && rest.some((a) => a === "--hard" || a === "--keep" || a === "--merge")) throw new Error("Replication never resets the working tree");
-  if (cmd === "push" && rest.some((a) => /^(--force|-f|--force-with-lease.*|--force-if-includes|--mirror|--delete|-d|--prune)$/.test(a) || /^\+/.test(a) || /^:/.test(a))) {
+  if (cmd === "push" && rest.some((a) => /^(--force|-f|--force-with-lease.*|--force-if-includes|--mirror|--delete|-d|--prune)$/.test(a) || /^\+/.test(a) || (/^:/.test(a) && !RETIRED_LEASE.test(a)))) {
     throw new Error("Replication never force-pushes or deletes on the remote");
   }
 }

@@ -44,8 +44,12 @@ export interface ReplicationDeps {
   backUpFolder: (folder: string) => Promise<string>;
   /** This Machine's last Source refresh of every source, which the Reader lease carries to the others. */
   lastSourceRefresh?: () => string | null;
+  /** Whether this Machine has a source of its own connected, besides the data folder: without one it never takes a silent Reader's place. */
+  sourcesConnected?: () => boolean;
   /** The Reader lease as this Machine knows it changed. */
   onLeaseChange?: () => void;
+  /** Lease commits per generation of the Reader lease (`LEASE_GENERATION_COMMITS` by default). */
+  leaseGenerationCommits?: number;
 }
 
 type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean };
@@ -88,8 +92,10 @@ export class Replication {
       machine: deps.machine,
       credentials: deps.seams.credentials,
       preferredReader: (root) => new MachineRecords(root).preferredReader(),
+      standIn: (root) => new MachineRecords(root).machine(deps.machine().id)?.standby === true && (deps.sourcesConnected?.() ?? false),
       lastRefreshAt: () => deps.lastSourceRefresh?.() ?? null,
       onChange: () => deps.onLeaseChange?.(),
+      ...(deps.leaseGenerationCommits ? { generationCommits: deps.leaseGenerationCommits } : {}),
     });
     this.machines = new ReplicatedMachines({
       root: () => this.activeRoot(),
