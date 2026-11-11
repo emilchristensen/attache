@@ -62,7 +62,7 @@ export function ProposalReview() {
             {p.reason && <span>Why: {p.reason}</span>}
             {p.source && <span>Source: {p.source}</span>}
             <span>
-              Proposed by {p.proposedBy} <Time iso={p.createdAt} />
+              Proposed by {p.proposedBy} on {p.proposedOn} <Time iso={p.createdAt} />
             </span>
           </div>
           <div className="item-actions">

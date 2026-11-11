@@ -333,6 +333,10 @@ export interface ProposalView {
   proposedBy: string;
   createdAt: string;
   decidedAt: string | null;
+  /** The Machine it was made on. */
+  proposedOn: string;
+  /** The Machine whose decision stands; null while it waits. */
+  decidedOn: string | null;
 }
 
 /**

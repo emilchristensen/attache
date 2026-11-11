@@ -62,23 +62,33 @@ export function decodeReviewFile(text: string | null): unknown {
   }
 }
 
-/** Replace the file atomically, so git and other readers never see half of it. */
+/** The absolute path of a review-state file; refuses anything outside the review folder. */
+function inside(root: string, rel: string): string {
+  if (!isReviewPath(rel) || rel.split(/[\\/]/).includes("..")) throw new Error(`Not a review-state path: ${rel}`);
+  return join(root, rel);
+}
+
+/**
+ * Replace the file atomically, so git and other readers never see half of it.
+ * The caller tells Replication (`app.replication.noteWrite()`).
+ */
 export function writeReviewFile(root: string, rel: string, value: unknown): void {
-  const abs = join(root, rel);
+  const abs = inside(root, rel);
   mkdirSync(dirname(abs), { recursive: true });
   const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
   writeFileSync(tmp, encodeReviewFile(value));
   renameSync(tmp, abs);
 }
 
+/** The parsed file, or null when it is missing or not JSON. */
 export function readReviewFile(root: string, rel: string): unknown {
-  const abs = join(root, rel);
+  const abs = inside(root, rel);
   if (!existsSync(abs)) return null;
   return decodeReviewFile(readFileSync(abs, "utf8"));
 }
 
 export function removeReviewFile(root: string, rel: string): void {
-  rmSync(join(root, rel), { force: true });
+  rmSync(inside(root, rel), { force: true });
 }
 
 /** Every file of `kind`, as Brain-relative paths. */

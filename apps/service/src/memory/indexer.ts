@@ -5,7 +5,7 @@ import { type Db, nowIso, tx } from "../core/db.ts";
 import { chunkSection } from "./chunker.ts";
 import { parseMarkdown } from "./markdown.ts";
 import { areaOf, type Area } from "./policy.ts";
-import { isReviewPath } from "../review-state/files.ts";
+import { REVIEW_STATE_DIR } from "../review-state/files.ts";
 
 export interface IndexRoot {
   /** "data" for the Jarvis data folder, "import:<id>" for imported folders. */
@@ -16,11 +16,9 @@ export interface IndexRoot {
 
 const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".jarvis", ".DS_Store"]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-
-/** Review state (the inbox and Proposals) lives in the Brain but is never recall evidence. */
-function unindexed(root: IndexRoot, rel: string): boolean {
-  return root.id === "data" && isReviewPath(rel);
-}
+/** Top-level folders of the data folder that are never recall: replicated review state (Proposals, inbox). */
+const DATA_SKIP_TOP: ReadonlySet<string> = new Set([REVIEW_STATE_DIR]);
+const NO_SKIP: ReadonlySet<string> = new Set();
 
 export interface ScanPlan {
   read: string[];
@@ -29,7 +27,7 @@ export interface ScanPlan {
 }
 
 /** List what an import would read, without reading contents. */
-export function planScan(rootPath: string, limit = 50_000): ScanPlan {
+export function planScan(rootPath: string, limit = 50_000, skipTop: ReadonlySet<string> = NO_SKIP): ScanPlan {
   const plan: ScanPlan = { read: [], skipped: [], totalBytes: 0 };
   const walk = (dir: string) => {
     let entries: string[];
@@ -53,7 +51,7 @@ export function planScan(rootPath: string, limit = 50_000): ScanPlan {
         continue;
       }
       if (st.isDirectory()) {
-        if (SKIP_DIRS.has(name) || name.startsWith(".")) {
+        if (SKIP_DIRS.has(name) || name.startsWith(".") || (dir === rootPath && skipTop.has(name))) {
           plan.skipped.push({ path: rel + "/", reason: "hidden or tool folder" });
           continue;
         }
@@ -185,8 +183,8 @@ export class Indexer {
     const parts = rel.split(sep).join("/").split("/").filter((p) => p && p !== ".");
     if (!parts.length || parts.includes("..")) return "rescan";
     if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p) || p.startsWith("."))) return "ignored";
+    if (root.id === "data" && DATA_SKIP_TOP.has(parts[0]!)) return "ignored";
     const n = parts.join("/");
-    if (unindexed(root, n)) return "ignored";
     const isMarkdown = n.toLowerCase().endsWith(".md");
     const abs = join(root.path, n);
     let st;
@@ -224,7 +222,7 @@ export class Indexer {
   /** Incremental scan: index new/changed files, drop documents whose files disappeared. */
   scan(root: IndexRoot, onlyAreas?: string[]): IndexResult {
     const result: IndexResult = { indexed: 0, unchanged: 0, removed: 0, errors: [] };
-    const plan = planScan(root.path);
+    const plan = planScan(root.path, undefined, root.id === "data" ? DATA_SKIP_TOP : NO_SKIP);
     const present = new Set<string>();
     const known = new Map(
       (this.db.prepare("select rel_path, mtime_ms, hash from documents where root = ?").all(root.id) as Array<{ rel_path: string; mtime_ms: number }>).map(
@@ -232,7 +230,6 @@ export class Indexer {
       ),
     );
     for (const rel of plan.read) {
-      if (unindexed(root, rel)) continue;
       if (onlyAreas && root.id === "data" && !onlyAreas.includes(rel.split("/")[0] ?? "")) continue;
       present.add(rel);
       try {

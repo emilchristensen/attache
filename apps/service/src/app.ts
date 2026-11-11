@@ -32,6 +32,7 @@ import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
+import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
 import { REPLICATION_SOURCE, syncBlockedItem } from "./replication/blocked-inbox.ts";
 
@@ -71,6 +72,8 @@ export class App {
   readonly replication: Replication;
   /** The owner's inbox, kept in the Brain so it replicates. */
   readonly inbox: Inbox;
+  /** Proposals, kept in the Brain so they replicate. */
+  readonly proposals: Proposals;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -119,6 +122,7 @@ export class App {
       onChange: () => this.bus.emit("event", { type: "attention.changed" }),
       localSources: [REPLICATION_SOURCE],
     });
+    this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
     this.replication.onPulled((paths) => this.inbox.pulled(paths));
     this.bus.setMaxListeners(500);
@@ -280,6 +284,7 @@ export class App {
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
     this.inbox.reconcile();
+    this.proposals.open();
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
       onChange: () => {
@@ -325,6 +330,7 @@ export class App {
       const r = this.memory.indexer.scan(root);
       if (r.indexed || r.removed) changed = true;
     }
+    if (this.proposals.reload(paths)) changed = true;
     if (changed) this.bus.emit("event", { type: "memory.changed" });
   }
 

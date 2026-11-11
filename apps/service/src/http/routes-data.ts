@@ -1,4 +1,4 @@
-import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type ProposalView, type RecentChangesResult } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -12,7 +12,6 @@ import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { isPastReview } from "../memory/review-date.ts";
 import { json } from "../core/db.ts";
 import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
-import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
 import { expandHome } from "../platform/locations.ts";
 import { recentChanges } from "../memory/recent-changes.ts";
@@ -166,12 +165,12 @@ export function registerDataRoutes(r: Router, app: App) {
   r.get("/memory/proposals", (c) => {
     const status = c.query("status") ?? "proposed";
     if (!PROPOSAL_STATUSES.includes(status)) throw new HttpError(400, "invalid_request", `status must be one of ${PROPOSAL_STATUSES.join(", ")}`);
-    return { proposals: listProposals(app.memory, { status, limit: Number(c.query("limit") ?? 100) }) };
+    return { proposals: app.proposals.list({ status: status as ProposalView["status"], limit: Number(c.query("limit") ?? 100) }) };
   });
   r.post("/memory/proposals", async (c) => {
     requireFeature(app, "capture");
     const input = await c.body(ProposalInput);
-    const out = proposeItem(app.memory, input, "model");
+    const out = app.proposals.propose(input, "model");
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });
@@ -179,7 +178,7 @@ export function registerDataRoutes(r: Router, app: App) {
     requireFeature(app, "capture");
     const d = c.params.decision;
     if (d !== "apply" && d !== "reject") throw new HttpError(400, "invalid_request", "decision must be apply or reject");
-    const out = decideProposal(app.memory, c.params.id!, d);
+    const out = app.proposals.decide(c.params.id!, d);
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });
