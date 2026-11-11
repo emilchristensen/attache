@@ -173,7 +173,7 @@ async function main() {
   await http("PATCH", "/config", { schedules: { refreshEveryMinutes: 55 } }, token);
   await http("POST", "/memory/save", { confirmed: true, origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
   await http("POST", "/setup/complete", {}, token);
-  check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  check("A02", "installing Jarvis does not touch any Harness settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
   const meaning = await http("GET", "/memory/meaning", undefined, token);
   check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
