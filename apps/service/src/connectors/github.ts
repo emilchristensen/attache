@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { platformLocations, toolCandidates } from "../platform/locations.ts";
 import { run } from "../platform/run.ts";
-import type { ConnectorAdapter, AdapterContext, Observation, SyncResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite, nextLink, paginate } from "./http.ts";
 
@@ -113,7 +113,7 @@ export const githubAdapter: ConnectorAdapter = {
     }
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     const scopes = ctx.connection.readScopes;

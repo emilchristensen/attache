@@ -37,7 +37,7 @@ const proseItems = async (m: TestMachine, state = "open"): Promise<InboxItem[]> 
   ((await m.get(`/attention?state=${state}`)).items as InboxItem[]).filter((i) => i.kind === "replication_prose_versions");
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 8_000): Promise<T> {
   const end = Date.now() + timeoutMs;
@@ -133,6 +133,27 @@ describe("Prose merge rule", () => {
     // Later checks do not raise it again or settle it.
     await pc.clock.advance(CHECK);
     expect(await proseItems(pc)).toHaveLength(1);
+  });
+
+  it("shows the item on every Machine, as one item, and settling it on one settles it on all", async () => {
+    const [mac, pc] = await twoMachinesWithNotes();
+    editNoteLine(mac, NOTES[1]!, "Grace owns the runbook now.");
+    editNoteLine(pc, NOTES[1]!, "Ada and Lin share the runbook.");
+    await replicateBoth(mac, pc);
+    // PC made the merge; the Mac sees the same item once the inbox file reaches it.
+    await pc.clock.advance(CHECK);
+    await mac.clock.advance(CHECK);
+    const [onPc] = await proseItems(pc);
+    const onMac = await proseItems(mac);
+    expect(onMac).toHaveLength(1);
+    expect(onMac[0]).toMatchObject({ title: onPc!.title, summary: onPc!.summary });
+
+    // The owner settles the note on the Mac; the item is resolved there and, once the file replicates, on the PC.
+    write(mac, ORION, read(mac, ORION).replace("### Version from Mac\n\nGrace owns the runbook now.\n\n", "").replace("### Version from PC\n\n", ""));
+    expect(await eventually(() => proseItems(mac), (items) => items.length === 0)).toEqual([]);
+    await mac.clock.advance(CHECK);
+    await pc.clock.advance(CHECK);
+    expect(await proseItems(pc)).toEqual([]);
   });
 
   it("raises one item for a note with two versions in several places, also when a later merge adds more", async () => {

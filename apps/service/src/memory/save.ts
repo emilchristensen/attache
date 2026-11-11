@@ -10,10 +10,11 @@ import { checkItems, writeItem, type CheckedItem } from "./save-items.ts";
 import type { ChangeMeta, SourceRef } from "./store.ts";
 
 /**
- * Apply what the user asked a coding agent to save. Every item is checked
+ * Apply what the owner asked a Harness to save. Every item is checked
  * before the first write, so a bad path or a duplicate note rejects the whole
- * save instead of leaving half of it behind. Writes run as the user: saving is
- * the user's explicit request, made through their own paired CLI.
+ * save instead of leaving half of it behind. Only a save the owner confirmed
+ * in the Harness, or one auto-accept lets through, writes as the owner;
+ * anything else is stored as Proposals for the owner to decide on.
  */
 export function saveToMemory(app: App, input: MemorySaveInput, clientId: string | null): MemorySaveResult {
   const root = app.memory.dataRoot;
@@ -23,6 +24,10 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
   if (autoAccepted && !mayAutoAccept(app, input.origin, plan)) {
     const harness = input.origin ? harnessLabel(input.origin.agent) : "an unnamed Harness";
     throw new HttpError(409, "auto_accept_off", `Auto-accept is off for ${harness} on this Machine, so the owner must confirm this save. Nothing was written.`);
+  }
+  if (!autoAccepted && !input.confirmed) {
+    const harness = input.origin ? harnessLabel(input.origin.agent) : "A Harness";
+    return { saved: [], ...proposeSave(app, { items: input.items, ...(input.origin ? { origin: input.origin } : {}), reason: `${harness} asked to save this, but the owner has not confirmed it, so it waits for review.` }) };
   }
   const source = originSource(app, input.origin);
   // One batch id for the whole save, with the Harness and session it came from, so recent saves can show and undo it as one.
@@ -34,7 +39,7 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
   app.db
     .prepare("insert into audit (at, actor, event, data) values (?,?,?,?)")
     .run(nowIso(), clientId ?? "user", "memory_saved", JSON.stringify({ origin: input.origin ?? null, autoAccepted, saved: saved.map((s) => ({ action: s.action, relPath: s.relPath })) }));
-  return { saved };
+  return { saved, proposals: [] };
 }
 
 /**

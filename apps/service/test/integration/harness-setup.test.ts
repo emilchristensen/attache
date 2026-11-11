@@ -73,7 +73,7 @@ beforeAll(async () => {
   write(at(".agents/skills/jarvis-notes/SKILL.md"), "---\nname: jarvis-notes\n---\nNamed like Jarvis, but mine.\n");
   svc = await startTestService({ stateDir });
   await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for the first weekend of December" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for the first weekend of December" }] }] });
 });
 afterAll(async () => {
   await mcp.closeAll();

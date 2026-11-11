@@ -41,7 +41,7 @@ if (process.argv.includes("--watch")) {
   await ctx.watch();
 } else {
   await build(options);
-  // The command coding agents run from their hooks: small, so it starts fast inside an agent's hook budget.
+  // The command each Harness runs from its hooks: small, so it starts fast inside a Harness hook budget.
   await build({ ...options, entryPoints: [here("./src/agents/jarvis-agent-hook.ts")], outfile: here("./dist/jarvis-agent-hook.mjs"), sourcemap: false, banner: {} });
   // Library entry for in-process probes (scripts/live-readonly.mjs); not shipped in releases.
   await build({ ...options, entryPoints: [here("./src/live-probe.ts")], outfile: here("./dist/live-probe.mjs"), sourcemap: false });

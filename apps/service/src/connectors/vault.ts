@@ -11,7 +11,7 @@ import { expandHome } from "../platform/locations.ts";
  * Deadlines from Markdown: open tasks with a due date (Obsidian Tasks `📅
  * 2026-10-01`, `due:2026-10-01`, `(due 2026-10-01)`, `@due(2026-10-01)`) and
  * notes whose frontmatter has `due:`. Completed tasks are ignored, so ticking
- * a task off resolves its attention item on the next fully covered sync.
+ * a task off resolves its attention item on the next fully covered Source refresh.
  */
 const DUE_RE = /(?:📅\s*|\bdue[:\s]\s*|@due\()(\d{4}-\d{2}-\d{2})\)?/i;
 const TASK_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;

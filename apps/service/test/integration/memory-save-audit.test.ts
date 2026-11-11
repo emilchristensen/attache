@@ -29,15 +29,15 @@ function cli(args: string[], input = "", env: Record<string, string> = {}): Prom
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }, { subject: "Repositories", value: "acme/orion" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Owner", value: "Ada" }, { subject: "Repositories", value: "acme/orion" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
 });
 
-describe("saving from a coding agent", () => {
+describe("saving from a Harness", () => {
   it("creates a new note and corrects an existing one in one save, citing the session", async () => {
-    const r = await svc.post("/memory/save", {
+    const r = await svc.post("/memory/save", { confirmed: true,
       origin: { agent: "claude-code", sessionId: "sess-1", cwd: "/Users/alex/code/jarvis" },
       items: [
         { action: "create", type: "decision", title: "CLI writes go through the service", facts: [{ subject: "Decision", value: "jarvis save posts to the running service instead of writing files" }], notes: "The service holds the data folder's writer lock.", events: ["Agreed while adding jarvis save"] },
@@ -53,8 +53,12 @@ describe("saving from a coding agent", () => {
     expect(decision).toContain("kind: agent-session");
     expect(decision).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): jarvis save posts to the running service/);
     expect(decision).toContain("The service holds the data folder's writer lock.");
-    expect(decision).toMatch(/— Agreed while adding jarvis save \(source: Claude Code session in jarvis \(agent-session: claude-code\/sess-1/);
+    // An event names its source briefly; the note's sources and the change log keep the full citation.
+    expect(decision).toMatch(/— Agreed while adding jarvis save \(source: Claude Code session in jarvis\)\n/);
     const orion = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
+    expect(orion).toMatch(/— Vendor slipped the cutover by a month \(source: Claude Code session in jarvis\)\n/);
+    const logged = (await svc.get(`/memory/document?path=${encodeURIComponent("memory/projects/orion-migration.md")}`)).changes as Array<{ change: string; afterValue: string; source: string | null }>;
+    expect(logged.find((c) => c.change === "append")).toMatchObject({ afterValue: "Vendor slipped the cutover by a month (source: Claude Code session in jarvis)", source: expect.stringMatching(/\(agent-session: claude-code\/sess-1/) });
     expect(orion).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Cutover moved to November — source: Claude Code session in jarvis/);
     // The old value is kept in History, not left looking current.
     expect(orion).toMatch(/\*\*Status\*\* was "Cutover planned for October".*superseded: vendor delay/);
@@ -66,7 +70,7 @@ describe("saving from a coding agent", () => {
 
   it("rejects the whole save when one item is wrong, writing nothing", async () => {
     const before = svc.app.memory.listDocuments({ area: "memory" }).length;
-    const r = await svc.call("POST", "/memory/save", {
+    const r = await svc.call("POST", "/memory/save", { confirmed: true,
       items: [
         { action: "create", type: "note", title: "Should not be written", facts: [{ subject: "Fact", value: "x" }] },
         { action: "update", path: "memory/projects/does-not-exist.md", events: ["x"] },
@@ -78,20 +82,20 @@ describe("saving from a coding agent", () => {
   });
 
   it("refuses a second note with the same title, outside memory, the identity record and repeated subjects", async () => {
-    const dup = await svc.call("POST", "/memory/save", { items: [{ action: "create", type: "project", title: "Orion Migration", facts: [{ subject: "Status", value: "x" }] }] });
+    const dup = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion Migration", facts: [{ subject: "Status", value: "x" }] }] });
     expect(dup.status).toBe(409);
     expect(dup.body.error.message).toContain("memory/projects/orion-migration.md");
-    const outside = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "evidence/captures/x.md", events: ["x"] }] });
+    const outside = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "evidence/captures/x.md", events: ["x"] }] });
     expect(outside.status).toBe(400);
-    const escape = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "../outside.md", events: ["x"] }] });
+    const escape = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "../outside.md", events: ["x"] }] });
     expect(escape.status).toBe(400);
     await svc.post("/setup/identity", { name: "Alex", confirm: true });
-    const self = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Role", value: "x", reason: "x" }] }] });
+    const self = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Role", value: "x", reason: "x" }] }] });
     expect(self.status).toBe(403);
-    const sameNew = await svc.call("POST", "/memory/save", { items: [0, 1].map(() => ({ action: "create", type: "note", title: "Same new note", facts: [{ subject: "A", value: "1" }] })) });
+    const sameNew = await svc.call("POST", "/memory/save", { confirmed: true, items: [0, 1].map(() => ({ action: "create", type: "note", title: "Same new note", facts: [{ subject: "A", value: "1" }] })) });
     expect(sameNew.status).toBe(400);
     expect(sameNew.body.error.message).toContain("twice");
-    const twice = await svc.call("POST", "/memory/save", { items: [{ action: "create", type: "note", title: "Twice", facts: [{ subject: "A", value: "1" }, { subject: "a", value: "2" }] }] });
+    const twice = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Twice", facts: [{ subject: "A", value: "1" }, { subject: "a", value: "2" }] }] });
     expect(twice.status).toBe(400);
     expect(twice.body.error.message).toContain("twice");
   });
@@ -100,7 +104,7 @@ describe("saving from a coding agent", () => {
 describe("auditing memory", () => {
   it("flags stale, unsourced and missing-source facts, and points at newer evidence", async () => {
     // A fact past its Review date, from a capture that has since been deleted.
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Helios budget", facts: [{ subject: "Budget", value: "40k EUR" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Helios budget", facts: [{ subject: "Budget", value: "40k EUR" }] }] });
     const rel = "memory/projects/helios-budget.md";
     const file = join(svc.dataDir, rel);
     writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\): 40k EUR/, "**Budget** (2026-01-05, review 2026-02-01): 40k EUR — source: (capture: evidence/captures/2026-01-05-gone.md, observed 2026-01-05)"));

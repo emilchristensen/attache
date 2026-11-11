@@ -2,9 +2,14 @@ import { win32 } from "node:path";
 import { serviceName, windowsAppData, type Env, type PlatformLocations } from "../locations.ts";
 import { runPowerShell } from "../powershell.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { waitUntil } from "../wait.ts";
+import { escapeXml as xml } from "../xml.ts";
 
 const { join } = win32;
+/** How long the task may take to show it started or stopped. */
 const WAIT_MS = 15_000;
+/** How long a stopped task's supervisor gets to stop the service cleanly before it is ended outright. */
+const SUPERVISOR_EXIT_MS = 15_000;
 /** Windows PowerShell and its ScheduledTasks module can take seconds to load on a busy computer. */
 const TASK_TIMEOUT_MS = 60_000;
 /** Task states in which the service is running or about to. */
@@ -12,8 +17,6 @@ const RUNNING = new Set(["Running", "Queued"]);
 /** Where the task definition names its owner; the script below puts the owner's account id there. */
 const OWNER = "{{owner}}";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** One argument of a Windows command line, quoted the way programs split it (CommandLineToArgvW). */
 function windowsArgument(s: string): string {
@@ -108,7 +111,7 @@ function Invoke-Request($req) {
       # Ending the task ends the console host, not the supervisor it started: that one notices and
       # stops the service cleanly. Wait for it, and end it outright if it is still there after a while.
       $mark = " --instance $($req.instance) "
-      $deadline = (Get-Date).AddSeconds(15)
+      $deadline = (Get-Date).AddMilliseconds([int]$req.supervisorExitMs)
       while ($true) {
         $left = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains(' service run ') -and $_.CommandLine.Contains($mark) })
         if ($left.Count -eq 0) { break }
@@ -153,11 +156,7 @@ export class TaskSchedulerServiceManager implements ServiceManager {
   }
 
   private async waitFor(want: boolean, failure: string): Promise<void> {
-    const deadline = Date.now() + WAIT_MS;
-    while ((await this.loaded()) !== want) {
-      if (Date.now() > deadline) throw new Error(failure);
-      await sleep(250);
-    }
+    if (!(await waitUntil(async () => (await this.loaded()) === want, WAIT_MS))) throw new Error(failure);
   }
 
   async install(spec: ServiceSpec): Promise<void> {
@@ -177,7 +176,7 @@ export class TaskSchedulerServiceManager implements ServiceManager {
   }
 
   async stop(): Promise<void> {
-    await this.task("stop");
+    await this.task("stop", { supervisorExitMs: String(SUPERVISOR_EXIT_MS) });
     await this.waitFor(false, `Task Scheduler did not stop the logon task ${this.name}`);
   }
 

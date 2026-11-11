@@ -61,7 +61,7 @@ Claude Code runs Jarvis's hooks through Git Bash, as it runs every hook on Windo
 
 Running the installer again repairs the installation without touching your data.
 Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
-On Windows, repairing the version you already run replaces its files, so close the coding agents that have Jarvis's MCP server open first; the installer says so if one still holds them.
+On Windows, repairing the version you already run replaces its files, so close each Harness that has Jarvis's MCP server open first; the installer says so if one still holds them.
 Harness hooks and the MCP server run Jarvis through a stable `current` link, so they keep working across upgrades.
 Jarvis no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
@@ -80,14 +80,14 @@ Setup has five steps and each works without the ones after it.
 3. **Connections.**
    Connect only what you want: GitHub, Jira, Confluence, Slack, Gmail, Google Calendar.
    Every connection starts read-only.
-   Slack, Gmail, Google Calendar, Jira and Confluence use your existing claude.ai connectors (Slack, Gmail, Google Calendar and Atlassian Rovo): Claude Code must be installed and signed in on this Mac with your claude.ai work account, and each connector must be connected in claude.ai → Settings → Connectors.
+   Slack, Gmail, Google Calendar, Jira and Confluence use your existing claude.ai connectors (Slack, Gmail, Google Calendar and Atlassian Rovo): Claude Code must be installed and signed in on this computer with your claude.ai work account, and each connector must be connected in claude.ai → Settings → Connectors.
    For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
    Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
    Each gets Jarvis's MCP server, so it can search your Brain and save to it with your confirmation; Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
 4. **Model and schedules.**
-   Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
+   Pick a model: Claude Code on this computer (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
    Set how often sources refresh, when the daily briefing is prepared, and whether urgent items raise a desktop notification.
 5. **Test and finish.**
@@ -228,7 +228,7 @@ When Jarvis starts after the upgrade, it removes the skill folders it installed 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
   A fact past its Review date is marked unverified.
-  While meaning-based search is not ready on this Machine, the answer starts with a line saying the passages match keywords only, and why.
+  While search does not rank by meaning on this Machine, the answer starts with a line saying the passages match keywords only, and why.
 - **read** returns a whole note, or only a line range, for a path that search returned, and names the facts in it that are past their Review date.
 - **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
   A fact can carry a Review date (see below).
@@ -279,6 +279,8 @@ The audit flags these facts, and only these, as stale.
 To clear the mark and the item, save the fact again: a correction without a Review date clears the old one, and one with a new date sets it.
 To confirm a fact is still true, save the same value with a later Review date.
 The old value keeps its Review date in History, and reverting a correction brings back the previous value with its Review date.
+A Proposal whose Review date passes before you apply it is still applied: the fact is written without that date, and the note's History says which date was dropped and why.
+Give the fact a new Review date with a later save if it still needs one.
 
 ## Editing notes in Obsidian
 
@@ -289,12 +291,13 @@ There is no Obsidian plugin; use the Dashboard in the browser to search, review 
 
 ## Meaning-based search
 
-Search can also find notes by meaning, so a question in other words, or in Danish, finds an English note.
+Meaning-based search finds notes by what they mean, so a question in other words, or in Danish, finds an English note.
+Search does not rank by meaning yet: this release downloads the model and builds the vectors, and results still match keywords only.
 It uses a small multilingual model (multilingual-e5-small, about 135 MB) that runs on each Machine, without a network and without sending your notes anywhere.
 Jarvis does not ship the model: download it once per Machine in **Settings → Meaning-based search**.
 The card shows the model's state: not downloaded, downloading, building, ready or failed.
 After the download Jarvis builds a vector for every passage it has indexed, in the background, and keeps them current as files change.
-Search keeps working on keywords the whole time; until vectors are ready, results in the Dashboard and in a Harness say they match keywords only.
+Search keeps working on keywords the whole time, and results in the Dashboard, in a Harness and from `jarvis search` say they match keywords only, and why.
 If the download fails, the card says why and offers to download again.
 The model lives in the service state folder and its vectors in this Machine's index, never in your Brain, so they are not replicated; each Machine builds its own.
 
@@ -351,12 +354,12 @@ The next time Jarvis starts with Credential Manager working, it moves the creden
 
 ## Backup, restore and uninstall
 
-- **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in Terminal.
+- **Backup:** Settings → Backup and export → *Create backup now*, or `jarvis backup` in a terminal.
   A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts).
   Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `jarvis stop`, then `jarvis restore <backup.tar.gz> --data-folder <empty folder> --force`, then `jarvis start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
-- **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from your coding agents, and keeps your data.
+- **Uninstall:** `~/.local/bin/jarvis-uninstall` (on Windows, `%LOCALAPPDATA%\Jarvis\bin\jarvis-uninstall`) removes the app, the background service and the command line, removes Jarvis's hooks from each Harness, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
   Files you had before Jarvis are left alone, including notes already in the data folder you chose: only what Jarvis created there is removed.
 
@@ -441,11 +444,10 @@ What happens on its own:
   The frontmatter merges field by field: the earliest `created`, the latest `updated`, lists such as `tags` and `sources` keep every item.
 - Two notes with the same type and title, created on two Machines, become one note with the facts and History of both.
 - A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
-  One inbox item, on the Machine that brought the two changes together, names the note and both Machines; delete the note again if it should go.
-  Unlike other inbox items, it stays on that Machine.
+  One inbox item, which every Machine shows, names the note and both Machines; delete the note again if it should go.
 - The free text of a note, such as its Notes section, merges line by line: when the two Machines changed different lines, both changes are kept.
   When both changed the same lines, the note keeps both versions, each under a heading such as `### Version from Mac`, and Replication carries on with every other file.
-  One inbox item, on the Machine that brought the two versions together, names the note.
+  One inbox item, which every Machine shows, names the note.
   Keep the version you want and delete the other with its heading, in an editor on any Machine; the item then resolves by itself.
   A note that gets two versions again later raises the item again.
 - Any other file both Machines changed in the same place, outside the notes and Jarvis' own review files, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.

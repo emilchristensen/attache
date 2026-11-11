@@ -5,14 +5,13 @@ import { run, type RunResult } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
+import { waitUntil } from "../wait.ts";
 
 const { join } = posix;
 const SYSTEMCTL = "systemctl";
 const STOP_WAIT_MS = 10_000;
 /** Unit states in which systemd keeps the service running, or is about to start it again after a crash. */
 const RUNNING = new Set(["active", "activating", "reloading"]);
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function noLineBreaks(s: string): string {
   if (/[\r\n]/.test(s)) throw new Error(`A Jarvis path cannot contain a line break: ${JSON.stringify(s)}`);
@@ -115,11 +114,7 @@ export class SystemdServiceManager implements ServiceManager {
 
   async stop(): Promise<void> {
     const r = await this.systemctl(["stop", this.name]);
-    const deadline = Date.now() + STOP_WAIT_MS;
-    while (await this.loaded()) {
-      if (Date.now() > deadline) throw r.code === 0 ? new Error(`systemd did not stop ${this.name}`) : systemctlFailure(["stop", this.name], r);
-      await sleep(250);
-    }
+    if (!(await waitUntil(async () => !(await this.loaded()), STOP_WAIT_MS))) throw r.code === 0 ? new Error(`systemd did not stop ${this.name}`) : systemctlFailure(["stop", this.name], r);
   }
 
   async uninstall(): Promise<void> {

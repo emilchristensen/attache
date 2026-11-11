@@ -34,15 +34,14 @@ LOCKS="$("$JARVIS" paths locksDir)"
 DATA_FOLDER=""
 OWNED=""
 CREATED_FOLDER="false"
-if [ "$DELETE" = "1" ] && [ -f "$STATE/jarvis.sqlite" ]; then
-  DATA_FOLDER="$("$NODE" -e '
-    const { DatabaseSync } = require("node:sqlite");
-    try { const d = new DatabaseSync(process.argv[1], { readOnly: true }); const r = d.prepare("select json from config where id = 1").get(); process.stdout.write(r ? (JSON.parse(r.json).dataFolder ?? "") : ""); } catch {}
-  ' "$STATE/jarvis.sqlite" 2>/dev/null || true)"
-  if [ -n "$DATA_FOLDER" ] && [ -f "$DATA_FOLDER/.jarvis/owned.json" ]; then
-    # Only entries Jarvis created are ever deleted; files the user already had stay.
-    CREATED_FOLDER="$("$NODE" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(o.createdFolder === true ? "true" : "false")' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || echo false)"
-    OWNED="$("$NODE" -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); for (const e of o.created ?? []) if (/^[A-Za-z.][A-Za-z0-9._-]*$/.test(e)) console.log(e)' "$DATA_FOLDER/.jarvis/owned.json" 2>/dev/null || true)"
+if [ "$DELETE" = "1" ]; then
+  # The data folder and what Jarvis created in it; only those entries are ever deleted, files the owner already had stay.
+  if PLAN="$("$JARVIS" data-folder --state-dir "$STATE")"; then
+    DATA_FOLDER="$(printf '%s' "$PLAN" | "$NODE" -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); process.stdout.write(p.dataFolder ?? "")')"
+    CREATED_FOLDER="$(printf '%s' "$PLAN" | "$NODE" -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); process.stdout.write(String(p.createdFolder))')"
+    OWNED="$(printf '%s' "$PLAN" | "$NODE" -e 'const p = JSON.parse(require("fs").readFileSync(0, "utf8")); for (const e of p.created) console.log(e)')"
+  else
+    printf 'Could not tell which data folder this install uses (see the message above), so no data folder will be deleted; remove it yourself if you want it gone.\n' >&2
   fi
 fi
 

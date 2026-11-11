@@ -256,6 +256,15 @@ export class BrainRepo {
     return at ? new Date(at).toISOString() : null;
   }
 
+  /** The Machine that set up Replication: the author of the Brain's first commit, or null when that was not a Machine. */
+  foundedBy(): string | null {
+    if (!this.revParse("HEAD")) return null;
+    const first = this.git.okSync(["rev-list", "--max-parents=0", "HEAD"]).trim().split("\n").at(-1);
+    if (!first) return null;
+    const [name = "", email = ""] = this.git.okSync(["log", "-1", "--format=%an%x00%ae", first]).trim().split("\0");
+    return machineOfAuthor(name, email).id;
+  }
+
   private lastAuthor(ref: string, path: string): MachineRef {
     const [name = "another Machine", email = ""] = this.git.okSync(["log", "-1", "--format=%an%x00%ae", ref, "--", path]).trim().split("\0");
     return machineOfAuthor(name, email);

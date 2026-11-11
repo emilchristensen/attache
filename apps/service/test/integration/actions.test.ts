@@ -27,7 +27,7 @@ function githubFixture() {
 }
 
 async function prepareDraft() {
-  const sync = await svc.post("/connections/github/sync");
+  const sync = await svc.post("/connections/github/refresh");
   await svc.waitJob(sync.job.id);
   const item = (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
   expect(item).toBeTruthy();

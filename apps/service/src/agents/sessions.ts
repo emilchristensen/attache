@@ -16,7 +16,8 @@ import { removeContextFiles, writeContextFiles } from "./context-files.ts";
 import { repositoryKey } from "../memory/repositories.ts";
 import { gitRemoteUrls } from "./git-remotes.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
-import { shellPath } from "../platform/shell-command.ts";
+import { currentOs } from "../platform/os.ts";
+import { searchCommand, type SearchCommand } from "./search-command.ts";
 import { replaceWith } from "../platform/replace-file.ts";
 import { queueConsolidation } from "../consolidation/consolidate.ts";
 
@@ -45,7 +46,7 @@ const MAX_UNPARSED_SAMPLES = 5;
 const MAX_LOGGED_BULLETS = 12;
 
 /**
- * Coding-agent sessions: hooks spool transcripts, this ingests them into the
+ * Harness sessions: hooks spool transcripts, this ingests them into the
  * data folder (a redacted transcript plus a dated session-log entry) and keeps
  * the session-start context current.
  */
@@ -362,12 +363,10 @@ export class AgentSessions {
     return existsSync(file) ? readFileSync(file, "utf8") : "## Jarvis memory\n\nNothing is remembered yet.\n";
   }
 
-  /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
-  private searchCommand(): string {
+  /** How a Harness reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
+  private searchCommand(): SearchCommand {
     const entry = process.argv[1] ? resolve(process.argv[1]) : "";
-    const q = (s: string) => shellPath(s);
-    if (!/jarvis-service\.mjs$/.test(entry)) return `jarvis search --state-dir ${q(this.stateDir)}`;
-    return `${q(stablePath(process.execPath))} ${q(stablePath(entry))} search --state-dir ${q(this.stateDir)}`;
+    return searchCommand({ os: currentOs(), execPath: stablePath(process.execPath), entry: entry && stablePath(entry), stateDir: this.stateDir });
   }
 
 }

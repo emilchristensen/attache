@@ -278,7 +278,7 @@ test("credentials: Settings says which secret store holds them and why", async (
   await expect(store).toContainText("JARVIS_CREDENTIAL_STORE=file chose the file.");
 });
 
-test("meaning-based search: search says it matches keywords only until the owner downloads the model in Settings", async () => {
+test("meaning-based search: search says it matches keywords only, and why, before and after the owner downloads the model in Settings", async () => {
   const page = await open("/memory");
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
@@ -290,12 +290,14 @@ test("meaning-based search: search says it matches keywords only until the owner
   await card.getByRole("button", { name: /^Download model/ }).click();
   await expect(card.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(card.getByText(/Every passage in this Machine's index has a vector/)).toBeVisible();
+  await expect(card.getByText(/Search does not rank by meaning yet/)).toBeVisible();
   await expect(card.getByRole("button", { name: /Download/ })).toHaveCount(0);
 
+  // Search does not rank by meaning yet, so it still says so once the vectors are built.
   await page.goto(`${stack.url}/memory`);
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
   await expect(page.locator(".list-item").first()).toBeVisible();
-  await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
+  await expect(page.locator("[data-keywords-only]")).toContainText("search does not rank by meaning yet");
 });
 
 test("reconnection: service restart shows a banner, then recovers state", async () => {
@@ -526,13 +528,14 @@ test("auto-accept: switched on for one Harness in Settings, kept across reload, 
   await page.reload();
   await expect(page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ })).toBeChecked();
 
-  // What the MCP save tool sends when auto-accept is on.
-  const status = await page.evaluate(async () => {
-    const body = { origin: { agent: "claude-code", sessionId: "sess-auto" }, autoAccept: true, items: [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }] };
+  // A save from Claude Code goes through without asking now. The Dashboard itself cannot save.
+  await harnessSave(stack, [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }], { agent: "claude-code", session: "sess-auto" });
+  const dashboardSave = await page.evaluate(async () => {
+    const body = { items: [{ action: "create", type: "note", title: "Typed in the Dashboard", facts: [{ subject: "Idea", value: "x" }] }] };
     const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
     return res.status;
   });
-  expect(status).toBe(200);
+  expect(dashboardSave).toBe(403);
   await page.goto(`${stack.url}/memory`);
   const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
   await expect(created).toContainText("Claude Code, session sess-auto");

@@ -10,6 +10,7 @@ import { isReviewPath, listReviewFiles, readReviewFile, removeReviewFile, writeR
 import { normalizeRel } from "./policy.ts";
 import { assertStillCurrent, correctionsOf } from "./proposal-corrections.ts";
 import { ProposalIndex } from "./proposal-index.ts";
+import { withoutPassedReviewDates } from "./proposal-review-dates.ts";
 import { legacyProposalRecord } from "./proposal-legacy.ts";
 import { parseProposalRecord, proposalItem, proposalPath, PROPOSALS_KIND, proposalSource, proposalStatus, toProposalView, type ProposalDecision, type ProposalRecord } from "./proposal-record.ts";
 import { undoApproval } from "./proposal-undo.ts";
@@ -134,8 +135,9 @@ export class Proposals {
     if (decision === "reject") {
       made = { ...base, decision: "rejected", path: null, batch: null };
     } else {
-      const item = proposalItem(record);
-      if (!item) throw new HttpError(409, "unreadable_proposal", "This Proposal can no longer be read, so it cannot be applied. Reject it instead.");
+      const proposed = proposalItem(record);
+      if (!proposed) throw new HttpError(409, "unreadable_proposal", "This Proposal can no longer be read, so it cannot be applied. Reject it instead.");
+      const item = withoutPassedReviewDates(proposed, this.deps.memory.today());
       const [step] = checkItems(this.deps.memory, [item]);
       if (step!.action === "update") assertStillCurrent(this.deps.memory, step!.relPath, record.corrections);
       // Its own batch id, as a save has, so the changes it makes show and revert as one, citing the Harness session it came from.

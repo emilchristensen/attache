@@ -7,11 +7,11 @@ import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
 import { redact } from "../core/log.ts";
 import { createHttpClient, RemoteError } from "./http.ts";
-import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, SyncResult, TestResult } from "./types.ts";
+import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, RefreshResult, TestResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
-import { toCandidate, type ApplyResult } from "../attention/engine.ts";
+import { recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import type { Inbox } from "../attention/inbox.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
@@ -35,6 +35,8 @@ export interface ManagerDeps {
   adapters: Map<ConnectionKind, ConnectorAdapter>;
   selfEmail: () => string | null;
   claude: ClaudeConnectorRunner;
+  /** Whether this Machine is the Reader, which alone raises inbox items for facts past their Review date. */
+  isReader: () => boolean;
 }
 
 export interface DisconnectEffects {
@@ -312,15 +314,15 @@ export class ConnectionManager {
     return migrated;
   }
 
-  // ---- sync ------------------------------------------------------------------
+  // ---- Source refresh --------------------------------------------------------
 
   previousCoverage(id: string): Coverage | null {
     const row = this.d.db.prepare("select coverage from sync_runs where connection_id = ? and finished_at is not null order by started_at desc limit 1").get(id) as { coverage: string } | undefined;
     return json<Coverage | null>(row?.coverage, null);
   }
 
-  /** Run one sync for a connection: fetch, archive observations, update attention. */
-  async sync(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number }> {
+  /** Run one Source refresh of a connection: fetch, archive observations, update attention. */
+  async refresh(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number }> {
     const rec = this.requireRecord(id);
     if (rec.status === "disconnected") throw new RemoteError("Connection is disconnected", "not_configured");
     const runId = randomUUID();
@@ -334,9 +336,9 @@ export class ConnectionManager {
     const set = this.inflight.get(id) ?? new Set<AbortController>();
     set.add(ctrl);
     this.inflight.set(id, set);
-    let result: SyncResult;
+    let result: RefreshResult;
     try {
-      result = rec.kind === "vault" ? this.syncVault(rec) : await this.syncRemote(rec, ctrl.signal);
+      result = rec.kind === "vault" ? this.refreshVault(rec) : await this.refreshRemote(rec, ctrl.signal);
     } catch (e) {
       const err = e as RemoteError;
       const cov = new CoverageTracker();
@@ -346,7 +348,7 @@ export class ConnectionManager {
       set.delete(ctrl);
       signal?.removeEventListener("abort", onOuterAbort);
     }
-    // A disconnect during the sync wins: store nothing and do not revive the connection.
+    // A disconnect during the refresh wins: store nothing and do not revive the connection.
     const current = this.record(id);
     if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
       this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or Source refresh cancelled' where id = ?").run(nowIso(), runId);
@@ -366,10 +368,10 @@ export class ConnectionManager {
     return { coverage: result.coverage, attention, observations: result.observations.length };
   }
 
-  private async syncRemote(rec: ConnectionRecord, signal?: AbortSignal): Promise<SyncResult> {
+  private async refreshRemote(rec: ConnectionRecord, signal?: AbortSignal): Promise<RefreshResult> {
     const a = this.adapter(rec.kind);
-    if (!a.sync) throw new RemoteError(`${a.definition.label} has nothing to refresh`, "not_configured");
-    return a.sync(this.context(rec, signal));
+    if (!a.refresh) throw new RemoteError(`${a.definition.label} has nothing to refresh`, "not_configured");
+    return a.refresh(this.context(rec, signal));
   }
 
   vaultRoot(rec: ConnectionRecord): IndexRoot | null {
@@ -378,7 +380,7 @@ export class ConnectionManager {
     return path ? { id: `import:${rec.id}`, path, label: rec.label } : null;
   }
 
-  private syncVault(rec: ConnectionRecord): SyncResult {
+  private refreshVault(rec: ConnectionRecord): RefreshResult {
     const cov = new CoverageTracker();
     const root = this.vaultRoot(rec);
     if (!root || !existsSync(root.path)) {
@@ -398,14 +400,22 @@ export class ConnectionManager {
 
   /**
    * Inbox items for facts past their Review date, read from the Brain as part of the data folder's Source refresh.
-   * The spec runs them only on the Reader: gate the data folder's whole refresh, never this list alone,
-   * because an item whose fact is no longer observed is resolved.
+   * Only the Reader raises them. Another Machine still observes every such fact, so a refresh it starts by hand
+   * leaves the items the Reader raised as they are (an item whose fact is no longer observed is resolved),
+   * but it raises none of its own: a fact without an item yet is observed without one.
    */
   private factReviews(root: IndexRoot, docs: readonly string[], now: Date) {
-    return scanFactReviews(root.path, docs, now);
+    const found = scanFactReviews(root.path, docs, now);
+    if (this.d.isReader()) return found;
+    const withoutNewItems = (o: Observation): Observation => {
+      if (!o.attention || recordByKey(this.d.db, o.attention.key)) return o;
+      const { attention: _raisedOnlyByTheReader, ...observed } = o;
+      return observed;
+    };
+    return { ...found, observations: found.observations.map(withoutNewItems) };
   }
 
-  private store(rec: ConnectionRecord, result: SyncResult, previous: Coverage | null): ApplyResult {
+  private store(rec: ConnectionRecord, result: RefreshResult, previous: Coverage | null): ApplyResult {
     const now = nowIso();
     const complete = result.coverage.state === "complete" || result.coverage.state === "empty";
     tx(this.d.db, () => {

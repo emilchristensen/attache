@@ -118,7 +118,7 @@ describe("review fixes", () => {
 
   it("#5 disconnecting during a sync stops it from storing data or reviving the connection", async () => {
     searchDelayMs = 400;
-    const sync = await svc.post("/connections/github/sync");
+    const sync = await svc.post("/connections/github/refresh");
     await new Promise((r) => setTimeout(r, 100));
     await svc.post("/connections/github/disconnect", { deleteData: true });
     await svc.waitJob(sync.job.id).catch(() => {});
@@ -131,7 +131,7 @@ describe("review fixes", () => {
 
   it("#7 secrets in source data are redacted from archived evidence", async () => {
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });
-    const s = await svc.post("/connections/github/sync");
+    const s = await svc.post("/connections/github/refresh");
     await svc.waitJob(s.job.id);
     const dir = join(svc.dataDir, "evidence/connectors/github");
     const text = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("\n");

@@ -43,6 +43,8 @@ export interface LeaseContext {
    * standby in the Brain and has a source of its own connected to read.
    */
   standIn: boolean;
+  /** Whether this Machine set up Replication of the Brain (it made the first commit). */
+  founder: boolean;
   now: Date;
   /** This Machine's own last Source refresh of every source. */
   lastRefreshAt: string | null;
@@ -60,10 +62,12 @@ export function hasLapsed(lease: LeaseRecord, now: Date): boolean {
  * What this Machine writes to the lease now, or null to leave it as it is.
  * The holder renews on its heartbeat, and at once when its name or last
  * Source refresh changed. The Preferred Reader takes the lease whenever it does
- * not hold it, so it takes the role back when it returns. Any Machine takes a
- * lease nobody holds yet. A standby Machine with its sources connected takes a
- * lease that lapsed: the Reader has been silent for `LEASE_TTL_MS`. A lease
- * another Machine holds is otherwise left alone.
+ * not hold it, so it takes the role back when it returns. A standby Machine
+ * with its sources connected takes a lease that lapsed (the Reader has been
+ * silent for `LEASE_TTL_MS`) or that nobody holds yet. A lease nobody holds is
+ * also taken by the Machine that set up Replication, unless the owner chose
+ * another Preferred Reader, so a Brain always gets a Reader. A lease another
+ * Machine holds is otherwise left alone.
  */
 export function leaseToWrite(current: LeaseRecord | null, ctx: LeaseContext): LeaseRecord | null {
   const now = ctx.now.toISOString();
@@ -73,7 +77,11 @@ export function leaseToWrite(current: LeaseRecord | null, ctx: LeaseContext): Le
     if (!due && current.name === ctx.me.name && current.lastRefreshAt === lastRefreshAt) return null;
     return { ...current, name: ctx.me.name, since: hasLapsed(current, ctx.now) ? now : current.since, renewedAt: now, lastRefreshAt };
   }
-  const claim = current === null || ctx.preferredReader === ctx.me.id || (ctx.standIn && hasLapsed(current, ctx.now));
+  const unheld = current === null;
+  const claim =
+    ctx.preferredReader === ctx.me.id ||
+    (ctx.standIn && (unheld || hasLapsed(current, ctx.now))) ||
+    (unheld && ctx.founder && ctx.preferredReader === null);
   if (!claim) return null;
   return { version: 1, holder: ctx.me.id, name: ctx.me.name, since: now, renewedAt: now, lastRefreshAt: later(current?.lastRefreshAt ?? null, ctx.lastRefreshAt) };
 }

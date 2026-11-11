@@ -58,7 +58,7 @@ beforeAll(async () => {
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
   await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
-  await svc.post("/memory/save", {
+  await svc.post("/memory/save", { confirmed: true,
     items: [
       { action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for October" }, { subject: "Repositories", value: "acme/orion" }] },
       { action: "create", type: "project", title: "Atlas", facts: [{ subject: "Status", value: "Discovery" }] },
@@ -109,7 +109,7 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
   });
 
   it("a save that lists something other than repositories is refused whole", async () => {
-    const r = await svc.call("POST", "/memory/save", {
+    const r = await svc.call("POST", "/memory/save", { confirmed: true,
       items: [
         { action: "create", type: "project", title: "Hermes", facts: [{ subject: "Repositories", value: "acme/hermes, the API repo" }] },
         { action: "update", path: ORION, events: ["Kick-off held"] },
@@ -119,7 +119,7 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
     expect(r.body.error.message).toContain('"the"');
     expect((await svc.call("GET", "/memory/document?path=memory/projects/hermes.md")).status).toBe(404);
     expect(readFileSync(join(svc.dataDir, ORION), "utf8")).not.toContain("Kick-off held");
-    const update = await svc.call("POST", "/memory/save", { items: [{ action: "update", path: ORION, facts: [{ subject: "repository", value: "https://", reason: "typo" }] }] });
+    const update = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: ORION, facts: [{ subject: "repository", value: "https://", reason: "typo" }] }] });
     expect(update.status).toBe(400);
     // A Proposal is checked like a save, so it cannot slip a bad list in for the owner to apply.
     const proposal = await svc.call("POST", "/memory/proposals", { item: { action: "update", path: ORION, facts: [{ subject: "Repositories", value: "acme/orion, the API repo", reason: "seen in a session" }] }, reason: "seen in a session" });
@@ -132,7 +132,7 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
     expect(sessionStart(atlas)).not.toContain("This session's project");
 
     // A save changes a fact and gives Atlas its repository.
-    await svc.post("/memory/save", {
+    await svc.post("/memory/save", { confirmed: true,
       items: [
         { action: "update", path: ORION, facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] },
         { action: "update", path: "memory/projects/atlas.md", facts: [{ subject: "Repositories", value: "gitlab.example.com/platform/atlas", reason: "named in the session" }] },

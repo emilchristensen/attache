@@ -1,5 +1,6 @@
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { resolvePaths } from "../core/paths.ts";
 import { currentOs } from "../platform/os.ts";
@@ -134,6 +135,47 @@ export async function notificationsCommand(sub: string | undefined, io: Platform
   if (sub !== "forget") throw new Error("Usage: jarvis notifications forget");
   await notifierFor(currentOs(), instance()).forget();
   io.out("Jarvis's notification registration removed.");
+}
+
+/** An entry name in `owned.json` that may be removed: one plain name at the top of the data folder, never a path. */
+const OWNED_ENTRY = /^[A-Za-z.][A-Za-z0-9._-]*$/;
+
+/** The data folder the service database names, or null when there is no database or it names none. Throws when it cannot be read. */
+function configuredDataFolder(dbFile: string): string | null {
+  if (!existsSync(dbFile)) return null;
+  try {
+    const db = new DatabaseSync(dbFile, { readOnly: true });
+    try {
+      const row = db.prepare("select json from config where id = 1").get() as { json: string } | undefined;
+      const folder = row ? (JSON.parse(row.json) as { dataFolder?: unknown }).dataFolder : undefined;
+      return typeof folder === "string" && folder !== "" ? folder : null;
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    throw new Error(`could not read the data folder from ${dbFile}: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * `jarvis data-folder --state-dir <dir>`: for a data-deleting uninstall, the
+ * data folder this install uses and what Jarvis created in it (`owned.json`),
+ * so files the owner already had are never removed. Fails rather than naming
+ * no folder when the database cannot be read.
+ */
+export function dataFolderCommand(io: PlatformCliIo): void {
+  const paths = resolvePaths(io.arg("state-dir"));
+  const dataFolder = configuredDataFolder(paths.dbFile);
+  const ownedFile = dataFolder ? join(dataFolder, ".jarvis", "owned.json") : null;
+  if (!dataFolder || !ownedFile || !existsSync(ownedFile)) return io.out(JSON.stringify({ dataFolder, createdFolder: false, created: [] }));
+  let record: { createdFolder?: unknown; created?: unknown };
+  try {
+    record = JSON.parse(readFileSync(ownedFile, "utf8")) as typeof record;
+  } catch (err) {
+    throw new Error(`could not read what Jarvis created from ${ownedFile}: ${(err as Error).message}`);
+  }
+  const created = Array.isArray(record.created) ? record.created.filter((e): e is string => typeof e === "string" && OWNED_ENTRY.test(e)) : [];
+  io.out(JSON.stringify({ dataFolder, createdFolder: record.createdFolder === true, created }));
 }
 
 /** Everything `platform/` resolves for this operating system, as JSON; with a key, just that value (for installer scripts). */

@@ -79,7 +79,7 @@ describe("per-Machine evidence", () => {
     const svc = await start();
     await svc.call("PATCH", "/machine", { name: "Work Mac" });
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });
-    await svc.waitJob((await svc.post("/connections/github/sync")).job.id);
+    await svc.waitJob((await svc.post("/connections/github/refresh")).job.id);
     const files = readdirSync(join(svc.dataDir, "evidence/connectors/github"));
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(new RegExp(`^${today()}-work-mac-[0-9a-f]{8}\\.md$`));
@@ -122,7 +122,7 @@ describe("evidence written before the change", () => {
 
   it("a project's session context reads every Machine's log of a day", async () => {
     const svc = await start({ features: { sessions: true } });
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Quasar rollout", facts: [{ subject: "Repositories", value: "acme/quasar" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Quasar rollout", facts: [{ subject: "Repositories", value: "acme/quasar" }] }] });
     const date = today();
     const other = `---\ntype: session-log\ntitle: Agent sessions on ${date}\ndate: ${date}\nmachine: Desk\nprovenance: agent-session-summary\n---\n# Agent sessions on ${date}\n\n## 08:00 · Claude Code · quasar\n\n**Before lunch**\n\nRepository: github.com/acme/quasar\n\n- Written on the other Machine.\n`;
     writeFileSync(join(svc.dataDir, "evidence/sessions", `${date}-desk-12345678.md`), other);

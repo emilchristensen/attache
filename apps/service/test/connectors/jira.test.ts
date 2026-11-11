@@ -101,29 +101,29 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
     c.connection.settings = done.settings;
     expect(await jiraAdapter.isAuthorized!(c)).toBe(true);
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [issue("ABC-1")], isLast: true }));
-    expect((await jiraAdapter.sync!(c)).coverage.state).toBe("complete");
+    expect((await jiraAdapter.refresh!(c)).coverage.state).toBe("complete");
     // The server forgets the access token: one refresh, then the call succeeds.
     atl.accessTokens.clear();
-    expect((await jiraAdapter.sync!(c)).coverage.state).toBe("complete");
+    expect((await jiraAdapter.refresh!(c)).coverage.state).toBe("complete");
     // Two jobs on the same connection with an expired token: one refresh, both succeed (refresh tokens are single use).
     atl.accessTokens.clear();
     c.secrets.set("accessTokenExpiresAt", new Date(0).toISOString());
     const twin = { ...c };
-    const [x, y] = await Promise.all([jiraAdapter.sync!(c), jiraAdapter.sync!(twin)]);
+    const [x, y] = await Promise.all([jiraAdapter.refresh!(c), jiraAdapter.refresh!(twin)]);
     expect([x.coverage.state, y.coverage.state]).toEqual(["complete", "complete"]);
     // The refresh token is revoked too: the sync is unauthorized, never "empty".
     atl.accessTokens.clear();
     atl.refreshTokens.clear();
-    expect((await jiraAdapter.sync!(c)).coverage.state).toBe("unauthorized");
+    expect((await jiraAdapter.refresh!(c)).coverage.state).toBe("unauthorized");
   });
 
   it("scope: only selected scopes are queried, with the scope's own JQL", async () => {
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [], isLast: true }));
-    await jiraAdapter.sync!(ctx(["due_soon"]));
+    await jiraAdapter.refresh!(ctx(["due_soon"]));
     expect(searches()).toHaveLength(1);
     expect(searches()[0]!.args.jql).toContain("duedate <= 7d");
     atl.calls.length = 0;
-    await jiraAdapter.sync!(ctx(["assigned_open", "reported_open"]));
+    await jiraAdapter.refresh!(ctx(["assigned_open", "reported_open"]));
     expect(searches().map((s) => String(s.args.jql).split(" ")[0]).sort()).toEqual(["assignee", "reporter"]);
   });
 
@@ -132,18 +132,18 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
       const page = Number(args.nextPageToken ?? 0);
       return { issues: [issue(`ABC-${page + 1}`)], isLast: page === 2, nextPageToken: String(page + 1) };
     });
-    const r = await jiraAdapter.sync!(ctx());
+    const r = await jiraAdapter.refresh!(ctx());
     expect(r.observations.map((o) => o.externalId)).toEqual(["ABC-1", "ABC-2", "ABC-3"]);
     expect(r.coverage).toMatchObject({ state: "complete", items: 3 });
     atl.tools.set("searchJiraIssuesUsingJql", (args) => ({ issues: [issue(`ABC-${Number(args.nextPageToken ?? 0) + 1}`)], isLast: false, nextPageToken: String(Number(args.nextPageToken ?? 0) + 1) }));
-    const capped = await jiraAdapter.sync!(ctx());
+    const capped = await jiraAdapter.refresh!(ctx());
     expect(capped.coverage.state).toBe("partial");
     expect(capped.coverage.scopes[0]!.note).toMatch(/Stopped after 5 pages/);
   });
 
   it("pagination: a next-page token without isLast is followed, not treated as the last page", async () => {
     atl.tools.set("searchJiraIssuesUsingJql", (args) => (args.nextPageToken ? { issues: [issue("ABC-2")] } : { issues: [issue("ABC-1")], nextPageToken: "p2" }));
-    const r = await jiraAdapter.sync!(ctx());
+    const r = await jiraAdapter.refresh!(ctx());
     expect(r.observations.map((o) => o.externalId)).toEqual(["ABC-1", "ABC-2"]);
     expect(r.coverage.state).toBe("complete");
   });
@@ -156,23 +156,23 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
       return { issues: [issue(`ABC-${calls}`)], isLast: false, nextPageToken: "2" };
     });
     atl.failNext = [429, 503];
-    const r = await jiraAdapter.sync!(ctx());
+    const r = await jiraAdapter.refresh!(ctx());
     expect(atl.failNext).toEqual([]);
     expect(r.coverage.state).toBe("partial");
     expect(r.observations).toHaveLength(1);
     expect(r.coverage.scopes[0]!.note).toMatch(/Rate limit/);
     // Persistent 5xx is offline, not empty.
     atl.failNext = [503, 503, 503];
-    expect((await jiraAdapter.sync!(ctx())).coverage.state).toBe("offline");
+    expect((await jiraAdapter.refresh!(ctx())).coverage.state).toBe("offline");
   });
 
   it("empty results: a successful zero is empty; an unreadable shape is an error, never empty", async () => {
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [], isLast: true }));
-    expect((await jiraAdapter.sync!(ctx())).coverage.state).toBe("empty");
+    expect((await jiraAdapter.refresh!(ctx())).coverage.state).toBe("empty");
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ unexpected: true }));
-    expect((await jiraAdapter.sync!(ctx())).coverage.state).toBe("error");
+    expect((await jiraAdapter.refresh!(ctx())).coverage.state).toBe("error");
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [issue("ABC-1"), { nokey: true }], isLast: true }));
-    const partial = await jiraAdapter.sync!(ctx());
+    const partial = await jiraAdapter.refresh!(ctx());
     expect(partial.coverage.state).toBe("partial");
     expect(partial.coverage.scopes[0]!.note).toMatch(/1 result\(s\) had no readable/);
   });
@@ -182,7 +182,7 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
       if (String(args.jql).startsWith("reporter")) throw new ToolError("You do not have permission to browse this project", 403);
       return { issues: [issue("ABC-1")], isLast: true };
     });
-    const r = await jiraAdapter.sync!(ctx(["assigned_open", "reported_open"]));
+    const r = await jiraAdapter.refresh!(ctx(["assigned_open", "reported_open"]));
     expect(r.coverage.state).toBe("partial");
     expect(r.coverage.scopes.find((s) => s.state === "denied")).toBeTruthy();
   });
@@ -191,14 +191,14 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [issue("ABC-1")], isLast: true }));
     atl.sse = true;
     const c = ctx();
-    expect((await jiraAdapter.sync!(c)).coverage.state).toBe("complete");
+    expect((await jiraAdapter.refresh!(c)).coverage.state).toBe("complete");
     atl.dropSessions = true;
-    expect((await jiraAdapter.sync!(c)).coverage.state).toBe("complete");
+    expect((await jiraAdapter.refresh!(c)).coverage.state).toBe("complete");
   });
 
   it("attention: due and overdue items, with priority boost; unrelated fields do not change the fingerprint", async () => {
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [issue("ABC-1", { duedate: "2026-09-29", priority: "High" }), issue("ABC-2", { duedate: "2026-10-02" }), issue("ABC-3", { duedate: "2026-12-01" })], isLast: true }));
-    const r = await jiraAdapter.sync!(ctx());
+    const r = await jiraAdapter.refresh!(ctx());
     const att = r.observations.filter((o) => o.attention).map((o) => [o.attention!.key, o.attention!.kind, o.attention!.priority]);
     expect(att).toEqual([["jira:ABC-1", "overdue_work_item", 90], ["jira:ABC-2", "due_work_item", 62]]);
     expect(r.observations[0]!.url).toBe(`${SITE}/browse/ABC-1`);

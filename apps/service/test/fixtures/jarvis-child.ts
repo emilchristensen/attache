@@ -117,7 +117,7 @@ export const connectGithub = (svc: ChildService, fx: FixtureServer, token: strin
 
 /** Refresh GitHub and wait for the job to end; returns its final status. */
 export async function syncGithub(svc: ChildService): Promise<string> {
-  const { job } = await svc.api("POST", "/connections/github/sync");
+  const { job } = await svc.api("POST", "/connections/github/refresh");
   for (let i = 0; i < 300; i++) {
     const r = await svc.api("GET", `/jobs/${job.id}`);
     if (["succeeded", "failed", "blocked", "cancelled"].includes(r.job.status)) return r.job.status;

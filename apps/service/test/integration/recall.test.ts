@@ -43,7 +43,7 @@ describe("A05 grounded recall and corrections", () => {
   let decision = "";
 
   it("retrieves a source-linked decision and the hit locates its evidence lines", async () => {
-    const out = await svc.post("/memory/save", {
+    const out = await svc.post("/memory/save", { confirmed: true,
       origin: { agent: "claude-code", sessionId: "sess-vendor-review" },
       items: [{ action: "create", type: "decision", title: "Nimbus contract renewal", facts: [{ subject: "Decision", value: "Renew Nimbus for two years at 12% discount" }, { subject: "Project", value: "Procurement" }] }],
     });
@@ -60,7 +60,7 @@ describe("A05 grounded recall and corrections", () => {
   });
 
   it("a correction changes what the next search returns and keeps the old value in history", async () => {
-    await svc.post("/memory/save", { items: [{ action: "update", path: decision, facts: [{ subject: "Decision", value: "Renew Nimbus for one year at 8% discount", reason: "Finance rejected the two-year term" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: decision, facts: [{ subject: "Decision", value: "Renew Nimbus for one year at 8% discount", reason: "Finance rejected the two-year term" }] }] });
     const hits = await recall("What did we decide about the Nimbus contract?");
     const current = hits.filter((h) => h.relPath === decision && h.section === "state");
     expect(current.map((h) => h.text).join("\n")).toContain("one year at 8% discount");

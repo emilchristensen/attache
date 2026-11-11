@@ -1,6 +1,7 @@
 import { redact } from "../core/log.ts";
 import { splitFrontmatter } from "../memory/markdown.ts";
 import { normalizeRel } from "../memory/policy.ts";
+import { looseText as norm } from "../memory/same-text.ts";
 
 /** Where meeting captures live in the Brain. Connector snapshots live elsewhere, so they are never one. */
 export const CAPTURES_DIR = "evidence/captures";
@@ -77,9 +78,6 @@ export function captureParts(lines: readonly CaptureLine[], maxChars: number): s
   if (current.some((l) => l.trim())) parts.push(current.join("\n"));
   return parts;
 }
-
-/** Text compared as the owner would read it: case and spacing do not make two passages different. */
-const norm = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
  * The first and last line of the file that hold a quoted passage, the

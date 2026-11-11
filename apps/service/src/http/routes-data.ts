@@ -121,6 +121,8 @@ export function registerDataRoutes(r: Router, app: App) {
   r.post("/memory/save", async (c) => {
     requireFeature(app, "capture");
     requireData(app);
+    // The Dashboard shows and decides (ADR 0003): only a Harness, through the MCP server and the CLI token, saves.
+    if (c.client?.kind !== "cli") throw new HttpError(403, "dashboard_cannot_save", "The Dashboard does not write to the Brain. Save from a Harness, which asks you to confirm.");
     const input = await c.body(MemorySaveInput);
     const out = saveToMemory(app, input, c.client?.id ?? null);
     app.bus.emit("event", { type: "memory.changed" });

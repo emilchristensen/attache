@@ -24,13 +24,13 @@ async function hits(m: TestMachine, q: string): Promise<string[]> {
 }
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 describe("Replication between Machines", () => {
   it("is off until switched on, and a single Machine works as before", async () => {
     single = await startTestService();
     expect((await single.get("/replication")).status).toBe("off");
-    await single.post("/memory/save", { items: [{ action: "create", type: "note", title: "Local only", facts: [{ subject: "Fact", value: "kept here" }] }] });
+    await single.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Local only", facts: [{ subject: "Fact", value: "kept here" }] }] });
     expect(existsSync(join(single.dataDir, ".git"))).toBe(false);
   });
 
@@ -68,7 +68,7 @@ describe("Replication between Machines", () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac] = world.machines as [TestMachine, TestMachine];
     await saveProject(mac, "Orion migration", "Cutover planned for October");
-    await mac.post("/memory/save", { items: [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }], events: ["Vendor slipped the cutover"] }] });
+    await mac.post("/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }], events: ["Vendor slipped the cutover"] }] });
     await mac.clock.advance(AFTER_WRITE);
     const message = world.remote.git("log", "-1", "--format=%an%n%B", "main");
     expect(message.split("\n")[0]).toBe("Mac");

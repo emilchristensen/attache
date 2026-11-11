@@ -12,6 +12,7 @@ import {
   forgetItem,
   recordByKey,
   resolveConnection,
+  resolveItems,
   takeRecord,
   type ApplyResult,
   type CandidateWithSource,
@@ -56,6 +57,14 @@ export class Inbox {
     const item = decide(this.d.db, id, decision, actor, until, this.d.ctx);
     this.write([item.key]);
     return item;
+  }
+
+  /** Resolve these items, as their source says they are settled. Returns the keys it resolved. */
+  resolve(keys: readonly string[]): string[] {
+    if (!keys.length) return [];
+    const resolved = resolveItems(this.d.db, keys, this.d.ctx);
+    this.write(resolved);
+    return resolved;
   }
 
   /** A connection was disconnected: its items are resolved, or deleted when the owner asked for that. */

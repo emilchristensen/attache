@@ -1,6 +1,6 @@
 /**
  * The two ways Jarvis reaches Jira and Confluence, behind one interface so
- * the adapters keep a single set of sync, attention, coverage and recovery
+ * the adapters keep a single set of Source refresh, attention, coverage and recovery
  * rules:
  *
  * - "claude-ai" (default): the user's claude.ai Atlassian Rovo connector

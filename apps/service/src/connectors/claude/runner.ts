@@ -104,9 +104,10 @@ export function labelOf(server: string): string {
   return server.replace(/^claude\.ai\s+/, "");
 }
 
-export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number } = {}): ClaudeConnectorRunner {
+export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number; sessionPerCallMs?: number } = {}): ClaudeConnectorRunner {
   const pendingDelayMs = config.pendingDelayMs ?? PENDING_DELAY_MS;
-  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * SESSION_PER_CALL_MS);
+  // The time a session's calls get, counted from Claude Code's init: starting has a budget of its own (`runSession`).
+  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * (config.sessionPerCallMs ?? SESSION_PER_CALL_MS));
   let active = 0;
   const waiting: Array<() => void> = [];
   const knownServers = new Set<string>();
@@ -179,11 +180,11 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
   return {
     async account(signal) {
       const bin = findClaudeCli();
-      if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+      if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
       const launch = claudeLaunch(bin, ["auth", "status", "--json"]);
       let stdout: string;
       try {
-        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
+        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, windowsHide: true, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
       } catch (e) {
         const text = String((e as { stdout?: string }).stdout ?? "") || (e as Error).message;
         if (/"loggedIn"\s*:\s*false/.test(text) || /not logged in/i.test(text)) throw new RemoteError("Claude Code is not signed in. Run `claude` once and sign in with your claude.ai account.", "unauthorized");

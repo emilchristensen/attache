@@ -2,7 +2,7 @@
  * Shared plumbing for adapters that read and write through the user's
  * claude.ai connectors (Slack, Gmail, Google Calendar) via Claude Code.
  * Authorization lives in claude.ai: Jarvis stores no credential for these
- * connections and only needs Claude Code signed in on this Mac.
+ * connections and only needs Claude Code signed in on this computer.
  */
 import type { ConnectionDefinition, CoverageState } from "@jarvis/contracts";
 import type { AdapterContext, TestResult } from "./types.ts";
@@ -29,8 +29,8 @@ export function claudeAuthMethods(server: string, extraFields: Field[] = []): Co
   return [
     {
       id: CLAUDE_AUTH_METHOD,
-      label: `Your claude.ai ${label} connector, through Claude Code on this Mac`,
-      reconnectHelp: `Make sure Claude Code is signed in on this Mac (run \`claude\` once in Terminal) and that ${label} shows as connected in claude.ai → Settings → Connectors, then reconnect.`,
+      label: `Your claude.ai ${label} connector, through Claude Code on this computer`,
+      reconnectHelp: `Make sure Claude Code is signed in on this computer (run \`claude\` once in a terminal) and that ${label} shows as connected in claude.ai → Settings → Connectors, then reconnect.`,
       fields: [...extraFields, SERVER_FIELD(server)],
     },
   ];
@@ -39,7 +39,7 @@ export function claudeAuthMethods(server: string, extraFields: Field[] = []): Co
 export function claudeSetupSteps(server: string): string[] {
   const label = labelOf(server);
   return [
-    "Install Claude Code on this Mac (claude.com/claude-code) and sign in once with your claude.ai work account.",
+    "Install Claude Code on this computer (claude.com/claude-code) and sign in once with your claude.ai work account.",
     `In claude.ai → Settings → Connectors, connect ${label} with the same account. In a claude.ai Team or Enterprise workspace an admin may have to enable the ${label} connector first.`,
   ];
 }
@@ -53,7 +53,7 @@ export function serverName(ctx: AdapterContext, fallback: string): string {
 }
 
 export function configureClaude(fields: Record<string, string>, fallback: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  if (!findClaudeCli()) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account, then connect again.", "not_configured");
+  if (!findClaudeCli()) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account, then connect again.", "not_configured");
   const server = fields.server?.trim() ?? "";
   if (server && !/^claude\.ai [\w .&()-]{1,80}$/.test(server)) throw new RemoteError('The connector name must look like "claude.ai Slack"', "not_configured");
   return { authMethod: CLAUDE_AUTH_METHOD, ...(server && server !== fallback ? { server } : {}), ...extra };

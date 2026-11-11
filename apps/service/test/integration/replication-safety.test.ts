@@ -12,7 +12,7 @@ afterEach(async () => {
 });
 
 const saveProject = (m: TestMachine, title: string, status: string) =>
-  m.post("/memory/save", { items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
+  m.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: status }] }] });
 
 const git = (m: TestMachine, ...args: string[]) =>
   execFileSync("git", ["-C", m.dataDir, ...args], { encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
@@ -79,7 +79,7 @@ describe("Deleting a note", () => {
 
 describe("A note deleted on one Machine and changed on another", () => {
   const status = (m: TestMachine, title: string, value: string) =>
-    m.post("/memory/save", { items: [{ action: "update", path: `memory/projects/${title}.md`, facts: [{ subject: "Status", value, reason: "news" }] }] });
+    m.post("/memory/save", { confirmed: true, items: [{ action: "update", path: `memory/projects/${title}.md`, facts: [{ subject: "Status", value, reason: "news" }] }] });
   const inbox = async (m: TestMachine) => ((await m.get("/attention")).items as Array<{ title: string; summary: string; sourceKind: string; evidence: Array<{ relPath?: string }> }>).filter((i) => i.sourceKind === "replication_merge");
 
   it("is kept with the change, on both Machines, and one inbox item says so", async () => {
@@ -122,15 +122,14 @@ describe("A note deleted on one Machine and changed on another", () => {
     await pc.clock.advance(60_000);
     expect(await inbox(pc)).toHaveLength(2);
 
-    // They are about the merge PC made, so they stay on PC: not in the Brain's replicated inbox, even after PC reopens its data folder.
+    // They replicate like any inbox item, so the Mac shows the same two, also after PC reopens its data folder.
     const reopened = await world.restart(pc);
     await reopened.clock.advance(60_000);
     await mac.clock.advance(60_000);
     expect(await inbox(reopened)).toHaveLength(2);
-    expect(await inbox(mac)).toHaveLength(0);
+    expect((await inbox(mac)).map((i) => i.title).sort()).toEqual(items.map((i) => i.title).sort());
     const inboxDir = join(reopened.dataDir, "review/inbox");
-    const files = existsSync(inboxDir) ? readdirSync(inboxDir).map((f) => readFileSync(join(inboxDir, f), "utf8")) : [];
-    expect(files.filter((f) => f.includes("replication_merge"))).toEqual([]);
+    expect(readdirSync(inboxDir).map((f) => readFileSync(join(inboxDir, f), "utf8")).filter((f) => f.includes("replication_merge"))).toHaveLength(2);
   });
 });
 

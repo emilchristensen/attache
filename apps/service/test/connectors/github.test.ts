@@ -38,14 +38,14 @@ describe("GitHub adapter contract", () => {
     fx.route("GET", "/user", () => ({ status: 401, json: { message: "Bad credentials" } }));
     fx.route("GET", "/search/issues", () => ({ status: 401, json: { message: "Bad credentials" } }));
     expect((await githubAdapter.test(ctx())).state).toBe("unauthorized");
-    const s = await githubAdapter.sync!(ctx());
+    const s = await githubAdapter.refresh!(ctx());
     expect(s.coverage.state).toBe("unauthorized");
     expect(s.observations).toHaveLength(0);
   });
 
   it("scope: only queries the selected scopes, and a 403 scope is 'denied'", async () => {
     fx.route("GET", "/search/issues", (req) => (req.query.get("q")!.includes("assignee") ? { status: 403, json: { message: "Resource not accessible by integration" } } : { json: { items: [], incomplete_results: false } }));
-    const s = await githubAdapter.sync!(ctx(["review_requests", "assigned_issues"]));
+    const s = await githubAdapter.refresh!(ctx(["review_requests", "assigned_issues"]));
     const qs = fx.requests.filter((r) => r.path === "/search/issues").map((r) => r.query.get("q"));
     expect(qs.some((q) => q!.includes("author:@me"))).toBe(false);
     expect(s.coverage.scopes.find((c) => c.scope.includes("assigned"))!.state).toBe("denied");
@@ -59,7 +59,7 @@ describe("GitHub adapter contract", () => {
         : { json: { items: [pr(1), pr(2)], incomplete_results: false }, headers: { link: `<${fx.url}/search/issues?q=x&page=2>; rel="next"` } },
     );
     fx.route("GET", /^\/repos\/acme\/web\/pulls\/\d+$/, (req) => ({ json: { head: { sha: `sha-${req.path.split("/").pop()}` } } }));
-    const s = await githubAdapter.sync!(ctx());
+    const s = await githubAdapter.refresh!(ctx());
     expect(s.observations.map((o) => o.externalId)).toEqual(["acme/web#1", "acme/web#2", "acme/web#3"]);
     expect(s.coverage.state).toBe("complete");
     expect(s.coverage.scopes[0]).toMatchObject({ pages: 2, items: 3 });
@@ -71,38 +71,38 @@ describe("GitHub adapter contract", () => {
       req.query.get("page") === "2" ? { status: 502, json: { message: "bad gateway" } } : { json: { items: [pr(1)], incomplete_results: false }, headers: { link: `<${fx.url}/search/issues?q=x&page=2>; rel="next"` } },
     );
     fx.route("GET", /pulls/, () => ({ json: { head: { sha: "a" } } }));
-    const s = await githubAdapter.sync!(ctx());
+    const s = await githubAdapter.refresh!(ctx());
     expect(s.coverage.state).toBe("partial");
     expect(s.observations).toHaveLength(1);
     fx.reset();
     fx.route("GET", "/search/issues", () => ({ json: { items: [], incomplete_results: true } }));
-    expect((await githubAdapter.sync!(ctx())).coverage.state).toBe("partial");
+    expect((await githubAdapter.refresh!(ctx())).coverage.state).toBe("partial");
   });
 
   it("retry: retries 429 honouring Retry-After, then succeeds", async () => {
     let calls = 0;
     fx.route("GET", "/search/issues", () => (++calls < 3 ? { status: 429, headers: { "retry-after": "0" }, json: { message: "slow down" } } : { json: { items: [], incomplete_results: false } }));
-    const s = await githubAdapter.sync!(ctx());
+    const s = await githubAdapter.refresh!(ctx());
     expect(calls).toBe(3);
     expect(s.coverage.state).toBe("empty");
   });
 
   it("empty result: a successful zero is 'empty', distinct from failure", async () => {
     fx.route("GET", "/search/issues", () => ({ json: { items: [], incomplete_results: false } }));
-    const s = await githubAdapter.sync!(ctx());
+    const s = await githubAdapter.refresh!(ctx());
     expect(s.coverage.state).toBe("empty");
     expect(s.coverage.scopes[0]).toMatchObject({ state: "empty", pages: 1, items: 0 });
   });
 
   it("offline: network failure is 'offline'", async () => {
     const c = fixtureContext({ kind: "github", baseUrl: "http://127.0.0.1:9", secrets: { token: "t" }, readScopes: ["review_requests"] });
-    const s = await githubAdapter.sync!(c);
+    const s = await githubAdapter.refresh!(c);
     expect(s.coverage.state).toBe("offline");
   });
 
   it("disconnect: without a stored token no request is made", async () => {
     const c = fixtureContext({ kind: "github", baseUrl: fx.url, secrets: {}, readScopes: ["review_requests"] });
-    const s = await githubAdapter.sync!(c);
+    const s = await githubAdapter.refresh!(c);
     expect(s.coverage.state).toBe("unauthorized");
     expect(fx.requests).toHaveLength(0);
   });
@@ -112,11 +112,11 @@ describe("GitHub adapter contract", () => {
     let updated = "2026-09-29T10:00:00Z";
     fx.route("GET", "/search/issues", () => ({ json: { items: [pr(7, { updated_at: updated })], incomplete_results: false } }));
     fx.route("GET", /pulls\/7$/, () => ({ json: { head: { sha } } }));
-    const a = (await githubAdapter.sync!(ctx())).observations[0]!.fingerprintParts;
+    const a = (await githubAdapter.refresh!(ctx())).observations[0]!.fingerprintParts;
     updated = "2026-09-30T09:00:00Z";
-    const b = (await githubAdapter.sync!(ctx())).observations[0]!.fingerprintParts;
+    const b = (await githubAdapter.refresh!(ctx())).observations[0]!.fingerprintParts;
     sha = "b2";
-    const c = (await githubAdapter.sync!(ctx())).observations[0]!.fingerprintParts;
+    const c = (await githubAdapter.refresh!(ctx())).observations[0]!.fingerprintParts;
     expect(a).toEqual(b);
     expect(c).not.toEqual(b);
   });

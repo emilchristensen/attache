@@ -170,10 +170,10 @@ async function main() {
   let token = await pairToken();
   await http("POST", "/setup/data-folder", { path: DATA }, token);
   await http("PUT", "/features", { changes: { drafts: false }, cascade: true }, token);
-  await http("PATCH", "/config", { schedules: { syncEveryMinutes: 55 } }, token);
-  await http("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
+  await http("PATCH", "/config", { schedules: { refreshEveryMinutes: 55 } }, token);
+  await http("POST", "/memory/save", { confirmed: true, origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
   await http("POST", "/setup/complete", {}, token);
-  check("A02", "installing Jarvis does not touch coding-agent settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  check("A02", "installing Jarvis does not touch any Harness settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
   const meaning = await http("GET", "/memory/meaning", undefined, token);
   check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
@@ -292,7 +292,7 @@ async function main() {
     const get = async (p) => (await fetch(`http://127.0.0.1:${restorePort}/api/v1${p}`, { headers: { authorization: `Bearer ${tok}` } })).json();
     const rcfg = (await get("/config")).config;
     const rhits = (await get("/memory/search?q=Helios budget")).hits;
-    check("A14", "restore into a fresh profile brings back config and data", restoredOk && rcfg.setupCompleted && rcfg.schedules.syncEveryMinutes === 55 && rcfg.dataFolder === freshData && rhits.some((h) => h.text.includes("Cap Helios at 40k")), `dataFolder=${restored.dataFolder}`);
+    check("A14", "restore into a fresh profile brings back config and data", restoredOk && rcfg.setupCompleted && rcfg.schedules.refreshEveryMinutes === 55 && rcfg.dataFolder === freshData && rhits.some((h) => h.text.includes("Cap Helios at 40k")), `dataFolder=${restored.dataFolder}`);
     const again = (() => {
       try {
         installed(["restore", backup.path, "--state-dir", freshState]);

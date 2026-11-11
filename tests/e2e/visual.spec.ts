@@ -133,8 +133,8 @@ test("screens", async ({ browser }) => {
     };
     await call("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
     await call("PUT", "/harnesses/claude-code/auto-accept", { autoAccept: true });
-    await call("POST", "/memory/save", { origin: { agent: "claude-code", sessionId: "6f1c2b0e-visual" }, autoAccept: true, items: [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }] });
   });
+  await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   await replicationScreens(page);
   // An edit by hand: "Prefers" is past its Review date, so the note shows it unverified.
   const priya = join(stack.dataDir, "memory/people/priya-shah.md");

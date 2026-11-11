@@ -1,6 +1,7 @@
 import type { ProposalCorrection } from "@jarvis/contracts";
 import { z } from "zod";
 import { HttpError } from "../http/router.ts";
+import { sameText } from "./same-text.ts";
 import type { CheckedItem } from "./save-items.ts";
 import type { MemoryStore } from "./store.ts";
 
@@ -12,7 +13,6 @@ export const CorrectionRecord = z.object({
 });
 
 /** Values compared as the note shows them: only spacing does not make two values different. */
-const sameText = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
 
 /**
  * The current facts a checked item gives a different value, with the value

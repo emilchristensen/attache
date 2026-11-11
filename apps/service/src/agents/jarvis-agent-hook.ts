@@ -1,5 +1,5 @@
 /**
- * The command coding agents run from their hooks:
+ * The command each Harness runs from its hooks:
  *
  *   node jarvis-agent-hook.mjs <agent> <session-start|pre-compact|session-end> --state-dir <dir>
  *

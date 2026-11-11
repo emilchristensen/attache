@@ -45,7 +45,12 @@ function Detail({ s }: { s: MeaningStatus }) {
         </div>
       );
     case "ready":
-      return <p className="small muted">Every passage in this Machine's index has a vector ({chunks}).</p>;
+      return (
+        <p className="small muted">
+          Every passage in this Machine's index has a vector ({chunks}).{" "}
+          {s.ranking === "meaning" ? "Search ranks by meaning and keywords." : "Search does not rank by meaning yet, so results still match keywords only."}
+        </p>
+      );
   }
 }
 
@@ -62,7 +67,7 @@ export function MeaningSearchCard() {
         {s && <StatusPill state={PILL[s.state]} label={LABEL[s.state]} />}
       </div>
       <p className="small muted">
-        Search also finds notes by meaning, so a question in other words or in Danish finds an English note. The model{s ? <> ({s.model.name})</> : null} runs on this Machine; notes never leave it, and its vectors stay out of the Brain.
+        Meaning-based search finds notes by what they mean, so a question in other words or in Danish finds an English note. The model{s ? <> ({s.model.name})</> : null} runs on this Machine; notes never leave it, and its vectors stay out of the Brain.
       </p>
       {status.loading && !s && <Loading lines={1} />}
       <ErrorState error={status.error} retry={status.reload} />

@@ -57,7 +57,7 @@ beforeAll(async () => {
   installFixtureModel(fx);
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }, { subject: "Repositories", value: "acme/orion" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }, { subject: "Repositories", value: "acme/orion" }] }] });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture-model" } });
 });
 afterAll(async () => {
@@ -66,7 +66,7 @@ afterAll(async () => {
   await fx?.close();
 });
 
-describe("coding-agent sessions", () => {
+describe("Harness sessions", () => {
   it("connecting Claude Code adds only Jarvis's hooks and keeps everything else", async () => {
     const r = await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     expect(r.test.ok).toBe(true);

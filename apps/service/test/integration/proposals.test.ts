@@ -9,7 +9,7 @@ const session = { kind: "agent-session", ref: "claude-code/sess-7", observedAt: 
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }, { subject: "Owner", value: "Mia" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }, { subject: "Owner", value: "Mia" }] }] });
 });
 afterAll(async () => {
   await svc?.stop();
@@ -127,7 +127,7 @@ describe("deciding a Proposal", () => {
 
   it("applies every part or nothing when the Brain changed after it was proposed", async () => {
     const created = await svc.post("/memory/proposals", { item: { action: "create", type: "note", title: "Coffee machine", facts: [{ subject: "Descaling", value: "Fridays" }], events: ["Bought in March"] }, reason: "Office chat" });
-    await svc.post("/memory/save", { items: [{ action: "create", type: "note", title: "Coffee Machine", facts: [{ subject: "Brand", value: "Sage" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Coffee Machine", facts: [{ subject: "Brand", value: "Sage" }] }] });
     const clash = await svc.call("POST", `/memory/proposals/${created.id}/apply`);
     expect(clash.status).toBe(409);
     const coffee = read("memory/notes/coffee-machine.md");
@@ -135,7 +135,7 @@ describe("deciding a Proposal", () => {
     expect(coffee).not.toContain("Bought in March");
     expect(existsSync(join(svc.dataDir, "memory/notes/coffee-machine-2.md"))).toBe(false);
 
-    await svc.post("/memory/save", { items: [{ action: "create", type: "note", title: "Short lived", facts: [{ subject: "A", value: "1" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Short lived", facts: [{ subject: "A", value: "1" }] }] });
     const update = await svc.post("/memory/proposals", { item: { action: "update", path: "memory/notes/short-lived.md", facts: [{ subject: "A", value: "2", reason: "x" }], events: ["y"] }, reason: "Cleanup" });
     rmSync(join(svc.dataDir, "memory/notes/short-lived.md"));
     const gone = await svc.call("POST", `/memory/proposals/${update.id}/apply`);
@@ -160,7 +160,7 @@ describe("the briefing", () => {
   });
 
   it("shows a correction as the old value and the new one", async () => {
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Billing revamp", facts: [{ subject: "Status", value: "Draft" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Billing revamp", facts: [{ subject: "Status", value: "Draft" }] }] });
     await svc.post("/memory/proposals", { item: { action: "update", path: "memory/projects/billing-revamp.md", facts: [{ subject: "Status", value: "Approved", reason: "Signed off" }, { subject: "Budget", value: "40k", reason: "Signed off" }] }, reason: "Steering group" });
     const { job } = await svc.post("/briefings", { kind: "manual" });
     expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");

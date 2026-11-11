@@ -86,7 +86,7 @@ async function connectModel(service: TestService) {
 
 async function setUp(service: TestService) {
   await service.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await service.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
+  await service.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
 }
 
 beforeAll(async () => {
@@ -269,7 +269,7 @@ describe("Corrections for contradicted facts", () => {
   const ATLAS = "memory/projects/atlas-launch.md";
   const today = () => new Date().toISOString().slice(0, 10);
   beforeAll(async () => {
-    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "1 March 2027" }, { subject: "Owner", value: "Priya" }, { subject: "Region", value: "EU only" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "1 March 2027" }, { subject: "Owner", value: "Priya" }, { subject: "Region", value: "EU only" }] }] });
   });
 
   it("a session that states a different value for a current fact yields a correction with the old value, the new value and the evidence, and approving it moves the old value to History with the reason", async () => {
@@ -314,7 +314,7 @@ describe("Corrections for contradicted facts", () => {
     const [p] = await proposalsFrom("s-correct-stale");
     expect(p!.corrections).toEqual([{ subject: "Owner", was: { value: "Priya", date: today(), review: null }, value: "Lars" }]);
     // The owner changes the fact from a Harness before deciding on the Proposal.
-    await svc.post("/memory/save", { items: [{ action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Mette", reason: "Priya moved team." }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Mette", reason: "Priya moved team." }] }] });
     const before = note(ATLAS);
     const refused = await svc.call("POST", `/memory/proposals/${p!.id}/apply`);
     expect(refused.status).toBe(409);

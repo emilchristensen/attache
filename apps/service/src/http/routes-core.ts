@@ -140,7 +140,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     const next = app.config.patch({ setupCompleted: true });
     app.scheduler.reconcile(next);
     // A Machine that joined another's Brain leaves reading the sources to the Reader.
-    if (app.featureEnabled("attention") && app.reader.isReader()) app.jobs.create({ kind: "sync", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
+    if (app.featureEnabled("attention") && app.reader.isReader()) app.jobs.create({ kind: "source-refresh", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
     app.bus.emit("event", { type: "config.changed" });
     return { config: next, features: app.featureStatuses() };
   });

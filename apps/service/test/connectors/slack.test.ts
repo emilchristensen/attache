@@ -53,7 +53,7 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
   it("authorization: an unconnected Slack connector or signed-out Claude Code fails every selected scope, never empty", async () => {
     claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
     expect(await slackAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
-    const s = await slackAdapter.sync!(ctx(["dms", "mentions"]));
+    const s = await slackAdapter.refresh!(ctx(["dms", "mentions"]));
     expect(s.coverage.state).toBe("unauthorized");
     expect(s.coverage.scopes).toHaveLength(2);
     claude.servers = [{ name: SERVER, status: "connected", source: "claudeai" }];
@@ -63,7 +63,7 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
 
   it("scope: DMs search only 1:1 conversations inside the window; mentions search for my user id; nothing else is called", async () => {
     searchable([msg("D01", "U0MIA", 1, "Can you look at this?")], [msg("C01", "U0BOB", 2, `<@${SELF}|Alex> ping`, { channelName: "general" })]);
-    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    const r = await slackAdapter.refresh!(ctx(["dms", "mentions"], { userId: SELF }));
     expect(r.coverage.state).toBe("complete");
     const search = calls("slack_search_public_and_private");
     expect(search.find((c) => c.args.channel_types === "im")!.args).toMatchObject({ filters: "is:dm", after: String(NOW_S - 48 * 3600), sort: "timestamp", include_bots: false });
@@ -76,7 +76,7 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
 
   it("awaiting reply: only when the newest human message in the DM is from someone else", async () => {
     searchable([msg("D01", SELF, 1, "Sent it."), msg("D01", "U0MIA", 3, "Got it?"), msg("D02", "U0BOB", 2, "Lunch?"), msg("D03", "UBOT", 1, "Reminder", { bot: true })], []);
-    const r = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const r = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
     const byChannel = Object.fromEntries(r.observations.map((o) => [String(o.data.channel), o.data.awaiting]));
     expect(byChannel).toEqual({ D01: false, D02: true });
     expect(r.observations.find((o) => o.data.channel === "D02")!.attention).toMatchObject({ kind: "pending_reply", title: "Reply to Person U0BOB in Slack" });
@@ -87,59 +87,59 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
 
   it("pagination: follows the search cursor", async () => {
     searchable(dms(45), []);
-    const r = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const r = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
     expect(r.coverage).toMatchObject({ state: "complete", items: 45 });
     expect(calls("slack_search_public_and_private")).toHaveLength(3);
   });
 
   it("pagination: stops at the window edge", async () => {
     searchable([...dms(5), msg("D999", "U0MIA", 60, "too old")], [], 3);
-    const edge = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const edge = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
     expect(edge.observations.map((o) => o.data.channel)).not.toContain("D999");
     expect(edge.coverage.state).toBe("complete");
   });
 
   it("pagination: a page cap is partial", async () => {
     searchable(Array.from({ length: 300 }, (_, i) => msg(`D${String(i).padStart(3, "0")}`, "U0MIA", 0.1 + i * 0.01, `x${i}`)), [], 20);
-    const capped = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const capped = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
     expect(capped.coverage.scopes[0]).toMatchObject({ state: "partial", items: 200, pages: 10, note: "Stopped after 10 pages" });
   });
 
   it("retry and failures: a tool error on the first page fails the scope; a later page failure keeps it partial", async () => {
     onTool(claude, SERVER, "slack_search_public_and_private", (a) => (a.channel_types === "im" ? { text: "missing_scope: search:read", isError: true } : slackSearchAnswer([])));
-    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    const r = await slackAdapter.refresh!(ctx(["dms", "mentions"], { userId: SELF }));
     expect(r.coverage.scopes.find((s) => s.scope.startsWith("Direct"))!.state).toBe("denied");
     expect(r.coverage.scopes.find((s) => s.scope.startsWith("Mentions"))!.state).toBe("empty");
     expect(r.coverage.state).toBe("partial");
     onTool(claude, SERVER, "slack_search_public_and_private", (a) => (a.cursor ? { text: "ratelimited", isError: true } : slackSearchAnswer([msg("D01", "U0MIA", 1, "hi")], "20")));
-    const p = await slackAdapter.sync!(ctx(["dms"], { userId: SELF }));
+    const p = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
     expect(p.coverage.state).toBe("partial");
     expect(p.observations).toHaveLength(1);
   });
 
   it("empty and unreadable: zero matches is empty; an unreadable result is partial, not empty", async () => {
     searchable([], []);
-    expect((await slackAdapter.sync!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("empty");
+    expect((await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("empty");
     onTool(claude, SERVER, "slack_search_public_and_private", () => jsonAnswer({ results: "### Result 1 of 1\nChannel: ???\nText: \nno ids\n\n---\n" }));
-    expect((await slackAdapter.sync!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("partial");
+    expect((await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("partial");
   });
 
   it("format drift: hits that no reader recognises make the scope partial, not empty", async () => {
     onTool(claude, SERVER, "slack_search_public_and_private", (a) => slackSearchInvalid(a) ?? slackSearchAnswer([msg("C01", "U0MIA", 1, "@Alex changed rendering", { channelName: "eng" })]));
-    const r = await slackAdapter.sync!(ctx(["dms", "mentions"], { userId: SELF }));
+    const r = await slackAdapter.refresh!(ctx(["dms", "mentions"], { userId: SELF }));
     expect(r.coverage.scopes.map((s) => s.state)).toEqual(["partial", "partial"]);
     expect(r.coverage.scopes[1]!.note).toMatch(/recognised form/);
   });
 
   it("watched channels: history per channel; unconfigured is not_configured; an unreadable channel is partial", async () => {
-    expect((await slackAdapter.sync!(ctx(["channels"], { userId: SELF }))).coverage.scopes[0]).toMatchObject({ state: "not_configured" });
+    expect((await slackAdapter.refresh!(ctx(["channels"], { userId: SELF }))).coverage.scopes[0]).toMatchObject({ state: "not_configured" });
     onTool(claude, SERVER, "slack_read_channel", (a) => (a.channel_id === "C01" ? slackHistoryAnswer("C01", [msg("C01", "U0BOB", 3, "Standup moved")]) : { text: "channel_not_found", isError: true }));
-    const r = await slackAdapter.sync!(ctx(["channels"], { userId: SELF, channels: "C01,C02" }));
+    const r = await slackAdapter.refresh!(ctx(["channels"], { userId: SELF, channels: "C01,C02" }));
     expect(r.observations.map((o) => o.kind)).toEqual(["slack_channel_message"]);
     // History carries no permalink; the link is built from the workspace URL once a search result reveals it.
     expect(r.observations[0]!.url).toBeUndefined();
     onTool(claude, SERVER, "slack_search_public_and_private", (a) => slackSearchInvalid(a) ?? slackSearchAnswer([msg("D01", "U0MIA", 1, "hi")]));
-    const linked = await slackAdapter.sync!(ctx(["dms", "channels"], { userId: SELF, channels: "C01" }));
+    const linked = await slackAdapter.refresh!(ctx(["dms", "channels"], { userId: SELF, channels: "C01" }));
     expect(linked.observations.find((o) => o.kind === "slack_channel_message")!.url).toMatch(/^https:\/\/acme\.slack\.com\/archives\/C01\/p\d+$/);
     expect(r.coverage.scopes[0]).toMatchObject({ state: "partial", note: expect.stringMatching(/Not read: C02/) });
   });

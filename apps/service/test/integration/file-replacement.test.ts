@@ -15,7 +15,7 @@ const NOTE = "memory/projects/orion-migration.md";
 
 beforeAll(async () => {
   svc = await startTestService();
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
 });
 afterAll(() => svc?.stop());
 
@@ -35,7 +35,7 @@ describe("replacing a note another program has open", () => {
   it("waits for the other program and saves, leaving no temporary file", async () => {
     const abs = join(svc.dataDir, NOTE);
     const holder = await holdOpen(abs, 1_500);
-    const r = await svc.post("/memory/save", { items: [{ action: "update", path: NOTE, facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }] });
+    const r = await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: NOTE, facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }] });
     expect(r.saved).toHaveLength(1);
     expect(readFileSync(abs, "utf8")).toContain("Cutover moved to November");
     expect(readdirSync(dirname(abs)).filter((f) => f.endsWith(".tmp"))).toEqual([]);

@@ -55,7 +55,7 @@ function Pair({ onPaired }: { onPaired: () => void }) {
       </div>
       <div className="card stack" style={{ marginTop: 24 }}>
         <h1>Pair this browser</h1>
-        <p className="muted">Jarvis runs on this Mac and only talks to paired clients. The installer opens this page with a code. To pair again, run <code>jarvis pair --open</code> in Terminal, or create a code in Settings on an already paired browser.</p>
+        <p className="muted">Jarvis runs on this computer and only talks to paired clients. The installer opens this page with a code. To pair again, run <code>jarvis pair --open</code> in a terminal, or create a code in Settings on an already paired browser.</p>
         <form
           className="stack"
           onSubmit={(e) => {

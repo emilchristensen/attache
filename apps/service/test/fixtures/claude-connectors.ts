@@ -15,7 +15,7 @@ export type ToolHandler = (args: Record<string, unknown>) => ToolAnswer | Promis
 export interface ClaudeFixture {
   servers: Array<{ name: string; status: string; source: string }>;
   auth: { loggedIn: boolean; authMethod?: string; email?: string; orgName?: string };
-  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "preapproved" | "too-long-unless-hidden";
+  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "slow-start" | "preapproved" | "too-long-unless-hidden";
   /** Every session the fixture CLI started: the tools it was told to disallow and how many calls were planned. */
   started: Array<{ disallowed: string[]; planned: number }>;
   /** Connector sessions started (one per Claude Code run). */

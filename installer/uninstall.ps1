@@ -58,15 +58,16 @@ $Locks = [string](Jarvis paths locksDir)
 $DataFolder = ''
 $Owned = @()
 $CreatedFolder = $false
-$Db = Join-Path $State 'jarvis.sqlite'
-if ($Delete -and (Test-Path -LiteralPath $Db)) {
-  $DataFolder = [string](& $Node -e "const { DatabaseSync } = require('node:sqlite'); try { const d = new DatabaseSync(process.argv[1], { readOnly: true }); const r = d.prepare('select json from config where id = 1').get(); process.stdout.write(r ? (JSON.parse(r.json).dataFolder ?? '') : ''); } catch {}" $Db)
-  $OwnedFile = Join-Path $DataFolder '.jarvis\owned.json'
-  if ($DataFolder -and (Test-Path -LiteralPath $OwnedFile)) {
-    # Only entries Jarvis created are ever deleted; files the owner already had stay.
-    $Record = Get-Content -Raw -Encoding UTF8 -LiteralPath $OwnedFile | ConvertFrom-Json
-    $CreatedFolder = ($Record.PSObject.Properties.Name -contains 'createdFolder') -and $Record.createdFolder -eq $true
-    if ($Record.PSObject.Properties.Name -contains 'created') { $Owned = @($Record.created | Where-Object { $_ -match '^[A-Za-z.][A-Za-z0-9._-]*$' }) }
+if ($Delete) {
+  # The data folder and what Jarvis created in it; only those entries are ever deleted, files the owner already had stay.
+  $Plan = [string](Jarvis data-folder --state-dir $State)
+  if ($LASTEXITCODE -eq 0) {
+    $Record = $Plan | ConvertFrom-Json
+    if ($Record.dataFolder) { $DataFolder = [string]$Record.dataFolder }
+    $CreatedFolder = $Record.createdFolder -eq $true
+    $Owned = @($Record.created)
+  } else {
+    [Console]::Error.WriteLine('Could not tell which data folder this install uses (see the message above), so no data folder will be deleted; remove it yourself if you want it gone.')
   }
 }
 
@@ -102,7 +103,7 @@ for ($i = 0; Test-Path -LiteralPath $Apps; $i++) {
   try { Remove-Item -LiteralPath $Apps -Recurse -Force }
   catch {
     if ($i -lt 30) { Start-Sleep -Milliseconds 500; continue }
-    [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close the coding agents that use Jarvis and remove the folder.")
+    [Console]::Error.WriteLine("Could not remove $Apps, because a program is still using it: $($_.Exception.Message) Close each Harness that uses Jarvis (such as Claude Code or Codex) and remove the folder.")
     exit 1
   }
 }

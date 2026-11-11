@@ -103,7 +103,7 @@ async function connectModel(service: TestService) {
 
 async function setUp(service: TestService) {
   await service.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await service.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
+  await service.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned" }] }] });
 }
 
 beforeAll(async () => {
@@ -185,6 +185,20 @@ describe("Consolidation from a meeting capture", () => {
     expect(Number(to) - Number(from)).toBe(1);
     // Nothing is written until the owner applies a Proposal.
     expect(read(ORION)).toBe(before);
+  });
+
+  it("what Consolidation drops from a meeting is reported as the meeting's, never a session's", async () => {
+    const rel = "evidence/captures/2026-11-11-granola-orion-retro.md";
+    const stop = consolidationReplies(() => ({
+      proposals: [{ item: { action: "update", path: ORION, facts: [{ subject: "Retro owner", value: "Priya" }] }, reason: "Made up.", evidence: "words nobody said in the retro" }],
+    }));
+    try {
+      writeIntoBrain(svc, rel, meetingCapture("Granola 2026-11-11: Orion retro", ["[0:01] Alex: Short retro today."]));
+      const job = await consolidated(svc, rel);
+      expect(job.result).toMatchObject({ capture: rel, proposals: 0, dropped: ["its evidence is not quoted from the meeting"] });
+    } finally {
+      stop();
+    }
   });
 
   it("a meeting capture that states a different value for a current fact yields a correction, as a session does", async () => {

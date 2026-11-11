@@ -18,7 +18,7 @@ export function openUrl(os: Os, url: string): void {
   } catch {
     return;
   }
-  const child = spawn(launch.command, launch.args, { stdio: "ignore", detached: true });
+  const child = spawn(launch.command, launch.args, { stdio: "ignore", detached: true, windowsHide: true });
   child.on("error", () => {});
   child.unref();
 }

@@ -53,7 +53,7 @@ export function installFixtureModel(fx: FixtureServer, prefix = "/model"): Fixtu
     else if (/keyword search queries/.test(system)) answer = user.split(/\s+/).slice(0, 3).join(" ");
     else if (/Write .* the user could send/.test(user)) answer = "Thanks for the update. I reviewed the changes and have one question about the migration order.";
     else if (/briefing/i.test(system + user) && /Attention items/.test(user)) answer = "Two deadlines need attention; nothing else changed.";
-    else if (/coding-agent session/.test(system)) {
+    else if (/summarise a finished Harness session/.test(system)) {
       const decisions = [...(/<session>([\s\S]*)<\/session>/.exec(user)?.[1] ?? "").matchAll(/[^.\n]*\b(?:decided|chose)\b[^.\n]*\./gi)].map((m) => `- ${m[0].replace(/^\s*\w+:\s*/, "").trim()}`);
       answer = decisions.length ? decisions.join("\n") : "NOTHING_DURABLE";
     }

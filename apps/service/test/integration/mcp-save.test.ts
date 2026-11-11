@@ -29,7 +29,7 @@ function brainFile(rel: string): string | null {
 beforeAll(async () => {
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
-  await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for November" }] }] });
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for November" }] }] });
 });
 afterAll(async () => {
   await mcp.closeAll();

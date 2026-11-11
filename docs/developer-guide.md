@@ -44,6 +44,15 @@ pnpm typecheck
 Run the service against a scratch profile while developing:
 
 ```sh
+pnpm dev                 # [--port 7500] [--state-dir <folder>]
+```
+
+`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/jarvis-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the web client with hot reload on `http://localhost:5173`.
+It prints a pairing link for that client.
+The scratch profile keeps its secrets in a file, and its writer locks and Harness home (`JARVIS_AGENT_HOME`) inside the state folder, so connecting a Harness there never touches your own.
+The same steps by hand:
+
+```sh
 node apps/service/build.mjs --watch &            # rebuild on change
 JARVIS_CREDENTIAL_STORE=file node apps/service/dist/jarvis-service.mjs serve --state-dir /tmp/jarvis-dev --port 7500
 node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --open

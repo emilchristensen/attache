@@ -3,14 +3,12 @@ import { join } from "node:path";
 import type { Env } from "../locations.ts";
 import { run } from "../run.ts";
 import { locateTool } from "../tools.ts";
+import { escapeXml } from "../xml.ts";
 import type { Notifier, NotifierState } from "./types.ts";
 
 const MAX = 240;
 /** D-Bus starts a notification daemon on its first notification, and a busy desktop answers slowly; allow for both. */
 const TIMEOUT_MS = 15_000;
-
-/** Notification bodies may carry markup (freedesktop.org Desktop Notifications), so their text is escaped. */
-const escapeMarkup = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Whether there is a session bus for the notification service to listen on, as systemd and desktop sessions provide it. */
 function hasSessionBus(env: Env): boolean {
@@ -41,7 +39,8 @@ export function linuxNotifier(env: Env = process.env): Notifier {
     async notify(title, body) {
       const r = route(env);
       if (!("tool" in r)) return r;
-      const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeMarkup(body.slice(0, MAX))], { timeoutMs: TIMEOUT_MS });
+      // Notification bodies may carry markup (freedesktop.org Desktop Notifications), so their text is escaped.
+      const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeXml(body.slice(0, MAX))], { timeoutMs: TIMEOUT_MS });
       return done.code === 0 ? { available: true } : { available: false, reason: done.stderr.trim().split("\n")[0] || `notify-send exited with ${done.code}` };
     },
     forget: async () => {},

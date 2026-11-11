@@ -57,7 +57,7 @@ Data folder (user-chosen, Markdown):
     captures/                captures, such as meeting notes and transcripts (a new one tagged as a meeting is consolidated)
     conversations/           chat archives from versions that had a chat (kept, never quoted by recall)
     connectors/<kind>/       connector snapshots, one file per day per Machine
-    sessions/                coding-agent session logs, one file per day per Machine (searchable)
+    sessions/                Harness session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
     wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts), one file each, named with the day and the Machine
@@ -94,8 +94,9 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
-The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis paths`), so their platform-specific work is the same code the service uses.
+The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis paths`, `jarvis data-folder`), so their platform-specific work is the same code the service uses.
 `jarvis paths` prints every resolved location for the computer it runs on.
+`jarvis data-folder` names the data folder and the entries Jarvis created in it, which is all a data-deleting uninstall removes; when the service database cannot be read it fails, and the uninstaller keeps the data folder and says so.
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
 `Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
@@ -149,7 +150,9 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
   Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
   The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
-  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  `MergeNotice`s become inbox items through `Inbox.apply` on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`; a source of its own, because the blocked item's refresh resolves every other `replication` item).
+  They replicate through `review/inbox/` like any item, so every Machine shows them.
+  Their key never holds the merge's time: a per-path notice is keyed by kind and path, any other by kind, path and its `version` (for a deleted-and-changed note, a hash of the note it kept), so two Machines that merge the same thing raise one item.
   A notice is one item per merge, unless it is `perPath`: then it is one item per file while it stays open, and a later merge raises it again only after it resolved.
   Items are resolved only by the owner, except the kinds listed in `SETTLED_BY_EDIT`: whenever the index changes (a save, an editor, a pull), `settleMergeNotices` reads their file and resolves the ones the owner has settled.
 - **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.
@@ -187,11 +190,12 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   A ref that only moves forward keeps every commit, so after 144 commits (about a day of heartbeats) the next write moves the lease to a new generation in one `--atomic` push: a last commit on the current generation saying so (a forward move, so a concurrent write still loses the race), the first commit of the next generation (a commit with no parent), and the deletion of the generation before the current one.
   At most two generations exist, so the lease's history stays bounded; no push is ever forced, and the only deletion Replication pushes is a retired lease generation (`assertNoRewrite`).
   The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*` and drops the generations the remote no longer has (`--prune`).
-  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it, so it takes the role back when it returns; any Machine takes a lease nobody holds yet (the Machine that sets Replication up takes it at setup); a standby Machine takes a lease that lapsed if it has a source connected besides the data folder (the standby flag from its record in the Brain, the sources from `App`, `ReplicationDeps.sourcesConnected`); otherwise the lease is left alone.
+  After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it, so it takes the role back when it returns; a standby Machine takes a lease that lapsed, or that nobody holds yet, if it has a source connected besides the data folder (the standby flag from its record in the Brain, the sources from `App`, `ReplicationDeps.sourcesConnected`); a lease nobody holds is also taken by the Machine that set up Replication (the author of the Brain's first commit, `BrainRepo.foundedBy`) unless the owner chose another Preferred Reader, which is how the first Machine takes it at setup; otherwise the lease is left alone, so a Machine that is not marked standby, or has no source connected, never takes it.
   A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
   A Machine that lost the lease hears so at its next check, so around a handover two Machines may both refresh for up to a minute: inbox items are files keyed by item (`review/inbox/`), so both Machines' writes meet as one file and the inbox merge rule keeps one, and deliverables such as briefings carry the Machine in their file name (`deliverableName`), so two briefings never collide.
-  The scheduler enqueues scheduled `sync` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
+  The scheduler enqueues scheduled `source-refresh` and `briefing` jobs only on the Reader (`app.reader.role()`), and the first Source refresh after setup only when the Machine is the Reader, so a Machine that joins reads nothing on its own.
   A Source refresh the owner starts by hand runs on the Machine they are on.
+  A briefing's deliverable carries the briefing itself in its frontmatter (`briefing`, `attention/replicated-briefing.ts`), so every Machine's Dashboard shows the newest briefing it has, its own or the Reader's (`latestBriefing`), checked before it is shown.
   `GET /reader` (and `/status`) returns the Reader as this Machine last heard it, whether it is silent, and `lastRefreshAt`, the last finished Source refresh of every source (an all-sources `sync` job or a briefing), which the holder carries in the lease to the other Machines; `reader.changed` tells the Dashboard.
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
@@ -228,7 +232,8 @@ Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes.
   A Harness submits saves through the MCP server or `jarvis save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
-- Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
+- Model output never writes memory directly.
+  Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
 - Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
   A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
@@ -248,7 +253,7 @@ Ranking uses BM25 with column weights (title 6, heading 3, text 1), fused by rec
 No document takes more than half of the results while other documents still have hits, so a long note that matches by title does not crowd out its evidence.
 A change to how files are chunked ships with a migration that clears every file's stored fingerprint, so the next scan re-chunks the data folder and imported folders while the old chunks stay searchable.
 The index is updated synchronously on every service write, fixing the new build's unscheduled indexer (four weeks stale when inspected).
-Edits made to the data folder outside the service (Obsidian, an editor, a coding agent) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
+Edits made to the data folder outside the service (Obsidian, an editor, a Harness) are picked up by a recursive file watcher (`memory/watcher.ts`): events are debounced (300 ms, at most 2 s for a continuous burst), then each changed Markdown path is re-indexed or removed on its own.
 Folder creates, moves and deletes, watcher failures and a catch-up just after the watcher starts trigger an incremental rescan, and a rescan also runs every five minutes for events the OS dropped.
 The watcher applies the same rules as the full scan: hidden and tool folders, non-Markdown files, files over 2 MB and symbolic links (the file or any parent folder) are never indexed.
 If the data folder itself goes missing, the rescan is skipped so an unmounted drive does not empty the index.
@@ -262,8 +267,9 @@ After that it runs offline.
 Each chunk stores the text its vector is made from (title, heading and the same text keyword search matches) and that text's SHA-256.
 Vectors live in `chunk_vectors`, keyed by model id and text hash, in the Machine's own SQLite index: they never enter the Brain and do not replicate, and re-chunking a file keeps the vectors of text that did not change.
 A background builder (`meaning/builder.ts`) embeds chunks without a vector in batches of eight whenever the indexer reports a change, then drops vectors no chunk uses.
-`GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress and how many chunks have vectors; search answers on keywords in every state, and the MCP `search` tool starts with a line saying so until vectors are ready.
-Meaning-based results do not yet join the ranking.
+`GET /memory/meaning` and every search response carry the state (`missing`, `downloading`, `failed`, `building`, `ready`), the download progress, how many chunks have vectors and `ranking`, how search ranks results now.
+Meaning-based results do not yet join the ranking (`SEARCH_RANKS_BY_MEANING` in `memory/search.ts`), so `ranking` is `keywords` in every state, `ready` included.
+The MCP `search` tool, `jarvis search` (first line, or stderr with `--json`) and the Dashboard's search say results match keywords only, and why, for as long as `ranking` is `keywords` (`meaning/note.ts`).
 
 Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
 A question set names, per question, the note and the subject of the current fact expected to answer it.
@@ -278,11 +284,11 @@ Installs from before ADR 0003 drop their stored conversations and messages on up
 
 ## Connections and transports
 
-Every connection is an adapter with setup, test, sync, disconnect and coverage accounting (`apps/service/src/connectors/`).
+Every connection is an adapter with setup, test, Source refresh, disconnect and coverage accounting (`apps/service/src/connectors/`).
 Remote sources use one of three transports.
 
 - **GitHub** uses its REST API with a token or the GitHub CLI login.
-- **Jira and Confluence** use the Atlassian Rovo MCP server in one of two ways behind one interface (`atlassian-backend.ts`), so sync, attention, coverage and recovery rules are shared.
+- **Jira and Confluence** use the Atlassian Rovo MCP server in one of two ways behind one interface (`atlassian-backend.ts`), so Source refresh, attention, coverage and recovery rules are shared.
   By default they go through the user's claude.ai Atlassian Rovo connector (Rovo MCP v1 tools) on the same gated Claude Code path as Slack, Gmail and Calendar, described below.
   It is the default because some Atlassian organizations refuse other OAuth clients and API tokens while allowing claude.ai.
   The v1 views differ: Jira pages with `pageInfo.endCursor` passed back as `nextPageToken`; Confluence search returns no total and no next page, so a full page is reported `partial`; Confluence dates come back relative ("about 2 hours ago") and are kept out of timestamps and fingerprints.
@@ -302,7 +308,7 @@ Remote sources use one of three transports.
   A long result that Claude Code spills to a file (a 50-issue Jira page is about 80 KB) is read back only from Claude Code's exact `<persisted-output>` wrapper, only from a file inside the project directory of Jarvis's own connector session, and the file is deleted once read, so a path planted in a message is never followed and connector data does not accumulate under `~/.claude`.
   A read session that stalls is started once more; a write session never is.
   The session waits for MCP connections (`MCP_CONNECTION_NONBLOCKING=false`); one that still meets a `pending` connector stops at init, before any call, and is started again.
-  Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack sync is a few sessions rather than one per call.
+  Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack Source refresh is a few sessions rather than one per call.
 
 Authorization for the claude.ai connectors lives in claude.ai, so Jarvis stores no credential for them; disconnecting stops Jarvis's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
 Write actions keep the approval rules below.
@@ -313,17 +319,19 @@ Atlassian token refreshes are single-flight per connection because Atlassian rot
 A sign-in that is started but not finished never replaces the stored OAuth client: a newly registered client is saved only when the callback succeeds.
 Connections created before these transports lose their old credentials once at startup and show `needs auth` with an explanation, keeping their scopes, channels, site and write authority.
 A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Jarvis first.
-A test that succeeds on a connection that was `needs auth` or `error` queues a sync of that connection, so its coverage no longer shows the failed run.
+A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
 ## Attention and briefings
 
 The attention engine follows these rules:
-- Item identity (`key`) is separate from change detection (`fingerprint`). Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
+- Item identity (`key`) is separate from change detection (`fingerprint`).
+  Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
 - Keys use the work item identity (for example `jira:ISSUE-1`), and the category (due, overdue) goes in the fingerprint, fixing the due→overdue key churn.
 - Transport-dependent fields (`updated_at`) are not fingerprint parts.
 - An item is resolved only if its source was fully covered in this and the previous run.
-- A dismissal records the fingerprint it applied to. Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
+- A dismissal records the fingerprint it applied to.
+  Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
 - The inbox replicates (`attention/inbox.ts`, `App.inbox`).
   Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
@@ -333,19 +341,31 @@ The attention engine follows these rules:
   Files are one line of JSON, so a file both Machines changed always reaches the merge rule (`attention/inbox-merge.ts`): the newer report of the item and the later decision win, a tie is broken by Machine id, and a deletion wins.
   Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
   The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
-- Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`. A zero from a partial source is never shown as "nothing to do".
+- Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`.
+  A zero from a partial source is never shown as "nothing to do".
 - Facts past their Review date (`attention/fact-reviews.ts`) are read from the Brain's `memory/` notes by the data folder's Source refresh (`ConnectionManager.syncVault`, builtin connection only), one item per fact, kind `fact-review`, key `fact-review:<note path>:<subject>`, fingerprint over the value, the fact's date and its Review date.
   A correction or a later Review date drops the fact from the next refresh, which resolves its item.
-  They are raised only on the Reader, because only the Reader runs the scheduled Source refresh (see "The Reader" above).
-- Gmail read state is derived from `labelIds`, never inferred. A thread whose last message is from the user is never awaiting reply. All-day events are detected from their midnight-to-midnight shape. Calendar notification mails are excluded from pending replies.
+  They are raised only on the Reader (`ManagerDeps.isReader`): a data-folder refresh the owner starts by hand on another Machine still observes every such fact, so it leaves the Reader's items as they are, but raises none of its own.
+- Gmail read state is derived from `labelIds`, never inferred.
+  A thread whose last message is from the user is never awaiting reply.
+  All-day events are detected from their midnight-to-midnight shape.
+  Calendar notification mails are excluded from pending replies.
 
 ## Jobs, scheduler and recovery
 
-- A job row is committed before the API acknowledges it. Every progress step writes an ordered `job_events` row; clients reconnect with `Last-Event-ID` and receive every missed event plus retained results.
-- The worker leases a job with an expiry. On service start, jobs with an expired lease are recovered from their last checkpoint.
-- External side effects go through an outbox keyed by an idempotency key. The key is recorded as `pending` before the call and `done` with the verified result after it. A recovered job that finds `done` reuses the result; one that finds `pending` verifies with the remote before retrying, so a restart cannot double-post.
-- Cancellation sets `cancel_requested_at`. The response and the job record state whether the work stopped (`stopped`) or the request arrived after completion (`too_late`).
-- The scheduler lives in the service. Schedules are rows with `next_run_at`. A tick every 15 s runs due schedules; if the gap between ticks exceeds twice the interval (the Mac slept), missed runs are coalesced into one catch-up run instead of replaying every missed interval. Offline sources simply record `offline` coverage and are retried next tick.
+- A job row is committed before the API acknowledges it.
+  Every progress step writes an ordered `job_events` row; clients reconnect with `Last-Event-ID` and receive every missed event plus retained results.
+- The worker leases a job with an expiry.
+  On service start, jobs with an expired lease are recovered from their last checkpoint.
+- External side effects go through an outbox keyed by an idempotency key.
+  The key is recorded as `pending` before the call and `done` with the verified result after it.
+  A recovered job that finds `done` reuses the result; one that finds `pending` verifies with the remote before retrying, so a restart cannot double-post.
+- Cancellation sets `cancel_requested_at`.
+  The response and the job record state whether the work stopped (`stopped`) or the request arrived after completion (`too_late`).
+- The scheduler lives in the service.
+  Schedules are rows with `next_run_at`.
+  A tick every 15 s runs due schedules; if the gap between ticks exceeds twice the interval (the Machine slept), missed runs are coalesced into one catch-up run instead of replaying every missed interval.
+  Offline sources simply record `offline` coverage and are retried next tick.
 - Browser tabs and service workers never schedule work.
 
 ## Drafts, approvals and execution
@@ -354,18 +374,23 @@ The attention engine follows these rules:
 - Editing a draft increments `version` and changes the hash, invalidating any approval.
 - Approval creates `{actionId, version, payloadHash, nonce, expiresAt, approvedBy}`.
 - Execution requires the approval; the server rechecks, immediately before calling the adapter: action status, version, hash, nonce unused (atomically consumed), approval and action expiry, feature enabled, connection connected and the write action authorized for that connection.
-- Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows). Otherwise `failed` with the error, or `unknown` if the call timed out after sending.
+- Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows).
+  Otherwise `failed` with the error, or `unknown` if the call timed out after sending.
 - Receipts and every attempt are stored in `action_events`.
 - Revoking an approval, disabling write authority or disconnecting prevents later execution.
 - Expiry uses 48 business hours (weekends skipped); refreshing a draft keeps its original `created`.
 
 ## Security
 
-- The service binds `127.0.0.1` only. The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
-- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed). The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
-- `Origin`, when present, must be the service origin. State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
+- The service binds `127.0.0.1` only.
+  The `Host` header must be the loopback address with the service port (prevents DNS rebinding).
+- Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed).
+  The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
+- `Origin`, when present, must be the service origin.
+  State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
-- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions. The model Jarvis calls has no tools, so injected text cannot trigger actions.
+- Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions.
+  The model Jarvis calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
 ## Harness sessions
@@ -415,6 +440,7 @@ Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `line
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
+The command (`agents/search-command.ts`) runs as written in a POSIX shell, Git Bash and cmd.exe; on Windows the context also gives it after PowerShell's call operator `&`, because PowerShell reads a quoted program path as a string.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
 For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the project's context, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
 A project's context (`agents/context.ts`, read from the Brain by `agents/context-sources.ts`) holds the project's full current state, the decisions and people linked to it, its session-log entries from the latest 14 days of logs, and then the global index.
@@ -446,6 +472,8 @@ The MCP prompts replace those skills, and there is no `jarvis save` command any 
 `jarvis audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
 Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
+Only a save marked `confirmed: true` (the owner accepted it when the MCP server asked) or `autoAccept: true` (checked against the setting) writes as the owner; any other save is stored as Proposals, one per item, and the response lists them under `proposals`.
+Only a client paired as `cli`, which the MCP server uses, may call it: the Dashboard's browser session gets 403 `dashboard_cannot_save` (ADR 0003).
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
@@ -495,7 +523,7 @@ The server starts even when the service is down, because a Harness launches its 
   Every change an auto-accepted save makes is marked in the change log (`memory_changes.auto_accepted`) beside its Harness and session, and Recent saves shows the mark.
   It never applies to the identity record, which no save can change.
   It then sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 10-minute limit.
-  Accept writes through `POST /memory/save` as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
+  Accept writes through `POST /memory/save` with `confirmed: true`, as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
   A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
   The origin names the Harness and session (`mcp/harness.ts`): from the environment the Harness gives the server (`CLAUDECODE` with `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, `ANTIGRAVITY_CONVERSATION_ID`), otherwise from the client name it reported (`claude-ai` is Claude Desktop), without a session; the folder is the server's working directory.
 - The `wrap-up` prompt (text in `mcp/prompt-text.ts` too) asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.
@@ -515,9 +543,13 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
 
 ## Clients
 
-- Browser: React. Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
-- Obsidian: no plugin. The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher. (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
-- Electron: not in this release. The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
+- Browser: React.
+  Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
+- Obsidian: no plugin.
+  The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
+  (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
+- Electron: not in this release.
+  The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same web client.
 
 ## What was reused and what inspired the design
 

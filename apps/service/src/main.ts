@@ -9,11 +9,14 @@ import { createBackup, restoreBackup } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, search } from "./memory/search.ts";
 import { unverifiedLabel } from "./memory/review-date.ts";
+import { configuredMeaningModel } from "./meaning/model.ts";
+import { meaningNote } from "./meaning/note.ts";
+import { offlineMeaningStatus } from "./meaning/status.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
-import { credentialsCommand, notificationsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
+import { credentialsCommand, dataFolderCommand, notificationsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
 import { currentOs } from "./platform/os.ts";
 import { openUrl } from "./platform/open-url.ts";
 import { runMcpServer } from "./mcp/server.ts";
@@ -88,7 +91,7 @@ async function status(argv: string[]) {
   }
 }
 
-/** Recall from a shell, for coding agents: top hits with file, lines and a snippet. Reads the index; never writes. */
+/** Recall from a shell, for a Harness: top hits with file, lines and a snippet. Reads the index; never writes. */
 async function searchCmd(argv: string[]) {
   const query = argv.slice(1).filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--state-dir" && all[i - 1] !== "--limit").join(" ").trim();
   if (!query) throw new Error('Usage: jarvis search "your query" [--limit 8] [--json]');
@@ -106,7 +109,14 @@ async function searchCmd(argv: string[]) {
       review: h.review,
       unverified: h.unverified,
     }));
-    if (argv.includes("--json")) return out(JSON.stringify(hits));
+    // This command reads the keyword index itself, so it says why results match keywords only, as the MCP server and the Dashboard do.
+    const note = meaningNote(offlineMeaningStatus(db, paths.modelsDir, configuredMeaningModel()));
+    if (argv.includes("--json")) {
+      // The JSON stays a list of hits for scripts; the note goes beside it, on stderr.
+      if (note) process.stderr.write(`${note}\n`);
+      return out(JSON.stringify(hits));
+    }
+    if (note) out(note);
     if (!hits.length) return out(`No matches for "${query}".`);
     out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}${h.unverified && h.review ? `  (${unverifiedLabel(h.review)})` : ""}\n    ${h.snippet}`).join("\n"));
   } finally {
@@ -188,6 +198,8 @@ async function main() {
       return notificationsCommand(argv[1], platformIo(argv));
     case "paths":
       return pathsCommand(argv[1], platformIo(argv));
+    case "data-folder":
+      return dataFolderCommand(platformIo(argv));
     case "backup": {
       const stateDir = arg("state-dir", argv);
       const app = new App({ ...(stateDir ? { stateDir } : {}), quiet: true });
@@ -207,7 +219,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, notifications, paths`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, notifications, paths, data-folder`);
   }
 }
 

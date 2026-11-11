@@ -75,10 +75,10 @@ describe("meeting preparation, team recall and pending replies through claude.ai
   });
 
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {
-    await svc.post("/memory/save", { items: [{ action: "create", type: "person", title: "Mia Jensen", facts: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "person", title: "Mia Jensen", facts: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] }] });
     // Long enough to be indexed as several passages that all match the meeting.
     const passage = (n: number) => `Design review round ${n} with Mia Jensen. ${"Async design review notes and decisions. ".repeat(32)}`;
-    await svc.post("/memory/save", { items: [{ action: "create", type: "note", title: "Design review log", facts: [{ subject: "Owner", value: "Mia Jensen" }], notes: [1, 2, 3].map(passage).join("\n\n") }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Design review log", facts: [{ subject: "Owner", value: "Mia Jensen" }], notes: [1, 2, 3].map(passage).join("\n\n") }] });
     const { job } = await svc.post("/briefings", { kind: "manual" });
     const done = await svc.waitJob(job.id);
     expect(done.job.status).toBe("succeeded");

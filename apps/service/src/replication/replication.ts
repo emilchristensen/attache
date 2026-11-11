@@ -8,8 +8,7 @@ import { Git, GitError, gitVersion } from "./git.ts";
 import { gitMissingMessage } from "../platform/git-install.ts";
 import { authorEnv, BrainRepo } from "./brain-repo.ts";
 import { commitMessage, machineTrailer } from "./commit-message.ts";
-import { normalizeRemote, RemoteError } from "./remote.ts";
-import { cloneBrain, isEmptyFolder, prepareRepository, remoteFailure, remoteHasBrain, ReplicationSetupError, sharesHistoryWith } from "./setup.ts";
+import { cloneBrain, isEmptyFolder, notEmptyRefusal, prepareRepository, refusalOf, remoteFailure, remoteHasBrain, ReplicationSetupError, setupRemote, sharesHistoryWith } from "./setup.ts";
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
 import { ReplicatedMachines } from "./machines.ts";
 import { isMachineRecordPath, MachineRecords } from "./machine-records.ts";
@@ -94,6 +93,7 @@ export class Replication {
       credentials: deps.seams.credentials,
       preferredReader: (root) => new MachineRecords(root).preferredReader(),
       standIn: (root) => new MachineRecords(root).machine(deps.machine().id)?.standby === true && (deps.sourcesConnected?.() ?? false),
+      founder: (root) => this.repo(root).foundedBy() === deps.machine().id,
       lastRefreshAt: () => deps.lastSourceRefresh?.() ?? null,
       onChange: () => deps.onLeaseChange?.(),
       ...(deps.leaseGenerationCommits ? { generationCommits: deps.leaseGenerationCommits } : {}),
@@ -409,21 +409,9 @@ export class Replication {
     }
   }
 
-  private remote(input: string): string {
-    try {
-      return normalizeRemote(input);
-    } catch (e) {
-      if (e instanceof RemoteError) throw new ReplicationSetupError(400, "invalid_remote", e.message);
-      throw e;
-    }
-  }
-
   private async refuseRemote(remote: string): Promise<void> {
-    const v = await this.checkRemote(remote);
-    if (v.ok) return;
-    if (v.status === "offline") throw new ReplicationSetupError(502, "remote_unreachable", v.cause);
-    if (v.status === "unauthorized") throw new ReplicationSetupError(502, "remote_unauthorized", v.cause);
-    throw new ReplicationSetupError(409, "remote_refused", v.cause);
+    const refusal = refusalOf(await this.checkRemote(remote));
+    if (refusal) throw refusal;
   }
 
   /**
@@ -434,7 +422,7 @@ export class Replication {
     return this.exclusive(async () => {
       const root = this.deps.dataRoot();
       if (!root) throw new ReplicationSetupError(409, "needs_data_folder", "Choose a data folder first.");
-      const remote = this.remote(remoteInput);
+      const remote = setupRemote(remoteInput);
       await this.refuseRemote(remote);
       const git = new Git({ cwd: root });
       if (await remoteHasBrain(git, remote, this.deps.seams)) {
@@ -483,8 +471,8 @@ export class Replication {
    */
   join(remoteInput: string, target: string, open: (path: string) => void): Promise<ReplicationView> {
     return this.exclusive(async () => {
-      const remote = this.remote(remoteInput);
-      if (!isEmptyFolder(target)) throw await this.refuseNotEmpty(target);
+      const remote = setupRemote(remoteInput);
+      if (!isEmptyFolder(target)) throw await notEmptyRefusal(target, this.deps.backUpFolder, this.deps.log);
       await this.refuseRemote(remote);
       await cloneBrain(remote, target, this.deps.seams);
       open(target);
@@ -495,22 +483,6 @@ export class Replication {
       this.machines.recordThisMachine(target);
       return view;
     });
-  }
-
-  /**
-   * A folder that is not empty may hold a Brain of its own. Two Brains are never
-   * merged, so the join is refused; the folder is backed up first, so the owner
-   * can move it aside and still keep what it held.
-   */
-  private async refuseNotEmpty(target: string): Promise<ReplicationSetupError> {
-    const refusal = `${target} is not empty. Jarvis joins a Brain only into an empty folder, so two Brains are never merged.`;
-    try {
-      const backup = await this.deps.backUpFolder(target);
-      return new ReplicationSetupError(409, "not_empty", `${refusal} It was backed up to ${backup}. Move the folder aside or choose an empty one, then join again.`, { backup });
-    } catch (e) {
-      this.deps.log.error("could not back up a folder a join refused", { folder: target, error: (e as Error).message });
-      return new ReplicationSetupError(409, "not_empty", `${refusal} Backing it up failed too (${(e as Error).message}); nothing in it was changed.`);
-    }
   }
 
   /**

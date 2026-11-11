@@ -2,7 +2,7 @@ import type { MeaningStatus } from "@jarvis/contracts";
 
 const percent = (part: number, whole: number) => (whole > 0 ? Math.floor((part / whole) * 100) : 0);
 
-/** One line telling a reader of search results why they match keywords only, or null once meaning-based search is ready. */
+/** One line telling a reader of search results why they match keywords only, or null once search ranks by meaning. */
 export function meaningNote(status: MeaningStatus): string | null {
   switch (status.state) {
     case "missing":
@@ -14,6 +14,6 @@ export function meaningNote(status: MeaningStatus): string | null {
     case "building":
       return `Results match keywords only while search vectors are built (${status.vectors.embedded} of ${status.vectors.chunks} passages).`;
     case "ready":
-      return null;
+      return status.ranking === "meaning" ? null : "Results match keywords only: every passage has a meaning vector, but search does not rank by meaning yet.";
   }
 }

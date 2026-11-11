@@ -31,17 +31,26 @@ export interface SystemSecretStoreOptions {
  */
 export class SystemSecretStore implements SecretStore {
   readonly kind: SystemSecretStoreOptions["kind"];
-  readonly note = null;
   private readonly backend: SecretBackend;
   private readonly leftovers: FileSecretStore;
   private readonly index: KeyIndex;
   private readonly ready: Promise<void>;
+  /** Leftover secrets the system store refused, with why, so the Dashboard can say they are still in the file. */
+  private stranded: ReadonlyMap<string, string> = new Map();
   constructor(opts: SystemSecretStoreOptions) {
     this.kind = opts.kind;
     this.backend = opts.backend;
     this.leftovers = opts.leftovers;
     this.index = new KeyIndex(opts.indexFile);
     this.ready = this.adoptLeftovers();
+  }
+
+  get note(): string | null {
+    if (this.stranded.size === 0) return null;
+    const keys = [...this.stranded.keys()];
+    const reasons = [...new Set(this.stranded.values())].join("; ");
+    const one = keys.length === 1;
+    return `${keys.length} ${one ? "secret" : "secrets"} (${keys.join(", ")}) could not be moved into the system secret store (${reasons}), so ${one ? "it stays" : "they stay"} in a file only you can read.`;
   }
 
   async get(key: string) {
@@ -69,6 +78,7 @@ export class SystemSecretStore implements SecretStore {
   }
 
   private async adoptLeftovers(): Promise<void> {
+    const stranded = new Map<string, string>();
     for (const key of await this.leftovers.keys()) {
       const value = await this.leftovers.get(key);
       if (value === null) continue;
@@ -76,9 +86,12 @@ export class SystemSecretStore implements SecretStore {
         await this.backend.store(key, value);
         this.index.add(key);
         if ((await this.backend.lookup(key)) === value) await this.leftovers.delete(key);
-      } catch {
-        // It stays in the file, which get() still reads.
+        else stranded.set(key, "it read back a different value");
+      } catch (err) {
+        // It stays in the file, which get() still reads; the note tells the owner.
+        stranded.set(key, err instanceof Error ? err.message : String(err));
       }
     }
+    this.stranded = stranded;
   }
 }

@@ -37,7 +37,7 @@ function editNote(rel: string, from: string, to: string) {
 
 /** "Refresh now" on the data folder, the Source refresh that reads the Brain. */
 async function refresh() {
-  const { job } = await svc.post("/connections/vault-data/sync", {});
+  const { job } = await svc.post("/connections/vault-data/refresh", {});
   const done = await svc.waitJob(job.id);
   expect(done.job.status).toBe("succeeded");
 }
@@ -115,13 +115,13 @@ describe("a fact past its Review date in the inbox", () => {
   });
 
   it("is resolved by correcting the fact", async () => {
-    await svc.post("/memory/save", { items: [{ action: "update", path: REL, facts: [{ subject: "Status", value: "Pilot moved to Trondheim", reason: "venue change" }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: REL, facts: [{ subject: "Status", value: "Pilot moved to Trondheim", reason: "venue change" }] }] });
     await refresh();
     expect((await itemFor("Status"))!.state).toBe("resolved");
   });
 
   it("is resolved by setting a later Review date", async () => {
-    await svc.post("/memory/save", { items: [{ action: "update", path: REL, facts: [{ subject: "Budget", value: "90k EUR", reason: "checked with finance", review: IN_A_MONTH }] }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: REL, facts: [{ subject: "Budget", value: "90k EUR", reason: "checked with finance", review: IN_A_MONTH }] }] });
     await refresh();
     expect((await itemFor("Budget"))!.state).toBe("resolved");
   });

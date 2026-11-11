@@ -63,7 +63,7 @@ describe("Line endings in a replicated Brain", () => {
     world = await startMachines(["PC", "Mac"]);
     const [pc, mac] = world.machines as [TestMachine, TestMachine];
     // A Harness on Windows may send text with CRLF line breaks.
-    await pc.post("/memory/save", { items: [{ action: "create", type: "note", title: "Tui count", facts: [{ subject: "Count", value: "The tui count is on Saturday" }], notes: "First line.\r\nSecond line." }] });
+    await pc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Tui count", facts: [{ subject: "Count", value: "The tui count is on Saturday" }], notes: "First line.\r\nSecond line." }] });
     await pc.clock.advance(AFTER_WRITE);
     await mac.clock.advance(CHECK);
 
@@ -87,7 +87,7 @@ describe("Line endings in a replicated Brain", () => {
     expect(await state(mac, KIWI)).toEqual([expect.objectContaining({ subject: "Harvest", value: "The kiwi harvest starts in March" })]);
     expect(await hits(mac, "kiwi harvest")).toContain(KIWI);
 
-    await pc.post("/memory/save", { items: [{ action: "update", path: KIWI, facts: [{ subject: "Harvest", value: "The kiwi harvest starts in April", reason: "late frost" }] }] });
+    await pc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: KIWI, facts: [{ subject: "Harvest", value: "The kiwi harvest starts in April", reason: "late frost" }] }] });
     const corrected = readFileSync(join(pc.dataDir, KIWI), "utf8");
     expect(corrected).not.toContain("\r");
     expect(corrected).toContain("- **Harvest** (");

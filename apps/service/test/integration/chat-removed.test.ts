@@ -90,6 +90,6 @@ describe("chat is gone", () => {
     expect(existsSync(join(fresh.dataDir, "evidence/captures"))).toBe(true);
 
     // Changing settings afterwards still works.
-    expect((await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 40 } })).status).toBe(200);
+    expect((await svc.call("PATCH", "/config", { schedules: { refreshEveryMinutes: 40 } })).status).toBe(200);
   });
 });
