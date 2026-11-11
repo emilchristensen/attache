@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
 
-// Tests here start the CLI as a child process up to ten times each, which is slow when the computer is busy.
+// Each test starts the `jarvis` executable from source several times, which is slow while the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 120_000 });
 
 const MAIN = join(import.meta.dirname, "../src/main.ts");
