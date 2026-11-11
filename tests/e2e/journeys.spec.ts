@@ -56,10 +56,15 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Use this folder" }).click();
 
   await expect(page.getByRole("heading", { name: "Choose what Jarvis does" })).toBeVisible();
-  // Keyboard: toggle voice with Space, then check the dependency explanation for Background work.
-  await page.getByRole("checkbox", { name: /^Voice/ }).focus();
+  // Voice is not a feature any more.
+  await expect(page.getByRole("checkbox", { name: /^Voice/ })).toHaveCount(0);
+  // Keyboard: toggle drafts off and on with Space, then check the dependency explanation for Background work.
+  const drafts = page.getByRole("checkbox", { name: /^Drafts and approvals/ });
+  await drafts.focus();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("checkbox", { name: /^Voice/ })).toBeChecked();
+  await expect(drafts).not.toBeChecked();
+  await page.keyboard.press("Space");
+  await expect(drafts).toBeChecked();
   await page.getByRole("checkbox", { name: /^Background work/ }).click();
   await expect(page.getByRole("alert")).toContainText("Attention and briefings needs Background work");
   await page.getByRole("button", { name: "Cancel" }).click();
@@ -91,7 +96,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await expect(codex.getByText("not connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "Model, voice and schedules" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Model and schedules" })).toBeVisible();
   const model = page.locator('[data-connection="model"]');
   await model.getByRole("button", { name: "Set up" }).click();
   await model.getByRole("combobox", { name: "How to connect" }).selectOption("openai-compatible");
@@ -103,13 +108,16 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Check and finish" })).toBeVisible();
-  await expect(page.locator('[data-feature-status="voice"]')).toContainText("needs setup");
+  await expect(page.locator('[data-feature-status="drafts"]')).toContainText("ready");
   await expect(page.locator('[data-feature-status="attention"]')).toContainText("ready");
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
   await expect(page.getByText("Needs your attention")).toBeVisible();
   await expect(page.getByText(/Overdue: Review rollback runbook/)).toBeVisible();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
+  // No microphone control or speech hint anywhere on the Dashboard.
+  await expect(page.getByRole("button", { name: /talk|microphone|speaking/i })).toHaveCount(0);
+  await expect(page.getByText(/stops speech/)).toHaveCount(0);
 });
 
 test("chat: streaming grounded answer, citation opens the exact evidence lines, keyboard", async () => {

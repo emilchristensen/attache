@@ -33,7 +33,7 @@ export function Home() {
       </section>
       <Splitter container={home} size={CHAT_SIZE} width={chatWidth} onResize={setChatWidth} label="Resize conversation" controls="home-chat" />
       <section className="chat-col" id="home-chat" aria-label="Conversation">
-        <Chat voiceOn={f.voice ?? false} />
+        <Chat />
       </section>
     </div>
   );

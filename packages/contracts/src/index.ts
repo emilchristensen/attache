@@ -7,10 +7,10 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 // ---------------------------------------------------------------------------
 // Features and connections
 
-export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "voice", "sessions"]);
+export const FeatureId = z.enum(["conversation", "recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "speech", "claude-code", "codex", "antigravity"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -92,15 +92,6 @@ export const ModelSettings = z.object({
   provider: z.enum(["none", "claude-cli", "anthropic", "openai-compatible"]).default("none"),
   model: z.string().default(""),
   baseUrl: z.string().default(""),
-});
-
-export const SpeechSettings = z.object({
-  stt: z.enum(["none", "whisper-local", "openai-compatible", "browser"]).default("none"),
-  tts: z.enum(["none", "macos-say", "openai-compatible", "browser"]).default("none"),
-  voice: z.string().default(""),
-  baseUrl: z.string().default(""),
-  sttModel: z.string().default(""),
-  ttsModel: z.string().default(""),
 });
 
 export const Config = z.object({
@@ -299,7 +290,6 @@ export const ChatInput = z.object({
   conversationId: z.string().nullable().optional(),
   text: z.string().min(1).max(20_000),
   context: z.object({ relPath: z.string().optional(), root: z.string().optional(), absPath: z.string().max(4096).optional(), title: z.string().max(300).optional(), selection: z.string().max(20_000).optional() }).optional(),
-  voice: z.boolean().optional(),
 });
 
 export interface MessageView {
