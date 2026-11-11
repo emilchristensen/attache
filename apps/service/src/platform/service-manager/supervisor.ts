@@ -20,6 +20,17 @@ const MAX_DELAY_MS = 60_000;
 /** A service that ran this long before stopping gets the short delay again. */
 const STEADY_MS = 60_000;
 const STOP_WAIT_MS = 10_000;
+const PARENT_CHECK_MS = 1_000;
+
+/** Whether a process still exists (one of another user's processes counts). */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 
 /** The environment the service runs in: what launchd and systemd units set, which a scheduled task cannot. */
 function serviceEnv(s: SupervisedService): NodeJS.ProcessEnv {
@@ -60,7 +71,9 @@ export function superviseService(s: SupervisedService): Promise<void> {
       const out = openSync(join(logs, "service.out.log"), "a");
       const err = openSync(errLog, "a");
       const startedAt = Date.now();
-      const c = spawn(process.execPath, [...process.execArgv, s.script, "serve", "--port", String(s.port)], { env: serviceEnv(s), stdio: ["ignore", out, err, "ipc"], windowsHide: true });
+      // Detached, so that a supervisor killed outright (Windows has no SIGTERM) does not take the
+      // service down with it mid-write: the closed channel asks the service to stop cleanly instead.
+      const c = spawn(process.execPath, [...process.execArgv, s.script, "serve", "--port", String(s.port)], { env: serviceEnv(s), stdio: ["ignore", out, err, "ipc"], windowsHide: true, detached: true });
       closeSync(out);
       closeSync(err);
       child = c;
@@ -75,9 +88,17 @@ export function superviseService(s: SupervisedService): Promise<void> {
       });
     };
 
+    // Ending the task (Task Scheduler, logoff, `jarvis stop`) ends the console host that started this
+    // process, not this process; so it watches that host and stops with it.
+    const parent = process.ppid;
+    const watch = setInterval(() => {
+      if (!alive(parent)) stop("the task that started it has ended");
+    }, PARENT_CHECK_MS);
+
     const stop = (why: string) => {
       if (stopping) return;
       stopping = true;
+      clearInterval(watch);
       note(`stopping (${why})`);
       if (timer) clearTimeout(timer);
       if (!child) return done();

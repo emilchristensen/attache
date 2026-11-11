@@ -179,7 +179,7 @@ describe("the entry point of the Windows logon task", () => {
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
   });
 
-  it("never leaves the service running when the supervisor itself is killed, as ending the task does", async () => {
+  it("stops the service cleanly when the supervisor itself is killed outright", async () => {
     const stateDir = join(tempDir("jarvis-supervised-"), "state");
     const supervisor = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("jarvis-supervised-home-")], {
       env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1" }),
@@ -189,5 +189,22 @@ describe("the entry point of the Windows logon task", () => {
     const service = await healthyService(stateDir);
     supervisor.kill("SIGKILL");
     await eventually("the service to stop without its supervisor", () => (alive(service.pid) ? null : true), 15_000);
+    expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
+  });
+
+  it("stops, with the service, when the console host the task started it in is gone, as ending the task leaves it", async () => {
+    const stateDir = join(tempDir("jarvis-supervised-"), "state");
+    const args = ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("jarvis-supervised-home-")];
+    // A stand-in for the console host: it starts the supervisor and is then ended without a word to it.
+    const host = spawn(process.execPath, ["-e", `require("node:child_process").spawn(process.execPath, ${JSON.stringify(args)}, { stdio: "ignore" }); setInterval(() => {}, 1000);`], {
+      env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1" }),
+      stdio: "ignore",
+    });
+    supervisors.push(host);
+    const service = await healthyService(stateDir);
+    host.kill("SIGKILL");
+    await eventually("the service to stop after its host", () => (alive(service.pid) ? null : true), 20_000);
+    expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
+    expect(readFileSync(join(stateDir, "logs", "service.err.log"), "utf8")).toContain("stopping (the task that started it has ended)");
   });
 });

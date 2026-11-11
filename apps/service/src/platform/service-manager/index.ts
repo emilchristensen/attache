@@ -17,6 +17,6 @@ export function serviceManagerFor(loc: PlatformLocations, instance: string): Ser
     case "linux":
       return new SystemdServiceManager(loc, serviceName(loc.os, instance));
     case "windows":
-      return new TaskSchedulerServiceManager(loc, serviceName(loc.os, instance));
+      return new TaskSchedulerServiceManager(loc, instance);
   }
 }

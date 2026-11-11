@@ -64,8 +64,10 @@ function windowsWrappers(spec: WrapperSpec): WrapperFile[] {
     },
     {
       path: win32.join(binDir, "jarvis-uninstall.cmd"),
-      // The uninstaller removes this very file; ending on the same line keeps cmd.exe from reading it again afterwards.
-      text: ["@echo off", "setlocal", setFullPath("JARVIS_PREFIX", at(spec.installPrefix)), setFullPath("JARVIS_STATE_DIR", at(spec.stateDir)), `set "JARVIS_INSTANCE=${instance}"`, `"${powershell}" -NoProfile -ExecutionPolicy Bypass -File "%JARVIS_PREFIX%\\current\\uninstall.ps1" %* & exit /b`, ""].join("\r\n"),
+      // The uninstaller deletes this very file, and cmd.exe reads a batch file again after every command.
+      // `(goto)` ends the batch first; the rest of the line, already expanded, still runs, and nothing is read again.
+      // So the pinned values go as arguments: the batch's own variables end with it.
+      text: ["@echo off", `(goto) 2>nul & "${powershell}" -NoProfile -ExecutionPolicy Bypass -File "${at(win32.join(current, "uninstall.ps1"))}" --prefix "${at(spec.installPrefix)}" --state-dir "${at(spec.stateDir)}" --instance ${instance} %*`, ""].join("\r\n"),
       mode: 0o755,
     },
   ];

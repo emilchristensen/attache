@@ -19,20 +19,32 @@ $Node = Join-Path $Here 'runtime\node.exe'
 $Service = Join-Path $Here 'service\jarvis-service.mjs'
 function Jarvis { & $Node $Service @args }
 
-if (-not $env:JARVIS_INSTANCE) { $env:JARVIS_INSTANCE = 'default' }
-$Prefix = if ($env:JARVIS_PREFIX) { $env:JARVIS_PREFIX } else { [string](Jarvis paths installPrefix) }
-# The same state folder the installer chose: `jarvis-uninstall` passes it on.
-$State = if ($env:JARVIS_STATE_DIR) { $env:JARVIS_STATE_DIR } elseif ($env:JARVIS_PREFIX) { Join-Path $env:JARVIS_PREFIX 'state' } else { [string](Jarvis paths stateDir) }
-$Current = Join-Path $Prefix 'current'
+# `jarvis-uninstall` passes the install, its state folder and instance as options (a batch file's own
+# variables end with it); the JARVIS_* variables are the fallback, as on macOS and Linux.
 $Delete = $false
 $Yes = $false
-foreach ($a in $args) {
-  switch ($a) {
+$Given = @{}
+for ($i = 0; $i -lt $args.Count; $i++) {
+  switch ($args[$i]) {
     '--delete-data' { $Delete = $true }
     '--yes' { $Yes = $true }
-    default { [Console]::Error.WriteLine("Unknown option $a"); exit 2 }
+    { $_ -in '--prefix', '--state-dir', '--instance' } {
+      if ($i + 1 -ge $args.Count) { [Console]::Error.WriteLine("$($args[$i]) needs a value"); exit 2 }
+      $Given[$args[$i]] = [string]$args[$i + 1]
+      $i++
+    }
+    default { [Console]::Error.WriteLine("Unknown option $($args[$i])"); exit 2 }
   }
 }
+if ($Given.ContainsKey('--instance')) { $env:JARVIS_INSTANCE = $Given['--instance'] }
+if ($Given.ContainsKey('--prefix')) { $env:JARVIS_PREFIX = [IO.Path]::GetFullPath($Given['--prefix']) }
+if ($Given.ContainsKey('--state-dir')) { $env:JARVIS_STATE_DIR = [IO.Path]::GetFullPath($Given['--state-dir']) }
+
+if (-not $env:JARVIS_INSTANCE) { $env:JARVIS_INSTANCE = 'default' }
+$Prefix = if ($env:JARVIS_PREFIX) { $env:JARVIS_PREFIX } else { [string](Jarvis paths installPrefix) }
+# The same state folder the installer chose.
+$State = if ($env:JARVIS_STATE_DIR) { $env:JARVIS_STATE_DIR } elseif ($env:JARVIS_PREFIX) { Join-Path $env:JARVIS_PREFIX 'state' } else { [string](Jarvis paths stateDir) }
+$Current = Join-Path $Prefix 'current'
 
 if (-not (Test-Path -LiteralPath (Join-Path $Current 'runtime\node.exe'))) {
   [Console]::Error.WriteLine("Jarvis is not installed in ${Prefix}: $Current is missing.")

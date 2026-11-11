@@ -20,7 +20,9 @@ describe("the Windows command wrappers", () => {
     const [jarvis, uninstall] = files.map((f) => f.text.split("\r\n"));
     expect(jarvis).toContain('if not defined JARVIS_STATE_DIR for %%p in ("%~dp0..\\state") do set "JARVIS_STATE_DIR=%%~fp"');
     expect(jarvis).toContain('"%~dp0..\\current\\bin\\jarvis.cmd" %*');
-    expect(uninstall).toContain('for %%p in ("%~dp0..") do set "JARVIS_PREFIX=%%~fp"');
+    expect(uninstall).toContain(
+      '(goto) 2>nul & "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\\current\\uninstall.ps1" --prefix "%~dp0.." --state-dir "%~dp0..\\state" --instance default %*',
+    );
   });
 
   it("go into the bin folder of the install they belong to, wherever it is", () => {

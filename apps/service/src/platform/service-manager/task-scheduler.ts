@@ -1,5 +1,5 @@
 import { win32 } from "node:path";
-import { windowsAppData, type Env, type PlatformLocations } from "../locations.ts";
+import { serviceName, windowsAppData, type Env, type PlatformLocations } from "../locations.ts";
 import { runPowerShell } from "../powershell.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
 
@@ -103,7 +103,22 @@ function Invoke-Request($req) {
       Register-ScheduledTask -TaskName $req.name -Xml $req.xml.Replace('${OWNER}', $owner) -Force | Out-Null
     }
     'start' { Start-ScheduledTask -TaskPath '\' -TaskName $req.name }
-    'stop' { if ($task) { Stop-ScheduledTask -TaskPath '\' -TaskName $req.name } }
+    'stop' {
+      if ($task) { Stop-ScheduledTask -TaskPath '\' -TaskName $req.name }
+      # Ending the task ends the console host, not the supervisor it started: that one notices and
+      # stops the service cleanly. Wait for it, and end it outright if it is still there after a while.
+      $mark = " --instance $($req.instance) "
+      $deadline = (Get-Date).AddSeconds(15)
+      while ($true) {
+        $left = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains(' service run ') -and $_.CommandLine.Contains($mark) })
+        if ($left.Count -eq 0) { break }
+        if ((Get-Date) -gt $deadline) {
+          foreach ($p in $left) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+          break
+        }
+        Start-Sleep -Milliseconds 250
+      }
+    }
     'uninstall' { if ($task) { Unregister-ScheduledTask -TaskPath '\' -TaskName $req.name -Confirm:$false } }
   }
   $now = Get-ScheduledTask -TaskPath '\' -TaskName $req.name -ErrorAction SilentlyContinue
@@ -116,17 +131,19 @@ export class TaskSchedulerServiceManager implements ServiceManager {
   readonly name: string;
   readonly definition = null;
   private readonly loc: PlatformLocations;
+  private readonly instance: string;
   private readonly env: Env;
 
-  constructor(loc: PlatformLocations, taskName: string, env: Env = process.env) {
+  constructor(loc: PlatformLocations, instance: string, env: Env = process.env) {
     this.loc = loc;
-    this.name = taskName;
+    this.instance = instance;
+    this.name = serviceName("windows", instance);
     this.env = env;
   }
 
   /** Run one operation on the task; returns the task's state afterwards (`Missing` when there is none). */
   private async task(op: string, extra: Record<string, string> = {}): Promise<string> {
-    const r = await runPowerShell(TASK_SCRIPT, { op, name: this.name, ...extra }, { env: this.env, timeoutMs: TASK_TIMEOUT_MS });
+    const r = await runPowerShell(TASK_SCRIPT, { op, name: this.name, instance: this.instance, ...extra }, { env: this.env, timeoutMs: TASK_TIMEOUT_MS });
     if (!r.ok) throw new Error(op === "state" ? `Task Scheduler could not say how the logon task ${this.name} is: ${r.why}` : `Task Scheduler could not ${op} the logon task ${this.name}: ${r.why}`);
     return String(r.reply.state);
   }

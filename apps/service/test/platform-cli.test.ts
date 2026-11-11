@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
 import { fakeSystemctl } from "./fixtures/fake-systemctl.ts";
@@ -137,7 +137,7 @@ describe("the command-line wrappers the installer puts on PATH", () => {
     mkdirSync(join(prefix, "current", "bin"), { recursive: true });
     writeFileSync(reporter, `const e = process.env; require("node:fs").appendFileSync(${JSON.stringify(reports)}, JSON.stringify({ state: e.JARVIS_STATE_DIR, prefix: e.JARVIS_PREFIX, instance: e.JARVIS_INSTANCE, port: e.JARVIS_PORT, args: process.argv.slice(2) }) + "\\n");\n`);
     writeFileSync(join(prefix, "current", "bin", "jarvis.cmd"), `@"${process.execPath}" "%~dp0..\\report.cjs" %*\r\n`);
-    writeFileSync(join(prefix, "current", "uninstall.ps1"), `& '${process.execPath}' (Join-Path $PSScriptRoot 'report.cjs') uninstall @args\r\nRemove-Item -LiteralPath (Join-Path $env:JARVIS_PREFIX 'bin\\jarvis-uninstall.cmd')\r\nexit 3\r\n`);
+    writeFileSync(join(prefix, "current", "uninstall.ps1"), `& '${process.execPath}' (Join-Path $PSScriptRoot 'report.cjs') uninstall @args\r\nRemove-Item -LiteralPath (Join-Path $PSScriptRoot '..\\bin\\jarvis-uninstall.cmd')\r\nexit 3\r\n`);
     const env = { USERPROFILE: home, LOCALAPPDATA: join(home, "AppData", "Local"), JARVIS_INSTANCE: "wraptest" };
     const installed = jarvis(["wrappers", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7999"], { env });
     expect(installed.stderr).toBe("");
@@ -156,7 +156,10 @@ describe("the command-line wrappers the installer puts on PATH", () => {
 
     // The uninstaller removes the wrapper that started it; its exit status still comes through.
     const uninstall = run(files[1]!, "--delete-data");
-    expect(lastReport()).toEqual({ prefix, state: join(prefix, "state"), instance: "wraptest", args: ["uninstall", "--delete-data"] });
+    // The batch file's own variables end with it, so the install, its state folder and instance go as options.
+    const { args } = lastReport();
+    expect(args).toEqual(["uninstall", "--prefix", expect.any(String), "--state-dir", expect.any(String), "--instance", "wraptest", "--delete-data"]);
+    expect([resolve(args[2]), resolve(args[4])]).toEqual([prefix, join(prefix, "state")]);
     expect(uninstall.stderr).toBe("");
     expect(uninstall.status).toBe(3);
 

@@ -105,8 +105,9 @@ The service's output goes to `service.out.log` and `service.err.log` in the stat
 The Windows service is a Task Scheduler task with a logon trigger for the owner's own account, running as the owner with limited rights (`InteractiveToken`, so it can reach the owner's Credential Manager and desktop), and needs no administrator rights to register.
 A task cannot set environment variables, and Task Scheduler does not restart a program that exits, so the task runs `jarvis service run` (`platform/service-manager/supervisor.ts`).
 It starts `jarvis serve` with the environment launchd and systemd units set (home folder, application data folders, state folder, instance, web folder), appends its output to `service.out.log` and `service.err.log`, and starts it again after a crash, 2 seconds later at first and backing off to a minute while it keeps failing.
-The service holds an IPC channel to its supervisor and shuts down cleanly when the channel closes, so it never outlives the task.
+The service is started detached, with an IPC channel to its supervisor, and shuts down cleanly when the channel closes, so it never outlives the task and is never killed mid-write with it.
 The task starts the bundled runtime through `conhost.exe --headless`, because a console program started by a task would otherwise open a window on the owner's desktop.
+Ending the task ends that console host but not the supervisor it started, so the supervisor stops itself once its parent is gone, and `jarvis stop` waits for it (ending it outright after 15 seconds).
 The service manager drives the task through Windows PowerShell's ScheduledTasks cmdlets, whose task states are the same in every display language.
 
 ### Machine identity and per-Machine evidence
