@@ -5,6 +5,7 @@ import { chunkTurns, renderTurns } from "../agents/transcripts.ts";
 import type { ProposalOrigin } from "../memory/proposals.ts";
 import { originSource } from "../memory/save.ts";
 import type { SourceRef } from "../memory/store.ts";
+import { quotedLines } from "./capture-text.ts";
 import { CONSOLIDATED_BY, MAX_INPUT_CHARS, consolidate, type PipelineResult } from "./pipeline.ts";
 
 export const CONSOLIDATION_JOB = "session-consolidate";
@@ -50,14 +51,14 @@ export async function runConsolidation(app: App, ctx: JobContext): Promise<Pipel
   });
 }
 
-/** The session's archived transcript, down to the line that holds the quoted evidence when it fits on one. */
+/** The session's archived transcript, down to the lines that hold the quoted evidence. */
 function citation(app: App, origin: ProposalOrigin, evidence: string): SourceRef | null {
   const source = originSource(app, origin);
   if (!source || !app.memory.exists(source.ref)) return source;
-  const quote = evidence.replace(/\s+/g, " ").trim().toLowerCase();
-  const line = app.memory
+  const lines = app.memory
     .read(source.ref)
     .split("\n")
-    .findIndex((l) => l.replace(/\s+/g, " ").toLowerCase().includes(quote));
-  return line >= 0 ? { ...source, lines: [line + 1, line + 1] } : source;
+    .map((text, i) => ({ text, line: i + 1 }));
+  const quoted = quotedLines(lines, evidence);
+  return quoted ? { ...source, lines: quoted } : source;
 }

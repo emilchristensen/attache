@@ -187,6 +187,20 @@ describe("Consolidation from a meeting capture", () => {
     expect(read(ORION)).toBe(before);
   });
 
+  it("what Consolidation drops from a meeting is reported as the meeting's, never a session's", async () => {
+    const rel = "evidence/captures/2026-11-11-granola-orion-retro.md";
+    const stop = consolidationReplies(() => ({
+      proposals: [{ item: { action: "update", path: ORION, facts: [{ subject: "Retro owner", value: "Priya" }] }, reason: "Made up.", evidence: "words nobody said in the retro" }],
+    }));
+    try {
+      writeIntoBrain(svc, rel, meetingCapture("Granola 2026-11-11: Orion retro", ["[0:01] Alex: Short retro today."]));
+      const job = await consolidated(svc, rel);
+      expect(job.result).toMatchObject({ capture: rel, proposals: 0, dropped: ["its evidence is not quoted from the meeting"] });
+    } finally {
+      stop();
+    }
+  });
+
   it("a meeting capture that states a different value for a current fact yields a correction, as a session does", async () => {
     const rel = "evidence/captures/2026-11-11-granola-orion-steering.md";
     const today = new Date().toISOString().slice(0, 10);

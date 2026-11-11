@@ -1,4 +1,7 @@
 import { NOTHING_DURABLE } from "../agents/summary.ts";
+import { SUBJECTS, type ConsolidationSubject } from "./subjects.ts";
+
+export type { ConsolidationSubject } from "./subjects.ts";
 
 /** The most Proposals Consolidation makes from one session or one meeting capture, so review stays quick. */
 export const CONSOLIDATION_MAX = 5;
@@ -12,23 +15,6 @@ export interface RelatedNote {
   title: string;
   facts: ReadonlyArray<{ subject: string; value: string; date: string; review?: string }>;
 }
-
-/** What Consolidation reads: a finished Harness session, or a meeting capture that arrived in the Brain. */
-export type ConsolidationSubject = "session" | "meeting";
-
-/** How the prompts name what is read, and what in it to leave out. */
-const SUBJECTS: Record<ConsolidationSubject, { noun: string; reads: string; ignore: string }> = {
-  session: {
-    noun: "session",
-    reads: "one finished Harness session",
-    ignore: "Ignore chatter, plans that were not agreed, file paths, command output, and facts the session only read back from memory.",
-  },
-  meeting: {
-    noun: "meeting",
-    reads: "the capture of one meeting: its notes and, when there is one, its transcript",
-    ignore: "Ignore small talk, ideas and plans that were not agreed, and what the meeting only repeated from before.",
-  },
-};
 
 const replyShape = (noun: string) => JSON.stringify({
   proposals: [
@@ -45,7 +31,7 @@ const replyShape = (noun: string) => JSON.stringify({
   ],
 });
 
-export function consolidationSystemPrompt(userName: string, today: string, subject: ConsolidationSubject = "session"): string {
+export function consolidationSystemPrompt(userName: string, today: string, subject: ConsolidationSubject): string {
   const { noun, reads, ignore } = SUBJECTS[subject];
   return [
     `You are the Consolidation step of Jarvis, ${userName}'s second brain: a set of Markdown notes, each with current facts (one value per subject) and a History of events.`,
@@ -65,8 +51,8 @@ export function consolidationSystemPrompt(userName: string, today: string, subje
   ].join("\n");
 }
 
-export function consolidationPrompt(input: { session: string; related: readonly RelatedNote[]; pending: readonly string[]; subject?: ConsolidationSubject }): string {
-  const noun = SUBJECTS[input.subject ?? "session"].noun;
+export function consolidationPrompt(input: { text: string; related: readonly RelatedNote[]; pending: readonly string[]; subject: ConsolidationSubject }): string {
+  const { noun, intro } = SUBJECTS[input.subject];
   const notes = input.related.length ? input.related.map(renderNote).join("\n\n") : "No note in the Brain looks related.";
   const pending = input.pending.length ? input.pending.map((p) => `- ${p}`).join("\n") : "None.";
   return [
@@ -76,8 +62,8 @@ export function consolidationPrompt(input: { session: string; related: readonly 
     "Changes already waiting for review (do not propose them again):",
     `<pending>\n${pending}\n</pending>`,
     "",
-    input.subject === "meeting" ? "The meeting capture follows between the markers." : "The session transcript follows between the markers.",
-    `<${noun}>\n${input.session}\n</${noun}>`,
+    intro,
+    `<${noun}>\n${input.text}\n</${noun}>`,
     "",
     `What should change in the Brain because of this ${noun}?`,
   ].join("\n");

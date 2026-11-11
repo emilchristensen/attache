@@ -3,13 +3,12 @@ import { HttpError } from "../http/router.ts";
 import { slugify } from "../memory/markdown.ts";
 import { normalizeRel } from "../memory/policy.ts";
 import { checkItems, type CheckedItem } from "../memory/save-items.ts";
+import { looseText as norm } from "../memory/same-text.ts";
 import type { MemoryStore } from "../memory/store.ts";
 import type { Candidate, Dropped } from "./reply.ts";
 
 type UpdateItem = Extract<MemorySaveItem, { action: "update" }>;
 
-/** Text compared as the owner would read it: case and spacing do not make two things different. */
-const norm = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
 /**
  * A fact value as the owner would read it: emphasis, quotes around it and a
  * closing full stop do not make it a different value, so a value the model
@@ -23,27 +22,27 @@ const plainValue = (value: string) =>
 
 /**
  * Keep only the candidates worth the owner's click, at most `limit` of them:
- * each must quote its evidence from the session, pass the same checks as a
+ * each must quote its evidence from what was read (`text`, named by `noun`), pass the same checks as a
  * save, and add something the Brain and the pending Proposals do not already
  * hold. Repeated parts are removed; a candidate with nothing left is dropped.
  */
 export function screenCandidates(
   memory: MemoryStore,
   candidates: readonly Candidate[],
-  context: { session: string; pending: readonly MemorySaveItem[]; limit: number },
+  context: { text: string; noun: string; pending: readonly MemorySaveItem[]; limit: number },
 ): { accepted: Candidate[]; dropped: Dropped[] } {
-  const session = norm(context.session);
+  const read = norm(context.text);
   const seen = new Set(context.pending.flatMap(keysOf));
   const accepted: Candidate[] = [];
   const dropped: Dropped[] = [];
   for (const c of candidates) {
-    const verdict = screenOne(memory, c, session, seen);
+    const verdict = screenOne(memory, c, { read, noun: context.noun }, seen);
     if ("problem" in verdict) {
       dropped.push(verdict);
       continue;
     }
     if (accepted.length >= context.limit) {
-      dropped.push({ problem: `more than ${context.limit} Proposals for one session` });
+      dropped.push({ problem: `more than ${context.limit} Proposals for one ${context.noun}` });
       continue;
     }
     accepted.push(verdict);
@@ -52,8 +51,8 @@ export function screenCandidates(
   return { accepted, dropped };
 }
 
-function screenOne(memory: MemoryStore, c: Candidate, session: string, seen: ReadonlySet<string>): Candidate | Dropped {
-  if (!session.includes(norm(c.evidence))) return { problem: "its evidence is not quoted from the session" };
+function screenOne(memory: MemoryStore, c: Candidate, source: { read: string; noun: string }, seen: ReadonlySet<string>): Candidate | Dropped {
+  if (!source.read.includes(norm(c.evidence))) return { problem: `its evidence is not quoted from the ${source.noun}` };
   let step: CheckedItem;
   try {
     [step] = checkItems(memory, [c.item]) as [CheckedItem];

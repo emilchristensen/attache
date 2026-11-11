@@ -1,6 +1,7 @@
 import { HttpError } from "../http/router.ts";
 import { parseStateEntries } from "./markdown.ts";
 import { isProtected } from "./policy.ts";
+import { sameText } from "./same-text.ts";
 import { noteHash, type MemoryChange, type MemoryStore } from "./store.ts";
 
 export type RevertCheck = { allowed: true; reason: null } | { allowed: false; reason: string };
@@ -13,7 +14,6 @@ export function isBrainChange(c: MemoryChange): boolean {
   return c.status === "applied" && c.change !== "proposal";
 }
 
-const sameText = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
 
 /**
  * Whether one click can undo a change, and in plain words why not. A change can

@@ -6,21 +6,16 @@ import type { ProposalOrigin } from "../memory/proposals.ts";
 import { factDay } from "../memory/review-date.ts";
 import type { SourceRef } from "../memory/store.ts";
 import { pendingLine } from "./pending.ts";
-import { CONSOLIDATION_MAX, consolidationPrompt, consolidationSystemPrompt, type ConsolidationSubject } from "./prompt.ts";
+import { CONSOLIDATION_MAX, consolidationPrompt, consolidationSystemPrompt } from "./prompt.ts";
 import { parseConsolidationReply, type Candidate, type Dropped } from "./reply.ts";
 import { relatedNotes } from "./related.ts";
 import { screenCandidates } from "./screen.ts";
+import { SUBJECTS, type ConsolidationSubject } from "./subjects.ts";
 
 /** Who Consolidation's Proposals are from, in the Dashboard and in the change log. */
 export const CONSOLIDATED_BY = "Consolidation";
 /** The most text one model call reads; longer input is read in parts, so an early decision is never skipped. */
 export const MAX_INPUT_CHARS = 100_000;
-
-/** How each subject is named where the pipeline reports on it. */
-const WORDING: Record<ConsolidationSubject, { noModel: string; source: string; reading: string }> = {
-  session: { noModel: "No model is connected, so Jarvis made no Proposals from this session.", source: "session", reading: "Reading the session" },
-  meeting: { noModel: "No model is connected, so Jarvis made no Proposals from this meeting capture.", source: "capture", reading: "Reading the meeting" },
-};
 
 /** One thing Consolidation reads, and what differs between a session and a meeting capture. */
 export interface ConsolidationSource {
@@ -53,13 +48,14 @@ export type PipelineResult = { proposals: number; dropped: string[] } | { propos
  */
 export async function consolidate(app: App, ctx: JobContext, source: ConsolidationSource): Promise<PipelineResult> {
   const { subject } = source;
+  const wording = SUBJECTS[subject];
   const model = await app.model();
   if (!model) {
-    app.log.info(WORDING[subject].noModel, source.logFields);
-    return { proposals: 0, skipped: "no model", message: WORDING[subject].noModel };
+    app.log.info(wording.noModel, source.logFields);
+    return { proposals: 0, skipped: "no model", message: wording.noModel };
   }
   const room = CONSOLIDATION_MAX - source.made().length;
-  if (room <= 0) return { proposals: 0, skipped: `this ${WORDING[subject].source} already has ${CONSOLIDATION_MAX} Proposals` };
+  if (room <= 0) return { proposals: 0, skipped: `this ${wording.source} already has ${CONSOLIDATION_MAX} Proposals` };
 
   ctx.progress(0.1, "Finding related notes");
   const related = relatedNotes(app.db, app.memory, source.queries);
@@ -68,10 +64,10 @@ export async function consolidate(app: App, ctx: JobContext, source: Consolidati
   const candidates: Candidate[] = [];
   const dropped: Dropped[] = [];
   for (const [i, text] of parts.entries()) {
-    ctx.progress(0.2 + (0.6 * i) / parts.length, parts.length > 1 ? `Reading part ${i + 1} of ${parts.length}` : WORDING[subject].reading);
+    ctx.progress(0.2 + (0.6 * i) / parts.length, parts.length > 1 ? `Reading part ${i + 1} of ${parts.length}` : wording.reading);
     const reply = await complete(model, {
       system: consolidationSystemPrompt(source.userName, factDay(), subject),
-      messages: [{ role: "user", content: consolidationPrompt({ session: text, related, pending: pending.map(pendingLine), subject }) }],
+      messages: [{ role: "user", content: consolidationPrompt({ text, related, pending: pending.map(pendingLine), subject }) }],
       maxTokens: 2_000,
       signal: ctx.signal,
     });
@@ -80,7 +76,7 @@ export async function consolidate(app: App, ctx: JobContext, source: Consolidati
     dropped.push(...parsed.dropped);
   }
 
-  const screened = screenCandidates(app.memory, candidates, { session: parts.join("\n\n"), pending, limit: room });
+  const screened = screenCandidates(app.memory, candidates, { text: parts.join("\n\n"), noun: wording.noun, pending, limit: room });
   const problems = [...dropped, ...screened.dropped].map((d) => d.problem);
   if (problems.length) app.log.info("Consolidation dropped model output", { ...source.logFields, dropped: problems });
   const ids = await ctx.effect(
