@@ -51,11 +51,11 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm test
 
-      # The journeys use the installed Google Chrome channel; the runner images ship it.
+      # The journeys use the installed Google Chrome channel (playwright.config.ts).
       - name: Google Chrome
         id: chrome
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npx playwright install chrome || npx playwright install --force chrome
+        run: npx playwright install chrome
 
       - name: Browser journeys
         if: ${{ !cancelled() && steps.chrome.outcome == 'success' }}
