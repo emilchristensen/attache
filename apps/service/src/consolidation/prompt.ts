@@ -10,7 +10,7 @@ export interface RelatedNote {
   path: string;
   type: string;
   title: string;
-  facts: ReadonlyArray<{ subject: string; value: string; review?: string }>;
+  facts: ReadonlyArray<{ subject: string; value: string; date: string; review?: string }>;
 }
 
 const REPLY_SHAPE = JSON.stringify({
@@ -35,7 +35,8 @@ export function consolidationSystemPrompt(userName: string, today: string): stri
     "Propose only what the session states and what will still matter weeks from now: decisions and their reasons, changed facts about projects, people and systems, and events worth keeping in a note's History.",
     "Ignore chatter, plans that were not agreed, file paths, command output, and facts the session only read back from memory.",
     "Never propose a fact a note already holds with the same value, or a change already waiting for review.",
-    "When the session contradicts a current fact, propose the new value for that same subject, and say in the reason what changed.",
+    "A correction: when the session states a different value for a current fact of a related note, propose the new value for that same subject in that note, quote the words that state it as the evidence, and say in the reason what changed and why; the reason is kept in the note's History beside the old value.",
+    "A session that mentions or repeats a current fact, or works with it as it stands, is not a correction: propose nothing for that fact.",
     "Prefer updating one of the related notes, by its exact path; create a note only when none of them fits, and give a new note every fact it needs in one Proposal.",
     `Propose at most ${CONSOLIDATION_MAX} changes, the most important first.`,
     `Every Proposal cites its evidence: one passage of at most ${EVIDENCE_MAX_CHARS} characters, copied word for word from the session.`,
@@ -64,6 +65,6 @@ export function consolidationPrompt(input: { session: string; related: readonly 
 }
 
 function renderNote(n: RelatedNote): string {
-  const facts = n.facts.length ? n.facts.map((f) => `- ${f.subject}: ${f.value}${f.review ? ` (review ${f.review})` : ""}`).join("\n") : "- (no current facts)";
+  const facts = n.facts.length ? n.facts.map((f) => `- ${f.subject}: ${f.value} (since ${f.date}${f.review ? `, review ${f.review}` : ""})`).join("\n") : "- (no current facts)";
   return `${n.path} (${n.type}: ${n.title})\n${facts}`;
 }

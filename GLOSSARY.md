@@ -54,6 +54,11 @@ _Avoid_: Suggestion, pending change, draft
 Jarvis reading finished work, such as a Harness session or a meeting capture, and making Proposals from it.
 _Avoid_: Distillation, auto-save, learning
 
+**Correction**:
+A change that gives a current fact a different value; the old value moves to the note's History with the reason.
+A fact that is only mentioned or repeated is not corrected.
+_Avoid_: Overwrite, fix, edit
+
 **Review date**:
 The day after which a fact should be checked again.
 A fact past its Review date stays in the Brain and is shown as unverified.

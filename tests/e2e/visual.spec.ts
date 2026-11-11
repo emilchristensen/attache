@@ -119,6 +119,12 @@ test("screens", async ({ browser }) => {
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion", review: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10) }] }], { agent: "codex", session: "thread-visual-2" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Fridays", reason: "new rhythm" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "A short call on Fridays", reason: "changed again" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  // A pending correction, so the review list shows an old value struck through beside the new one.
+  await page.evaluate(async () => {
+    const item = { action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Mondays again", reason: "The Friday call clashed with the release meeting." }] };
+    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "The Friday call clashed with the release meeting.", evidence: "Priya asked to go back to written updates on Mondays." }) });
+    if (!res.ok) throw new Error(`propose failed: ${res.status}`);
+  });
   // Claude Code connected with auto-accept on, and one auto-accepted save, so Settings and Recent saves show both.
   await page.evaluate(async () => {
     const call = async (method: string, path: string, body: unknown) => {

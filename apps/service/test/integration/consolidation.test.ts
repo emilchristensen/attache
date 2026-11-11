@@ -264,6 +264,107 @@ describe("Consolidation from a Harness session", () => {
   });
 });
 
+describe("Corrections for contradicted facts", () => {
+  const ATLAS = "memory/projects/atlas-launch.md";
+  const today = () => new Date().toISOString().slice(0, 10);
+  beforeAll(async () => {
+    await svc.post("/memory/save", { items: [{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "1 March 2027" }, { subject: "Owner", value: "Priya" }, { subject: "Region", value: "EU only" }] }] });
+  });
+
+  it("a session that states a different value for a current fact yields a correction with the old value, the new value and the evidence, and approving it moves the old value to History with the reason", async () => {
+    const quote = "The Atlas launch moves to 15 April 2027";
+    const reason = "The session moved the Atlas launch from March to April.";
+    const stop = consolidationReplies((call) => {
+      // The model sees the fact the session contradicts, with its current value.
+      expect(call.user).toContain(ATLAS);
+      expect(call.user).toContain("Launch date: 1 March 2027");
+      return { proposals: [{ item: { action: "update", path: ATLAS, facts: [{ subject: "Launch date", value: "15 April 2027" }] }, reason, evidence: quote }] };
+    });
+    try {
+      await endSession("s-correct", [["When does Atlas launch?", `We decided it today: ${quote}, because the vendor slipped.`]]);
+    } finally {
+      stop();
+    }
+    const [p, ...rest] = await proposalsFrom("s-correct");
+    expect(rest).toEqual([]);
+    expect(p).toMatchObject({
+      status: "proposed",
+      target: ATLAS,
+      reason,
+      evidence: quote,
+      corrections: [{ subject: "Launch date", was: { value: "1 March 2027", date: today(), review: null }, value: "15 April 2027" }],
+    });
+    await svc.post(`/memory/proposals/${p!.id}/apply`);
+    const [current, history] = note(ATLAS).split("## History");
+    expect(current).toContain(`- **Launch date** (${today()}): 15 April 2027`);
+    expect(current).not.toContain("1 March 2027");
+    expect(history).toContain(`**Launch date** was "1 March 2027" (dated ${today()}`);
+    expect(history).toContain(`superseded: ${reason}`);
+  });
+
+  it("a correction whose old value changed before the owner decided is refused and stays pending, so it never replaces a value the owner was not shown", async () => {
+    const quote = "Lars owns Atlas from now on";
+    const stop = consolidationReplies(() => ({ proposals: [{ item: { action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Lars" }] }, reason: "The session handed Atlas to Lars.", evidence: quote }] }));
+    try {
+      await endSession("s-correct-stale", [["Who owns Atlas?", `We decided that ${quote}.`]]);
+    } finally {
+      stop();
+    }
+    const [p] = await proposalsFrom("s-correct-stale");
+    expect(p!.corrections).toEqual([{ subject: "Owner", was: { value: "Priya", date: today(), review: null }, value: "Lars" }]);
+    // The owner changes the fact from a Harness before deciding on the Proposal.
+    await svc.post("/memory/save", { items: [{ action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Mette", reason: "Priya moved team." }] }] });
+    const before = note(ATLAS);
+    const refused = await svc.call("POST", `/memory/proposals/${p!.id}/apply`);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.message).toContain('it now says "Mette", not "Priya"');
+    expect(note(ATLAS)).toBe(before);
+    expect((await proposalsFrom("s-correct-stale")).map((q) => q.status)).toEqual(["proposed"]);
+    expect((await svc.post<ProposalView>(`/memory/proposals/${p!.id}/reject`)).status).toBe("rejected");
+  });
+
+  it("a session that only repeats a current fact yields nothing, however the model writes the value back", async () => {
+    const quote = "Atlas stays EU only, as before";
+    const before = note(ATLAS);
+    const stop = consolidationReplies(() => ({
+      proposals: ["EU only.", '"EU only"', "**EU only**", "  eu   ONLY "].map((value) => ({ item: { action: "update", path: ATLAS, facts: [{ subject: "region", value }] }, reason: "The session confirmed the region.", evidence: quote })),
+    }));
+    try {
+      const r = await endSession("s-repeat-fact", [["Where does Atlas run?", `We decided nothing new: ${quote}.`]]);
+      expect(r.consolidate?.result).toMatchObject({ proposals: 0 });
+    } finally {
+      stop();
+    }
+    expect(await proposalsFrom("s-repeat-fact")).toEqual([]);
+    expect(note(ATLAS)).toBe(before);
+  });
+
+  it("a fact that is mentioned but not contradicted yields nothing, while what the session did decide is still proposed", async () => {
+    const quote = "Sofie leads the Atlas launch comms";
+    const stop = consolidationReplies((call) => {
+      // The model is told that a mention is not a contradiction.
+      expect(call.system).toMatch(/mentions or repeats a current fact[^\n]*is not a correction/);
+      return {
+        proposals: [
+          { item: { action: "update", path: ATLAS, facts: [{ subject: "Region", value: "EU only" }, { subject: "Comms lead", value: "Sofie" }] }, reason: "The session named the comms lead.", evidence: quote },
+          { item: { action: "update", path: ATLAS, facts: [{ subject: "Region", value: "EU only." }] }, reason: "The session mentioned the region.", evidence: "the EU only launch" },
+        ],
+      };
+    });
+    try {
+      const r = await endSession("s-mention", [["Who does comms?", `For the EU only launch, we decided ${quote}.`]]);
+      expect(r.consolidate?.result).toMatchObject({ proposals: 1 });
+    } finally {
+      stop();
+    }
+    const made = await proposalsFrom("s-mention");
+    expect(made.map((p) => ({ item: p.item, corrections: p.corrections }))).toEqual([
+      { item: { action: "update", path: ATLAS, facts: [{ subject: "Comms lead", value: "Sofie", reason: "The session named the comms lead." }] }, corrections: [] },
+    ]);
+    await svc.post(`/memory/proposals/${made[0]!.id}/reject`);
+  });
+});
+
 describe("Consolidation without a model", () => {
   let bare: TestService;
   beforeAll(async () => {

@@ -2,6 +2,7 @@ import { MemorySaveInput, MemorySaveItem, SourceRefInput, type ProposalView } fr
 import { z } from "zod";
 import { latestDecision, ReviewMachine } from "../review-state/decisions.ts";
 import { reviewPath } from "../review-state/files.ts";
+import { CorrectionRecord } from "./proposal-corrections.ts";
 import type { SourceRef } from "./store.ts";
 
 /** Proposals' folder inside the review-state area: `review/proposals/`. */
@@ -40,6 +41,8 @@ export const ProposalRecord = z.object({
   origin: MemorySaveInput.shape.origin.unwrap().nullable().default(null),
   /** The words in the cited evidence the change rests on, quoted from it. */
   evidence: z.string().nullable().default(null),
+  /** The current facts it gives a different value, as the note held them when it was made. */
+  corrections: z.array(CorrectionRecord).default([]),
   /** Checked when read, so a Proposal whose item no longer validates still lists and can be rejected. */
   item: z.unknown(),
   decisions: z.array(ProposalDecision).default([]),
@@ -75,6 +78,7 @@ export function toProposalView(record: ProposalRecord): ProposalView {
     reason: record.reason,
     source: record.sourceText,
     evidence: record.evidence,
+    corrections: record.corrections,
     proposedBy: record.proposedBy,
     createdAt: record.createdAt,
     decidedAt: last?.at ?? null,
@@ -84,10 +88,14 @@ export function toProposalView(record: ProposalRecord): ProposalView {
 }
 
 /** One line saying what a Proposal changes, for lists such as the briefing. */
-export function proposalHeadline(record: Pick<ProposalRecord, "item">): string {
+export function proposalHeadline(record: Pick<ProposalRecord, "item" | "corrections">): string {
   const item = proposalItem(record);
   if (!item) return "A Proposal that can no longer be read";
-  const facts = (item.facts ?? []).map((f) => `${f.subject}: ${f.value}${f.review ? ` (review after ${f.review})` : ""}`);
+  const was = (subject: string) => record.corrections.find((c) => c.subject.toLowerCase() === subject.toLowerCase())?.was.value;
+  const facts = (item.facts ?? []).map((f) => {
+    const old = was(f.subject);
+    return `${f.subject}: ${old === undefined ? "" : `${old} → `}${f.value}${f.review ? ` (review after ${f.review})` : ""}`;
+  });
   const events = item.events?.length ?? 0;
   const parts = [...facts, ...(events ? [`${events} event${events === 1 ? "" : "s"}`] : [])].join("; ");
   const line = item.action === "create" ? `New ${item.type} "${item.title}" (${parts})` : parts;

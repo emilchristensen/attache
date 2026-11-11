@@ -145,6 +145,10 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
 - **Consolidation:** when the session log entry holds something durable, Jarvis reads the session again, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*.
   Each names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
   A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+  When a session states a different value for a fact a note already holds, the Proposal is a correction: it shows the current value struck through beside the new one, with the reason and the evidence.
+  Applying it moves the old value to the note's *History* with that reason.
+  A session that only mentions or repeats a fact proposes nothing for it.
+  If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
   Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
   It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
 - **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).

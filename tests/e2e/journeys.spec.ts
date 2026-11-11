@@ -399,7 +399,10 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   const review = page.getByRole("region", { name: /Memory changes to review/ });
   const card = review.locator(`[data-proposal="${update.id}"]`);
   await expect(card.getByText(`Update ${VENDOR}`)).toBeVisible();
-  await expect(card.locator('[data-part="fact"]')).toHaveText([/Decision: Use Postmark from January 2027 \(Contract signed\)/, /Owner: Procurement \(Named in the contract\)/]);
+  // A fact the note already holds with another value shows as a correction: the old value and the new one.
+  await expect(card.locator('[data-part="correction"]')).toHaveText([/Correction\s*Decision: Switch to Postmark for 2027 → Use Postmark from January 2027 \(Contract signed\)/]);
+  await expect(card.locator('[data-part="correction"] del')).toHaveText("Switch to Postmark for 2027");
+  await expect(card.locator('[data-part="fact"]')).toHaveText([/Owner: Procurement \(Named in the contract\)/]);
   await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
   await expect(card.locator("[data-evidence]")).toHaveText(/Evidence\s*Procurement signed the Postmark contract this morning\./);
   await expect(card).toContainText("Why: Vendor review session");
