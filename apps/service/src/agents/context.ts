@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
+import type { SearchCommand } from "./search-command.ts";
 
 /**
  * The memory block a Harness receives when a session starts. Built by the
@@ -17,7 +18,7 @@ export interface ContextInput {
   identity: { name: string; email?: string; role?: string } | null;
   /** Every curated note, most recently updated first. */
   notes: ReadonlyArray<{ type: string; title: string }>;
-  searchCommand: string;
+  searchCommand: SearchCommand;
   /** The project whose repository the session runs in; absent in the global context. */
   project?: ProjectSection;
 }
@@ -92,7 +93,8 @@ function render(c: ContextInput, shown: Shown, all: Shown): string {
   const out = header(c);
   if (c.project) out.push(...projectLines(c.project, shown, c));
   out.push(...indexLines(c.notes, shown.titles));
-  out.push("", "### Deeper recall", "", "Nothing else from the Brain is loaded. When a topic matters, search Jarvis instead of guessing; results cite file and line in the data folder:", "", `    ${c.searchCommand} "your query"`);
+  out.push("", "### Deeper recall", "", "Nothing else from the Brain is loaded. When a topic matters, search Jarvis instead of guessing; results cite file and line in the data folder:", "", `    ${c.searchCommand.line} "your query"`);
+  if (c.searchCommand.powershell) out.push("", "In PowerShell, start it with the call operator:", "", `    ${c.searchCommand.powershell} "your query"`);
   const cut = cutNotice(shown, all);
   if (cut) out.push("", cut);
   return out.join("\n") + "\n";

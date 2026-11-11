@@ -440,6 +440,7 @@ Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `line
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
+The command (`agents/search-command.ts`) runs as written in a POSIX shell, Git Bash and cmd.exe; on Windows the context also gives it after PowerShell's call operator `&`, because PowerShell reads a quoted program path as a string.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
 For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the project's context, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
 A project's context (`agents/context.ts`, read from the Brain by `agents/context-sources.ts`) holds the project's full current state, the decisions and people linked to it, its session-log entries from the latest 14 days of logs, and then the global index.
