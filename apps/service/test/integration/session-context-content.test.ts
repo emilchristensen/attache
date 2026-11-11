@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 
 /**
  * What the session context holds (spec seam 2): the session-start hook, run
@@ -21,7 +22,7 @@ afterEach(async () => {
 
 const day = (ago: number) => new Date(Date.now() - ago * 86_400_000).toISOString().slice(0, 10);
 
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" });
 
 let repos = 0;
 /** A local repository whose `origin` is `remote`; nothing is ever fetched. */
@@ -37,7 +38,7 @@ function repo(remote: string): string {
 function sessionStart(cwd: string): string {
   const s = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
   const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
-  const out = execFileSync("/bin/sh", ["-lc", command], { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, HOME }, encoding: "utf8" });
+  const out = runInShell(hookShell("claude-code"), command, { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, ...homeEnv(HOME) } });
   return out.trim() ? (JSON.parse(out).hookSpecificOutput.additionalContext as string) : "";
 }
 
