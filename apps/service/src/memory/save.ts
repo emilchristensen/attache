@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { MemorySaveInput, MemorySaveResult } from "@jarvis/contracts";
 import type { App } from "../app.ts";
@@ -6,7 +7,7 @@ import { integrationFor } from "../agents/integrations.ts";
 import { slugify } from "./markdown.ts";
 import { isProtected, normalizeRel } from "./policy.ts";
 import { HttpError } from "../http/router.ts";
-import { formatSource, type SourceRef } from "./store.ts";
+import { formatSource, type ChangeMeta, type SourceRef } from "./store.ts";
 
 /**
  * Apply what the user asked a coding agent to save. Every item is checked
@@ -28,6 +29,7 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
   const source = originSource(app, input.origin);
   const label = source ? formatSource(source) : null;
   const withSource = (text: string) => (label ? `${text} (source: ${label})` : text);
+  const meta: ChangeMeta = { harness: input.origin?.agent ?? null, sessionId: input.origin?.sessionId || null, batchId: randomUUID() };
   const saved: MemorySaveResult["saved"] = [];
   for (const step of plan) {
     if (step.action === "create") {
@@ -35,13 +37,15 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
       const { relPath } = app.memory.createMemory(
         { type: item.type, title: item.title, state: item.facts, ...(item.notes?.trim() ? { notes: item.notes } : {}), sources: source ? [source] : [], provenance: "agent-saved", ...(item.tags?.length ? { tags: item.tags } : {}) },
         "user",
+        {},
+        meta,
       );
-      for (const e of item.events ?? []) app.memory.appendEvent(relPath, withSource(e), "user");
+      for (const e of item.events ?? []) app.memory.appendEvent(relPath, withSource(e), "user", meta);
       saved.push({ action: "created", relPath, absPath: join(root, relPath), title: item.title, facts: item.facts.length, events: item.events?.length ?? 0 });
     } else {
       const { item, relPath, title } = step;
-      for (const f of item.facts ?? []) app.memory.correct(relPath, { subject: f.subject, value: f.value, reason: f.reason, ...(source ? { source } : {}) }, "user");
-      for (const e of item.events ?? []) app.memory.appendEvent(relPath, withSource(e), "user");
+      for (const f of item.facts ?? []) app.memory.correct(relPath, { subject: f.subject, value: f.value, reason: f.reason, ...(source ? { source } : {}) }, "user", {}, meta);
+      for (const e of item.events ?? []) app.memory.appendEvent(relPath, withSource(e), "user", meta);
       saved.push({ action: "updated", relPath, absPath: join(root, relPath), title, facts: item.facts?.length ?? 0, events: item.events?.length ?? 0 });
     }
   }

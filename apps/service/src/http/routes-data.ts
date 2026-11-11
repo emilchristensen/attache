@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, type FeatureId, type RecentChangesResult } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -13,6 +13,8 @@ import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
 import { saveToMemory } from "../memory/save.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
+import { recentChanges } from "../memory/recent-changes.ts";
+import { revertChange } from "../memory/revert.ts";
 
 export function requireFeature(app: App, id: FeatureId) {
   if (!app.featureEnabled(id)) throw new HttpError(409, "feature_disabled", `${app.featureLabel(id)} is turned off. Turn it on in Settings.`, { feature: id });
@@ -168,6 +170,20 @@ export function registerDataRoutes(r: Router, app: App) {
     app.memory.replaceNotes(input.relPath, input.notes);
     app.bus.emit("event", { type: "memory.changed" });
     return app.memory.describe(input.relPath);
+  });
+  r.get("/memory/recent-changes", (c): RecentChangesResult => {
+    requireFeature(app, "recall");
+    requireData(app);
+    const limit = Number(c.query("limit") ?? 50);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "invalid_request", "limit must be a whole number between 1 and 200");
+    return { changes: recentChanges(app.db, app.memory, limit) };
+  });
+  r.post("/memory/changes/:id/revert", (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const change = revertChange(app.memory, c.params.id!);
+    app.bus.emit("event", { type: "memory.changed" });
+    return { change: recentChanges(app.db, app.memory, 1).find((v) => v.id === change.id) ?? null };
   });
   r.get("/memory/changes", (c) => app.memory.listChanges({ ...(c.query("status") ? { status: c.query("status")! } : {}), limit: Number(c.query("limit") ?? 100) }));
   r.post("/memory/proposals", async (c) => {

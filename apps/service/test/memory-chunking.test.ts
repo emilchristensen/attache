@@ -129,12 +129,11 @@ describe("upgrading an index built by an earlier version", () => {
   it("re-chunks every document on the next scan", () => {
     const { db, store } = setup();
     bigProject(store);
-    const version = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
     store.indexer.scan(store.rootRef!);
     expect(store.indexer.scan(store.rootRef!).indexed).toBe(0);
-    // Replay the migration that invalidates the index, as an upgrade from the previous version would.
-    db.exec(`pragma user_version = ${version - 1}`);
-    migrate(db);
+    // Replay the migration that invalidates the index (schema version 4), as an upgrade from version 3 would.
+    db.exec("pragma user_version = 3");
+    migrate(db, 4);
     const rescanned = store.indexer.scan(store.rootRef!);
     expect(rescanned.indexed).toBeGreaterThan(0);
     expect(rescanned.unchanged).toBe(0);

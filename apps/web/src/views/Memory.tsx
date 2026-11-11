@@ -3,6 +3,7 @@ import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
+import { RecentSaves } from "./RecentSaves.tsx";
 
 interface Hit {
   chunkId: number;
@@ -310,6 +311,7 @@ export function MemoryView() {
       </div>
       {capturing && <Capture onDone={() => { setCapturing(false); list.reload(); }} />}
       <ReviewQueue />
+      <RecentSaves />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search memory and notes" aria-label="Search memory" />

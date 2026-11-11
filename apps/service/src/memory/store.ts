@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkS
 import { dirname, join } from "node:path";
 import { type Db, nowIso, json } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
-import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
+import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
@@ -36,6 +36,8 @@ export interface IndexedDocument {
 
 export interface MemoryChange {
   id: string;
+  /** Insertion order: a later change has a higher number, even within one millisecond. */
+  seq: number;
   docRelPath: string;
   change: "create" | "correct" | "append" | "proposal" | "delete";
   subject: string | null;
@@ -47,6 +49,23 @@ export interface MemoryChange {
   status: "applied" | "proposed" | "rejected";
   createdAt: string;
   decidedAt: string | null;
+  /** The Harness (integration kind) and session a save came from, when it came from one. */
+  harness: string | null;
+  sessionId: string | null;
+  /** Shared by every change one save made, so a created note's own events do not block reverting it. */
+  batchId: string | null;
+  /** The change this one reverted. */
+  reverts: string | null;
+  /** SHA-256 of the note right after this change, to tell whether anything touched it since. */
+  docHash: string | null;
+}
+
+/** Where a change came from, recorded with it in the change log. */
+export interface ChangeMeta {
+  harness?: string | null;
+  sessionId?: string | null;
+  batchId?: string | null;
+  reverts?: string | null;
 }
 
 const README = `# Jarvis data folder
@@ -188,15 +207,16 @@ export class MemoryStore {
     return rel;
   }
 
-  private recordChange(c: Omit<MemoryChange, "id" | "createdAt" | "decidedAt"> & { decidedAt?: string | null }): MemoryChange {
-    const change: MemoryChange = { id: randomUUID(), createdAt: nowIso(), decidedAt: c.decidedAt ?? (c.status === "applied" ? nowIso() : null), ...c };
+  private recordChange(c: Omit<MemoryChange, "id" | "seq" | "createdAt" | "decidedAt" | keyof ChangeMeta | "docHash"> & { decidedAt?: string | null }, meta: ChangeMeta = {}): MemoryChange {
+    const id = randomUUID();
+    const docHash = c.status === "applied" && this.exists(c.docRelPath) ? noteHash(this.read(c.docRelPath)) : null;
     this.db
       .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at)
-         values (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(change.id, change.docRelPath, change.change, change.subject, change.beforeValue, change.afterValue, change.reason, change.source, change.actor, change.status, change.createdAt, change.decidedAt);
-    return change;
+      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash);
+    return this.getChange(id)!;
   }
 
   // ---- memory notes ----------------------------------------------------------
@@ -205,6 +225,7 @@ export class MemoryStore {
     input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[] },
     actor: WriteActor,
     opts: { approvedProposal?: boolean } = {},
+    meta: ChangeMeta = {},
   ): { relPath: string } {
     const dir = `memory/${input.type === "person" ? "people" : input.type + "s"}`;
     const rel = this.uniquePath(dir, slugify(input.title));
@@ -226,7 +247,7 @@ export class MemoryStore {
       history: [...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)), `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
     });
     this.writeFile(rel, doc, actor, opts);
-    this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+    this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" }, meta);
     return { relPath: rel };
   }
 
@@ -234,7 +255,7 @@ export class MemoryStore {
    * Correct one current fact. The previous value is kept in History with its
    * date and source; the index is updated immediately so the next answer sees it.
    */
-  correct(rel: string, input: { subject: string; value: string; reason: string; source?: SourceRef }, actor: WriteActor, opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {}): MemoryChange {
+  correct(rel: string, input: { subject: string; value: string; reason: string; source?: SourceRef }, actor: WriteActor, opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {}, meta: ChangeMeta = {}): MemoryChange {
     const n = normalizeRel(rel);
     const raw = this.read(n);
     const sourceLabel = input.source ? formatSource(input.source) : actor === "user" ? "user correction" : undefined;
@@ -251,14 +272,48 @@ export class MemoryStore {
       source: sourceLabel ?? null,
       actor,
       status: "applied",
-    });
+    }, meta);
   }
 
-  appendEvent(rel: string, text: string, actor: WriteActor): void {
+  /**
+   * Take one subject out of Current State. The removed value is kept in History
+   * with its date and source, as a correction keeps the value it replaces.
+   */
+  removeFact(rel: string, input: { subject: string; reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
+    const n = normalizeRel(rel);
+    const { text, removed } = removeStateEntry(this.read(n), { subject: input.subject, date: today() }, input.reason);
+    if (!removed) throw new PolicyError(`${n} has no current “${input.subject}”`, "invalid_path");
+    this.writeFile(n, bumpFrontmatter(text, { updated: today() }), actor);
+    return this.recordChange({ docRelPath: n, change: "correct", subject: removed.subject, beforeValue: removed.value, afterValue: null, reason: input.reason, source: null, actor, status: "applied" }, meta);
+  }
+
+  appendEvent(rel: string, text: string, actor: WriteActor, meta: ChangeMeta = {}): void {
     const n = normalizeRel(rel);
     const raw = this.read(n);
     this.writeFile(n, appendHistory(raw, `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`), actor);
-    this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: text, reason: null, source: null, actor, status: "applied" });
+    this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: text, reason: null, source: null, actor, status: "applied" }, meta);
+  }
+
+  /**
+   * Remove a curated note from the Brain and from search. The change log keeps
+   * the whole file, so the removal itself can be undone.
+   */
+  deleteMemory(rel: string, input: { reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
+    const n = normalizeRel(rel);
+    if (!n.startsWith("memory/")) throw new PolicyError(`Only curated memory notes can be removed: ${n}`, "invalid_path");
+    assertWritable(n, actor);
+    const raw = this.read(n);
+    unlinkSync(resolveInside(this.requireRoot(), n));
+    this.indexer.removeFile(this.rootRef!.id, n);
+    return this.recordChange({ docRelPath: n, change: "delete", subject: null, beforeValue: raw, afterValue: null, reason: input.reason, source: null, actor, status: "applied" }, meta);
+  }
+
+  /** Put a removed note back exactly as it was. */
+  restoreMemory(rel: string, raw: string, input: { reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
+    const n = normalizeRel(rel);
+    if (this.exists(n)) throw new PolicyError(`${n} already exists`, "invalid_path");
+    this.writeFile(n, raw, actor);
+    return this.recordChange({ docRelPath: n, change: "create", subject: null, beforeValue: null, afterValue: parseMarkdown(raw, n).title, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
   /** Edit a note's free-text body (Notes section) as the user. */
@@ -318,24 +373,29 @@ export class MemoryStore {
   }
 
   getChange(id: string): MemoryChange | null {
-    const r = this.db.prepare("select * from memory_changes where id = ?").get(id) as Record<string, string | null> | undefined;
+    const r = this.db.prepare("select rowid as seq, * from memory_changes where id = ?").get(id) as Record<string, string | number | null> | undefined;
     return r ? rowToChange(r) : null;
   }
 
-  listChanges(opts: { relPath?: string; status?: string; limit?: number } = {}): MemoryChange[] {
+  /** Newest first. `after` keeps only changes recorded after the change with that `seq`. */
+  listChanges(opts: { relPath?: string; status?: string; after?: number; limit?: number } = {}): MemoryChange[] {
     const where: string[] = [];
-    const args: string[] = [];
+    const args: Array<string | number> = [];
     if (opts.relPath) {
       where.push("doc_rel_path = ?");
       args.push(opts.relPath);
+    }
+    if (opts.after !== undefined) {
+      where.push("rowid > ?");
+      args.push(opts.after);
     }
     if (opts.status) {
       where.push("status = ?");
       args.push(opts.status);
     }
     const rows = this.db
-      .prepare(`select * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`)
-      .all(...args) as Array<Record<string, string | null>>;
+      .prepare(`select rowid as seq, * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by rowid desc limit ${Math.min(opts.limit ?? 100, 500)}`)
+      .all(...args) as Array<Record<string, string | number | null>>;
     return rows.map(rowToChange);
   }
 
@@ -530,9 +590,16 @@ function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {
   return `---\n${stringifyYaml({ ...frontmatter, ...patch }, { lineWidth: 0 }).trimEnd()}\n---\n${body}`;
 }
 
-function rowToChange(r: Record<string, string | null>): MemoryChange {
+/** Fingerprint of a note's text, comparable with `MemoryChange.docHash`. */
+export function noteHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function rowToChange(raw: Record<string, string | number | null>): MemoryChange {
+  const r = raw as Record<string, string | null>;
   return {
     id: r.id!,
+    seq: Number(raw.seq),
     docRelPath: r.doc_rel_path!,
     change: r.change as MemoryChange["change"],
     subject: r.subject ?? null,
@@ -544,5 +611,10 @@ function rowToChange(r: Record<string, string | null>): MemoryChange {
     status: r.status as MemoryChange["status"],
     createdAt: r.created_at!,
     decidedAt: r.decided_at ?? null,
+    harness: r.harness ?? null,
+    sessionId: r.session_id ?? null,
+    batchId: r.batch_id ?? null,
+    reverts: r.reverts ?? null,
+    docHash: r.doc_hash ?? null,
   };
 }

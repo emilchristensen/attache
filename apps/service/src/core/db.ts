@@ -130,6 +130,17 @@ const MIGRATIONS: string[] = [
   `
   update documents set hash = '', mtime_ms = -1;
   `,
+  // Recent saves with revert: which Harness and session made each change, which changes one save
+  // made together, which change a revert undid, and a fingerprint of the note right after the write.
+  `
+  alter table memory_changes add column harness text;
+  alter table memory_changes add column session_id text;
+  alter table memory_changes add column batch_id text;
+  alter table memory_changes add column reverts text;
+  alter table memory_changes add column doc_hash text;
+  create index memory_changes_doc on memory_changes(doc_rel_path);
+  create index memory_changes_reverts on memory_changes(reverts);
+  `,
 ];
 
 export function openDb(file: string): Db {
@@ -139,9 +150,11 @@ export function openDb(file: string): Db {
   return db;
 }
 
-export function migrate(db: Db): { from: number; to: number } {
+/** Apply every pending migration, or only those up to schema version `to` (tests replay one upgrade step). */
+export function migrate(db: Db, to: number = MIGRATIONS.length): { from: number; to: number } {
   const from = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
-  for (let i = from; i < MIGRATIONS.length; i++) {
+  const target = Math.min(to, MIGRATIONS.length);
+  for (let i = from; i < target; i++) {
     db.exec("begin");
     try {
       db.exec(MIGRATIONS[i]!);
@@ -152,7 +165,7 @@ export function migrate(db: Db): { from: number; to: number } {
       throw err;
     }
   }
-  return { from, to: MIGRATIONS.length };
+  return { from, to: Math.max(from, target) };
 }
 
 export function tx<T>(db: Db, fn: () => T): T {

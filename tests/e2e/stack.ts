@@ -104,6 +104,11 @@ export async function startStack(opts: { port?: number } = {}): Promise<Stack> {
   };
 }
 
+/** Save items the way a Harness does today: through the jarvis executable, citing its session. */
+export function harnessSave(stack: Stack, items: unknown[], origin: { agent: string; session: string }) {
+  execFileSync(NODE, [BUNDLE, "save", "--agent", origin.agent, "--session", origin.session, "--state-dir", stack.stateDir], { input: JSON.stringify({ items }), env: { ...process.env, JARVIS_CREDENTIAL_STORE: "file" } });
+}
+
 export function readRuntime(stateDir: string) {
   return JSON.parse(readFileSync(join(stateDir, "runtime.json"), "utf8"));
 }
