@@ -3,6 +3,7 @@ import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, Mac
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { AutoAccept } from "./AutoAccept.tsx";
 import { FeatureList } from "./Setup.tsx";
 
 interface Caps {
@@ -215,6 +216,7 @@ export function SettingsView() {
           </>
         )}
         <ThisMachine />
+        <AutoAccept />
         <Clients />
         <Backups />
         <div className="card stack-sm">

@@ -61,6 +61,8 @@ export interface MemoryChange {
   reverts: string | null;
   /** SHA-256 of the note right after this change, to tell whether anything touched it since. */
   docHash: string | null;
+  /** Written without asking the owner, because auto-accept was on for the Harness. */
+  autoAccepted: boolean;
 }
 
 /** Where a change came from, recorded with it in the change log. */
@@ -69,6 +71,7 @@ export interface ChangeMeta {
   sessionId?: string | null;
   batchId?: string | null;
   reverts?: string | null;
+  autoAccepted?: boolean;
 }
 
 const README = `# Jarvis data folder
@@ -211,10 +214,10 @@ export class MemoryStore {
     const docHash = c.status === "applied" && this.exists(c.docRelPath) ? noteHash(this.read(c.docRelPath)) : null;
     this.db
       .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash)
-         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash, auto_accepted)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash);
+      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash, meta.autoAccepted ? 1 : 0);
     return this.getChange(id)!;
   }
 
@@ -635,5 +638,6 @@ function rowToChange(raw: Record<string, string | number | null>): MemoryChange 
     batchId: r.batch_id ?? null,
     reverts: r.reverts ?? null,
     docHash: r.doc_hash ?? null,
+    autoAccepted: Number(raw.auto_accepted) === 1,
   };
 }

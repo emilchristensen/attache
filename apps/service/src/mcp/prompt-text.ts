@@ -73,6 +73,7 @@ Its arguments look like this:
 ${SAVE_EXAMPLE}
 
 Jarvis asks the owner to confirm the items before it writes them, and records which Harness and session they came from.
+If the owner switched on auto-accept for this Harness, Jarvis writes them without asking; the reply says so.
 If the owner declines, nothing is saved: say so, and do not call the tool again unless they ask.
 If the reply says the items await review, tell the owner they can approve them in the Jarvis Dashboard.
 If the tool returns an error, read its message, fix the items and call it again.
@@ -135,7 +136,7 @@ Every fact needs a \`reason\` that cites the evidence; Jarvis moves the old valu
 ${CORRECTION_EXAMPLE}
 
 Make the corrections through the \`save\` tool only after the owner says yes, and only the ones they accept.
-Jarvis then asks the owner to confirm the save once more before it writes.
+Jarvis then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
 For an unsupported fact, ask the owner for the current value rather than guessing.
 ${HANDS_OFF}
 The identity record (\`memory/self.md\`) can only be changed in Jarvis Settings; point the owner there.
