@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AttentionItemView, Coverage } from "@jarvis/contracts";
 import { type Db, json, nowIso } from "../core/db.ts";
 import { listItems } from "./engine.ts";
+import { FACT_REVIEW_KIND } from "./fact-reviews.ts";
 import { search } from "../memory/search.ts";
 import { ProposalIndex } from "../memory/proposal-index.ts";
 import { proposalHeadline } from "../memory/proposal-record.ts";
@@ -45,6 +46,7 @@ const SECTION_OF: Record<string, { id: string; title: string }> = {
   invite_response: { id: "meetings", title: "Meetings to prepare" },
   pending_reply: { id: "replies", title: "Pending replies" },
   mention: { id: "replies", title: "Pending replies" },
+  [FACT_REVIEW_KIND]: { id: "facts", title: "Facts to check" },
 };
 
 function sectionFor(kind: string) {
@@ -78,7 +80,7 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
   if (drafts.length) sections.set("prepared", { id: "prepared", title: "Prepared for your review", items: drafts.map((d) => ({ id: d.id, title: d.title, summary: d.status === "approved" ? "Approved, not yet sent." : "Draft awaiting your review.", url: null, isNew: false, changed: false })) });
   const proposals = new ProposalIndex(db).list({ status: "proposed", limit: 20 });
   if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.target}`, url: null, isNew: false, changed: false })) });
-  const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "other"];
+  const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "facts", "other"];
   return {
     id: randomUUID(),
     kind: input.kind,
@@ -112,6 +114,7 @@ export function deterministicSummary(b: Omit<Briefing, "summary" | "deliverableP
       count("replies") && `${count("replies")} pending repl${count("replies") === 1 ? "y" : "ies"}`,
       b.counts.drafts && `${b.counts.drafts} draft${b.counts.drafts === 1 ? "" : "s"} ready for review`,
       b.counts.proposals && `${b.counts.proposals} memory change${b.counts.proposals === 1 ? "" : "s"} to review`,
+      count("facts") && `${count("facts")} fact${count("facts") === 1 ? "" : "s"} to check`,
     ].filter(Boolean);
     parts.push(`${bits.join(", ")}.`);
     if (b.counts.new || b.counts.changed) parts.push(`${b.counts.new} new and ${b.counts.changed} changed since the last briefing.`);
