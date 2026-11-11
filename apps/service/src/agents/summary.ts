@@ -11,7 +11,7 @@ const MAX_BULLET_CHARS = 400;
 
 export function summarySystemPrompt(userName: string): string {
   return [
-    `You summarise a finished coding-agent session for ${userName}'s second brain.`,
+    `You summarise a finished Harness session for ${userName}'s second brain.`,
     "Decide what is durably worth remembering weeks from now: decisions and their reasons, lessons learned, corrected assumptions, and stable facts about systems, people or projects.",
     "Ignore chatter, restatements of the task, file paths, command output and anything that will be false next week.",
     "Facts the session only read back from memory or notes are already remembered and do not count; decisions, reasons and lessons stated during the session do count, however briefly they were stated.",

@@ -66,7 +66,7 @@ afterAll(async () => {
   await fx?.close();
 });
 
-describe("coding-agent sessions", () => {
+describe("Harness sessions", () => {
   it("connecting Claude Code adds only Jarvis's hooks and keeps everything else", async () => {
     const r = await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     expect(r.test.ok).toBe(true);

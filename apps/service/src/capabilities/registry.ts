@@ -85,7 +85,7 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Jarvis memory.",
+    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Jarvis memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],

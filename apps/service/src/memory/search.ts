@@ -56,7 +56,7 @@ export function queryTerms(query: string): string[] {
 
 const quote = (t: string) => `"${t.replace(/"/g, '""')}"`;
 
-/** Raw archives that recall never quotes as evidence: chat archives from versions that had a chat, and coding-agent transcripts. Their summaries are searchable. */
+/** Raw archives that recall never quotes as evidence: chat archives from versions that had a chat, and Harness session transcripts. Their summaries are searchable. */
 export const RECALL_EXCLUDE = ["evidence/conversations/", "evidence/sessions/transcripts/"];
 
 const AREA_WEIGHT: Record<string, number> = { memory: 1.0, import: 0.9, deliverables: 0.7, evidence: 0.75 };

@@ -45,7 +45,7 @@ const MAX_UNPARSED_SAMPLES = 5;
 const MAX_LOGGED_BULLETS = 12;
 
 /**
- * Coding-agent sessions: hooks spool transcripts, this ingests them into the
+ * Harness sessions: hooks spool transcripts, this ingests them into the
  * data folder (a redacted transcript plus a dated session-log entry) and keeps
  * the session-start context current.
  */

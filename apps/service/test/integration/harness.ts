@@ -8,7 +8,7 @@ import type { Clock } from "../../src/replication/clock.ts";
 
 process.env.JARVIS_CREDENTIAL_STORE = "file";
 process.env.JARVIS_NO_NOTIFY = "1";
-// Coding-agent hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
+// Harness hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
 process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home æøå-"));
 // The command skills tell agents to run: the CLI from source, since tests have no bundle.
 process.env.JARVIS_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts");

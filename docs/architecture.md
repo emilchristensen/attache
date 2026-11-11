@@ -57,7 +57,7 @@ Data folder (user-chosen, Markdown):
     captures/                captures, such as meeting notes and transcripts (a new one tagged as a meeting is consolidated)
     conversations/           chat archives from versions that had a chat (kept, never quoted by recall)
     connectors/<kind>/       connector snapshots, one file per day per Machine
-    sessions/                coding-agent session logs, one file per day per Machine (searchable)
+    sessions/                Harness session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
     wrap-ups/                durable points of Harness conversations, from the wrap-up prompt (searchable)
   deliverables/             generated work products (briefings, research, drafts), one file each, named with the day and the Machine
