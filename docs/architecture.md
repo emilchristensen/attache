@@ -122,13 +122,20 @@ The code is in `apps/service/src/replication/`; `App.replication` owns it, and `
   Files the merge changed are re-indexed straight away (`Replication.onPulled`), before the file watcher would notice them; deleted files leave the index the same way.
   Merge rules are tried in the order `defaultSeams()` lists them (`mergeByRules`); the first that returns an outcome settles the file.
   The first rule, `deleted-and-changed` (`replication/deleted-and-changed.ts`), settles a Markdown note one side deleted and the other changed by keeping the changed version, with a notice; the review-state rules (`review/inbox/`, `review/proposals/`) and the note merge rule for notes both sides changed come after it.
-  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, one item per notice per merge, never resolved automatically, and kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  `MergeNotice`s become inbox items on the Machine that made the merge (`replication/merge-notice-inbox.ts`, source `replication_merge`, kept out of the replicated `review/inbox/` like the blocked item; a source of its own, because the blocked item's sync resolves every other `replication` item).
+  A notice is one item per merge, unless it is `perPath`: then it is one item per file while it stays open, and a later merge raises it again only after it resolved.
+  Items are resolved only by the owner, except the kinds listed in `SETTLED_BY_EDIT`: whenever the index changes (a save, an editor, a pull), `settleMergeNotices` reads their file and resolves the ones the owner has settled.
 - **The note merge rule** (`replication/note-merge/`, `noteMergeRule()`) settles notes under `memory/` that both sides changed.
   It takes each version apart (`parts.ts`): frontmatter, Current State entries (with their indented lines), History items, and the prose, which keeps one placeholder line where the facts and the History items were.
   Facts merge by subject (`facts.ts`): a subject one side changed takes that change, a change wins over a removal, and when both changed it the newer date wins, a tie going to the Machine whose id sorts last; the losing value becomes a `superseded` History line naming both Machines, dated with the winner's date.
   History is unioned (`history.ts`): the shared start stays, what each side added is interleaved by date, every item once.
   Frontmatter merges field by field (`frontmatter.ts`): a field one side changed takes that change; when both did, `created` keeps the earliest, `updated` the latest, lists keep every item, anything else comes from the note updated last.
-  Prose goes to a `ProseMerge` (`prose.ts`); the default takes prose only one side changed and otherwise leaves the note to block.
+  Prose goes to a `ProseMerge` (`prose.ts`); Replication registers `keepBothVersions` (`prose-versions.ts`), a three-way line merge (`line-diff.ts`, `line-merge.ts`).
+  Changes from the two sides that touch different base lines all merge, neighbouring lines included; an insertion right before or after a line the other side changed is not a clash, two different insertions at the same place are.
+  Where both sides changed the same lines differently, the lines both versions start and end with stay shared, and what differs is kept twice: under `### Version from <Machine>` headings (one level below the section they sit in; a Machine's id is added when both carry the same name), in the agreed Machine order, with a `perPath` notice of kind `prose_versions`.
+  The facts and History placeholders never go inside a version.
+  With no common version (two notes created apart), the lines both have in common stand in for it.
+  The `prose_versions` item resolves once the note no longer holds two version headings of the same level in a row (`holdsTwoVersions`), or is gone.
   Both sides are put in an order that does not depend on which Machine merges (`sides.ts`) and nothing depends on the time of the merge, so two Machines merging the same versions write the same note.
   Two notes with the same type and title share a path, so they arrive with no common version and merge as one note.
 - **Commits** are authored by the Machine (name, and `<machine id>@machine.jarvis.invalid`), with the clock's time.

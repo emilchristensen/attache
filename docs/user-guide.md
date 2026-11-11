@@ -304,7 +304,12 @@ What happens on its own:
 - A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
   One inbox item, on the Machine that brought the two changes together, names the note and both Machines; delete the note again if it should go.
   Unlike other inbox items, it stays on that Machine.
-- Until the prose merge arrives, a note whose free text both Machines changed differently, or any other file both changed in the same place, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+- The free text of a note, such as its Notes section, merges line by line: when the two Machines changed different lines, both changes are kept.
+  When both changed the same lines, the note keeps both versions, each under a heading such as `### Version from Mac`, and Replication carries on with every other file.
+  One inbox item, on the Machine that brought the two versions together, names the note.
+  Keep the version you want and delete the other with its heading, in an editor on any Machine; the item then resolves by itself.
+  A note that gets two versions again later raises the item again.
+- Any other file both Machines changed in the same place, outside the notes and Jarvis' own review files, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
 - While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
   While it is unauthorized, the item asks you to reconnect GitHub instead.
   It resolves by itself once Replication is up to date again.
