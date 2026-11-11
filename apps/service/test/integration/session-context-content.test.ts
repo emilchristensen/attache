@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 
@@ -211,7 +211,7 @@ describe("session context content", { timeout: 30_000 }, () => {
     expect(sessions).toContain("The cutover script now retries failed batches.");
     expect(sessions.indexOf("rollback plan")).toBeLessThan(sessions.indexOf("cutover script"));
     expect(sessions).not.toContain("Atlas spike");
-    expect(sessions).toContain(`](${join(svc.dataDir, "evidence/sessions/transcripts/claude-code/")}`);
+    expect(sessions).toContain(`](<${join(svc.dataDir, "evidence", "sessions", "transcripts", "claude-code")}${sep}`);
     // Nothing from other projects' facts or other notes' facts.
     expect(ctx).not.toContain("Flat white");
     expect(ctx).not.toContain("Discovery");
