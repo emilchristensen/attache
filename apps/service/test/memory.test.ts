@@ -9,7 +9,7 @@ import { tempDir } from "./helpers.ts";
 
 function setup() {
   const db = openDb(":memory:");
-  const store = new MemoryStore(db, null, "test");
+  const store = new MemoryStore(db, null, { instance: "test", locksDir: tempDir(), machine: () => ({ id: "00000000-0000-4000-8000-000000000001", name: "Test Machine" }) });
   const root = tempDir();
   store.open(root);
   return { db, store, root };

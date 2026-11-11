@@ -54,8 +54,9 @@ Data folder (user-chosen, Markdown):
     people/ projects/ decisions/ notes/
     self.md                 identity record (protected)
   evidence/                 archived evidence, never presented as curated fact
-    captures/ conversations/ connectors/
-    sessions/                coding-agent session logs, one file per day (searchable)
+    captures/ conversations/
+    connectors/<kind>/       connector snapshots, one file per day per Machine
+    sessions/                coding-agent session logs, one file per day per Machine (searchable)
       transcripts/<agent>/   redacted session transcripts (archived, never quoted by recall)
   deliverables/             generated work products (briefings, research, drafts)
 ```
@@ -65,7 +66,16 @@ The import preview lists what will be read, what is skipped and that zero files 
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
 Service state (`~/Library/Application Support/Jarvis/state`): `jarvis.sqlite`, logs, runtime metadata, backups.
+Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
 Credentials: Keychain service `dev.jarvis.<instance>`.
+
+### Machine identity and per-Machine evidence
+
+Each Machine has an id (a UUID made once) and a name (the hostname without its domain until the owner renames it), kept in the `machine` table of the service database, never in the Brain.
+`GET /machine` returns both; `PATCH /machine` renames (1 to 64 characters, no control characters); Settings shows them.
+Evidence that every Machine appends to is written per Machine, so that Replication never merges two Machines' writes into one file (ADR 0001): session logs go to `evidence/sessions/<date>-<machine>.md` and connector snapshots to `evidence/connectors/<kind>/<date>-<machine>.md`.
+`<machine>` is the name's slug plus the first eight hex digits of the id, so two Machines with the same name still write apart; the frontmatter records `machine` and `machine_id`.
+Files written before this change keep their `<date>.md` name; search and the audit index them like any evidence, and the session context reads every file of a day, old or per-Machine, as that day's log.
 
 ## Memory model
 
@@ -78,7 +88,9 @@ Write policy (deterministic, in `memory/policy.ts`):
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
 - Model output never writes memory directly. Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
-- Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder (a lock file with the owner pid prevents a second writer).
+- Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
+  A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
+  A `.jarvis/writer.lock` left inside the data folder by an earlier version is honoured the same way and then removed.
 - Paths are resolved and confined to the data folder; symlinks out of it are refused.
 
 ## Retrieval

@@ -7,7 +7,7 @@ export type Row = Record<string, SQLInputValue>;
  * Ordered, append-only migrations. Never edit a shipped migration; add a new
  * one. `user_version` records the applied count so upgrades are repeatable.
  */
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: readonly string[] = [
   `
   create table config (id integer primary key check (id = 1), json text not null, revision integer not null, updated_at text not null);
   create table audit (id integer primary key autoincrement, at text not null, actor text not null, event text not null, data text);
@@ -129,6 +129,13 @@ const MIGRATIONS: string[] = [
   // fingerprint so the next scan re-chunks it; the old chunks stay searchable until then.
   `
   update documents set hash = '', mtime_ms = -1;
+  `,
+  // This Machine's identity: local state, never part of the Brain.
+  `
+  create table machine (
+    id integer primary key check (id = 1), machine_id text not null, name text not null,
+    created_at text not null, updated_at text not null
+  );
   `,
 ];
 

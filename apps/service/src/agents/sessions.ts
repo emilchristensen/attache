@@ -6,6 +6,7 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { parseStateEntries, splitFrontmatter } from "../memory/markdown.ts";
+import { sessionLogDate } from "../memory/evidence-paths.ts";
 import { AgentHooks, stablePath } from "./install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
@@ -340,16 +341,22 @@ export class AgentSessions {
     }
   }
 
+  /** The session logs of the latest `days` days, every Machine's file for a day read as one. */
   private recentLogs(days: number): Array<{ date: string; body: string }> {
     const root = this.app.memory.dataRoot;
     const dir = root ? join(root, "evidence", "sessions") : null;
     if (!dir || !existsSync(dir)) return [];
-    return readdirSync(dir)
-      .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+    const byDate = new Map<string, string[]>();
+    for (const f of readdirSync(dir).sort()) {
+      const date = sessionLogDate(f);
+      if (date) byDate.set(date, [...(byDate.get(date) ?? []), f]);
+    }
+    const body = (f: string) => splitFrontmatter(readFileSync(join(dir, f), "utf8")).body.replace(/^# .*\n/, "").trim();
+    return [...byDate.keys()]
       .sort()
       .reverse()
       .slice(0, days)
-      .map((f) => ({ date: f.slice(0, 10), body: splitFrontmatter(readFileSync(join(dir, f), "utf8")).body.replace(/^# .*\n/, "") }));
+      .map((date) => ({ date, body: byDate.get(date)!.map(body).join("\n\n") }));
   }
 
   /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */

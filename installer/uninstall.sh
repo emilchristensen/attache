@@ -75,6 +75,8 @@ if [ "$DELETE" = "1" ]; then
       echo "Kept your own files in $DATA_FOLDER; removed only what Jarvis created there."
     fi
   fi
+  # Writer locks are released when the service stops; the folder is shared by every instance, so only an empty one goes.
+  rmdir "$HOME/Library/Application Support/Jarvis/locks" 2>/dev/null || true
   rmdir "$PREFIX" 2>/dev/null || true
   echo "Jarvis removed, including its data."
 else

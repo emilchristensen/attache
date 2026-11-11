@@ -263,6 +263,20 @@ test("feature switches: turning attention off changes the product and the backen
   await expect(page.getByText(/attention:sync: next/)).toBeVisible();
 });
 
+test("this Machine: named after its hostname, renamed in Settings, and the name is kept", async () => {
+  const page = await open("/settings");
+  const card = page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) });
+  const name = card.getByRole("textbox", { name: "Name" });
+  await expect(name).not.toHaveValue("");
+  const id = await card.locator(".mono").textContent();
+  await name.fill("Home PC");
+  await card.getByRole("button", { name: "Rename" }).click();
+  await expect(page.getByText("Machine renamed")).toBeVisible();
+  await page.reload();
+  await expect(card.getByRole("textbox", { name: "Name" })).toHaveValue("Home PC");
+  await expect(card.locator(".mono")).toHaveText(id!);
+});
+
 test("reconnection: service restart shows a banner, then recovers state", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
