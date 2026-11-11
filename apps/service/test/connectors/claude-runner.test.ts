@@ -8,7 +8,7 @@ import { createLogger } from "../../src/core/log.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { mountClaude, onTool, useFakeClaude, jsonAnswer, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
 
-// Each test starts many fake Claude Code CLI processes, which is slow on a busy machine.
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
 vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;

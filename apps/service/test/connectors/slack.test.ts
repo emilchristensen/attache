@@ -5,7 +5,7 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { jsonAnswer, mountClaude, onTool, slackHistoryAnswer, slackProfileAnswer, slackSearchAnswer, slackSearchInvalid, useFakeClaude, type ClaudeFixture, type SlackFixtureMessage } from "../fixtures/claude-connectors.ts";
 
-// Each test starts many fake Claude Code CLI processes, which is slow on a busy machine.
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
 vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;

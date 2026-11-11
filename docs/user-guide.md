@@ -149,7 +149,7 @@ claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
 
 Other Harnesses take the same command and argument in their MCP server settings.
 
-- **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
+- **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
 - **read** returns a whole note, or only a line range, for a path that search returned.
 - **save** writes facts and events, with the same items as `jarvis save`: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
@@ -161,12 +161,17 @@ Other Harnesses take the same command and argument in their MCP server settings.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
 - **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
-- Two prompts carry Jarvis's procedures, so the Harness needs no installed skills.
-  In Claude Code they appear as `/mcp__jarvis__save` and `/mcp__jarvis__audit`.
+- Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.
+  In Claude Code they appear as `/mcp__jarvis__save`, `/mcp__jarvis__audit` and `/mcp__jarvis__wrap-up`.
   - **save** distills what matters from the last turn: it searches before creating a note, sorts each item into a fact or an event, and saves through Jarvis rather than editing files.
     Text after the prompt says what to focus on.
   - **audit** runs the audit, judges each fact against the newer evidence, and shows you every correction before making it through Jarvis.
     Text after the prompt limits the audit to a topic.
+  - **wrap-up** records the durable points of the current conversation: decisions, facts about people and projects, commitments and stated preferences.
+    Use it where Jarvis cannot capture the conversation itself, such as the Chat tab in Claude Desktop.
+    The agent stores the points with the `wrap_up` tool as one evidence document in `evidence/wrap-ups/`, with the Harness and the date, and with secrets redacted.
+    The points are evidence, not curated memory: search finds them, labelled `evidence`, but none becomes a current fact unless it is saved to a note.
+    When the conversation held nothing durable, nothing is stored and the agent tells you so.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.

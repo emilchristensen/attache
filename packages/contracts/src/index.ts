@@ -269,6 +269,25 @@ export interface MemorySaveProposalResult {
   proposals: ProposalView[];
 }
 
+export const WRAP_UP_POINTS_MAX = 30;
+
+/**
+ * The durable points of one Harness conversation, distilled by its agent with
+ * the wrap-up prompt. Stored as evidence, never as curated memory. No points
+ * means the conversation held nothing durable, and nothing is stored.
+ */
+export const WrapUpInput = z.object({
+  /** The Harness the conversation happened in. */
+  harness: z.object({ id: z.string().trim().min(1).max(40), label: z.string().trim().min(1).max(80) }),
+  /** A short name for the conversation. */
+  title: z.string().trim().min(1).max(200).optional(),
+  /** One self-contained sentence each. */
+  points: z.array(z.string().trim().min(1).max(2000)).max(WRAP_UP_POINTS_MAX),
+});
+export type WrapUpInput = z.infer<typeof WrapUpInput>;
+
+export type WrapUpResult = { stored: true; relPath: string; title: string; date: string; points: number } | { stored: false; reason: string };
+
 /** Suggest one save item for the owner to apply or reject in the Dashboard. */
 export const ProposalInput = z.object({
   item: MemorySaveItem,

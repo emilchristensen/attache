@@ -1,9 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { jiraAdapter } from "../../src/connectors/jira.ts";
 import { confluenceAdapter } from "../../src/connectors/confluence.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { jsonAnswer, mountClaude, onTool, useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 // Shapes mirror what the claude.ai Atlassian Rovo connector (Rovo MCP v1) returned live on 2026-10-01.
 let fx: FixtureServer;
