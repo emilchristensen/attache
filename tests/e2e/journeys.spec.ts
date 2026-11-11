@@ -81,20 +81,23 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await gh.getByRole("button", { name: "Connect" }).click();
   await expect(gh.getByText("connected", { exact: true })).toBeVisible();
   await expect(gh.getByText("Signed in as alex")).toBeVisible();
-  // Coding agents: connecting Claude Code adds Jarvis's hooks and keeps the user's own.
+  // Harnesses: connecting Claude Code adds Jarvis's MCP server and hooks, and keeps the user's own entries.
+  await expect(page.locator('[data-connection="claude-desktop"]')).toBeVisible();
   const claude = page.locator('[data-connection="claude-code"]');
   await claude.getByRole("button", { name: "Set up" }).click();
-  await expect(claude.getByText(/Adds three hooks to ~\/.claude\/settings.json/)).toBeVisible();
+  await expect(claude.getByText(/Adds Jarvis's MCP server to ~\/.claude.json and three hooks to ~\/.claude\/settings.json/)).toBeVisible();
   await claude.getByRole("button", { name: "Connect" }).click();
   await expect(claude.getByText("connected", { exact: true })).toBeVisible();
   const claudeSettings = JSON.parse(readFileSync(join(stack.agentHome, ".claude/settings.json"), "utf8"));
   expect(claudeSettings.hooks.PreToolUse[0].hooks[0].command).toBe("rtk hook claude");
   for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(claudeSettings.hooks[e])).toContain("jarvis-agent-hook");
-  // An agent that is not installed says so instead of writing anything.
+  const claudeMcp = JSON.parse(readFileSync(join(stack.agentHome, ".claude.json"), "utf8")).mcpServers;
+  expect(Object.values(claudeMcp)).toEqual([expect.objectContaining({ args: expect.arrayContaining(["mcp", "--state-dir", stack.stateDir]) })]);
+  // A Harness that is not installed says so instead of writing anything.
   const codex = page.locator('[data-connection="codex"]');
   await codex.getByRole("button", { name: "Set up" }).click();
   await codex.getByRole("button", { name: "Connect" }).click();
-  await expect(page.getByText(/Codex was not found on this Mac/)).toBeVisible();
+  await expect(page.getByText(/Codex was not found on this Machine/)).toBeVisible();
   await expect(codex.getByText("not connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -311,8 +314,8 @@ test("narrow screen: bottom navigation, no horizontal overflow, all views reacha
 
 test("memory: notes, evidence and deliverables are read-only, with no capture box or correct and edit controls", async () => {
   // Notes reach the Brain from a Harness, never from the Dashboard.
-  harnessSave(stack, [{ action: "create", type: "decision", title: "Email vendor", facts: [{ subject: "Decision", value: "Keep Nimbus as email vendor for 2027" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
-  harnessSave(stack, [{ action: "update", path: VENDOR, facts: [{ subject: "Decision", value: "Switch to Postmark for 2027", reason: "Procurement chose Postmark" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
+  await harnessSave(stack, [{ action: "create", type: "decision", title: "Email vendor", facts: [{ subject: "Decision", value: "Keep Nimbus as email vendor for 2027" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
+  await harnessSave(stack, [{ action: "update", path: VENDOR, facts: [{ subject: "Decision", value: "Switch to Postmark for 2027", reason: "Procurement chose Postmark" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
   const page = await open("/memory?tab=decision");
   await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
   await expect(page.getByRole("button", { name: /capture/i })).toHaveCount(0);
@@ -413,10 +416,10 @@ test("memory: a Proposal shows every part of the change and is applied or reject
 test("recent saves: each save shows its Harness and session, and one click reverts it", async () => {
   const save = (items: unknown[], agent: string, session: string) => harnessSave(stack, items, { agent, session });
   const atlas = "memory/projects/atlas-launch.md";
-  save([{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "14 October" }, { subject: "Owner", value: "Ada" }] }], "claude-code", "sess-e2e-1");
-  save([{ action: "update", path: atlas, facts: [{ subject: "Launch date", value: "21 October", reason: "vendor slip" }, { subject: "Owner", value: "Grace", reason: "handover" }] }], "claude-code", "sess-e2e-2");
-  save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
-  save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
+  await save([{ action: "create", type: "project", title: "Atlas launch", facts: [{ subject: "Launch date", value: "14 October" }, { subject: "Owner", value: "Ada" }] }], "claude-code", "sess-e2e-1");
+  await save([{ action: "update", path: atlas, facts: [{ subject: "Launch date", value: "21 October", reason: "vendor slip" }, { subject: "Owner", value: "Grace", reason: "handover" }] }], "claude-code", "sess-e2e-2");
+  await save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
+  await save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
 
   const page = await open("/memory");
   const recent = page.getByRole("region", { name: "Recent saves" });
@@ -459,7 +462,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
 test("review dates: a fact shows its Review date, and one past it is marked unverified", async () => {
   const rel = "memory/projects/helix-rollout.md";
   const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-  harnessSave(stack, [{ action: "create", type: "project", title: "Helix rollout", facts: [{ subject: "Status", value: "Helix pilot in two stores", review: inAMonth }, { subject: "Budget", value: "Helix budget is 40k EUR" }] }], { agent: "claude-code", session: "sess-e2e-review" });
+  await harnessSave(stack, [{ action: "create", type: "project", title: "Helix rollout", facts: [{ subject: "Status", value: "Helix pilot in two stores", review: inAMonth }, { subject: "Budget", value: "Helix budget is 40k EUR" }] }], { agent: "claude-code", session: "sess-e2e-review" });
   // An edit by hand: the budget was due for review long ago.
   const file = join(stack.dataDir, rel);
   writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Budget** (2026-01-10, review 2026-02-01)"));
