@@ -166,6 +166,10 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
+    // A cancel that arrives before the session has started stops it too, instead of waiting out the session timeout.
+    const early = new AbortController();
+    early.abort();
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: early.signal })).rejects.toThrow(/Cancelled/);
   });
 
   it("helpers: tool naming, order-insensitive argument equality, spill files only from the config dir", () => {
