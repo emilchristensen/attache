@@ -1,9 +1,10 @@
 import { join } from "node:path";
-import type { MemorySaveInput, MemorySaveResult } from "@jarvis/contracts";
+import type { MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@jarvis/contracts";
 import type { App } from "../app.ts";
-import { nowIso } from "../core/db.ts";
-import { integrationFor } from "../agents/integrations.ts";
+import { nowIso, tx } from "../core/db.ts";
+import { harnessLabel } from "../agents/integrations.ts";
 import { HttpError } from "../http/router.ts";
+import { proposeItems } from "./proposals.ts";
 import { checkItems, writeItem } from "./save-items.ts";
 import type { SourceRef } from "./store.ts";
 
@@ -26,10 +27,33 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
   return { saved };
 }
 
+/**
+ * Check a save against the Brain without writing anything, so a Harness can
+ * show the owner what it would change, and an invalid item is refused before
+ * the owner is asked.
+ */
+export function checkSave(app: App, items: MemorySaveInput["items"]): MemorySaveCheckResult {
+  if (!app.memory.dataRoot) throw new HttpError(409, "needs_data_folder", "Choose a data folder first.");
+  return {
+    items: checkItems(app.memory, items).map((step) => (step.action === "create" ? { action: "create", title: step.item.title, relPath: null } : { action: "update", title: step.title, relPath: step.relPath })),
+  };
+}
+
+/**
+ * Store a save the owner could not confirm as one Proposal per item, citing
+ * the Harness session, so it is neither lost nor written unseen. The items are
+ * checked as one save: every Proposal is recorded, or none.
+ */
+export function proposeSave(app: App, input: MemorySaveProposalInput): MemorySaveProposalResult {
+  const source = originSource(app, input.origin);
+  const proposedBy = input.origin ? harnessLabel(input.origin.agent) : "model";
+  return { proposals: tx(app.db, () => proposeItems(app.memory, input.items, { reason: input.reason, source, origin: input.origin ?? null, proposedBy })) };
+}
+
 /** Cite the session the items came from: its archived transcript when Jarvis has one, otherwise the agent and session id. */
 export function originSource(app: App, origin: MemorySaveInput["origin"]): SourceRef | null {
   if (!origin) return null;
-  const agentLabel = integrationFor(origin.agent)?.label ?? origin.agent;
+  const agentLabel = harnessLabel(origin.agent);
   const row = origin.sessionId ? (app.db.prepare("select rel_path from agent_sessions where agent = ? and session_id = ?").get(origin.agent, origin.sessionId) as { rel_path: string } | undefined) : undefined;
   const folder = origin.cwd?.split("/").filter(Boolean).at(-1);
   return {

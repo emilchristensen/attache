@@ -1,4 +1,4 @@
-import type { Config } from "@jarvis/contracts";
+import type { Config, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@jarvis/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "../cli/client.ts";
 
@@ -39,6 +39,12 @@ export interface BrainAccess {
   search(query: string, limit: number): Promise<Passage[]>;
   read(path: string, range: LineRange): Promise<NoteText>;
   overview(): Promise<BrainOverview>;
+  /** Check a save against the Brain without writing; throws the reason an item is refused. */
+  checkSave(items: MemorySaveInput["items"]): Promise<MemorySaveCheckResult>;
+  /** Write a save the owner confirmed, as the owner. */
+  save(input: MemorySaveInput): Promise<MemorySaveResult>;
+  /** Store a save the owner could not confirm as Proposals. */
+  propose(input: MemorySaveProposalInput): Promise<MemorySaveProposalResult>;
 }
 
 interface RawHit {
@@ -90,6 +96,9 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
         notes: docs.filter((d) => d.relPath !== "memory/self.md" && d.title).map((d) => ({ type: d.docType ?? "note", title: d.title })),
       };
     },
+    checkSave: async (items) => client().post<MemorySaveCheckResult>("/memory/save/check", { items }),
+    save: async (input) => client().post<MemorySaveResult>("/memory/save", input),
+    propose: async (input) => client().post<MemorySaveProposalResult>("/memory/save/proposals", input),
   };
 }
 

@@ -5,6 +5,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServicePaths } from "../core/paths.ts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
+import { registerSaveTool, type ServerContext } from "./save-tool.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -39,7 +40,7 @@ function renderNote(n: NoteText): string {
 }
 
 /** The MCP server a Harness talks to, over any transport. */
-export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string }): McpServer {
+export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext }): McpServer {
   const server = new McpServer({ name: "jarvis", title: "Jarvis", version: info.version }, { instructions: info.instructions });
   server.registerTool(
     "search",
@@ -81,6 +82,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
       }
     },
   );
+  registerSaveTool(server, brain, info.context);
   return server;
 }
 
@@ -108,5 +110,5 @@ export async function runMcpServer(paths: ServicePaths, version: string): Promis
   const brain = serviceBrain(paths);
   const found = await fetchOverview(brain);
   const instructions = "overview" in found ? buildInstructions(found.overview) : buildInstructions(null, found.error);
-  await createMcpServer(brain, { version, instructions }).connect(new StdioServerTransport());
+  await createMcpServer(brain, { version, instructions, context: { env: process.env, cwd: process.cwd() } }).connect(new StdioServerTransport());
 }

@@ -138,6 +138,13 @@ Other Harnesses take the same command and argument in their MCP server settings.
 - **search** finds passages in your Brain and returns each one with its path, line range, the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out raw chat and session transcripts and includes their summaries.
 - **read** returns a whole note, or only a line range, for a path that search returned.
+- **save** writes facts and events, with the same items as `jarvis save`: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+  Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
+  Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
+  Accept, and the items are written as you, each fact citing the Harness and session it came from.
+  Decline or close the request, and nothing is written; the agent is told so.
+  A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
+  Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
 - When the Harness connects, the server tells it who you are and lists the titles of your notes, so a Harness without Jarvis's hooks knows when to search.
 - If Jarvis is not running, the server still starts, and each tool answers that Jarvis is not running and how to start it (`jarvis start`).
   The tools work as soon as Jarvis runs, without restarting the Harness.

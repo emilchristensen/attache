@@ -1,14 +1,26 @@
-import { MemorySaveItem, SourceRefInput, type ProposalInput, type ProposalView } from "@jarvis/contracts";
+import { MemorySaveInput, MemorySaveItem, SourceRefInput, type ProposalInput, type ProposalView } from "@jarvis/contracts";
 import { json } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";
 import { normalizeRel } from "./policy.ts";
 import { checkItems, writeItem } from "./save-items.ts";
 import { formatSource, type MemoryChange, type MemoryStore, type SourceRef } from "./store.ts";
 
-/** What a Proposal stores: one whole save item and the evidence it cites. */
+/** The Harness session a Proposal came from, when a Harness made it. */
+export type ProposalOrigin = NonNullable<MemorySaveInput["origin"]>;
+
+/** What a Proposal stores: one whole save item, the evidence it cites, and the Harness session it came from. */
 interface ProposalPayload {
   item: MemorySaveItem;
   source: SourceRef | null;
+  origin: ProposalOrigin | null;
+}
+
+/** Who suggests a set of items, why, and from which evidence. */
+export interface ProposalMeta {
+  reason: string;
+  source: SourceRef | null;
+  origin?: ProposalOrigin | null;
+  proposedBy: string;
 }
 
 /** The shape every Proposal had before Proposals carried whole save items: one fact, for an existing note or a new one. */
@@ -23,12 +35,22 @@ interface LegacyPayload {
  * when it is made rather than when the owner clicks Apply.
  */
 export function proposeItem(memory: MemoryStore, input: ProposalInput, proposedBy: string): ProposalView {
+  return proposeItems(memory, [input.item], { reason: input.reason, source: input.source ?? null, proposedBy })[0]!;
+}
+
+/**
+ * Record one Proposal per item. The items are checked together, like one
+ * save, so one invalid item refuses them all. Callers that need every
+ * Proposal or none run this inside a transaction.
+ */
+export function proposeItems(memory: MemoryStore, items: readonly MemorySaveItem[], meta: ProposalMeta): ProposalView[] {
   requireBrain(memory);
-  checkItems(memory, [input.item]);
-  const source: SourceRef | null = input.source ?? null;
-  const payload: ProposalPayload = { item: input.item, source };
-  const row = memory.propose({ target: targetOf(input.item), subject: summarize(input.item), payload, reason: input.reason, source: source ? formatSource(source) : null, actor: proposedBy });
-  return toView(row);
+  checkItems(memory, items);
+  const origin = meta.origin ?? null;
+  return items.map((item) => {
+    const payload: ProposalPayload = { item, source: meta.source, origin };
+    return toView(memory.propose({ target: targetOf(item), subject: summarize(item), payload, reason: meta.reason, source: meta.source ? formatSource(meta.source) : null, actor: meta.proposedBy }));
+  });
 }
 
 export function listProposals(memory: MemoryStore, opts: { status?: string; limit?: number } = {}): ProposalView[] {
@@ -92,7 +114,8 @@ function readPayload(row: StoredProposal): ProposalPayload | null {
     const item = MemorySaveItem.safeParse(stored.item);
     const source = stored.source == null ? null : SourceRefInput.safeParse(stored.source);
     if (!item.success || (source && !source.success)) return null;
-    return { item: item.data, source: source?.data ?? null };
+    const origin = MemorySaveInput.shape.origin.safeParse(stored.origin ?? undefined);
+    return { item: item.data, source: source?.data ?? null, origin: (origin.success ? origin.data : undefined) ?? null };
   }
   return readLegacy(row, stored as LegacyPayload);
 }
@@ -110,7 +133,7 @@ function readLegacy(row: StoredProposal, stored: LegacyPayload): ProposalPayload
   const item = MemorySaveItem.safeParse(candidate);
   if (!item.success) return null;
   const source: SourceRef = { kind: "user", ref: row.source || "proposal", observedAt: row.createdAt, ...(row.source ? { label: row.source } : {}) };
-  return { item: item.data, source };
+  return { item: item.data, source, origin: null };
 }
 
 /** Where a Proposal lands: the note it changes, or a placeholder naming the note it would create. */

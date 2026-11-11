@@ -184,8 +184,11 @@ export const CorrectionInput = z.object({
   reason: z.string().min(1).max(1000),
 });
 
-const SaveFact = z.object({ subject: z.string().trim().min(1).max(100), value: z.string().trim().min(1).max(5000) });
-const SaveEvent = z.string().trim().min(1).max(2000);
+const SaveFact = z.object({
+  subject: z.string().trim().min(1).max(100).describe("What the fact is about, e.g. Status or Role. One current value per subject."),
+  value: z.string().trim().min(1).max(5000).describe("The current value."),
+});
+const SaveEvent = z.string().trim().min(1).max(2000).describe("Something that happened, appended to the note's History.");
 
 /**
  * One change to one note: a new note with its facts, or an update to an existing
@@ -197,14 +200,17 @@ export const MemorySaveItem = z.discriminatedUnion("action", [
     type: z.enum(["person", "project", "decision", "note"]),
     title: z.string().trim().min(1).max(200),
     facts: z.array(SaveFact).min(1).max(50),
-    notes: z.string().max(20_000).optional(),
+    notes: z.string().max(20_000).optional().describe("Free prose for the note's body."),
     events: z.array(SaveEvent).max(20).optional(),
     tags: z.array(z.string().max(50)).max(20).optional(),
   }),
   z.object({
     action: z.literal("update"),
-    path: z.string().trim().min(1).max(500),
-    facts: z.array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000) })).max(50).optional(),
+    path: z.string().trim().min(1).max(500).describe("The note's path in the Brain, e.g. memory/projects/orion.md."),
+    facts: z
+      .array(SaveFact.extend({ reason: z.string().trim().min(1).max(1000).describe("Why the value changed, kept in History beside the old value.") }))
+      .max(50)
+      .optional(),
     events: z.array(SaveEvent).max(20).optional(),
   }),
 ]);
@@ -230,6 +236,22 @@ export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
 export interface MemorySaveResult {
   saved: Array<{ action: "created" | "updated"; relPath: string; absPath: string; title: string; facts: number; events: number }>;
+}
+
+/** What a save would change, checked against the Brain without writing: one entry per item, in order. */
+export interface MemorySaveCheckResult {
+  items: Array<{ action: "create"; title: string; relPath: null } | { action: "update"; title: string; /** The note the update changes. */ relPath: string }>;
+}
+
+/** A save the owner could not confirm, stored as one Proposal per item for review in the Dashboard. */
+export const MemorySaveProposalInput = MemorySaveInput.extend({
+  /** Why the save waits for review, shown beside each Proposal. */
+  reason: z.string().trim().min(1).max(1000),
+});
+export type MemorySaveProposalInput = z.infer<typeof MemorySaveProposalInput>;
+
+export interface MemorySaveProposalResult {
+  proposals: ProposalView[];
 }
 
 /** Suggest one save item for the owner to apply or reject in the Dashboard. */

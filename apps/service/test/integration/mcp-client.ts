@@ -1,0 +1,47 @@
+import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ElicitRequestSchema, type ElicitRequest, type ElicitResult } from "@modelcontextprotocol/sdk/types.js";
+
+const MAIN = join(import.meta.dirname, "../../src/main.ts");
+
+/** Variables a Harness sets for the processes it starts; the test runner may itself run inside one. */
+const HARNESS_ENV = /^(CLAUDECODE|CLAUDE_SESSION_ID|CLAUDE_CODE_|CODEX_|ANTIGRAVITY_)/;
+
+export interface HarnessClientOptions {
+  /** The client name the Harness reports when it connects. */
+  name?: string;
+  /** Environment the Harness gives the server, on top of a clean one. */
+  env?: Record<string, string>;
+  /** How the owner answers a confirmation request. Without it the client cannot show one. */
+  confirm?: (request: ElicitRequest["params"]) => ElicitResult | Promise<ElicitResult>;
+  /** Claim the confirmation request without handling it, as a Harness that advertises more than it does. */
+  claimsConfirmation?: boolean;
+}
+
+/**
+ * Start Jarvis's MCP server the way a Harness does: the `jarvis` executable
+ * with `mcp` as a child process over stdio, with no token in its command or
+ * environment.
+ */
+export async function connectHarness(stateDir: string, opts: HarnessClientOptions = {}): Promise<Client> {
+  const base = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !HARNESS_ENV.test(e[0])));
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MAIN, "mcp", "--state-dir", stateDir], env: { ...base, ...opts.env }, stderr: "pipe" });
+  const client = new Client({ name: opts.name ?? "test-harness", version: "1.0.0" }, { capabilities: opts.confirm || opts.claimsConfirmation ? { elicitation: { form: {} } } : {} });
+  const confirm = opts.confirm;
+  if (confirm) client.setRequestHandler(ElicitRequestSchema, async (req) => confirm(req.params));
+  await client.connect(transport);
+  return client;
+}
+
+export interface ToolReply<T> {
+  isError: boolean;
+  text: string;
+  data: T;
+}
+
+export async function callTool<T>(client: Client, name: string, args: Record<string, unknown>): Promise<ToolReply<T>> {
+  const r = await client.callTool({ name, arguments: args });
+  const content = r.content as Array<{ type: string; text: string }>;
+  return { isError: r.isError === true, text: content.map((c) => c.text).join("\n"), data: r.structuredContent as T };
+}

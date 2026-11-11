@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, ProposalInput, type FeatureId } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, CaptureInput, ChatInput, CorrectionInput, MemoryCreateInput, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -11,7 +11,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
 import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
 import { json } from "../core/db.ts";
-import { saveToMemory } from "../memory/save.ts";
+import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
 import { decideProposal, listProposals, proposeItem } from "../memory/proposals.ts";
 import { auditMemory, DEFAULT_STALE_DAYS } from "../memory/audit.ts";
 
@@ -164,6 +164,20 @@ export function registerDataRoutes(r: Router, app: App) {
     requireData(app);
     const input = await c.body(MemorySaveInput);
     const out = saveToMemory(app, input, c.client?.id ?? null);
+    app.bus.emit("event", { type: "memory.changed" });
+    return out;
+  });
+  r.post("/memory/save/check", async (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const input = await c.body(MemorySaveInput);
+    return checkSave(app, input.items);
+  });
+  r.post("/memory/save/proposals", async (c) => {
+    requireFeature(app, "capture");
+    requireData(app);
+    const input = await c.body(MemorySaveProposalInput);
+    const out = proposeSave(app, input);
     app.bus.emit("event", { type: "memory.changed" });
     return out;
   });
