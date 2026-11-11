@@ -108,6 +108,8 @@ function classifyFailure(text: string): RemoteError {
 
 /** Run one session. Throws RemoteError for failures of the session itself; per-call failures are outcomes. */
 export async function runSession(req: SessionRequest): Promise<SessionOutput> {
+  // An abort that fired before the session starts never reaches its listener, so the session would run to its timeout.
+  if (req.signal.aborted) throw new RemoteError("Cancelled", "error");
   const bin = findClaudeCli();
   if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
   const cwd = CONNECTOR_CWD;
