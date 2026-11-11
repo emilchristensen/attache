@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { accessOutsideOwner } from "../helpers.ts";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
 let svc: TestService;
@@ -217,7 +217,7 @@ describe("the terminal commands", () => {
     expect(text).toMatch(/^Jarvis memory audit: \d+ notes, \d+ current facts, stale after 60 days/);
     expect(text).toContain(`## Helios budget [project, first fact in every session's index]`);
     expect(text).toMatch(/- Budget \(2026-01-05, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);
-    expect(text).toContain(`newer: ${svc.dataDir}/evidence/captures/`);
+    expect(text).toContain(`newer: ${join(svc.dataDir, "evidence", "captures")}${sep}`);
     const json = JSON.parse((await cli(["audit", "--json", "--stale-days", "400"])).stdout);
     expect(json.staleDays).toBe(400);
     expect(existsSync(json.findings[0].absPath)).toBe(true);
