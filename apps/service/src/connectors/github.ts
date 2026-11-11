@@ -80,7 +80,7 @@ export const githubAdapter: ConnectorAdapter = {
         id: "token",
         label: "Personal access token",
         fields: [
-          { id: "token", label: "Token", secret: true, placeholder: "github_pat_… or ghp_…", help: "Create a fine-grained token with read access to Pull requests, Issues and Metadata for the repositories you want. Add Issues: write only if you authorise commenting." },
+          { id: "token", label: "Token", secret: true, placeholder: "github_pat_… or ghp_…", help: "Create a fine-grained token with read access to Pull requests, Issues and Metadata for the repositories you want. Add Issues: write only if you authorise commenting. Replication also needs Contents: read and write on the Brain's repository." },
           { id: "apiBaseUrl", label: "API URL (GitHub Enterprise only)", secret: false, optional: true, placeholder: "https://api.github.com" },
         ],
       },

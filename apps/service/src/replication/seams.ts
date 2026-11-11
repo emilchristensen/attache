@@ -6,9 +6,13 @@
  */
 import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { proposalMergeRule } from "../memory/proposal-merge.ts";
+import { systemClock, type Clock } from "./clock.ts";
 import { credentialScan } from "./credential-scan.ts";
 import { deletedAndChangedRule } from "./deleted-and-changed.ts";
+import { githubCredentials } from "./github-credentials.ts";
+import { NO_GITHUB, type GitHubAccess } from "./github.ts";
 import { noteMergeRule } from "./note-merge/rule.ts";
+import { PrivateRemoteGuard } from "./private-remote.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
@@ -75,10 +79,13 @@ export interface CommitGuard {
   check(files: readonly StagedFile[]): GuardVerdict;
 }
 
+/** A remote guard's answer; `offline` when it could not find out this time, so the next check asks again. */
+export type RemoteVerdict = GuardVerdict | { ok: false; status: "offline"; cause: string };
+
 /** Runs at setup, at join and before every push; a refusal stops the push. */
 export interface RemoteGuard {
   readonly name: string;
-  check(remote: string): Promise<GuardVerdict>;
+  check(remote: string): Promise<RemoteVerdict>;
 }
 
 /** How git authenticates to the remote, without the secret ever being part of its address. */
@@ -96,7 +103,7 @@ export interface ReplicationSeams {
   credentials: GitCredentials;
 }
 
-/** Git's own credential setup on this Machine, until a ticket adds Jarvis's helper. */
+/** Git's own credential setup on this Machine: what remotes other than GitHub over https use. */
 export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () => ({}) };
 
 /** Settles one file as Replication does: the first rule that applies and returns an outcome wins. */
@@ -122,12 +129,23 @@ function mergeRules(): readonly MergeRule[] {
   return [deletedAndChangedRule, inboxMergeRule, proposalMergeRule, noteMergeRule()];
 }
 
+/** What the service hands the seams that need more than the files. */
+export interface SeamDeps {
+  /** The GitHub connection, for the private-repository check and the repository token. */
+  github?: GitHubAccess;
+  clock?: Pick<Clock, "now">;
+  /** This install's state folder and instance, for the credential helper git runs. */
+  install?: { stateDir: string; instance: string };
+}
+
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
-export function defaultSeams(): ReplicationSeams {
+export function defaultSeams(deps: SeamDeps = {}): ReplicationSeams {
+  const github = deps.github ?? NO_GITHUB;
+  const credentials = deps.install ? githubCredentials({ github, ...deps.install }) : MACHINE_CREDENTIALS;
   return {
     mergeRules: mergeRules(),
     commitGuards: [credentialScan],
-    remoteGuards: [],
-    credentials: MACHINE_CREDENTIALS,
+    remoteGuards: [new PrivateRemoteGuard({ github, clock: deps.clock ?? systemClock })],
+    credentials,
   };
 }

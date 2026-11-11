@@ -266,8 +266,11 @@ Replication keeps the Brain the same on every Machine you run Jarvis on, through
 It is off until you switch it on; a Brain on one Machine works exactly as before.
 Each Machine needs git installed.
 
+- **Connect GitHub first** in the Dashboard's Connections.
+  Replication reaches the repository with the GitHub connection's token, so its token needs Contents: read and write on the Brain's repository, besides what the GitHub source uses.
 - **Switch it on** on the Machine that has your Brain: `jarvis replication setup owner/jarvis-brain`.
-  Name an empty repository: `owner/name` on GitHub, an `https://` or `ssh://` address, or a folder path.
+  Name an empty, private repository: `owner/name` on GitHub, a GitHub `ssh://` or `git@github.com:` address (which uses this Machine's ssh keys), or a folder path.
+  A public repository is refused with a message that says so, and so is a repository on another host, because Jarvis can confirm that a repository is private only on GitHub.
   Jarvis makes the data folder a git repository, commits everything in it and pushes it.
   A repository that already holds a Brain is refused, so two Brains are never mixed.
 - **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
@@ -303,6 +306,7 @@ What happens on its own:
   Unlike other inbox items, it stays on that Machine.
 - Until the prose merge arrives, a note whose free text both Machines changed differently, or any other file both changed in the same place, blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
 - While Replication is blocked, the inbox shows one item, "Replication is blocked", with the cause.
+  While it is unauthorized, the item asks you to reconnect GitHub instead.
   It resolves by itself once Replication is up to date again.
 
 The inbox replicates with the Brain:
@@ -315,8 +319,7 @@ The inbox replicates with the Brain:
 
 Proposals replicate the same way, from the Brain's `review/proposals/` folder, which search never reads either.
 
-The repository holds the whole Brain in plain text, so keep it private.
-Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
+Files that belong to one computer stay out of the repository: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
 
 ### Credential scan
 
@@ -328,6 +331,17 @@ Everything already committed stays in the repository and on the other Machines.
 Remove the credential from the file, by hand or with a save, and Replication continues by itself at the next check.
 If you corrected the fact with a save, the old value is still in the note's History, so remove it there too.
 A credential that is in the repository's history already does not hold back later edits to its file, but it is still there: rotate it, and purge it from the history by hand if you need to (see [Deleted notes stay in git history](#deleted-notes-stay-in-git-history)).
+
+### Private repository and token
+
+The repository holds the whole Brain in plain text, so Jarvis keeps checking that it is private:
+
+- Jarvis asks GitHub whether the repository is private at setup, at join, and again before pushing once the last answer is five minutes old.
+  A repository that has turned public blocks pushing and reads as blocked; make it private again and Replication carries on by itself.
+- The token stays in the secret store.
+  Git gets it from Jarvis's credential helper (`jarvis git-credential`) each time it reaches GitHub, so it is never part of the repository's address, its `.git/config`, a command line or the logs.
+  Your own git credential helpers are not used for the Brain's repository.
+- When GitHub rejects the token, the status reads unauthorized and the inbox asks you to reconnect GitHub; once you have, Replication carries on.
 
 ### Deleted notes stay in git history
 

@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
@@ -18,6 +18,7 @@ import { openUrl } from "./platform/open-url.ts";
 import { runMcpServer } from "./mcp/server.ts";
 import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
 import { replicationCommand } from "./cli/replication-commands.ts";
+import { gitCredentialCommand } from "./cli/git-credential-command.ts";
 
 export const DEFAULT_PORT = 7427;
 
@@ -163,6 +164,8 @@ async function main() {
       return runMcpServer(resolvePaths(arg("state-dir", argv)), VERSION);
     case "replication":
       return replicationCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
+    case "git-credential":
+      return gitCredentialCommand(argv, resolvePaths(arg("state-dir", argv)), { readStdin: () => readFileSync(0, "utf8"), write: (t) => process.stdout.write(t) });
     case "evaluate-recall":
       return evaluateRecallCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":

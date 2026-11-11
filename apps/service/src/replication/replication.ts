@@ -10,7 +10,7 @@ import { commitMessage, machineTrailer } from "./commit-message.ts";
 import { normalizeRemote, RemoteError } from "./remote.ts";
 import { cloneBrain, isEmptyFolder, prepareRepository, remoteFailure, remoteHasBrain, ReplicationSetupError } from "./setup.ts";
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
-import type { GuardVerdict, MergeNotice, ReplicationSeams } from "./seams.ts";
+import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
 
 /** A save is committed and pushed this long after the last write, so a burst of writes makes one commit. */
 export const COMMIT_DELAY_MS = 30_000;
@@ -279,7 +279,7 @@ export class Replication {
     return null;
   }
 
-  private async checkRemote(remote: string): Promise<GuardVerdict> {
+  private async checkRemote(remote: string): Promise<RemoteVerdict> {
     for (const g of this.deps.seams.remoteGuards) {
       const v = await g.check(remote);
       if (!v.ok) return v;
@@ -336,7 +336,10 @@ export class Replication {
 
   private async refuseRemote(remote: string): Promise<void> {
     const v = await this.checkRemote(remote);
-    if (!v.ok) throw new ReplicationSetupError(409, "remote_refused", v.cause);
+    if (v.ok) return;
+    if (v.status === "offline") throw new ReplicationSetupError(502, "remote_unreachable", v.cause);
+    if (v.status === "unauthorized") throw new ReplicationSetupError(502, "remote_unauthorized", v.cause);
+    throw new ReplicationSetupError(409, "remote_refused", v.cause);
   }
 
   /**

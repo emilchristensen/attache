@@ -34,7 +34,10 @@ import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
-import { REPLICATION_SOURCE, syncBlockedItem } from "./replication/blocked-inbox.ts";
+import type { GitHubAccess } from "./replication/github.ts";
+import { connectionSecretKey } from "./connectors/manager.ts";
+import { resolveEndpoint } from "./connectors/test-endpoints.ts";
+import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
 import { MERGE_NOTICE_SOURCE, raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
 
 export interface AppOptions {
@@ -107,7 +110,7 @@ export class App {
       db: this.db,
       log: this.log,
       clock: this.clock,
-      seams: defaultSeams(),
+      seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
@@ -311,9 +314,23 @@ export class App {
     return r;
   }
 
+  /** What Replication borrows from the GitHub connection: its API address and, from the secret store, its token. */
+  private githubAccess(): GitHubAccess {
+    const record = () => this.connections.records().find((r) => r.kind === "github" && r.status !== "disconnected" && r.status !== "not_configured") ?? null;
+    return {
+      connection: () => {
+        const r = record();
+        if (!r) return null;
+        const configured = typeof r.settings.apiBaseUrl === "string" && r.settings.apiBaseUrl ? r.settings.apiBaseUrl : "https://api.github.com";
+        return { id: r.id, apiBase: resolveEndpoint(configured) };
+      },
+      token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
+    };
+  }
+
   /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
   private replicationChanged() {
-    if (syncBlockedItem(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
     this.bus.emit("event", { type: "replication.changed" });
   }
 
