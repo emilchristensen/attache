@@ -58,8 +58,8 @@ jobs:
         env:
           JARVIS_TEST_REAL_DESKTOP: "1"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
           sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts
 
       # The journeys use the installed Google Chrome channel (playwright.config.ts).
