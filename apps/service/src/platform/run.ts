@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
+import { win32 } from "node:path";
 import { launchTool } from "./launch.ts";
 
 export interface RunResult {
   code: number;
   stdout: string;
   stderr: string;
+  /** True when the tool was stopped because it ran past `timeoutMs`. */
+  timedOut: boolean;
 }
 
 /**
@@ -17,14 +20,16 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
   try {
     launch = launchTool(cmd, args);
   } catch (e) {
-    return Promise.resolve({ code: 1, stdout: "", stderr: (e as Error).message });
+    return Promise.resolve({ code: 1, stdout: "", stderr: (e as Error).message, timedOut: false });
   }
   return new Promise((resolve) => {
-    const child = execFile(launch.command, launch.args, { maxBuffer: 1024 * 1024, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) }, (error, stdout, stderr) => {
+    const child = execFile(launch.command, launch.args, { maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) }, (error, stdout, stderr) => {
       const exited = error && typeof (error as { code?: unknown }).code === "number";
       const code = exited ? Number((error as { code: number }).code) : error ? 1 : 0;
-      // A tool that ran and failed speaks for itself on stderr; one that could not run (missing, timed out) gets Node's reason.
-      resolve({ code, stdout: String(stdout), stderr: String(stderr) || (error && !exited ? error.message : "") });
+      const timedOut = !!error && !!opts.timeoutMs && (error as { killed?: boolean }).killed === true;
+      // A tool that ran and failed speaks for itself on stderr; one that could not run (missing, timed out) gets a reason of its own.
+      const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : error && !exited ? error.message : "";
+      resolve({ code, stdout: String(stdout), stderr: String(stderr) || reason, timedOut });
     });
     if (opts.input !== undefined) child.stdin?.end(opts.input);
   });

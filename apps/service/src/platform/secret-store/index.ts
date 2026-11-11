@@ -3,6 +3,7 @@ import type { Os } from "../os.ts";
 import { FileSecretStore } from "./file.ts";
 import { KeychainSecretStore } from "./keychain.ts";
 import { linuxSecretStore } from "./linux.ts";
+import { windowsSecretStore } from "./windows.ts";
 import type { SecretStore } from "./types.ts";
 
 export type { SecretStore } from "./types.ts";
@@ -20,8 +21,8 @@ export interface SecretStoreOptions {
 
 /**
  * The secret store for this operating system: the Keychain on macOS, the
- * Secret Service on Linux when one is reachable (else the owner-only file).
- * Windows (Credential Manager) uses the owner-only file until its store arrives.
+ * Secret Service on Linux and Credential Manager on Windows, each when it
+ * works (else the owner-only file).
  */
 export function createSecretStore(opts: SecretStoreOptions): SecretStore {
   const env = opts.env ?? process.env;
@@ -33,7 +34,7 @@ export function createSecretStore(opts: SecretStoreOptions): SecretStore {
     case "linux":
       return linuxSecretStore({ service, indexFile: join(opts.stateDir, "secret-service-index.json"), secretsFile: opts.secretsFile, env });
     case "windows":
-      return new FileSecretStore(opts.secretsFile, "Jarvis does not use the Windows Credential Manager yet, so secrets are kept in a file only you can read.");
+      return windowsSecretStore({ service, indexFile: join(opts.stateDir, "credential-manager-index.json"), secretsFile: opts.secretsFile, env });
   }
 }
 

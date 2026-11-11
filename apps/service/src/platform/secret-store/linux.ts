@@ -4,7 +4,8 @@ import type { Env } from "../locations.ts";
 import { launchTool } from "../launch.ts";
 import { locateTool } from "../tools.ts";
 import { FileSecretStore } from "./file.ts";
-import { SecretServiceStore } from "./secret-service.ts";
+import { secretServiceBackend } from "./secret-service.ts";
+import { SystemSecretStore } from "./system-store.ts";
 import type { SecretStore } from "./types.ts";
 
 export interface LinuxSecretStoreOptions {
@@ -58,5 +59,5 @@ function reach(opts: LinuxSecretStoreOptions): Reachability {
 export function linuxSecretStore(opts: LinuxSecretStoreOptions): SecretStore {
   const r = reach(opts);
   if (!r.reachable) return new FileSecretStore(opts.secretsFile, `No Secret Service is reachable (${r.why}), so secrets are kept in a file only you can read.`);
-  return new SecretServiceStore({ tool: r.tool, service: opts.service, indexFile: opts.indexFile, leftovers: new FileSecretStore(opts.secretsFile) });
+  return new SystemSecretStore({ kind: "secret-service", backend: secretServiceBackend(r.tool, opts.service), indexFile: opts.indexFile, leftovers: new FileSecretStore(opts.secretsFile) });
 }

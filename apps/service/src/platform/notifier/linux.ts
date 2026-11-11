@@ -42,5 +42,6 @@ export function linuxNotifier(env: Env = process.env): Notifier {
       const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeMarkup(body.slice(0, MAX))], { timeoutMs: 5000 });
       return done.code === 0 ? { available: true } : { available: false, reason: done.stderr.trim().split("\n")[0] || `notify-send exited with ${done.code}` };
     },
+    forget: async () => {},
   };
 }

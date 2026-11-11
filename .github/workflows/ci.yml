@@ -64,6 +64,14 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
           sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts
 
+      # The Windows secret store and notifications against Credential Manager and Windows notifications.
+      - name: Windows desktop tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 10
+        env:
+          JARVIS_TEST_REAL_DESKTOP: "1"
+        run: pnpm vitest run apps/service/test/windows-desktop-real.test.ts
+
       # The journeys use the installed Google Chrome channel (playwright.config.ts).
       - name: Google Chrome
         id: chrome

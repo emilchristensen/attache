@@ -1,11 +1,11 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { registerSecret } from "../../core/log.ts";
 import type { SecretStore } from "./types.ts";
-import { replaceWith } from "../replace-file.ts";
+import { writePrivateFile } from "../private-file.ts";
 
 /**
- * Secrets in a file only the owner can read (mode 0600) under the service
- * state folder. The fallback where no operating-system secret store is
+ * Secrets in a file only the owner can read (mode 0600, or an owner-only
+ * access-control list on Windows) under the service state folder. The fallback where no operating-system secret store is
  * reachable, and what tests use. The file is removed once it holds nothing.
  */
 export class FileSecretStore implements SecretStore {
@@ -27,9 +27,7 @@ export class FileSecretStore implements SecretStore {
       rmSync(this.file, { force: true });
       return;
     }
-    const tmp = `${this.file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
-    replaceWith(tmp, this.file);
+    writePrivateFile(this.file, JSON.stringify(data));
   }
 
   async get(key: string) {

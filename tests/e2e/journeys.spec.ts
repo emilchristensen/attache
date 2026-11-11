@@ -274,7 +274,7 @@ test("credentials: Settings says which secret store holds them and why", async (
   // The stack forces the private file, as an install without a system secret store would use.
   const store = page.locator("[data-credential-store]");
   await expect(store).toHaveAttribute("data-credential-store", "file");
-  await expect(store).toContainText("Local file (0600)");
+  await expect(store).toContainText("Private file (only you can read it)");
   await expect(store).toContainText("JARVIS_CREDENTIAL_STORE=file chose the file.");
 });
 

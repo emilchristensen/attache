@@ -4,7 +4,7 @@
  * Secrets are never written to the Brain, the database or clients.
  */
 export interface SecretStore {
-  readonly kind: "keychain" | "secret-service" | "file";
+  readonly kind: "keychain" | "secret-service" | "credential-manager" | "file";
   /** Why this store is in use when it is not the operating system's own, for the Dashboard; null otherwise. */
   readonly note: string | null;
   get(key: string): Promise<string | null>;
