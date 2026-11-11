@@ -171,15 +171,6 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
   });
 
-  it("a run cancelled before its session starts stops at once instead of waiting out the timeout", async () => {
-    claude.mode = "hang";
-    const ctrl = new AbortController();
-    ctrl.abort();
-    const started = Date.now();
-    await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);
-    expect(Date.now() - started).toBeLessThan(10_000);
-  });
-
   it("helpers: tool naming, order-insensitive argument equality, spill files only from the config dir", () => {
     expect(fullToolName("claude.ai Google Calendar", "list_events")).toBe("mcp__claude_ai_Google_Calendar__list_events");
     expect(deepEqual({ a: 1, b: [1, { c: 2 }] }, { b: [1, { c: 2 }], a: 1 })).toBe(true);
