@@ -72,7 +72,7 @@ The Dashboard shows notes, evidence and deliverables read-only: it has no captur
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
 Changes that Jarvis proposes wait in *Memory changes to review* until you apply or reject them.
-Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites.
+Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites, with the words it quotes from that evidence.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
@@ -117,8 +117,13 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
 - **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
   Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Jarvis named Machines keep their `<date>.md` name and are still searched and shown.
-  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
+  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript, and says that no Proposals were made.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
+- **Consolidation:** when the session log entry holds something durable, Jarvis reads the session again, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*.
+  Each names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
+  A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+  Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
+  It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
 - **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
   A session started inside one of a project's repositories also gets, first, that project's current state, the decisions and people linked to it, and the latest session-log entries from sessions in its repositories.
   A decision or a person is linked to a project when either note names the other, by its title or with a link to its file.

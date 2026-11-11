@@ -46,7 +46,7 @@ test("screens", async ({ browser }) => {
   // A pending Proposal, so the Memory screens show the review list.
   await page.evaluate(async () => {
     const item = { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }, { subject: "Team", value: "Vendor management" }], notes: "Met on the vendor call.\nPrefers email.", events: ["Introduced in the vendor call"], tags: ["vendor"] };
-    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in jarvis" } }) });
+    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in jarvis" }, evidence: "Lena from Postmark joined the call; she manages our account and prefers email." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
   // Recent saves on the Memory screen: a correction, a reverted one, and one a later save overwrote.

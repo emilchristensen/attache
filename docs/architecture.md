@@ -328,6 +328,18 @@ That job asks the model for durable decisions and lessons, appends one entry per
 An entry for a session that ran in a git repository carries a `Repository: <host/owner/name>` line, read from the folder's git config when the job runs, which ties it to the project that lists that repository.
 Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
 
+### Consolidation
+
+When a summary finds something durable, `session-distill` queues a `session-consolidate` job for the same turns (`consolidation/consolidate.ts`, input `{ agent, sessionId, from, to, topics }`, where `topics` are the summary's bullets).
+It runs on the Machine whose hook spooled the session; a Machine that receives the transcript and session log through Replication never ingests them, so it never consolidates them.
+Without a model the summary does not run, so nothing is queued and the session log entry says no Proposals were made; a job that finds the model gone returns `{ skipped: "no model" }` with that message.
+The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`), finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for at most five changes as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
+The reply is untrusted data (`consolidation/reply.ts`, `consolidation/screen.ts`): an entry that is not a valid save item, whose evidence is not quoted from the session, or that fails `checkItems` (the save's validation) is dropped and logged, never repaired.
+Facts the note already holds with the same value, events already in the note, and parts of pending Proposals are removed; an item with nothing left is dropped.
+A session has room for five Proposals from Consolidation in total, counted across every run for it.
+What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
+Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
+
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
@@ -364,7 +376,7 @@ Each pairs itself on first use as client kind `cli` (the same trust as `jarvis p
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
 
-A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested and the evidence it cites.
+A Proposal (`memory/proposals.ts`) holds exactly one such item, with the reason it was suggested, the evidence it cites, and optionally the words it quotes from that evidence (`evidence`).
 `POST /api/v1/memory/proposals` runs the save's validation before recording it, `GET /api/v1/memory/proposals?status=proposed` lists pending ones with the whole item, and `POST /api/v1/memory/proposals/:id/apply|reject` decides one.
 Applying validates the item again, because the Brain may have changed since, then writes it as the service with the approved-Proposal permission and provenance `user-approved`; a refusal leaves the Proposal pending and the Brain untouched.
 Rejecting writes nothing.
