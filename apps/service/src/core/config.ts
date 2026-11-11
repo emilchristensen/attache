@@ -1,4 +1,4 @@
-import { Config, type ConfigPatch } from "@jarvis/contracts";
+import { Config, FeatureId, type ConfigPatch } from "@jarvis/contracts";
 import { type Db, nowIso } from "./db.ts";
 
 /** Configuration persisted in the service database, with a revision counter for optimistic updates. */
@@ -13,7 +13,7 @@ export class ConfigStore {
   get(): Config {
     if (this.cache) return this.cache;
     const row = this.db.prepare("select json from config where id = 1").get() as { json: string } | undefined;
-    const parsed = Config.parse(row ? JSON.parse(row.json) : {});
+    const parsed = Config.parse(withoutRetiredFeatures(row ? JSON.parse(row.json) : {}));
     this.cache = parsed;
     return parsed;
   }
@@ -45,4 +45,17 @@ export class ConfigStore {
       notifications: { ...cur.notifications, ...(p.notifications ?? {}) },
     });
   }
+}
+
+/**
+ * A feature Jarvis no longer has (voice, for one) may still be switched on or
+ * off in a configuration saved before the upgrade. Forget it rather than
+ * refuse the whole configuration; the next save writes it without the entry.
+ */
+function withoutRetiredFeatures(stored: unknown): unknown {
+  if (!stored || typeof stored !== "object") return stored;
+  const { features, ...rest } = stored as { features?: unknown };
+  if (!features || typeof features !== "object") return stored;
+  const known = Object.entries(features).filter(([id]) => FeatureId.safeParse(id).success);
+  return { ...rest, features: Object.fromEntries(known) };
 }
