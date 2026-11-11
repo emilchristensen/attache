@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { MemorySaveInput, MemorySaveResult } from "@jarvis/contracts";
 import type { App } from "../app.ts";
@@ -5,7 +6,7 @@ import { nowIso } from "../core/db.ts";
 import { integrationFor } from "../agents/integrations.ts";
 import { HttpError } from "../http/router.ts";
 import { checkItems, writeItem } from "./save-items.ts";
-import type { SourceRef } from "./store.ts";
+import type { ChangeMeta, SourceRef } from "./store.ts";
 
 /**
  * Apply what the user asked a coding agent to save. Every item is checked
@@ -18,8 +19,10 @@ export function saveToMemory(app: App, input: MemorySaveInput, clientId: string 
   if (!root) throw new HttpError(409, "needs_data_folder", "Choose a data folder first.");
   const plan = checkItems(app.memory, input.items);
   const source = originSource(app, input.origin);
+  // One batch id for the whole save, with the Harness and session it came from, so recent saves can show and undo it as one.
+  const meta: ChangeMeta = { harness: input.origin?.agent ?? null, sessionId: input.origin?.sessionId || null, batchId: randomUUID() };
   const saved: MemorySaveResult["saved"] = plan.map((step) => {
-    const written = writeItem(app.memory, step, source, { actor: "user", provenance: "agent-saved" });
+    const written = writeItem(app.memory, step, source, { actor: "user", provenance: "agent-saved" }, meta);
     return { ...written, absPath: join(root, written.relPath) };
   });
   app.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), clientId ?? "user", "memory_saved", JSON.stringify({ origin: input.origin ?? null, saved: saved.map((s) => ({ action: s.action, relPath: s.relPath })) }));

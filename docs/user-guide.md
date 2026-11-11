@@ -80,6 +80,20 @@ Each Proposal shows the whole change before you decide: the new note or the note
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
 A Proposal can never change your identity record.
 
+**Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
+Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, a Proposal you approved, or you) and when.
+**Revert** undoes one change with one click:
+
+- A corrected fact gets its previous value back as a new correction, so the note's *History* shows both the change and its revert.
+- A fact a save added is taken out of *Current state* and kept in *History*.
+- A note a save created is removed from your Brain and from search, together with the events and facts that same save wrote into it.
+- A removed note can be brought back by reverting the removal.
+
+Every revert is listed as a change of its own, so you can revert a revert.
+A change can be reverted only while it is still the last word on what it changed.
+When a later change overwrote the same fact, or the note was edited outside Jarvis since, the row says why and offers no **Revert**; revert the later change first.
+Events stay in *History*, which only grows, so they cannot be reverted.
+
 **Drafts** shows each draft with its context and evidence.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
@@ -104,6 +118,10 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  A session started inside one of a project's repositories also gets that project's current state first.
+  A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
+  The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
+  Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/jarvis-memory.md`.
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.

@@ -53,6 +53,8 @@ When a note under \`memory/\` already covers it, update that note by its path (t
 Jarvis refuses a second note with the same type and title.
 Note types are \`person\`, \`project\`, \`decision\` and \`note\`.
 A decision gets its own decision note with the subject \`Decision\` and the reasoning in \`notes\`; also add an event to the project it belongs to, when there is one.
+A project's \`Repositories\` fact lists its git repositories, separated by commas: \`owner/name\` for GitHub, \`host/owner/name\`, or a remote address.
+A new session in one of them starts with that project's context, so add the repository this session runs in when its project does not list it yet.
 
 ## Save
 

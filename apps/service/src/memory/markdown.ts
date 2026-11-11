@@ -172,12 +172,27 @@ export function applyStateCorrection(
     }
     lines.splice(insertAt, 0, newLine);
   }
-  let text = lines.join("\n");
-  if (previous) {
-    const hist = `- ${entry.date} — **${previous.subject}** was "${previous.value}" (dated ${previous.date}${previous.source ? `, source: ${previous.source}` : ""}); superseded: ${reason.replace(/\s*\n\s*/g, " ")}`;
-    text = appendHistory(text, hist);
-  }
-  return { text, previous };
+  const text = lines.join("\n");
+  return { text: previous ? appendHistory(text, formerValueLine(entry.date, previous, "superseded", reason)) : text, previous };
+}
+
+/**
+ * Take one subject's entry (and any indented lines under it) out of Current
+ * State and keep the removed value in History. Returns the text unchanged and
+ * `removed: null` when the subject has no entry.
+ */
+export function removeStateEntry(raw: string, entry: { subject: string; date: string }, reason: string): { text: string; removed: StateEntry | null } {
+  const removed = parseStateEntries(raw).find((e) => e.subject.toLowerCase() === entry.subject.toLowerCase()) ?? null;
+  if (!removed) return { text: raw, removed: null };
+  const lines = raw.split("\n");
+  let end = removed.line;
+  while (end < lines.length && /^\s+\S/.test(lines[end]!)) end++;
+  const text = [...lines.slice(0, removed.line - 1), ...lines.slice(end)].join("\n");
+  return { text: appendHistory(text, formerValueLine(entry.date, removed, "removed", reason)), removed };
+}
+
+function formerValueLine(date: string, former: StateEntry, outcome: "superseded" | "removed", reason: string): string {
+  return `- ${date} — **${former.subject}** was "${former.value}" (dated ${former.date}${former.source ? `, source: ${former.source}` : ""}); ${outcome}: ${reason.replace(/\s*\n\s*/g, " ")}`;
 }
 
 export function appendHistory(raw: string, line: string): string {
