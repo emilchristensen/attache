@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,12 +8,16 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { antigravityTranscript, claudeTranscript, codexRollout } from "../fixtures/agents/transcripts.ts";
 import { spoolDir } from "../../src/agents/spool.ts";
+import { callTool, mcpClients } from "./mcp-client.ts";
 
 const HOME = process.env.JARVIS_AGENT_HOME!;
 const FOREIGN_CLAUDE = { model: "opus", hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }], SessionStart: [{ matcher: "", hooks: [{ type: "command", command: "bash snapshot.sh", timeout: 5 }] }] } };
 
 let svc: TestService;
 let fx: FixtureServer;
+const mcp = mcpClients();
+/** The name Jarvis registers its MCP server under for this install. */
+const registeredName = () => svc.app.sessions.hooks.ownerKey();
 const work = mkdtempSync(join(tmpdir(), "jarvis-it-agentwork-"));
 
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
@@ -25,19 +29,6 @@ function runHook(settingsPath: string, event: string, input: Record<string, unkn
     ? (Object.values(s).flatMap((v: any) => v?.[event] ?? []) as Array<{ command: string }>).find((h) => h.command.includes("jarvis-agent-hook"))!.command
     : (s.hooks[event] as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
   return execFileSync("/bin/sh", ["-lc", command], { input: JSON.stringify(input), env: { ...process.env, HOME, ...opts.env }, encoding: "utf8" });
-}
-
-/** Run a command through a shell the way an agent's Bash tool does. Asynchronous: the service it calls runs in this process. */
-function shell(script: string, env: Record<string, string> = {}): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("/bin/sh", ["-c", script], { cwd: work, env: { ...process.env, HOME, ...env } });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-    child.on("error", reject);
-    child.on("close", (status) => resolve({ status, stdout, stderr }));
-  });
 }
 
 async function until<T>(fn: () => T | undefined | null | false, ms = 15_000): Promise<T> {
@@ -67,6 +58,7 @@ beforeAll(async () => {
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture-model" } });
 });
 afterAll(async () => {
+  await mcp.closeAll();
   await svc?.stop();
   await fx?.close();
 });
@@ -82,11 +74,9 @@ describe("coding-agent sessions", () => {
     for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(s.hooks[e])).toContain("jarvis-agent-hook");
     // The previous file was backed up first.
     expect(readdirSync(svc.app.paths.backupsDir).some((f) => f.includes("claude_settings_json"))).toBe(true);
-    // The save and audit skills, which only the user can invoke.
-    const [save, audit] = svc.app.sessions.hooks.skills.names();
-    expect(readdirSync(join(HOME, ".claude/skills")).sort()).toEqual([audit, save]);
-    expect(readFileSync(join(HOME, `.claude/skills/${save}/SKILL.md`), "utf8")).toContain("disable-model-invocation: true");
-    expect(r.test.message).toContain(`/${save} and /${audit} skills`);
+    // Saves go through the MCP server now; no skills are installed.
+    expect(readJson(join(HOME, ".claude.json")).mcpServers).toEqual({ [registeredName()]: expect.objectContaining({ args: expect.arrayContaining(["mcp", svc.stateDir]) }) });
+    expect(existsSync(join(HOME, ".claude/skills"))).toBe(false);
   });
 
   it("a new session starts with the user's Jarvis memory", async () => {
@@ -129,18 +119,15 @@ describe("coding-agent sessions", () => {
     expect(hits[0]!.file.startsWith(svc.dataDir)).toBe(true);
   });
 
-  it("the save skill's command, run by the agent, writes curated memory that cites the session", async () => {
-    const skill = readFileSync(join(HOME, `.claude/skills/${svc.app.sessions.hooks.skills.names()[0]}/SKILL.md`), "utf8");
-    const command = skill.split("\n").find((l) => / save <<'JSON'$/.test(l))!.trim();
-    const items = { items: [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }] };
-    const out = await shell(`${command}\n${JSON.stringify(items)}\nJSON\n`, { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "s1" });
-    expect(out.stderr).toBe("");
-    expect(out.stdout).toContain("Updated Orion migration (1 fact, 0 events)");
+  it("a save through the registered MCP server, confirmed in the Harness, writes curated memory that cites the session", async () => {
+    const entry = readJson(join(HOME, ".claude.json")).mcpServers[registeredName()];
+    const client = await mcp.connectRegistered(entry, { name: "claude-code", cwd: work, env: { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "s1" }, confirm: () => ({ action: "accept", content: {} }) });
+    const items = [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }];
+    const r = await callTool<{ outcome: string }>(client, "save", { items });
+    expect(r.data.outcome).toBe("saved");
     const note = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
     // s1 was archived above, so the fact cites its transcript.
     expect(note).toMatch(/Cutover moved to November — source: Claude Code session in jarvis-it-agentwork-\w+ \(agent-session: evidence\/sessions\/transcripts\/claude-code\/\d{4}-\d{2}-\d{2}-s1\.md/);
-    const audit = await shell(skill.split("\n").find((l) => / search "<topic>"$/.test(l))!.trim().replace(/ search .*/, " audit"));
-    expect(audit.stdout).toContain("## Orion migration [project, first fact in every session's index]");
   });
 
   it("a compaction then the end of the same session adds only the new turns", async () => {
@@ -286,7 +273,9 @@ describe("coding-agent sessions", () => {
     expect(readJson(join(HOME, ".codex/hooks.json"))).toEqual({ hooks: {} });
     expect(Object.keys(readJson(join(HOME, ".gemini/config/hooks.json")))).toEqual(["claude-mem"]);
     expect(readdirSync(join(HOME, ".gemini/config/rules"))).toEqual([]);
-    for (const dir of [".claude/skills", ".agents/skills", ".gemini/config/skills"]) expect(readdirSync(join(HOME, dir))).toEqual([]);
+    expect(readJson(join(HOME, ".claude.json")).mcpServers).toBeUndefined();
+    expect(existsSync(join(HOME, ".codex/config.toml")) ? readFileSync(join(HOME, ".codex/config.toml"), "utf8") : "").not.toContain("--state-dir");
+    expect(readJson(join(HOME, ".gemini/config/mcp_config.json")).mcpServers).toBeUndefined();
   });
 
   it("hooks from another Jarvis instance are left alone", async () => {

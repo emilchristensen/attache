@@ -10,7 +10,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -235,12 +235,12 @@ export const MemorySaveItem = z.discriminatedUnion("action", [
 export type MemorySaveItem = z.infer<typeof MemorySaveItem>;
 
 /**
- * What the user asked a coding agent to save (`jarvis save`). State goes into
+ * What the owner asked a Harness to save (the MCP `save` tool). State goes into
  * `facts` (one current value per subject, replacing the old one), events into
  * `events` (appended to History). Validated as a whole before anything is written.
  */
 export const MemorySaveInput = z.object({
-  /** The coding-agent session the items were distilled from. */
+  /** The Harness session the items were distilled from. */
   origin: z
     .object({
       agent: z.string().trim().min(1).max(40),

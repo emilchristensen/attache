@@ -37,7 +37,8 @@ Setup has five steps and each works without the ones after it.
    For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
-   Under *Coding agents*, connect Claude Code, Codex or Antigravity if you use them (see Agent sessions below).
+   Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
+   Each gets Jarvis's MCP server, so it can search your Brain and save to it with your confirmation; Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
 4. **Model and schedules.**
    Pick a model: Claude Code on this Mac (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Jarvis still searches and shows you the evidence it finds.
@@ -102,11 +103,13 @@ Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 
-Jarvis can remember your work with coding agents: Claude Code, Codex and Antigravity.
-Connect each agent you use under Connections → *Coding agents*; the card says exactly which file changes before you connect.
+Jarvis remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
+Connect each one you use under Connections → *Harnesses*; the card says exactly which files change before you connect.
 
-- **What changes in the agent:** Jarvis adds its own hooks to the agent's settings (`~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json`).
-  Your other settings and hooks are kept, the file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
+- **What changes in the Harness:** connecting adds Jarvis's MCP server (see the next section) and Jarvis's own hooks, in one step.
+  The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
+  Your other settings, hooks and MCP servers are kept, each file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
+  A file Jarvis cannot read (for example JSON with comments, or TOML that does not parse) is refused with a message that names it, and nothing is changed.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
 - **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
@@ -123,39 +126,31 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Jarvis hooks.
   Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Jarvis's again; reconnecting updates Jarvis's hooks in place and leaves yours where they are.
 - **If Jarvis is not running,** sessions are queued on your Mac and saved the next time it starts.
-- **Save and audit skills:** connecting an agent also adds two skills that only you can run; the agent never starts them on its own.
-  In Claude Code and Antigravity type `/jarvis-save` or `/jarvis-audit`; in Codex type `$jarvis-save` or `$jarvis-audit`.
-  - `/jarvis-save` distills the important parts of the last turn (decisions, lessons, current facts about people and projects) into your curated memory.
-    It updates the note that already covers a topic instead of creating a second one, keeps every replaced value in the note's History, and records which session it came from.
-    Add a few words after the command to say what to focus on.
-  - `/jarvis-audit` checks your memory for facts that have quietly stopped being true, starting with the ones every new session reads.
-    It reports contradicted and unsupported facts with the evidence, and corrects only what you approve.
-  - Both use the Jarvis command line, so Jarvis must be running; `jarvis save --help` shows the format, and `jarvis audit` prints the same report from a terminal.
-  - The skills live in `~/.claude/skills`, `~/.agents/skills` (Codex) and `~/.gemini/config/skills`; Jarvis never changes a skill folder it did not create, and **Disconnect** removes them.
 
-Turning *Agent sessions* off in Settings disconnects every agent and removes the hooks and skills.
-Uninstalling Jarvis removes them too.
+Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Jarvis's MCP server; Claude Desktop stays connected.
+Uninstalling Jarvis removes them all.
 
 ## The Brain in any Harness (MCP)
 
-Any Harness that speaks MCP, including ones without a shell such as Claude Desktop, can reach your Brain through Jarvis's MCP server.
-The Harness starts it as a local process with the command `jarvis mcp`; there is no URL and no token to copy.
+Every Harness you connect reaches your Brain through Jarvis's MCP server, including Claude Desktop, which has no shell and no hooks.
+Connect Claude Desktop under Connections → *Harnesses* like the others; it gets the MCP server only, in its `claude_desktop_config.json`, and needs a restart to load it.
+Its Code tab runs Claude Code, so connect Claude Code too to save those sessions.
+
+The Harness starts the server as a local process (`jarvis mcp`, pinned to this install); there is no URL and no token to copy.
 The server pairs with the running service the way the command line does and keeps its token in Jarvis's state folder, never in the Harness's configuration.
+It is listed under the name `jarvis`.
+If the Harness already lists a server named `jarvis` that Jarvis did not add (for example one you added by hand with `claude mcp add`), connecting stops and says so; remove that entry, then connect again.
 
-For now, add it to your Harness by hand, for example in Claude Code:
-
-```sh
-claude mcp add --scope user jarvis -- ~/.local/bin/jarvis mcp
-```
-
-Other Harnesses take the same command and argument in their MCP server settings.
+Earlier versions installed two skills, `jarvis-save` and `jarvis-audit`, and a `jarvis save` command.
+The MCP tools and prompts replace both, because a save is now confirmed by you in the Harness, which a shell command cannot do.
+When Jarvis starts after the upgrade, it removes the skill folders it installed (the ones with its `.jarvis-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
   A fact past its Review date is marked unverified.
   While meaning-based search is not ready on this Machine, the answer starts with a line saying the passages match keywords only, and why.
 - **read** returns a whole note, or only a line range, for a path that search returned, and names the facts in it that are past their Review date.
-- **save** writes facts and events, with the same items as `jarvis save`: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
+- **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
   A fact can carry a Review date (see below).
   Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
   Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
@@ -300,9 +295,9 @@ Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder
 | Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
-| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
-| Coding-agent hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
-| Coding-agent skills | `jarvis-save` and `jarvis-audit` in `~/.claude/skills`, `~/.agents/skills`, `~/.gemini/config/skills`; `jarvis agent-hooks status` lists them |
+| Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |
+| Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Jarvis added); `jarvis agent-hooks status` lists them |
+| Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `jarvis` entry); `jarvis agent-hooks status` lists them |
 | Service agent | `~/Library/LaunchAgents/dev.jarvis.service.plist` |
 
 `jarvis paths` prints every one of these locations for the computer it runs on, and `jarvis service status` says whether the background service is loaded.
