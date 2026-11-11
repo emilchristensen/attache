@@ -121,8 +121,11 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
   Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
   It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
-- **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
-  A session started inside one of a project's repositories also gets that project's current state first.
+- **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Jarvis keeps, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
+  A session started inside one of a project's repositories also gets, first, that project's current state, the decisions and people linked to it, and the latest session-log entries from sessions in its repositories.
+  A decision or a person is linked to a project when either note names the other, by its title or with a link to its file.
+  The whole block stays within about 8 KB; when there is more, Jarvis drops note titles first, then the oldest session entries, then the least recently updated decisions and people, and says what it left out.
+  The project's own facts are always there, and a fact past its Review date is marked unverified.
   A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
   The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
   Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.

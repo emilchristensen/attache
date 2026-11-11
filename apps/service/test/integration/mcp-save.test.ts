@@ -130,13 +130,15 @@ describe("MCP save, confirmed in the Harness", () => {
   it("never changes the identity record, not even when the owner would accept", async () => {
     const before = brainFile("memory/self.md");
     expect(before).toContain("Ada Lovelace");
+    // One client per kind of Harness, reused for every spelling: each connect cold-starts a server process.
+    const accepting = owner("accept");
+    const clients = [await connect({ env: CLAUDE_CODE_SESSION, confirm: accepting.confirm }), await connect({ env: CLAUDE_CODE_SESSION })];
     for (const path of ["memory/self.md", "./memory/self.md", "memory/people/../self.md", "memory/SELF.md"]) {
-      for (const confirm of [owner("accept"), null]) {
-        const client = await connect({ env: CLAUDE_CODE_SESSION, ...(confirm ? { confirm: confirm.confirm } : {}) });
+      for (const client of clients) {
         const r = await callTool<SaveReply>(client, "save", { items: [{ action: "update", path, facts: [{ subject: "Name", value: "Mallory", reason: "Takeover" }] }] });
         expect(r.isError).toBe(true);
         expect(r.text).toContain("identity record");
-        if (confirm) expect(confirm.shown).toEqual([]);
+        expect(accepting.shown).toEqual([]);
       }
     }
     expect(brainFile("memory/self.md")).toBe(before);

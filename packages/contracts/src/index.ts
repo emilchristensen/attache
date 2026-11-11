@@ -400,6 +400,7 @@ export interface MemoryAuditReport {
   entries: number;
   /** Counts per flag, so two runs can be compared. */
   counts: Record<string, number>;
+  /** `inSessionIndex`: a project's session context carries the note's facts (a project that lists repositories, or a decision or person linked to one). */
   findings: Array<{ relPath: string; absPath: string; title: string; type: string; inSessionIndex: boolean; flags: string[]; entries: MemoryAuditEntry[] }>;
   /** Pairs of notes whose titles reduce to the same name. */
   possibleDuplicates: Array<{ title: string; relPaths: string[] }>;

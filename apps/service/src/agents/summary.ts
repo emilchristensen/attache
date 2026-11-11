@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { repositoryLine } from "./session-log-entries.ts";
 
 /**
  * Turning a session into a session-log entry: the model is asked what is
@@ -65,6 +66,8 @@ export function sessionLogSection(input: {
   agentLabel: string;
   title: string;
   cwd: string | null;
+  /** Repository keys of the folder the session ran in; they tie the entry to a project's session context. */
+  repositories: readonly string[];
   at: string | null;
   continued: boolean;
   /** null when no model was available to summarise. */
@@ -74,5 +77,6 @@ export function sessionLogSection(input: {
   const head = [localTime(input.at), input.agentLabel, projectLabel(input.cwd)].filter(Boolean).join(" · ");
   const lines =
     input.bullets === null ? ["- No model is connected, so this session was saved without a summary, and Jarvis made no Proposals from it."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
-  return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
+  const repository = repositoryLine(input.repositories);
+  return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...(repository ? [repository, ""] : []), ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
 }
