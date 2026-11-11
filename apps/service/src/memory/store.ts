@@ -239,7 +239,7 @@ export class MemoryStore {
     this.writeFile(rel, doc, actor, opts);
     tx(this.db, () => {
       this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" }, meta);
-      for (const e of input.events ?? []) this.recordChange({ docRelPath: rel, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" }, meta);
+      for (const e of input.events ?? []) this.recordChange({ docRelPath: rel, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: sourceLabel ?? null, actor, status: "applied" }, meta);
     });
     return { relPath: rel };
   }
@@ -284,7 +284,7 @@ export class MemoryStore {
     this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: this.today() }) : text, actor, opts);
     return tx(this.db, () => [
       ...corrections.map((c) => this.recordChange({ docRelPath: n, change: "correct", subject: c.subject, beforeValue: c.before, afterValue: c.value, beforeReview: c.beforeReview, afterReview: c.review, reason: c.reason, source: sourceLabel ?? null, actor, status: "applied" }, meta)),
-      ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: null, actor, status: "applied" }, meta)),
+      ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: input.source ? formatSource(input.source) : null, actor, status: "applied" }, meta)),
     ]);
   }
 

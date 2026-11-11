@@ -3,7 +3,7 @@ import { HttpError } from "../http/router.ts";
 import { slugify } from "./markdown.ts";
 import { isProtected, normalizeRel } from "./policy.ts";
 import { isRepositorySubject, parseRepositoryList } from "./repositories.ts";
-import { formatSource, type ChangeMeta, type MemoryStore, type SourceRef } from "./store.ts";
+import type { ChangeMeta, MemoryStore, SourceRef } from "./store.ts";
 
 type CreateItem = Extract<MemorySaveItem, { action: "create" }>;
 type UpdateItem = Extract<MemorySaveItem, { action: "update" }>;
@@ -44,7 +44,8 @@ export function checkItems(memory: MemoryStore, items: readonly MemorySaveItem[]
  * `meta` goes into the change log with every change: items written together share one batch id.
  */
 export function writeItem(memory: MemoryStore, step: CheckedItem, source: SourceRef | null, writer: ItemWriter, meta: ChangeMeta): WrittenItem {
-  const label = source ? formatSource(source) : null;
+  // An event names its source briefly; the full citation is in the note's sources and in the change log.
+  const label = source ? (source.label ?? `${source.kind}: ${source.ref}`) : null;
   const events = (step.item.events ?? []).map((text) => (label ? `${text} (source: ${label})` : text));
   const opts = { approvedProposal: writer.actor === "service" };
   if (step.action === "create") {

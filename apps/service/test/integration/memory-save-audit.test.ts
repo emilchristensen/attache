@@ -53,8 +53,12 @@ describe("saving from a Harness", () => {
     expect(decision).toContain("kind: agent-session");
     expect(decision).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): jarvis save posts to the running service/);
     expect(decision).toContain("The service holds the data folder's writer lock.");
-    expect(decision).toMatch(/— Agreed while adding jarvis save \(source: Claude Code session in jarvis \(agent-session: claude-code\/sess-1/);
+    // An event names its source briefly; the note's sources and the change log keep the full citation.
+    expect(decision).toMatch(/— Agreed while adding jarvis save \(source: Claude Code session in jarvis\)\n/);
     const orion = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
+    expect(orion).toMatch(/— Vendor slipped the cutover by a month \(source: Claude Code session in jarvis\)\n/);
+    const logged = (await svc.get(`/memory/document?path=${encodeURIComponent("memory/projects/orion-migration.md")}`)).changes as Array<{ change: string; afterValue: string; source: string | null }>;
+    expect(logged.find((c) => c.change === "append")).toMatchObject({ afterValue: "Vendor slipped the cutover by a month (source: Claude Code session in jarvis)", source: expect.stringMatching(/\(agent-session: claude-code\/sess-1/) });
     expect(orion).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Cutover moved to November — source: Claude Code session in jarvis/);
     // The old value is kept in History, not left looking current.
     expect(orion).toMatch(/\*\*Status\*\* was "Cutover planned for October".*superseded: vendor delay/);
