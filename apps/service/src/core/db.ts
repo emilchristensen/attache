@@ -1,4 +1,4 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync, type PrepareOptions, type SQLInputValue, type StatementResultingChanges, type StatementSync } from "node:sqlite";
 
 export type Db = DatabaseSync;
 export type Row = Record<string, SQLInputValue>;
@@ -232,8 +232,37 @@ export const MIGRATIONS: readonly string[] = [
   `,
 ];
 
+const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);
+
+/**
+ * The service's connection. Deleting from the contentless search index (`chunks_fts`) writes tombstone pages
+ * whose rowids lie above 2^53, and SQLite then reports the last of them as the connection's last insert rowid.
+ * Node 26 throws from every later `run()` that would return it as a number, so `run()` reads it as a BigInt
+ * and returns plain numbers whenever they fit.
+ */
+class ServiceDatabase extends DatabaseSync {
+  override prepare(sql: string, options?: PrepareOptions): StatementSync {
+    const statement = options ? super.prepare(sql, options) : super.prepare(sql);
+    if (options?.readBigInts) return statement;
+    const run = statement.run.bind(statement);
+    Object.defineProperty(statement, "run", {
+      value: (...params: SQLInputValue[]): StatementResultingChanges => {
+        // run() returns no rows, so reading BigInts changes only how the counts come back.
+        statement.setReadBigInts(true);
+        try {
+          const r = run(...params);
+          return { changes: fitsInNumber(r.changes), lastInsertRowid: fitsInNumber(r.lastInsertRowid) };
+        } finally {
+          statement.setReadBigInts(false);
+        }
+      },
+    });
+    return statement;
+  }
+}
+
 export function openDb(file: string): Db {
-  const db = new DatabaseSync(file);
+  const db = new ServiceDatabase(file);
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma synchronous = normal;");
   migrate(db);
   return db;
