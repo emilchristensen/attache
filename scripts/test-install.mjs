@@ -214,7 +214,9 @@ async function main() {
 
   // --- the MCP server Jarvis registered runs the installed CLI, with no jarvis on PATH, and saves what the owner confirms ---
   const mcpEntry = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers?.jarvis;
-  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", mcpEntry?.command === `${PREFIX}/current/runtime/node` && mcpEntry.args.join(" ") === `${PREFIX}/current/service/jarvis-service.mjs mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
+  // Node reports its own path with symlinks resolved, so the temporary home's /var may show as /private/var.
+  const viaCurrent = (p, rest) => typeof p === "string" && p.endsWith(`${PREFIX}/current/${rest}`) && !p.includes("/app/");
+  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, "runtime/node") && viaCurrent(mcpEntry.args[0], "service/jarvis-service.mjs") && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
   const mcpItems = [{ action: "create", type: "decision", title: "The MCP server runs the installed CLI", facts: [{ subject: "Decision", value: "Harnesses start the bundled node and service, so the server needs nothing on PATH" }] }];
   let mcpOutcome = "";
   try {
