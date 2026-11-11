@@ -159,6 +159,13 @@ Other Harnesses take the same command and argument in their MCP server settings.
   Decline or close the request, and nothing is written; the agent is told so.
   A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
+- **Auto-accept** skips the confirmation for a Harness you trust.
+  In Settings, under **Auto-accept saves**, each connected Harness has a switch, off by default.
+  With it on, a save from that Harness is written without asking; every other Harness still asks.
+  The setting belongs to this Machine only: it is kept in Jarvis's local state, not in your Brain, so another Machine asks until you switch it on there too.
+  Disconnecting a Harness switches its auto-accept off.
+  An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
+  Your identity record is never changed this way.
 - **audit** lists every current fact with its date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   It writes nothing.
 - Three prompts carry Jarvis's procedures, so the Harness needs no installed skills.

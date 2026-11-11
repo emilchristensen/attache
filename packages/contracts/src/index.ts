@@ -270,6 +270,11 @@ export const MemorySaveInput = z.object({
     })
     .optional(),
   items: z.array(MemorySaveItem).min(1).max(20),
+  /**
+   * Write without asking the owner, because they switched on auto-accept for
+   * the origin's Harness on this Machine. Refused when it is off.
+   */
+  autoAccept: z.boolean().optional(),
 });
 export type MemorySaveInput = z.infer<typeof MemorySaveInput>;
 
@@ -280,10 +285,24 @@ export interface MemorySaveResult {
 /** What a save would change, checked against the Brain without writing: one entry per item, in order. */
 export interface MemorySaveCheckResult {
   items: Array<{ action: "create"; title: string; relPath: null } | { action: "update"; title: string; /** The note the update changes. */ relPath: string }>;
+  /** Whether the save may be written without asking: auto-accept is on for the origin's Harness on this Machine. */
+  autoAccept: boolean;
 }
 
+/** A connected Harness and whether its saves skip the confirmation request on this Machine. */
+export interface HarnessSettingView {
+  /** Harness integration kind, e.g. `claude-code`. */
+  id: string;
+  label: string;
+  /** Off by default; kept in this Machine's local state, never in the Brain. */
+  autoAccept: boolean;
+}
+
+export const HarnessAutoAcceptInput = z.object({ autoAccept: z.boolean() });
+export type HarnessAutoAcceptInput = z.infer<typeof HarnessAutoAcceptInput>;
+
 /** A save the owner could not confirm, stored as one Proposal per item for review in the Dashboard. */
-export const MemorySaveProposalInput = MemorySaveInput.extend({
+export const MemorySaveProposalInput = MemorySaveInput.omit({ autoAccept: true }).extend({
   /** Why the save waits for review, shown beside each Proposal. */
   reason: z.string().trim().min(1).max(1000),
 });
@@ -358,6 +377,8 @@ export interface RecentChangeView {
     sessionId: string | null;
     /** What to show: the Harness and session, or who else made the change. */
     label: string;
+    /** Written without asking the owner, because auto-accept was on for the Harness. */
+    autoAccepted: boolean;
   };
   at: string;
   /** The change this one reverted, and the change that reverted this one. */

@@ -48,9 +48,9 @@ export interface BrainAccess {
   overview(): Promise<BrainOverview>;
   /** Every current fact with its date, source, flags and newer evidence. Read-only. */
   audit(): Promise<AuditView>;
-  /** Check a save against the Brain without writing; throws the reason an item is refused. */
-  checkSave(items: MemorySaveInput["items"]): Promise<MemorySaveCheckResult>;
-  /** Write a save the owner confirmed, as the owner. */
+  /** Check a save against the Brain without writing, and whether its Harness may skip asking; throws the reason an item is refused. */
+  checkSave(input: Pick<MemorySaveInput, "items" | "origin">): Promise<MemorySaveCheckResult>;
+  /** Write a save as the owner: one they confirmed, or one auto-accept lets through (`autoAccept`). */
   save(input: MemorySaveInput): Promise<MemorySaveResult>;
   /** Store a save the owner could not confirm as Proposals. */
   propose(input: MemorySaveProposalInput): Promise<MemorySaveProposalResult>;
@@ -114,7 +114,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
       const report = await c.get<MemoryAuditReport>("/memory/audit");
       return auditView(report, await brainPaths(c, report.findings.flatMap((f) => f.entries.flatMap((e) => e.newerEvidence.map((n) => n.root)))));
     },
-    checkSave: async (items) => client().post<MemorySaveCheckResult>("/memory/save/check", { items }),
+    checkSave: async (input) => client().post<MemorySaveCheckResult>("/memory/save/check", input),
     save: async (input) => client().post<MemorySaveResult>("/memory/save", input),
     propose: async (input) => client().post<MemorySaveProposalResult>("/memory/save/proposals", input),
     async wrapUp(input) {

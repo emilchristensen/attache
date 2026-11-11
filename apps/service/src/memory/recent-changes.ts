@@ -46,7 +46,7 @@ function values(c: MemoryChange): { oldValue: string | null; newValue: string | 
 function sourceOf(c: MemoryChange): RecentChangeView["source"] {
   const harnessLabel = c.harness ? (integrationFor(c.harness)?.label ?? c.harness) : null;
   const label = harnessLabel ? `${harnessLabel}${c.sessionId ? `, session ${c.sessionId}` : ""}` : c.reverts ? "Revert in the Dashboard" : c.actor === "service" ? "A Proposal you approved" : (c.source ?? "You");
-  return { harness: c.harness, harnessLabel, sessionId: c.sessionId, label };
+  return { harness: c.harness, harnessLabel, sessionId: c.sessionId, label, autoAccepted: c.autoAccepted };
 }
 
 /** A note's title from the index, or for a note that is gone, from the change that created or removed it. */

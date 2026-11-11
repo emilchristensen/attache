@@ -161,6 +161,12 @@ export const MIGRATIONS: readonly string[] = [
     committed_seq integer not null default 0, status text not null, cause text, checked_at text, pushed_at text
   );
   `,
+  // Auto-accept per Harness: local state of this Machine, never part of the Brain. A change
+  // written without asking the owner is marked so in the change log.
+  `
+  create table harness_settings (harness text primary key, auto_accept integer not null default 0, updated_at text not null);
+  alter table memory_changes add column auto_accepted integer not null default 0;
+  `,
 ];
 
 export function openDb(file: string): Db {
