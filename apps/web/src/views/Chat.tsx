@@ -4,15 +4,12 @@ import { api, post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { ErrorState, Link, Loading, renderMarkdown, Time, useToast } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
-import { useVoice, voice } from "../voice.ts";
 
 interface Conversation {
   id: string;
   title: string;
   updatedAt: string;
 }
-
-const STATE_LABEL = { idle: "Ready", listening: "Listening", thinking: "Thinking", speaking: "Speaking", error: "Voice issue" } as const;
 
 function withCitations(html: string, citations: Citation[]): string {
   const known = new Set(citations.map((c) => c.marker));
@@ -82,38 +79,29 @@ function AssistantMessage({ m, streamText, onRetry }: { m: MessageView; streamTe
   );
 }
 
-export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPath: string; root: string } }) {
+export function Chat({ context }: { context?: { relPath: string; root: string } }) {
   const convs = useResource<Conversation[]>("/conversations", ["message.done"]);
   const [conversationId, setConversationId] = useState<string | null>(() => localStorage.getItem("jarvis.conversation"));
   const msgs = useResource<MessageView[]>(conversationId ? `/conversations/${conversationId}/messages` : null, []);
   const [stream, setStream] = useState<Record<string, string>>({});
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [speakReplies, setSpeakReplies] = useState(() => localStorage.getItem("jarvis.speakReplies") === "1");
-  const pendingVoice = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const v = useVoice();
   const toast = useToast();
 
   useEffect(() => {
     if (conversationId) localStorage.setItem("jarvis.conversation", conversationId);
     else localStorage.removeItem("jarvis.conversation");
   }, [conversationId]);
-  useEffect(() => localStorage.setItem("jarvis.speakReplies", speakReplies ? "1" : "0"), [speakReplies]);
   useEffect(() => {
     if (msgs.error?.status === 404) setConversationId(null);
   }, [msgs.error]);
 
   useLiveEvent((ev) => {
-    if (ev.type === "connections.changed" || ev.type === "config.changed" || ev.type === "reconnected") {
-      void api<{ modes: { stt: string; tts: string } }>("/voice/status").then((s) => (voice.modes = s.modes)).catch(() => {});
-      return;
-    }
     if (ev.conversationId !== conversationId) return;
     if (ev.type === "message.delta") {
       const id = String(ev.messageId);
       setStream((s) => ({ ...s, [id]: (s[id] ?? "") + String(ev.delta) }));
-      voice.setThinking(false);
     } else if (ev.type === "message.retrieval") msgs.reload();
     else if (ev.type === "message.done") {
       const m = ev.message as MessageView;
@@ -122,9 +110,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
         const { [m.id]: _drop, ...rest } = s;
         return rest;
       });
-      voice.setThinking(false);
-      if (pendingVoice.current === m.id && m.status === "complete" && voice.canSpeak && speakReplies) void voice.speak(m.content);
-      pendingVoice.current = null;
     }
   });
 
@@ -134,7 +119,7 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
 
   const streamingId = msgs.data?.find((m) => m.status === "streaming")?.id ?? null;
 
-  const send = async (t: string, viaVoice = false) => {
+  const send = async (t: string) => {
     const clean = t.trim();
     if (!clean || sending) return;
     setSending(true);
@@ -142,10 +127,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
       const r = await post<{ conversationId: string; userMessage: MessageView; assistantMessage: MessageView }>("/chat", { conversationId, text: clean, ...(context ? { context } : {}) });
       if (r.conversationId !== conversationId) setConversationId(r.conversationId);
       msgs.setData([...(r.conversationId === conversationId ? (msgs.data ?? []) : []), r.userMessage, r.assistantMessage]);
-      if (viaVoice) {
-        pendingVoice.current = r.assistantMessage.id;
-        voice.setThinking(true);
-      }
       setText("");
       convs.reload();
     } catch (e) {
@@ -154,20 +135,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
       setSending(false);
     }
   };
-
-  const pttDown = async () => {
-    voice.clearError();
-    try {
-      await voice.start();
-    } catch {
-      // state carries the recovery message
-    }
-  };
-  const pttUp = async () => {
-    const t = await voice.stop();
-    if (t) await send(t, true);
-  };
-  voice.onBrowserTranscript = (t) => void send(t, true);
 
   return (
     <div className="chat">
@@ -186,20 +153,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
         <button className="small ghost" onClick={() => setConversationId(null)}>
           New
         </button>
-        <div style={{ flex: 1 }} />
-        {voiceOn && (
-          <>
-            <span className="orb" data-state={v.state} aria-hidden />
-            <span className="voice-label" aria-live="polite">
-              {STATE_LABEL[v.state]}
-            </span>
-            {v.state === "speaking" && (
-              <button className="small" onClick={() => voice.interrupt()}>
-                Stop speaking
-              </button>
-            )}
-          </>
-        )}
       </div>
       <div className="messages" ref={listRef} aria-live="polite" aria-busy={!!streamingId}>
         {!conversationId && (
@@ -227,16 +180,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
           void send(text);
         }}
       >
-        {v.message && (
-          <div className={v.state === "error" ? "unsupported" : "small muted"} role={v.state === "error" ? "alert" : "status"}>
-            {v.message}
-            {v.micDenied && (
-              <button type="button" className="small" style={{ marginLeft: 8 }} onClick={() => void pttDown().then(() => voice.stop())}>
-                Try the microphone again
-              </button>
-            )}
-          </div>
-        )}
         <div className="row">
           <label className="sr-only" htmlFor="composer">
             Message Jarvis
@@ -252,37 +195,8 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
                 e.preventDefault();
                 void send(text);
               }
-              if (e.key === "Escape") voice.interrupt();
             }}
           />
-          {voiceOn && v.modes.stt !== "none" && (
-            <button
-              type="button"
-              className={v.state === "listening" ? "danger" : ""}
-              aria-pressed={v.state === "listening"}
-              title="Hold to talk (or hold Space while this button is focused)"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                void pttDown();
-              }}
-              onPointerUp={() => void pttUp()}
-              onPointerLeave={() => v.state === "listening" && void pttUp()}
-              onKeyDown={(e) => {
-                if ((e.key === " " || e.key === "Enter") && !e.repeat) {
-                  e.preventDefault();
-                  void pttDown();
-                }
-              }}
-              onKeyUp={(e) => {
-                if (e.key === " " || e.key === "Enter") {
-                  e.preventDefault();
-                  void pttUp();
-                }
-              }}
-            >
-              {v.state === "listening" ? "Listening…" : "Hold to talk"}
-            </button>
-          )}
           {streamingId ? (
             <button type="button" onClick={() => void api(`/messages/${streamingId}/cancel`, { method: "POST", body: {} })}>
               Stop
@@ -295,11 +209,6 @@ export function Chat({ voiceOn, context }: { voiceOn: boolean; context?: { relPa
         </div>
         <div className="row hint">
           <span>Enter to send · Shift+Enter for a new line · / to focus</span>
-          {voiceOn && v.modes.tts !== "none" && (
-            <label className="check" style={{ marginLeft: "auto" }}>
-              <input type="checkbox" checked={speakReplies} onChange={(e) => setSpeakReplies(e.target.checked)} /> Speak replies to voice questions
-            </label>
-          )}
         </div>
       </form>
     </div>

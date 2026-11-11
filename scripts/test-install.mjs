@@ -10,7 +10,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const arg = (n, d) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : d);
@@ -127,7 +127,7 @@ async function main() {
   // Configure a notes-only workspace with some data.
   let token = await pairToken();
   await http("POST", "/setup/data-folder", { path: DATA }, token);
-  await http("PUT", "/features", { changes: { voice: true }, cascade: true }, token);
+  await http("PUT", "/features", { changes: { drafts: false }, cascade: true }, token);
   await http("PATCH", "/config", { schedules: { syncEveryMinutes: 55 } }, token);
   await http("POST", "/memory/capture", { text: "The Helios budget review is on Thursday.", title: "Helios", source: { kind: "user", ref: "install-test" }, decision: { title: "Helios budget", decision: "Cap Helios at 40k" } }, token);
   await http("POST", "/setup/complete", {}, token);
@@ -147,6 +147,10 @@ async function main() {
   check("A02", "reinstall leaves exactly one LaunchAgent", plists.length === 1, plists.join(","));
 
   // --- A02/A14: upgrade preserves configuration and data ---
+  // A speech model an earlier version downloaded for voice goes with the upgrade.
+  const oldSpeechModel = join(STATE, "models", "ggml-base.en.bin");
+  mkdirSync(dirname(oldSpeechModel), { recursive: true });
+  writeFileSync(oldSpeechModel, "whisper model left by voice");
   sh(artifact(TO));
   const h2 = await http("GET", "/health");
   token = await pairToken();
@@ -157,6 +161,7 @@ async function main() {
   check("A02", "upgrade preserves configuration", JSON.stringify(cfgAfterUpgrade) === JSON.stringify(cfgBefore));
   check("A02", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
   check("A14", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
+  check("A02", "upgrade removes the speech model voice downloaded", !existsSync(oldSpeechModel));
 
   // --- A02: the hooks keep working across the upgrade and save a real session ---
   const hookTest = await http("POST", "/connections/claude-code/test", {}, token);

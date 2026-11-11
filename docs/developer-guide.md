@@ -7,14 +7,14 @@ Developer setup is separate from end-user installation: users run the installer 
 | Path | What |
 | --- | --- |
 | `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
-| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, speech, HTTP API |
+| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, HTTP API |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
-| `tests/e2e` | Playwright journeys (Chrome, voice, visual captures) |
+| `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
-Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `speech/`, `http/`.
+Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`.
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Service modules: `core/` (db, config, logging with redaction, credential store, 
 - Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
-- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
+- Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
 
 ```sh
 pnpm install
@@ -42,7 +42,7 @@ node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --ope
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_WHISPER_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`).
 
 Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, `~/.agents`, `~/.codex`, `~/.gemini`).
 The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
@@ -75,12 +75,12 @@ Artifacts are unsigned; notarisation is an external step (see the acceptance rep
 ## Verification
 
 ```sh
-node scripts/verify-release.mjs           # everything: checks, builds, e2e, voice, install/upgrade/restore/uninstall, live read-only
+node scripts/verify-release.mjs           # everything: checks, builds, e2e, install/upgrade/restore/uninstall, live read-only
 node scripts/verify-release.mjs --quick   # lint, typecheck, builds, Vitest only
 ```
 
 Results: `test-results/verification-summary.md` (acceptance table) and `test-results/verification-report.json`.
-Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/voice.spec.ts`.
+Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/journeys.spec.ts`.
 
 ## Rules for changes
 
