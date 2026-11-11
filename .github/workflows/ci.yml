@@ -52,6 +52,16 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm test
 
+      # The Linux secret store and notifications against GNOME Keyring and dunst in a throwaway desktop session.
+      - name: Linux desktop session tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Linux' }}
+        env:
+          JARVIS_TEST_REAL_DESKTOP: "1"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
+          sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts
+
       # The journeys use the installed Google Chrome channel (playwright.config.ts).
       - name: Google Chrome
         id: chrome

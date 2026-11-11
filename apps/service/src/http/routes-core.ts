@@ -166,6 +166,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
       stateDir: app.paths.stateDir,
       dataFolder: app.config.get().dataFolder,
       credentialStore: app.secrets.kind,
+      credentialStoreNote: app.secrets.note,
       documents: Number((app.db.prepare("select count(*) n from documents").get() as { n: number }).n),
       jobs: counts,
       schedules: app.scheduler.list(),
