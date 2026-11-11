@@ -4,6 +4,13 @@
  * a one-step installer that unpacks the release and runs its installer:
  * `install.sh` on macOS and Linux, `install.ps1` on Windows.
  */
+/**
+ * The Node.js runtime every release bundles: one exact version, chosen for the product (spec #5 §3)
+ * and changed on purpose. Development runs on any Node from `engines.node` in package.json, and this
+ * version must be one of those (scripts/test/node-version.test.mjs).
+ */
+export const BUNDLED_NODE_VERSION = "24.22.2";
+
 export const RELEASE_TARGETS = {
   "macos-arm64": {
     os: "macos",

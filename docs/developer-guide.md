@@ -26,8 +26,10 @@ Service modules: `core/` (db, config, logging with redaction, service paths), `p
   `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `JARVIS_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
 - `apps/service/test/windows-desktop.test.ts` runs the Windows secret store and notifications anywhere, against a stand-in for Windows PowerShell (`fake-powershell.mjs`) and for `icacls` and `whoami`.
   `apps/service/test/windows-desktop-real.test.ts` checks the same against Credential Manager and Windows notifications; it runs only on Windows with `JARVIS_TEST_REAL_DESKTOP=1`, as CI's Windows job does, because it shows notifications and writes to your Credential Manager (it removes what it wrote).
-- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
-  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
+- Node 24.22.0 or newer, whichever compatible version you have installed: `engines.node` in `package.json` names the minimum, and `pnpm install` refuses an older Node (`engineStrict` in `pnpm-workspace.yaml`).
+  Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22.0, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed (`apps/service/test/memory-watcher.test.ts` fails on 24.21).
+  The release bundles one exact Node of its own, `BUNDLED_NODE_VERSION` in `scripts/release-targets.mjs`, which must be at least the minimum.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
 - Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
@@ -69,7 +71,8 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
-Each platform is one job, `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)`, with these steps:
+Each platform runs the checks twice: `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)` on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`), and `checks (<os>, current Node)` on the newest Node release.
+Each job has these steps:
 
 | Step | Run it locally |
 | --- | --- |
@@ -81,21 +84,24 @@ Each platform is one job, `checks (macos-latest)`, `checks (ubuntu-latest)` and 
 | Windows desktop tests (Windows only) | `JARVIS_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
 | Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
 
-A separate job, `install (ubuntu-latest)`, runs the install test (see "Install test" below) and uploads `test-results/install-results.json`.
+Separate jobs, `install (ubuntu-latest)` and `install (windows-latest)`, run the install test (see "Install test" below) on the minimum supported Node and upload `test-results/install-results.json`.
+When a check fails, the install test copies the installed service's logs (`service.log`, `service.err.log`, `service.out.log`) to `test-results/install-logs/` before it removes the state folder, and the job uploads them with the results.
 
 Every check runs even when an earlier one fails, so a run lists all failures at once.
-On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
-Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+On failure a job runs `node scripts/collect-service-logs.mjs`, which copies the `logs` folders that test services left in Jarvis's temporary folders (Vitest, the browser journeys, a crashed install test) to `test-results/service-logs/`, and uploads `test-results/` (Playwright traces and screenshots, service logs) as an artifact.
+pnpm comes from `packageManager` in `package.json`, so CI and a local checkout use the same pnpm.
 `.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
 Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
 The e2e stack (`tests/e2e/stack.ts`) starts its services and fixture server on ports the OS picks, so several checkouts on one computer can run `pnpm e2e` at the same time.
 Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
 
-To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+To reproduce a Linux failure on a Mac, run the same commands in a container with the Node of the failing job, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.0-bookworm bash` for the minimum, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
 A pull request with a failing check shows the failure on GitHub.
+`node scripts/ci-failures.mjs <run-id|run-url>` prints, for each failed job of a run, the failed step, the failing tests and their first error lines, or the step's last lines when it names no test; for a job that never started it says why (a billing or spending limit, a cancelled run).
+It needs the GitHub CLI (`gh`) signed in to an account that can read the repository.
 Branch protection on `main` requires `checks (ubuntu-latest)`, `checks (macos-latest)` and `checks (windows-latest)` to pass before a pull request can merge.
-The `install` jobs are not required, so a slow or flaky installer run does not hold up a merge; check them before a release.
+The `checks (<os>, current Node)` and `install` jobs are not required, so a new Node release or a slow or flaky installer run does not hold up a merge; check them before a release.
 
 ## Fixtures versus live
 
@@ -149,7 +155,7 @@ Produces in `release/0.1.0/`:
 - `SHA256SUMS`, covering every artifact built into the folder.
 
 Targets are listed in `scripts/release-targets.mjs`, the one-step installers' headers in `scripts/release-installers.mjs`.
-The build downloads the official Node runtime of the pinned version for the target from nodejs.org (the tarball for macOS and Linux, `win-x64/node.exe` for Windows), verifies it against `SHASUMS256.txt`, and bundles it.
+The build downloads the official Node runtime of `BUNDLED_NODE_VERSION` (`scripts/release-targets.mjs`) for the target from nodejs.org (the tarball for macOS and Linux, `win-x64/node.exe` for Windows), verifies it against `SHASUMS256.txt`, and bundles it.
 The release carries a `TARGET` file, and `install.sh` and `install.ps1` refuse to run on any other kind of computer.
 The Windows installer and uninstaller (`installer/install.ps1`, `installer/uninstall.ps1`) are plain ASCII, because Windows PowerShell reads a script without a byte order mark in the legacy code page.
 They switch versions with a directory junction (`current`), which needs no administrator rights, unlike a symbolic link.
