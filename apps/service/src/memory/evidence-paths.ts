@@ -35,6 +35,16 @@ export function wrapUpPath(date: string, title: string, machine: MachineIdentity
   return `${WRAP_UP_DIR}/${date}-${machineTag(machine)}-${slugify(title).slice(0, 60)}.md`;
 }
 
+/**
+ * The file name, without `.md`, of a generated deliverable (a briefing, a
+ * research result, a draft). The Machine tag keeps two Machines that generate
+ * a same-named deliverable on the same day, such as both briefing around a
+ * Reader handover, from creating the same file.
+ */
+export function deliverableName(date: string, title: string, machine: MachineIdentity): string {
+  return `${date}-${machineTag(machine)}-${slugify(title)}`;
+}
+
 /** The day a session-log file speaks for, or null when `file` is not one. */
 export function sessionLogDate(file: string): string | null {
   return SESSION_LOG_FILE.exec(file)?.[1] ?? null;

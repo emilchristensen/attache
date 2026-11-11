@@ -29,7 +29,7 @@ function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMa
           <input type="checkbox" checked={m.standby} disabled={busy} onChange={(e) => onStandby(e.target.checked)} />
           <span>
             <strong>Standby</strong>
-            <span className="muted"> · may take over as Reader when the Reader is silent for 30 minutes</span>
+            <span className="muted"> · becomes the Reader once the Reader is silent for 30 minutes, if a source is connected here</span>
           </span>
         </label>
       )}

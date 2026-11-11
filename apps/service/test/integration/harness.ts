@@ -35,13 +35,15 @@ export interface TestServiceOptions {
   features?: Record<string, boolean>;
   /** Drives Replication's timers; the real clock when left out. */
   clock?: Clock;
+  /** Lease commits per generation of the Reader lease ref; small in tests that check the history stays bounded. */
+  leaseGenerationCommits?: number;
   meaning?: AppOptions["meaning"];
 }
 
 export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? mkdtempSync(join(tmpdir(), "jarvis-it-state-"));
   const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "jarvis-it-data-")), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `jarvis serve` writes, so the CLI finds this service.

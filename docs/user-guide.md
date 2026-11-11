@@ -372,6 +372,11 @@ Replication is in the Dashboard under **Settings → Replication**, and in the t
   A Source refresh you start yourself with **Refresh now** still runs on the Machine you are on.
   The Reader says it is still there every 10 minutes through the repository, without adding to the Brain's history.
   A Reader that could not reach the repository for 30 minutes, because it was asleep or offline, shows as silent and reads nothing on a schedule until it is back; then it catches up once.
+- **Failover:** when the Reader has been silent for 30 minutes, a Machine marked **Standby** becomes the Reader at its next check, so the inbox keeps moving while your always-on Machine is off.
+  It takes over only if it has a source of its own connected, such as Slack or GitHub; the data folder does not count, because every Machine has it.
+  A Machine that is not on standby, or has no source connected, never takes over.
+  When the Preferred Reader is back online, it takes the role back at its next check and the standby stops reading on a schedule; you never switch it by hand.
+  For a minute or so around a handover both Machines may refresh at once; the inbox still shows each item once, and each Machine's briefing is kept in a file of its own.
 - **Switch off** stops replicating from this Machine (`jarvis replication off`).
   The Brain stays in the data folder with its history, saves carry on locally, and the other Machines keep their copies.
   Set Replication up again with the same repository to pick up where it left off: this Machine's changes from while it was off are sent, and the others' are merged in.
