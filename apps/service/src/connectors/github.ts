@@ -1,5 +1,7 @@
-import { execFile } from "node:child_process";
-import type { ConnectorAdapter, AdapterContext, Observation, SyncResult } from "./types.ts";
+import { existsSync } from "node:fs";
+import { platformLocations, toolCandidates } from "../platform/locations.ts";
+import { run } from "../platform/run.ts";
+import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite, nextLink, paginate } from "./http.ts";
 
@@ -26,17 +28,13 @@ function repoOf(item: SearchItem): string {
 }
 
 async function ghCliToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    const candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "gh"];
-    const tryNext = (i: number) => {
-      if (i >= candidates.length) return resolve(null);
-      execFile(candidates[i]!, ["auth", "token"], { timeout: 5000 }, (err, stdout) => {
-        if (err || !stdout.trim()) return tryNext(i + 1);
-        resolve(stdout.trim());
-      });
-    };
-    tryNext(0);
-  });
+  // Services started at login often lack the owner's PATH, so the usual install folders come first.
+  const candidates = [...toolCandidates(platformLocations(), "gh").filter((p) => existsSync(p)), "gh"];
+  for (const candidate of candidates) {
+    const r = await run(candidate, ["auth", "token"], { timeoutMs: 5000 });
+    if (r.code === 0 && r.stdout.trim()) return r.stdout.trim();
+  }
+  return null;
 }
 
 function base(ctx: AdapterContext): string {
@@ -77,7 +75,7 @@ export const githubAdapter: ConnectorAdapter = {
         id: "token",
         label: "Personal access token",
         fields: [
-          { id: "token", label: "Token", secret: true, placeholder: "github_pat_… or ghp_…", help: "Create a fine-grained token with read access to Pull requests, Issues and Metadata for the repositories you want. Add Issues: write only if you authorise commenting." },
+          { id: "token", label: "Token", secret: true, placeholder: "github_pat_… or ghp_…", help: "Create a fine-grained token with read access to Pull requests, Issues and Metadata for the repositories you want. Add Issues: write only if you authorise commenting. Replication also needs Contents: read and write on the Brain's repository." },
           { id: "apiBaseUrl", label: "API URL (GitHub Enterprise only)", secret: false, optional: true, placeholder: "https://api.github.com" },
         ],
       },
@@ -115,7 +113,7 @@ export const githubAdapter: ConnectorAdapter = {
     }
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     const scopes = ctx.connection.readScopes;

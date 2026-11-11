@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installScenarios } from "../fixtures/scenarios.ts";
 import { useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let svc: TestService;
 let fx: FixtureServer;
@@ -10,7 +13,7 @@ let claude: ClaudeFixture;
 
 const slackServer = () => claude.servers.find((s) => s.name === "claude.ai Slack")!;
 const slack = async () => (await svc.get("/connections")).find((c: { kind: string }) => c.kind === "slack");
-const syncJobs = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "sync" && j.connectionId === "slack");
+const syncJobs = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "source-refresh" && j.connectionId === "slack");
 
 beforeAll(async () => {
   fx = await startFixtureServer();
@@ -29,7 +32,7 @@ describe("a connection that recovers its sign-in", () => {
     expect((await svc.post("/connections/slack/configure", { method: "claude-ai", fields: {} })).test).toMatchObject({ ok: true });
 
     slackServer().status = "needs-auth";
-    await svc.waitJob((await svc.post("/connections/slack/sync")).job.id);
+    await svc.waitJob((await svc.post("/connections/slack/refresh")).job.id);
     expect(await slack()).toMatchObject({ status: "needs_auth", coverage: { state: "unauthorized" } });
     const before = (await syncJobs()).length;
 

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus } from "@jarvis/contracts";
+import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@jarvis/contracts";
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { AutoAccept } from "./AutoAccept.tsx";
+import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
+import { MeaningSearchCard } from "./MeaningSearch.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -18,11 +21,20 @@ interface Status {
   node: string;
   stateDir: string;
   dataFolder: string | null;
-  credentialStore: string;
+  credentialStore: "keychain" | "secret-service" | "credential-manager" | "file";
+  /** Why this store is in use when it is not the operating system's own. */
+  credentialStoreNote: string | null;
   documents: number;
   jobs: Array<{ status: string; n: number }>;
-  schedules: Array<{ id: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
+  schedules: Array<{ id: string; label: string; enabled: boolean; nextRunAt: string | null; lastRunAt: string | null }>;
 }
+
+const CREDENTIAL_STORES: Record<Status["credentialStore"], string> = {
+  keychain: "macOS Keychain",
+  "secret-service": "Secret Service (desktop keyring)",
+  "credential-manager": "Windows Credential Manager",
+  file: "Private file (only you can read it)",
+};
 
 function Schedules({ config, onSaved }: { config: Config; onSaved: () => void }) {
   const [s, setS] = useState(config.schedules);
@@ -35,7 +47,7 @@ function Schedules({ config, onSaved }: { config: Config; onSaved: () => void })
       <div className="grid-2">
         <label className="field">
           Refresh sources every (minutes)
-          <input type="number" min={5} max={1440} value={s.syncEveryMinutes} onChange={(e) => setS({ ...s, syncEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
+          <input type="number" min={5} max={1440} value={s.refreshEveryMinutes} onChange={(e) => setS({ ...s, refreshEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
         </label>
         <label className="field">
           Daily briefing at
@@ -88,6 +100,44 @@ function Identity({ config, onSaved }: { config: Config; onSaved: () => void }) 
   );
 }
 
+function ThisMachine() {
+  const machine = useResource<MachineView>("/machine", ["config.changed"]);
+  const [name, setName] = useState("");
+  const { busy, run } = useAction();
+  useEffect(() => setName(machine.data?.name ?? ""), [machine.data?.name]);
+  const changed = !!machine.data && name.trim() !== machine.data.name;
+  return (
+    <div className="card stack">
+      <h3>This Machine</h3>
+      <p className="small muted">Session logs and connector snapshots written here carry this name, and with Replication on the other Machines list this one by it, so you can tell which computer a change came from.</p>
+      {machine.loading && !machine.data && <Loading lines={1} />}
+      <ErrorState error={machine.error} retry={machine.reload} />
+      {machine.data && (
+        <form
+          className="stack-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (changed) void run("machine", () => patch("/machine", { name }).then(machine.reload), "Machine renamed");
+          }}
+        >
+          <label className="field">
+            Name
+            <input value={name} onChange={(e) => setName(e.target.value)} data-machine-name />
+          </label>
+          <p className="small muted">
+            Id <span className="mono">{machine.data.id}</span>
+          </p>
+          <div>
+            <button type="submit" disabled={!changed || !name.trim() || busy !== null}>
+              Rename
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function Clients() {
   const clients = useResource<Array<{ id: string; name: string; kind: string; createdAt: string; lastSeenAt: string | null; revokedAt: string | null }>>("/clients");
   const [code, setCode] = useState<{ code: string; expiresAt: string } | null>(null);
@@ -131,7 +181,7 @@ function Backups() {
   return (
     <div className="card stack">
       <h3>Backup and export</h3>
-      <p className="small muted">A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts). Credentials stay in the Keychain and are not exported; reconnect them after a restore.</p>
+      <p className="small muted">A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts). Credentials stay in the secret store and are not exported; reconnect them after a restore.</p>
       <div>
         <button disabled={busy !== null} onClick={() => run("bk", () => post("/backups").then(list.reload), "Backup created")}>
           {busy ? "Creating…" : "Create backup now"}
@@ -176,6 +226,10 @@ export function SettingsView() {
             <Identity config={cfg.data.config} onSaved={cfg.reload} />
           </>
         )}
+        <ThisMachine />
+        <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
+        <AutoAccept />
+        <MeaningSearchCard />
         <Clients />
         <Backups />
         <div className="card stack-sm">
@@ -194,7 +248,10 @@ export function SettingsView() {
               <dt>Service state</dt>
               <dd className="mono">{status.data.stateDir}</dd>
               <dt>Credentials</dt>
-              <dd>{status.data.credentialStore === "keychain" ? "macOS Keychain" : "Local file (0600)"}</dd>
+              <dd data-credential-store={status.data.credentialStore}>
+                {CREDENTIAL_STORES[status.data.credentialStore]}
+                {status.data.credentialStoreNote && <div className="small muted">{status.data.credentialStoreNote}</div>}
+              </dd>
               <dt>Indexed files</dt>
               <dd>{status.data.documents}</dd>
               <dt>Jobs</dt>
@@ -203,7 +260,7 @@ export function SettingsView() {
               <dd>
                 {status.data.schedules.map((s) => (
                   <div key={s.id}>
-                    {s.id}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
+                    {s.label}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
                   </div>
                 ))}
               </dd>

@@ -33,14 +33,26 @@ export interface Section {
 export interface StateEntry {
   subject: string;
   date: string;
+  /** The day after which the fact should be checked again, when one is set. */
+  review?: string;
   value: string;
   source?: string;
   line: number;
 }
 
-const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const FM_RE = /^---\n([\s\S]*?)\n---\n?/;
 
-export function splitFrontmatter(raw: string): { frontmatter: Record<string, unknown>; body: string; bodyStartLine: number; error?: string } {
+/**
+ * A note's text with LF line endings. An editor on Windows may save a note
+ * with CRLF; Jarvis reads it the same, and everything it writes is LF, as
+ * the Brain repository stores it on every Machine.
+ */
+export function toLf(text: string): string {
+  return text.includes("\r\n") ? text.replace(/\r\n/g, "\n") : text;
+}
+
+export function splitFrontmatter(text: string): { frontmatter: Record<string, unknown>; body: string; bodyStartLine: number; error?: string } {
+  const raw = toLf(text);
   const m = FM_RE.exec(raw);
   if (!m) return { frontmatter: {}, body: raw, bodyStartLine: 1 };
   let frontmatter: Record<string, unknown> = {};
@@ -93,16 +105,21 @@ export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdow
   return { frontmatter, body, bodyStartLine, title: fmTitle || h1 || fallbackTitle, sections };
 }
 
-const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})\): (.*?)(?: — source: (.+))?$/;
+/**
+ * `- **Subject** (date[, review date]): value[ — source: …]`. Jarvis writes
+ * `(2026-11-10, review 2026-11-13)`; a hand edit may vary the spacing, the
+ * case of "review" or add a colon after it, and still reads the same.
+ */
+const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})(?:\s*,\s*[Rr]eview:?\s*(\d{4}-\d{2}-\d{2}))?\s*\): (.*?)(?: — source: (.+))?$/;
 
-/** One `- **Subject** (date): value — source: …` line, or null when the line is not a state entry. */
+/** One `- **Subject** (date[, review date]): value — source: …` line, or null when the line is not a state entry. */
 export function parseStateLine(line: string): Omit<StateEntry, "line"> | null {
-  const m = STATE_RE.exec(line);
-  return m ? { subject: m[1]!, date: m[2]!, value: m[3]!, ...(m[4] ? { source: m[4] } : {}) } : null;
+  const m = STATE_RE.exec(line.endsWith("\r") ? line.slice(0, -1) : line);
+  return m ? { subject: m[1]!, date: m[2]!, ...(m[3] ? { review: m[3] } : {}), value: m[4]!, ...(m[5] ? { source: m[5] } : {}) } : null;
 }
 
 export function parseStateEntries(raw: string): StateEntry[] {
-  const lines = raw.split("\n");
+  const lines = toLf(raw).split("\n");
   const out: StateEntry[] = [];
   let inState = false;
   lines.forEach((line, i) => {
@@ -116,15 +133,24 @@ export function parseStateEntries(raw: string): StateEntry[] {
   return out;
 }
 
-export function formatStateEntry(e: { subject: string; date: string; value: string; source?: string | undefined }): string {
+/** What a current-state entry holds, as the writer takes it. */
+export interface StateEntryInput {
+  subject: string;
+  date: string;
+  review?: string | undefined;
+  value: string;
+  source?: string | undefined;
+}
+
+export function formatStateEntry(e: StateEntryInput): string {
   const value = e.value.replace(/\s*\n\s*/g, " ").trim();
-  return `- **${e.subject.replace(/\*\*/g, "")}** (${e.date}): ${value}${e.source ? ` — source: ${e.source}` : ""}`;
+  return `- **${e.subject.replace(/\*\*/g, "")}** (${e.date}${e.review ? `, review ${e.review}` : ""}): ${value}${e.source ? ` — source: ${e.source}` : ""}`;
 }
 
 export interface MemoryDocInput {
   frontmatter: Record<string, unknown>;
   title: string;
-  state: Array<{ subject: string; date: string; value: string; source?: string | undefined }>;
+  state: StateEntryInput[];
   notes?: string;
   history?: string[];
 }
@@ -143,14 +169,16 @@ export function renderMemoryDoc(doc: MemoryDocInput): string {
 
 /**
  * Replace (or add) one subject's state entry and append the superseded value to
- * History. Returns the new file text and the prior entry, if any.
+ * History. The new entry carries only the Review date it is given, so a date
+ * set for the old value never follows the new one. Returns the new file text
+ * and the prior entry, if any.
  */
 export function applyStateCorrection(
   raw: string,
-  entry: { subject: string; date: string; value: string; source?: string | undefined },
+  entry: StateEntryInput,
   reason: string,
 ): { text: string; previous: StateEntry | null } {
-  const lines = raw.split("\n");
+  const lines = toLf(raw).split("\n");
   const entries = parseStateEntries(raw);
   const previous = entries.find((e) => e.subject.toLowerCase() === entry.subject.toLowerCase()) ?? null;
   const newLine = formatStateEntry(entry);
@@ -172,16 +200,35 @@ export function applyStateCorrection(
     }
     lines.splice(insertAt, 0, newLine);
   }
-  let text = lines.join("\n");
-  if (previous) {
-    const hist = `- ${entry.date} — **${previous.subject}** was "${previous.value}" (dated ${previous.date}${previous.source ? `, source: ${previous.source}` : ""}); superseded: ${reason.replace(/\s*\n\s*/g, " ")}`;
-    text = appendHistory(text, hist);
-  }
-  return { text, previous };
+  const text = lines.join("\n");
+  return { text: previous ? appendHistory(text, formerValueLine(entry.date, previous, "superseded", reason)) : text, previous };
+}
+
+/**
+ * Take one subject's entry (and any indented lines under it) out of Current
+ * State and keep the removed value in History. Returns the text unchanged and
+ * `removed: null` when the subject has no entry.
+ */
+export function removeStateEntry(raw: string, entry: { subject: string; date: string }, reason: string): { text: string; removed: StateEntry | null } {
+  const removed = parseStateEntries(raw).find((e) => e.subject.toLowerCase() === entry.subject.toLowerCase()) ?? null;
+  if (!removed) return { text: raw, removed: null };
+  const lines = toLf(raw).split("\n");
+  let end = removed.line;
+  while (end < lines.length && /^\s+\S/.test(lines[end]!)) end++;
+  const text = [...lines.slice(0, removed.line - 1), ...lines.slice(end)].join("\n");
+  return { text: appendHistory(text, formerValueLine(entry.date, removed, "removed", reason)), removed };
+}
+
+/**
+ * The History line that keeps a value no longer current:
+ * `- <date> — **Subject** was "<value>" (dated <d>[, review <r>][, source: …]); <outcome>: <reason>`.
+ */
+export function formerValueLine(date: string, former: Omit<StateEntry, "line">, outcome: "superseded" | "removed", reason: string): string {
+  return `- ${date} — **${former.subject}** was "${former.value}" (dated ${former.date}${former.review ? `, review ${former.review}` : ""}${former.source ? `, source: ${former.source}` : ""}); ${outcome}: ${reason.replace(/\s*\n\s*/g, " ")}`;
 }
 
 export function appendHistory(raw: string, line: string): string {
-  const trimmed = raw.replace(/\s+$/, "");
+  const trimmed = toLf(raw).replace(/\s+$/, "");
   if (/^#{1,6}\s+history\s*$/im.test(trimmed)) {
     // History is the last section by construction; if not, append at file end regardless.
     return `${trimmed}\n${line}\n`;

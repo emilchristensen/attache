@@ -8,7 +8,7 @@ import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
 import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
-import { SpeechError } from "../speech/engine.ts";
+import { expandHome } from "../platform/locations.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -159,7 +159,6 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
-    if (kind === "speech") fields.whisperModelPath = app.speech.modelPath;
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
     return out;
@@ -169,9 +168,9 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
-    // A connection that just recovered still shows the failed coverage of its last sync: refresh it now.
+    // A connection that just recovered still shows the failed coverage of its last Source refresh: refresh it now.
     if (out.ok && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
-      app.jobs.create({ kind: "sync", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
     }
     return { test: out, status: app.connections.status(app.connections.requireRecord(c.params.id!)) };
   });
@@ -195,11 +194,11 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     if (kind === "model") await app.refreshModel();
     return out;
   });
-  r.post("/connections/:id/sync", (c) => {
+  r.post("/connections/:id/refresh", (c) => {
     requireFeature(app, "attention");
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.status === "disconnected") throw new HttpError(409, "disconnected", "Reconnect this source first.");
-    const { job } = app.jobs.create({ kind: "sync", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+    const { job } = app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
     return { __status: 201, body: { job } };
   });
   r.post("/connections/:kind/oauth/start", async (c) => {
@@ -252,7 +251,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   r.post("/import/preview", async (c) => {
     requireFeature(app, "capture");
     const { path } = await c.body(z.object({ path: z.string().min(1) }));
-    return app.connections.previewImport(path.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+    return app.connections.previewImport(expandHome(path));
   });
   r.post("/import", async (c) => {
     requireFeature(app, "capture");
@@ -267,35 +266,6 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     return { __status: 201, body: { job } };
   });
 
-  // ---- voice ---------------------------------------------------------------------------------
-  r.get("/voice/status", async () => ({ enabled: app.featureEnabled("voice"), modes: await app.speech.clientModes(), environment: app.speech.environment(), voices: await app.speech.voices() }));
-  r.post("/voice/model/download", () => {
-    void app.speech.downloadModel();
-    return { __status: 202, body: { download: app.speech.environment().download } };
-  });
-  r.post("/voice/transcribe", async (c) => {
-    requireFeature(app, "voice");
-    const audio = await c.raw(20 * 1024 * 1024);
-    try {
-      const text = await app.speech.transcribe(audio);
-      return { text };
-    } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
-      throw e;
-    }
-  });
-  r.post("/voice/speak", async (c) => {
-    requireFeature(app, "voice");
-    const { text } = await c.body(z.object({ text: z.string().min(1).max(8000) }));
-    try {
-      const out = await app.speech.synthesize(text);
-      return { __raw: out.audio, mime: out.mime };
-    } catch (e) {
-      if (e instanceof SpeechError) throw new HttpError(e.kind === "not_configured" ? 409 : e.kind === "invalid" ? 400 : 503, `speech_${e.kind}`, e.message);
-      throw e;
-    }
-  });
-
   // ---- backup ---------------------------------------------------------------------------------
   r.get("/backups", () => listBackups(app));
   r.post("/backups", async () => ({ __status: 201, body: await createBackup(app) }));
@@ -304,7 +274,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
 function defaultTitle(kind: JobKind, input: Record<string, unknown>): string {
   if (kind === "research") return `Research: ${String(input.question ?? "").slice(0, 120)}`;
   if (kind === "demo-long") return "Diagnostics: long-running self-test";
-  if (kind === "sync") return "Refresh sources";
+  if (kind === "source-refresh") return "Refresh sources";
   if (kind === "reindex") return "Rebuild search index";
   if (kind === "briefing") return "Briefing";
   return kind;

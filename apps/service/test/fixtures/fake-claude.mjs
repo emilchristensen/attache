@@ -80,6 +80,8 @@ const disallowed = flag < 0 ? [] : args.slice(flag + 1).filter((a, i, all) => !a
 await post("/claude/started", { disallowed, planned: plan.length });
 // A session without planned calls only lists the servers; it does not consume a behaviour.
 const { mode = "normal" } = plan.length ? await get("/claude/behavior") : {};
+// Like Claude Code on a busy computer, or connecting slow MCP servers: a long start before init.
+if (mode === "slow-start") await new Promise((r) => setTimeout(r, Number(process.env.FAKE_CLAUDE_START_MS ?? 1_500)));
 emit({ type: "system", subtype: "init", tools: [], mcp_servers: servers });
 
 if (mode === "too-long-unless-hidden") {

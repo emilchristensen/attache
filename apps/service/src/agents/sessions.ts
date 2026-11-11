@@ -1,18 +1,25 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { App } from "../app.ts";
 import type { JobContext } from "../jobs/queue.ts";
 import { nowIso } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
-import { parseStateEntries, splitFrontmatter } from "../memory/markdown.ts";
-import { AgentHooks, stablePath } from "./install.ts";
-import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
+import { AgentHooks, agentHome, stablePath } from "./install.ts";
+import { AGENT_INTEGRATIONS, integrationFor, type AgentIntegration } from "./integrations.ts";
+import { removeLegacySkills } from "./legacy-skills.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
 import { redact } from "../core/log.ts";
-import { buildSessionContext } from "./context.ts";
+import { brainContexts, type ContextBase } from "./context-sources.ts";
+import { removeContextFiles, writeContextFiles } from "./context-files.ts";
+import { repositoryKey } from "../memory/repositories.ts";
+import { gitRemoteUrls } from "./git-remotes.ts";
 import { localDate, parseSummary, sessionLogSection, summaryPrompt, summarySystemPrompt } from "./summary.ts";
+import { currentOs } from "../platform/os.ts";
+import { searchCommand, type SearchCommand } from "./search-command.ts";
+import { replaceWith } from "../platform/replace-file.ts";
+import { queueConsolidation } from "../consolidation/consolidate.ts";
 
 interface SessionRow {
   agent: string;
@@ -39,7 +46,7 @@ const MAX_UNPARSED_SAMPLES = 5;
 const MAX_LOGGED_BULLETS = 12;
 
 /**
- * Coding-agent sessions: hooks spool transcripts, this ingests them into the
+ * Harness sessions: hooks spool transcripts, this ingests them into the
  * data folder (a redacted transcript plus a dated session-log entry) and keeps
  * the session-start context current.
  */
@@ -68,6 +75,7 @@ export class AgentSessions {
 
   start() {
     mkdirSync(spoolDir(this.stateDir), { recursive: true, mode: 0o700 });
+    this.upgradeHarnesses();
     const kick = () => {
       if (this.debounce) clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.tick(), 300);
@@ -129,12 +137,12 @@ export class AgentSessions {
   private ingestOne(r: SpoolRecord): boolean {
     const integration = integrationFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
-    if (!integration || !copy || !existsSync(copy)) {
+    if (!integration?.hooks || !copy || !existsSync(copy)) {
       this.app.log.warn("agent session not saved", { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") });
       return false;
     }
     const raw = readFileSync(copy, "utf8");
-    const parsed = integration.parseTranscript(raw);
+    const parsed = integration.hooks.parseTranscript(raw);
     if (!parsed.turns.length) {
       if (raw.trim()) this.keepUnparsed(r, copy);
       return false;
@@ -216,7 +224,7 @@ export class AgentSessions {
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
     writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    renameSync(tmp, file);
+    replaceWith(tmp, file);
   }
 
   private userName(): string {
@@ -277,49 +285,74 @@ export class AgentSessions {
     }
     const at = turns.at(-1)?.at ?? nowIso();
     const date = localDate(at);
-    const section = sessionLogSection({ agentLabel: integration.label, title: row.title ?? "Session", cwd: row.cwd, at, continued: from > 0, bullets, transcriptLink: `transcripts/${row.rel_path.split("/transcripts/")[1]}` });
+    const section = sessionLogSection({ agentLabel: integration.label, title: row.title ?? "Session", cwd: row.cwd, repositories: repositoriesOf(row.cwd), at, continued: from > 0, bullets, transcriptLink: `transcripts/${row.rel_path.split("/transcripts/")[1]}` });
     const saved = await ctx.effect(`session-log:${agent}:${sessionId}:${to}`, async () => this.app.memory.appendSessionLog(date, section));
     this.app.db.prepare("update agent_sessions set distilled_turns = max(distilled_turns, ?) where agent = ? and session_id = ?").run(to, agent, sessionId);
     this.app.bus.emit("event", { type: "memory.changed", relPath: saved.relPath });
-    return { relPath: saved.relPath, turns: to - from, summarised: bullets !== null, durable: bullets?.length ?? 0 };
+    // Consolidation reads what the summary found durable; without a model there is no summary, and the log says so.
+    const consolidation = bullets === null ? "no model" : bullets.length ? "queued" : "nothing durable";
+    if (consolidation === "queued") queueConsolidation(this.app, { agent, sessionId, from, to, topics: bullets! }, { label: integration.label, title: row.title ?? "Session" });
+    return { relPath: saved.relPath, turns: to - from, summarised: bullets !== null, durable: bullets?.length ?? 0, consolidation };
+  }
+
+  /** Turns `from` up to `to` of a session as the summariser read them (redacted), for Consolidation; null when the session is gone. */
+  sessionPart(agent: string, sessionId: string, from: number, to: number): { turns: Turn[]; title: string; cwd: string | null; agentLabel: string; userName: string } | null {
+    const integration = integrationFor(agent);
+    const row = this.row(agent, sessionId);
+    const cacheFile = this.cachePath(agent, sessionId);
+    if (!integration || !row || !existsSync(cacheFile)) return null;
+    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const turns = cached.turns.slice(from, to);
+    return turns.length ? { turns, title: row.title ?? "Session", cwd: row.cwd, agentLabel: integration.label, userName: this.userName() } : null;
   }
 
   // ---- session-start context ---------------------------------------------------
 
-  /** Keep the context file the session-start hook prints in step with memory; remove it while the feature is off. */
+  /** Keep the context files the session-start hook prints in step with the Brain; remove them while the feature is off. */
   refreshContext() {
-    const file = contextFile(this.stateDir);
     if (!this.enabled()) {
-      rmSync(file, { force: true });
+      removeContextFiles(this.stateDir);
       return;
     }
     const cfg = this.app.config.get();
-    const text = buildSessionContext({
+    const base: ContextBase = {
       now: new Date(),
       dataFolder: cfg.dataFolder!,
       identity: cfg.identity ? { name: cfg.identity.name, ...(cfg.identity.email ? { email: cfg.identity.email } : {}) } : null,
-      memory: this.app.memory
-        .listDocuments({ area: "memory", root: "data", limit: 400 })
-        .filter((d) => d.relPath !== "memory/self.md" && d.title)
-        .map((d) => ({ type: d.docType ?? "note", title: d.title, ...this.gist(d.relPath) })),
-      recentLogs: this.recentLogs(2),
       searchCommand: this.searchCommand(),
-    });
-    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    if (!existsSync(file) || readFileSync(file, "utf8") !== text) {
-      const tmp = join(dirname(file), `.${randomUUID()}.tmp`);
-      writeFileSync(tmp, text, { mode: 0o600 });
-      renameSync(tmp, file);
-    }
-    for (const a of AGENT_INTEGRATIONS) {
-      if (this.app.connections.record(a.kind)?.status !== "connected") continue;
+    };
+    const { global, projects } = brainContexts(this.app.memory, base, (relPath, error) => this.app.log.warn("could not read a note for the session context", { relPath, error: error.message }));
+    writeContextFiles(this.stateDir, global, projects);
+    for (const a of this.connectedHarnesses()) {
       try {
-        // Agents without a session-start hook read the same context from a rule file.
-        this.hooks.writeRules(a, text);
-        // Keep the save and audit skills in step with this version.
-        this.hooks.skills.install(a);
+        // Harnesses without a session-start hook read the global context from a rule file.
+        this.hooks.writeRules(a, global);
       } catch (e) {
-        this.app.log.warn("could not update agent memory rule or skills", { agent: a.kind, error: (e as Error).message });
+        this.app.log.warn("could not update a Harness's memory rule", { agent: a.kind, error: (e as Error).message });
+      }
+    }
+  }
+
+  private connectedHarnesses(): AgentIntegration[] {
+    return AGENT_INTEGRATIONS.filter((a) => this.app.connections.record(a.kind)?.status === "connected");
+  }
+
+  /**
+   * Bring connected Harnesses up to this version once per start: an upgrade
+   * may move the install's paths, so the MCP server entry is rewritten when it
+   * no longer matches, and the save and audit skills earlier versions
+   * installed are removed, since the MCP prompts replace them.
+   */
+  private upgradeHarnesses() {
+    const skills = removeLegacySkills(agentHome(), this.stateDir);
+    if (skills.removed.length) this.app.log.info("removed the save and audit skills the MCP prompts replace", { folders: skills.removed });
+    for (const e of skills.errors) this.app.log.warn("could not remove an earlier version's skill folder", e);
+    for (const a of this.connectedHarnesses()) {
+      try {
+        const r = this.hooks.refreshMcp(a);
+        if (r.changed) this.app.log.info("registered Jarvis's MCP server", { agent: a.kind, path: r.path });
+      } catch (e) {
+        this.app.log.warn("could not register Jarvis's MCP server", { agent: a.kind, error: (e as Error).message });
       }
     }
   }
@@ -330,34 +363,10 @@ export class AgentSessions {
     return existsSync(file) ? readFileSync(file, "utf8") : "## Jarvis memory\n\nNothing is remembered yet.\n";
   }
 
-  /** A note's first current fact, so the index says what each note is about. */
-  private gist(relPath: string): { gist?: string } {
-    try {
-      const first = parseStateEntries(this.app.memory.read(relPath))[0];
-      return first ? { gist: first.value.replace(/\s+/g, " ").trim() } : {};
-    } catch {
-      return {};
-    }
-  }
-
-  private recentLogs(days: number): Array<{ date: string; body: string }> {
-    const root = this.app.memory.dataRoot;
-    const dir = root ? join(root, "evidence", "sessions") : null;
-    if (!dir || !existsSync(dir)) return [];
-    return readdirSync(dir)
-      .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
-      .sort()
-      .reverse()
-      .slice(0, days)
-      .map((f) => ({ date: f.slice(0, 10), body: splitFrontmatter(readFileSync(join(dir, f), "utf8")).body.replace(/^# .*\n/, "") }));
-  }
-
-  /** How an agent reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
-  private searchCommand(): string {
+  /** How a Harness reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */
+  private searchCommand(): SearchCommand {
     const entry = process.argv[1] ? resolve(process.argv[1]) : "";
-    const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-    if (!/jarvis-service\.mjs$/.test(entry)) return `jarvis search --state-dir ${q(this.stateDir)}`;
-    return `${q(stablePath(process.execPath))} ${q(stablePath(entry))} search --state-dir ${q(this.stateDir)}`;
+    return searchCommand({ os: currentOs(), execPath: stablePath(process.execPath), entry: entry && stablePath(entry), stateDir: this.stateDir });
   }
 
 }
@@ -365,4 +374,10 @@ export class AgentSessions {
 function firstLine(text: string | undefined): string | null {
   const line = text?.split("\n").find((l) => l.trim())?.trim();
   return line ? (line.length > 80 ? `${line.slice(0, 77)}…` : line) : null;
+}
+
+/** The repository keys of the folder a session ran in, read from its git config; none when it is gone or outside a repository. */
+function repositoriesOf(cwd: string | null): string[] {
+  const keys = cwd ? gitRemoteUrls(cwd).map(repositoryKey) : [];
+  return [...new Set(keys.filter((k): k is string => k !== null))];
 }

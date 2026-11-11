@@ -7,7 +7,7 @@ export type Row = Record<string, SQLInputValue>;
  * Ordered, append-only migrations. Never edit a shipped migration; add a new
  * one. `user_version` records the applied count so upgrades are repeatable.
  */
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: readonly string[] = [
   `
   create table config (id integer primary key check (id = 1), json text not null, revision integer not null, updated_at text not null);
   create table audit (id integer primary key autoincrement, at text not null, actor text not null, event text not null, data text);
@@ -129,6 +129,106 @@ const MIGRATIONS: string[] = [
   // fingerprint so the next scan re-chunks it; the old chunks stay searchable until then.
   `
   update documents set hash = '', mtime_ms = -1;
+  `,
+  // This Machine's identity: local state, never part of the Brain.
+  `
+  create table machine (
+    id integer primary key check (id = 1), machine_id text not null, name text not null,
+    created_at text not null, updated_at text not null
+  );
+  `,
+  // Recent saves with revert: which Harness and session made each change, which changes one save
+  // made together, which change a revert undid, and a fingerprint of the note right after the write.
+  `
+  alter table memory_changes add column harness text;
+  alter table memory_changes add column session_id text;
+  alter table memory_changes add column batch_id text;
+  alter table memory_changes add column reverts text;
+  alter table memory_changes add column doc_hash text;
+  create index memory_changes_doc on memory_changes(doc_rel_path);
+  create index memory_changes_reverts on memory_changes(reverts);
+  `,
+  // Jarvis holds no conversation of its own (ADR 0003). Chat archives already written stay in the Brain as evidence.
+  `
+  drop index if exists messages_conv;
+  drop table if exists messages;
+  drop table if exists conversations;
+  `,
+  // Replication of the Brain through git: local state, never part of the Brain. No row means off.
+  `
+  create table replication (
+    id integer primary key check (id = 1), data_folder text not null, remote text not null, enabled_at text not null,
+    committed_seq integer not null default 0, status text not null, cause text, checked_at text, pushed_at text
+  );
+  `,
+  // Auto-accept per Harness: local state of this Machine, never part of the Brain. A change
+  // written without asking the owner is marked so in the change log.
+  `
+  create table harness_settings (harness text primary key, auto_accept integer not null default 0, updated_at text not null);
+  alter table memory_changes add column auto_accepted integer not null default 0;
+  `,
+  // Meaning-based search, local to this Machine: the text each chunk's vector is made from, and the
+  // vectors, keyed by model and that text's hash so text that did not change keeps its vector when its
+  // file is re-chunked. Forget every file's fingerprint so the next scan fills in the new columns.
+  `
+  alter table chunks add column embed_text text;
+  alter table chunks add column embed_hash text;
+  create index chunks_embed on chunks(embed_hash);
+  create table chunk_vectors (model text not null, hash text not null, vector blob not null, primary key (model, hash)) without rowid;
+  update documents set hash = '', mtime_ms = -1;
+  `,
+  // Review dates: the Review date a fact had before and after a correction, so a revert brings back both.
+  `
+  alter table memory_changes add column before_review text;
+  alter table memory_changes add column after_review text;
+  `,
+  // The inbox replicates: each item keeps what its source said (with when the source stopped reporting it
+  // and the Machine that ran Source refresh) apart from the owner's latest decision, so the state can be
+  // worked out the same way on every Machine. Items and decisions from before carry over.
+  `
+  alter table attention_items add column resolved_at text;
+  alter table attention_items add column decision text;
+  alter table attention_items add column machine text;
+  update attention_items set decision = (
+    select json_object('decision', d.decision, 'fingerprint', d.fingerprint, 'until', d.until, 'at', d.at, 'actor', d.actor, 'machine', null)
+    from attention_decisions d where d.item_key = attention_items.item_key order by d.id desc limit 1
+  );
+  update attention_items set resolved_at = updated_at
+  where state = 'resolved'
+    and not (decision is not null and json_extract(decision, '$.decision') = 'done' and json_extract(decision, '$.fingerprint') = fingerprint);
+  `,
+  // Proposals live in the Brain (review/proposals/), so they replicate. This table is only this
+  // Machine's index of those files, rebuilt from them; Proposals stored in the change log before
+  // are carried over into files when the data folder is next opened.
+  `
+  create table proposals (
+    id text primary key, rel_path text not null unique, status text not null, created_at text not null,
+    decided_at text, record text not null
+  );
+  create index proposals_status on proposals(status, created_at);
+  `,
+  // When this Machine was last up to date with the others, for the Dashboard. Setup and join count.
+  `
+  alter table replication add column up_to_date_at text;
+  update replication set up_to_date_at = checked_at where status = 'up_to_date';
+  `,
+  // Consolidation from meeting captures: which captures of a data folder this Machine has seen, and
+  // since when it watches the folder for new ones. Local state, never part of the Brain: a capture is
+  // consolidated on the Machine where it arrived, and one that came from another Machine is only seen.
+  `
+  create table capture_watch (data_folder text primary key, since text not null);
+  create table capture_arrivals (
+    data_folder text not null, rel_path text not null, arrival text not null, seen_at text not null,
+    primary key (data_folder, rel_path)
+  ) without rowid;
+  `,
+  // Source refresh had been stored as "sync" (the job kind, its schedule and its interval setting);
+  // the glossary avoids that word, so stored rows and settings take the Source refresh name.
+  `
+  update jobs set kind = 'source-refresh' where kind = 'sync';
+  update schedules set id = 'attention:source-refresh', job_kind = 'source-refresh' where id = 'attention:sync';
+  update config set json = json_set(json_remove(json, '$.schedules.syncEveryMinutes'), '$.schedules.refreshEveryMinutes', json_extract(json, '$.schedules.syncEveryMinutes'))
+  where json_extract(json, '$.schedules.syncEveryMinutes') is not null;
   `,
 ];
 

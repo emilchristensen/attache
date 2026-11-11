@@ -15,7 +15,7 @@ export type ToolHandler = (args: Record<string, unknown>) => ToolAnswer | Promis
 export interface ClaudeFixture {
   servers: Array<{ name: string; status: string; source: string }>;
   auth: { loggedIn: boolean; authMethod?: string; email?: string; orgName?: string };
-  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "preapproved" | "too-long-unless-hidden";
+  mode: "normal" | "unplanned" | "altered" | "skip-last" | "skip-all" | "not-logged-in" | "hang" | "slow-start" | "preapproved" | "too-long-unless-hidden";
   /** Every session the fixture CLI started: the tools it was told to disallow and how many calls were planned. */
   started: Array<{ disallowed: string[]; planned: number }>;
   /** Connector sessions started (one per Claude Code run). */
@@ -26,7 +26,12 @@ export interface ClaudeFixture {
   calls: Array<{ server: string; tool: string; args: Record<string, unknown> }>;
 }
 
-export const FAKE_CLAUDE = resolve(import.meta.dirname, "fake-claude.mjs");
+/**
+ * The fixture CLI as Claude Code is installed on this operating system: the
+ * script itself, or on Windows an npm command shim around it, as `npm install
+ * -g` creates.
+ */
+export const FAKE_CLAUDE = resolve(import.meta.dirname, process.platform === "win32" ? "fake-claude.cmd" : "fake-claude.mjs");
 
 const key = (server: string, tool: string) => `${server}\0${tool}`;
 

@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { migrate, openDb } from "../src/core/db.ts";
+import { MIGRATIONS, openDb } from "../src/core/db.ts";
 import { MemoryStore } from "../src/memory/store.ts";
-import { documentBlocks, search } from "../src/memory/search.ts";
+import { search } from "../src/memory/search.ts";
 import { splitLong } from "../src/memory/chunker.ts";
-import { MAX_EVIDENCE_CHARS, renderEvidence } from "../src/conversation/service.ts";
 import { tempDir } from "./helpers.ts";
 
 function setup() {
   const db = openDb(":memory:");
-  const store = new MemoryStore(db, null, "test");
+  const store = new MemoryStore(db, null, { instance: "test", locksDir: tempDir(), machine: () => ({ id: "00000000-0000-4000-8000-000000000001", name: "Test Machine" }) });
   const root = tempDir();
   store.open(root);
   return { db, store, root };
@@ -38,9 +37,6 @@ describe("recall retrieves single facts", () => {
     expect(hit.text).toContain("Quillfeather Energy");
     expect(hit.text).not.toContain("Detail number 1.");
     expect(hit.snippet).toContain("Quillfeather");
-    // The whole fact reaches the model: nothing is cut off by the evidence size limit.
-    expect(hit.text.length).toBeLessThan(MAX_EVIDENCE_CHARS);
-    expect(renderEvidence([hit], null)).toContain("Quillfeather Energy");
   });
 
   it("keeps a fact's source in the cited text but does not match queries on it", () => {
@@ -112,29 +108,16 @@ describe("splitting long text", () => {
   });
 });
 
-describe("a note opened as conversation context", () => {
-  it("is passed as whole sections, current state first, not as its first few facts", () => {
-    const { db, store } = setup();
-    const { relPath } = store.createMemory({ type: "project", title: "Juniper", state: Array.from({ length: 12 }, (_, i) => ({ subject: `Fact ${i + 1}`, value: `value ${i + 1}` })), notes: "Free text about Juniper." }, "user");
-    const blocks = documentBlocks(db, "data", relPath);
-    expect(blocks.map((b) => b.section)).toEqual(["state", "body", "history"]);
-    expect(blocks[0]!.text).toContain("value 1");
-    expect(blocks[0]!.text).toContain("value 12");
-    expect(blocks[0]!.endLine - blocks[0]!.startLine).toBe(11);
-    expect(blocks[1]!.text).toContain("Free text about Juniper.");
-  });
-});
-
 describe("upgrading an index built by an earlier version", () => {
   it("re-chunks every document on the next scan", () => {
     const { db, store } = setup();
     bigProject(store);
-    const version = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
     store.indexer.scan(store.rootRef!);
     expect(store.indexer.scan(store.rootRef!).indexed).toBe(0);
-    // Replay the migration that invalidates the index, as an upgrade from the previous version would.
-    db.exec(`pragma user_version = ${version - 1}`);
-    migrate(db);
+    // Replay the migration that invalidates the index, as an upgrade from the version before it would.
+    const reindex = MIGRATIONS.findIndex((m) => m.includes("update documents set hash = ''"));
+    expect(reindex).toBeGreaterThan(0);
+    db.exec(MIGRATIONS[reindex]!);
     const rescanned = store.indexer.scan(store.rootRef!);
     expect(rescanned.indexed).toBeGreaterThan(0);
     expect(rescanned.unchanged).toBe(0);

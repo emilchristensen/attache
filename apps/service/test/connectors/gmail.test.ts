@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { gmailAdapter, isCalendarNotification, parseThreadPage, summarizeThread, type GmailThread } from "../../src/connectors/gmail.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { jsonAnswer, mountClaude, onTool, useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let claude: ClaudeFixture;
@@ -61,14 +64,14 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
     expect(await gmailAdapter.test(ctx())).toMatchObject({ ok: true, account: SELF });
     claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
     expect(await gmailAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("unauthorized");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("unauthorized");
   });
 
   it("scope: the inbox query covers 7 days; an unselected scope makes no call", async () => {
     inbox([]);
-    await gmailAdapter.sync!(ctx([]));
+    await gmailAdapter.refresh!(ctx([]));
     expect(claude.calls).toHaveLength(0);
-    await gmailAdapter.sync!(ctx());
+    await gmailAdapter.refresh!(ctx());
     expect(calls("search_threads")[0]!.args).toMatchObject({ query: "in:inbox newer_than:7d", view: "THREAD_VIEW_MINIMAL" });
   });
 
@@ -80,7 +83,7 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
       thread("t4", [m("e", "old@client.example", 24 * 9, ["INBOX", "UNREAD"])]),
       thread("t5", [m("f", "quiet@client.example", 5, ["INBOX"])]),
     ]);
-    const r = await gmailAdapter.sync!(ctx());
+    const r = await gmailAdapter.refresh!(ctx());
     expect(r.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:t1"]);
     expect(r.observations.map((o) => o.externalId).sort()).toEqual(["t1", "t2", "t3", "t5"]);
     expect(r.coverage).toMatchObject({ state: "complete", items: 4 });
@@ -91,22 +94,22 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
   it("pagination and caps: follows nextPageToken; a page cap is partial", async () => {
     const many = Array.from({ length: 60 }, (_, i) => thread(`t${i}`, [m(`m${i}`, "x@client.example", 1 + i * 0.1, ["INBOX"])]));
     inbox(many);
-    const r = await gmailAdapter.sync!(ctx());
+    const r = await gmailAdapter.refresh!(ctx());
     expect(r.coverage, JSON.stringify(r.coverage)).toMatchObject({ state: "complete", items: 60 });
     expect(calls("search_threads")).toHaveLength(3);
     inbox(Array.from({ length: 200 }, (_, i) => thread(`u${i}`, [m(`n${i}`, "x@client.example", 1, ["INBOX"])])));
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("partial");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("partial");
   });
 
   it("empty, errors and retries: {} is empty; a tool error fails; a failed later page is partial; a skipped call is retried", async () => {
     inbox([]);
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("empty");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("empty");
     onTool(claude, SERVER, "search_threads", () => ({ text: "Request had insufficient authentication scopes (403)", isError: true }));
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("denied");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("denied");
     onTool(claude, SERVER, "search_threads", (a) => (a.pageToken ? { text: "Backend unavailable 503", isError: true } : jsonAnswer({ threads: [thread("t1", [m("a", "x@client.example", 1, ["INBOX"])])], nextPageToken: "25" })));
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("partial");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("partial");
     onTool(claude, SERVER, "search_threads", () => ({ text: "not json" }));
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("error");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("error");
   });
 
   it("search results without dates or labels are completed with get_thread (metadata only, no bodies)", async () => {
@@ -117,7 +120,7 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
       thread("t2", [m("b", "bob@client.example", 30, ["INBOX"]), m("c", self, 20, ["SENT"])]),
       thread("t3", [m("d", "old@client.example", 24 * 9, ["INBOX"])]),
     ]);
-    const r = await gmailAdapter.sync!(dotted());
+    const r = await gmailAdapter.refresh!(dotted());
     expect(r.coverage, JSON.stringify(r.coverage)).toMatchObject({ state: "complete", items: 2 });
     // The reply goes to the real address, and my own last message (dots and all) is recognised.
     expect(r.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:t1"]);
@@ -128,22 +131,22 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
   it("a thread whose details cannot be read stays unread coverage, not a silent drop", async () => {
     currentConnectorInbox([thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])]), thread("t2", [m("b", "bob@client.example", 2, ["INBOX"])])]);
     onTool(claude, SERVER, "get_thread", (a) => (a.threadId === "t2" ? { text: "Backend unavailable 503", isError: true } : jsonAnswer(thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])]))));
-    const r = await gmailAdapter.sync!(ctx());
+    const r = await gmailAdapter.refresh!(ctx());
     expect(r.coverage).toMatchObject({ state: "partial", items: 1 });
     expect(r.coverage.scopes[0]!.note).toMatch(/1 thread\(s\) could not be read or dated/);
   });
 
   it("search results that already carry dates and labels make no get_thread calls", async () => {
     inbox([thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])])]);
-    await gmailAdapter.sync!(ctx());
+    await gmailAdapter.refresh!(ctx());
     expect(calls("get_thread")).toHaveLength(0);
   });
 
   it("coverage: undated threads make the scope partial; an error inside the result is an error, not zero threads", async () => {
     inbox([thread("t1", [{ ...m("a", "x@client.example", 1, ["INBOX"]), internalDate: "", date: "" }])]);
-    expect((await gmailAdapter.sync!(ctx())).coverage).toMatchObject({ state: "partial", items: 0 });
+    expect((await gmailAdapter.refresh!(ctx())).coverage).toMatchObject({ state: "partial", items: 0 });
     onTool(claude, SERVER, "search_threads", () => jsonAnswer({ error: { code: 403, message: "PERMISSION_DENIED" } }));
-    expect((await gmailAdapter.sync!(ctx())).coverage.state).toBe("denied");
+    expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("denied");
   });
 
   it("execute: saves a reply draft (never sends), verified with get_draft; recovery matches thread and body", async () => {

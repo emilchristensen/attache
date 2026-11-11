@@ -5,6 +5,8 @@ import { FEATURES, isEnabled } from "../capabilities/registry.ts";
 
 export interface ScheduleRow {
   id: string;
+  /** What the schedule does, in the owner's words (from the capability registry). */
+  label: string;
   capability: string;
   jobKind: string;
   everyMinutes: number | null;
@@ -15,6 +17,9 @@ export interface ScheduleRow {
   lastJobId: string | null;
 }
 
+/** What `Scheduler.enqueue` returns to keep a schedule due: it runs at a later tick, as a catch-up if it waited long. */
+export const LATER: unique symbol = Symbol("later");
+
 /** Next local time-of-day occurrence strictly after `from`. */
 export function nextDaily(from: Date, hhmm: string): Date {
   const [h, m] = hhmm.split(":").map(Number) as [number, number];
@@ -22,6 +27,12 @@ export function nextDaily(from: Date, hhmm: string): Date {
   d.setHours(h, m, 0, 0);
   if (d.getTime() <= from.getTime()) d.setDate(d.getDate() + 1);
   return d;
+}
+
+/** A schedule row's id is `<feature>:<schedule>`; its label comes from the registry entry that defines it. */
+function scheduleLabel(capability: string, id: string): string {
+  const own = id.slice(capability.length + 1);
+  return FEATURES.find((f) => f.id === capability)?.schedules.find((s) => s.id === own)?.label ?? id;
 }
 
 /**
@@ -42,8 +53,11 @@ export class Scheduler {
   private firstTick: NodeJS.Timeout | null = null;
   private lastTick = Date.now();
   readonly tickMs: number;
-  /** Enqueue a job for a due schedule; returns the job id (or null if nothing was enqueued). */
-  enqueue: (row: ScheduleRow, reason: "due" | "catch_up") => string | null = () => null;
+  /**
+   * Enqueue a job for a due schedule; returns the job id, null when nothing
+   * was enqueued, or `LATER` to leave the schedule due and ask again at the next tick.
+   */
+  enqueue: (row: ScheduleRow, reason: "due" | "catch_up") => string | null | typeof LATER = () => null;
   onResume: (gapMs: number) => void = () => {};
 
   constructor(db: Db, log: Logger, opts: { tickMs?: number } = {}) {
@@ -58,7 +72,7 @@ export class Scheduler {
       for (const s of f.schedules) {
         const id = `${f.id}:${s.id}`;
         const enabled = isEnabled(config.features, f.id) && config.setupCompleted && (s.id !== "briefing" || config.schedules.briefingEnabled);
-        const every = s.id === "sync" ? config.schedules.syncEveryMinutes : null;
+        const every = s.id === "source-refresh" ? config.schedules.refreshEveryMinutes : null;
         const daily = s.id === "briefing" ? config.schedules.briefingAt : null;
         const existing = this.db.prepare("select * from schedules where id = ?").get(id) as Record<string, unknown> | undefined;
         if (!existing) {
@@ -80,6 +94,7 @@ export class Scheduler {
   list(): ScheduleRow[] {
     return (this.db.prepare("select * from schedules order by id").all() as Array<Record<string, unknown>>).map((r) => ({
       id: String(r.id),
+      label: scheduleLabel(String(r.capability), String(r.id)),
       capability: String(r.capability),
       jobKind: String(r.job_kind),
       everyMinutes: r.every_minutes === null ? null : Number(r.every_minutes),
@@ -124,7 +139,9 @@ export class Scheduler {
       const reason = resumed || missedMultiple ? "catch_up" : "due";
       let jobId: string | null = null;
       try {
-        jobId = this.enqueue(s, reason);
+        const queued = this.enqueue(s, reason);
+        if (queued === LATER) continue;
+        jobId = queued;
       } catch (e) {
         this.log.warn("schedule enqueue failed", { id: s.id, error: (e as Error).message });
       }

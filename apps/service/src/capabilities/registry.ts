@@ -1,5 +1,5 @@
 import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@jarvis/contracts";
-import { AGENT_KINDS } from "../agents/integrations.ts";
+import { HOOK_AGENT_KINDS } from "../agents/integrations.ts";
 
 /**
  * The single server-side definition of what Jarvis can do. The setup
@@ -15,7 +15,7 @@ export interface FeatureDefinition {
   requiresFeatures: FeatureId[];
   connections: Array<{ kinds: ConnectionKind[]; label: string; required: boolean; missingEffect: string }>;
   /** Scheduled triggers owned by this feature. */
-  schedules: Array<{ id: string; label: string; jobKind: "sync" | "briefing" }>;
+  schedules: Array<{ id: string; label: string; jobKind: "source-refresh" | "briefing" }>;
   /** Job kinds that belong to this feature (cancelled when it is disabled). */
   jobKinds: string[];
 }
@@ -35,26 +35,16 @@ export const FEATURES: FeatureDefinition[] = [
     jobKinds: ["reindex"],
   },
   {
-    id: "conversation",
-    label: "Conversation",
-    description: "A persistent chat. Every answer retrieves evidence from your notes and cites it.",
-    core: true,
-    defaultEnabled: true,
-    requiresFeatures: ["recall"],
-    connections: [{ kinds: ["model"], label: "A model for written answers", required: false, missingEffect: "Without a model, Jarvis replies with the evidence it found instead of a written answer." }],
-    schedules: [],
-    jobKinds: [],
-  },
-  {
     id: "capture",
-    label: "Capture and memory",
-    description: "Import a Markdown folder, capture notes and source-linked decisions, and correct what Jarvis remembers.",
+    label: "Saving to memory",
+    description: "Import a Markdown folder, save notes and decisions from a Harness, propose what the Brain should change because of a meeting capture (with a model), and review Proposals and recent saves.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["recall"],
+    // A model is only needed to propose changes from meeting captures; saving works without one, so it is not listed here.
     connections: [],
     schedules: [],
-    jobKinds: ["import"],
+    jobKinds: ["import", "capture-consolidate"],
   },
   {
     id: "jobs",
@@ -76,10 +66,10 @@ export const FEATURES: FeatureDefinition[] = [
     requiresFeatures: ["jobs"],
     connections: [{ kinds: SOURCE_KINDS, label: "At least one source (your data folder counts)", required: true, missingEffect: "Nothing to watch." }],
     schedules: [
-      { id: "sync", label: "Refresh sources", jobKind: "sync" },
+      { id: "source-refresh", label: "Source refresh", jobKind: "source-refresh" },
       { id: "briefing", label: "Daily briefing", jobKind: "briefing" },
     ],
-    jobKinds: ["sync", "briefing"],
+    jobKinds: ["source-refresh", "briefing"],
   },
   {
     id: "drafts",
@@ -93,29 +83,18 @@ export const FEATURES: FeatureDefinition[] = [
     jobKinds: ["draft", "action"],
   },
   {
-    id: "voice",
-    label: "Voice",
-    description: "Optional push-to-talk and spoken answers. Typing always works.",
-    core: false,
-    defaultEnabled: false,
-    requiresFeatures: ["conversation"],
-    connections: [{ kinds: ["speech"], label: "A speech provider", required: true, missingEffect: "Voice needs speech recognition and/or speech output configured." }],
-    schedules: [],
-    jobKinds: [],
-  },
-  {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your coding-agent sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, and give each new session your Jarvis memory.",
+    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Jarvis memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
-      { kinds: AGENT_KINDS, label: "A coding agent (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
-      { kinds: ["model"], label: "A model to summarise sessions", required: false, missingEffect: "Sessions are saved without a summary." },
+      { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
+      { kinds: ["model"], label: "A model to summarise sessions and propose changes", required: false, missingEffect: "Sessions are saved without a summary, and no Proposals are made from them." },
     ],
     schedules: [],
-    jobKinds: ["session-distill"],
+    jobKinds: ["session-distill", "session-consolidate"],
   },
 ];
 
@@ -187,7 +166,7 @@ export function resolveChange(current: Partial<Record<FeatureId, boolean>>, chan
 
 export function computeStatus(
   features: Partial<Record<FeatureId, boolean>>,
-  connections: Array<{ kind: ConnectionKind; status: string; detail?: { stt?: boolean; tts?: boolean } }>,
+  connections: Array<{ kind: ConnectionKind; status: string }>,
   opts: { dataFolder: string | null },
 ): FeatureStatus[] {
   const eff = effectiveFeatures(features);
@@ -204,7 +183,7 @@ export function computeStatus(
     if (!eff[f.id]) return { ...base, readiness: "disabled" as ReadinessState, reason: null };
     const missingFeatures = f.requiresFeatures.filter((d) => !eff[d]);
     if (missingFeatures.length) return { ...base, readiness: "needs_setup" as ReadinessState, reason: `Turn on ${missingFeatures.map((m) => featureDef(m).label).join(", ")}.` };
-    if ((f.id === "recall" || f.id === "capture" || f.id === "conversation" || f.id === "sessions") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
+    if ((f.id === "recall" || f.id === "capture" || f.id === "sessions") && !opts.dataFolder) return { ...base, readiness: "needs_setup" as ReadinessState, reason: "Choose a data folder." };
     let readiness: ReadinessState = "ready";
     let reason: string | null = null;
     for (const c of f.connections) {
@@ -219,12 +198,6 @@ export function computeStatus(
         } else if (readiness === "ready") {
           readiness = "partial";
           reason = c.missingEffect;
-        }
-      } else if (f.id === "voice") {
-        const d = ok[0]!.detail ?? {};
-        if (!d.stt || !d.tts) {
-          readiness = "partial";
-          reason = !d.stt ? "Speech output works; speech recognition is not configured." : "Speech recognition works; spoken answers are not configured.";
         }
       }
     }

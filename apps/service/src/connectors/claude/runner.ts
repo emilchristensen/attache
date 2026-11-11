@@ -6,14 +6,14 @@
  */
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { promisify } from "node:util";
 import { RemoteError } from "../http.ts";
 import type { Logger } from "../../core/log.ts";
 import { findClaudeCli } from "../../models/providers.ts";
+import { platformLocations } from "../../platform/locations.ts";
 import { preApprovingRules, serverPrefix, type CallOutcome, type PlannedCall } from "./plan.ts";
-import { CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
+import { claudeLaunch, CONNECTOR_CWD, PromptTooLongError, runSession } from "./session.ts";
 
 const exec = promisify(execFile);
 
@@ -44,11 +44,8 @@ const SESSION_PER_CALL_MS = 8_000;
 const SESSION_MAX_MS = 240_000;
 
 export function claudeConfigDir(): string {
-  return process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || homedir(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR || join(platformLocations().home, ".claude");
 }
-
-/** macOS location of managed (organization) Claude Code settings, which also apply to headless sessions. */
-export const MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json";
 
 function allowRules(file: string): unknown[] {
   if (!existsSync(file)) return [];
@@ -61,7 +58,7 @@ function allowRules(file: string): unknown[] {
 }
 
 function userAllowRules(): unknown[] {
-  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.JARVIS_MANAGED_SETTINGS ?? MANAGED_SETTINGS)];
+  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.JARVIS_MANAGED_SETTINGS ?? platformLocations().claudeManagedSettings)];
 }
 
 /** Claude Code's project directory name for a working directory: every non-alphanumeric character becomes "-". */
@@ -80,8 +77,9 @@ export function projectSlug(dir: string): string {
  */
 export function resolveSpill(text: string, configDir = claudeConfigDir(), cwd = CONNECTOR_CWD): string {
   if (!text.trimStart().startsWith("<persisted-output>")) return text;
-  const m = /Full output saved to: (\/\S+\/tool-results\/[A-Za-z0-9._-]+\.(?:txt|json))\s/.exec(text);
-  if (!m || m[1]!.split("/").includes("..")) return text;
+  // An absolute path on this line, POSIX or Windows (`C:\…`), which may contain spaces.
+  const m = /Full output saved to: ((?:\/|[A-Za-z]:[\\/]).*?[\\/]tool-results[\\/][A-Za-z0-9._-]+\.(?:txt|json))\s/.exec(text);
+  if (!m || m[1]!.split(/[\\/]/).includes("..")) return text;
   try {
     const root = realpathSync(join(configDir, "projects", projectSlug(realpathSync(cwd))));
     const file = realpathSync(m[1]!);
@@ -106,9 +104,10 @@ export function labelOf(server: string): string {
   return server.replace(/^claude\.ai\s+/, "");
 }
 
-export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number } = {}): ClaudeConnectorRunner {
+export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayMs?: number; sessionBaseMs?: number; sessionPerCallMs?: number } = {}): ClaudeConnectorRunner {
   const pendingDelayMs = config.pendingDelayMs ?? PENDING_DELAY_MS;
-  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * SESSION_PER_CALL_MS);
+  // The time a session's calls get, counted from Claude Code's init: starting has a budget of its own (`runSession`).
+  const sessionMs = (n: number) => Math.min(SESSION_MAX_MS, (config.sessionBaseMs ?? SESSION_BASE_MS) + n * (config.sessionPerCallMs ?? SESSION_PER_CALL_MS));
   let active = 0;
   const waiting: Array<() => void> = [];
   const knownServers = new Set<string>();
@@ -181,10 +180,11 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
   return {
     async account(signal) {
       const bin = findClaudeCli();
-      if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+      if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+      const launch = claudeLaunch(bin, ["auth", "status", "--json"]);
       let stdout: string;
       try {
-        ({ stdout } = await exec(bin, ["auth", "status", "--json"], { signal, timeout: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
+        ({ stdout } = await exec(launch.command, launch.args, { signal, timeout: 20_000, windowsHide: true, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } }));
       } catch (e) {
         const text = String((e as { stdout?: string }).stdout ?? "") || (e as Error).message;
         if (/"loggedIn"\s*:\s*false/.test(text) || /not logged in/i.test(text)) throw new RemoteError("Claude Code is not signed in. Run `claude` once and sign in with your claude.ai account.", "unauthorized");

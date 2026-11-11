@@ -6,7 +6,7 @@
  * (parameter_validation_failed), so the DM search filters on is:dm.
  * Posting is slack_send_message, read back from the channel or thread.
  */
-import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
 import { attemptStartMs, csvList, recordFailure, stringSetting } from "./common.ts";
@@ -237,7 +237,7 @@ export const slackAdapter: ConnectorAdapter = {
     });
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     const scopes = ctx.connection.readScopes;

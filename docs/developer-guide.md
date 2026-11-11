@@ -7,22 +7,30 @@ Developer setup is separate from end-user installation: users run the installer 
 | Path | What |
 | --- | --- |
 | `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
-| `apps/service` | The local service: memory writer, index, conversation, attention, jobs, scheduler, approvals, connectors, speech, HTTP API |
+| `apps/service` | The local service: memory writer, index, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, exclusion check |
-| `tests/e2e` | Playwright journeys (Chrome, voice, visual captures) |
+| `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, inspection, guides, build status, acceptance report |
 
-Service modules: `core/` (db, config, logging with redaction, credential store, notifications), `memory/` (Markdown model, policy, indexer, search, store), `conversation/`, `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `speech/`, `http/`.
+Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
 
 ## Requirements
 
-- macOS on Apple silicon for the full suite (launchd, Keychain, `say`).
-- Node 24.18 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+- macOS, Linux or Windows for lint, typecheck, Vitest and the browser journeys.
+  The install test needs macOS on Apple silicon, or Linux on x86_64 with a systemd user manager.
+- On Windows, Git for Windows: the tests run Claude Code's hook commands through Git Bash, as Claude Code does, and Codex's through cmd.exe.
+  `JARVIS_TEST_GIT_BASH` points the tests at a Git Bash outside `C:\Program Files\Git`.
+- `apps/service/test/linux-desktop.test.ts` runs the Linux secret store and notifications anywhere, against stand-ins for `secret-tool` and `notify-send`.
+  `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `JARVIS_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
+- `apps/service/test/windows-desktop.test.ts` runs the Windows secret store and notifications anywhere, against a stand-in for Windows PowerShell (`fake-powershell.mjs`) and for `icacls` and `whoami`.
+  `apps/service/test/windows-desktop-real.test.ts` checks the same against Credential Manager and Windows notifications; it runs only on Windows with `JARVIS_TEST_REAL_DESKTOP=1`, as CI's Windows job does, because it shows notifications and writes to your Credential Manager (it removes what it wrote).
+- Node 24.22 (`.node-version`); Node 22 lacks FTS5 in `node:sqlite`.
+  Before 24.22, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed.
 - pnpm 11.
 - Google Chrome (Playwright uses the installed Chrome channel).
-- Optional: `brew install whisper-cpp` for voice tests, the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
+- Optional: the Claude Code CLI signed in with claude.ai for live model use and the live Slack, Gmail and Calendar checks.
 
 ```sh
 pnpm install
@@ -36,51 +44,141 @@ pnpm typecheck
 Run the service against a scratch profile while developing:
 
 ```sh
+pnpm dev                 # [--port 7500] [--state-dir <folder>]
+```
+
+`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/jarvis-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the web client with hot reload on `http://localhost:5173`.
+It prints a pairing link for that client.
+The scratch profile keeps its secrets in a file, and its writer locks and Harness home (`JARVIS_AGENT_HOME`) inside the state folder, so connecting a Harness there never touches your own.
+The same steps by hand:
+
+```sh
 node apps/service/build.mjs --watch &            # rebuild on change
 JARVIS_CREDENTIAL_STORE=file node apps/service/dist/jarvis-service.mjs serve --state-dir /tmp/jarvis-dev --port 7500
 node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --open
 JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and LaunchAgent), `JARVIS_CREDENTIAL_STORE=file|keychain`, `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_WHISPER_BIN`, `JARVIS_AGENT_HOME` (home folder whose coding-agent settings and skills are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script the save and audit skills call; tests point it at `apps/service/src/main.ts`).
+Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and the background service), `JARVIS_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose Harness hooks and MCP configuration are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script a Harness runs as Jarvis's MCP server; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model), `JARVIS_SECRET_TOOL_BIN` and `JARVIS_NOTIFY_SEND_BIN` (the `secret-tool` and `notify-send` Jarvis runs on Linux), `JARVIS_POWERSHELL_BIN`, `JARVIS_ICACLS_BIN` and `JARVIS_WHOAMI_BIN` (the Windows PowerShell, `icacls` and `whoami` Jarvis runs on Windows); tests point them at the recording stand-ins in `apps/service/test/fixtures/`.
 
-Coding-agent hooks and skills edit real files in your home folder (`~/.claude`, `~/.agents`, `~/.codex`, `~/.gemini`).
-The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting an agent will add hooks for the scratch instance to your own agents.
-`jarvis agent-hooks status` lists this install's hooks and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
+Connecting a Harness edits real files in your home folder (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, Claude Desktop's settings folder).
+Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
+The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting a Harness will add hooks and an MCP server for the scratch instance to your own Harnesses.
+`jarvis agent-hooks status` lists this install's hooks and MCP server entries, and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push, every pull request and on demand, on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
+Each platform is one job, `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)`, with these steps:
+
+| Step | Run it locally |
+| --- | --- |
+| Install | `pnpm install --frozen-lockfile` |
+| Lint | `pnpm lint --max-warnings 0` |
+| Typecheck | `pnpm typecheck` |
+| Unit and integration tests | `pnpm test` |
+| Linux desktop session tests (Linux only) | `JARVIS_TEST_REAL_DESKTOP=1 sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts` |
+| Windows desktop tests (Windows only) | `JARVIS_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
+| Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
+
+A separate job, `install (ubuntu-latest)`, runs the install test (see "Install test" below) and uploads `test-results/install-results.json`.
+
+Every check runs even when an earlier one fails, so a run lists all failures at once.
+On failure the job uploads `test-results/` (Playwright traces and screenshots) as an artifact.
+Node comes from `.node-version` and pnpm from `packageManager` in `package.json`, so CI and a local checkout use the same versions.
+`.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
+Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
+Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
+
+To reproduce a Linux failure on a Mac, run the same commands in a container with the pinned Node, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.2-bookworm bash`, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
+
+A pull request with a failing check shows the failure on GitHub.
+Branch protection on `main` requires `checks (ubuntu-latest)`, `checks (macos-latest)` and `checks (windows-latest)` to pass before a pull request can merge.
+The `install` jobs are not required, so a slow or flaky installer run does not hold up a merge; check them before a release.
 
 ## Fixtures versus live
 
 Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
 The service talks to it only when `JARVIS_TEST_ENDPOINTS=1` and `JARVIS_FIXTURE_URL` are set; normal operation never reads those variables.
-The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
+The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` (on Windows `fake-claude.cmd`, an npm-style shim around it, as `npm install -g` installs Claude Code there) through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
+
+Tests never download the real meaning model.
+`apps/service/test/fixtures/fixture-meaning-model.ts` builds a tiny ONNX model (one `Gather` node, written by `onnx-writer.ts`) and a word-level tokenizer with the same files as the real one, and serves them from the fixture server; the integration tests and browser journeys download it through the normal path and run the real ONNX runtime on it.
+To check the real model on a platform, download its files from the pinned revision in `apps/service/src/meaning/model.ts` and run `JARVIS_TEST_REAL_MODEL_DIR=<folder> pnpm test apps/service/test/integration/meaning-real-model.test.ts`; without the variable that test is skipped.
 `scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
+
+## Several Machines in one test
+
+`apps/service/test/integration/machines.ts` starts several Machines in one Vitest process, each a whole service with its own state folder, Brain copy and `ManualClock` (`apps/service/test/fixtures/manual-clock.ts`).
+`startMachines(["Mac", "PC"])` creates a local bare repository as the remote, sets Replication up on the first Machine and joins the others into empty folders; `world.addMachine(name, { join: false })` adds one that stays apart.
+Nothing replicates until a test moves a Machine's clock: `await mac.clock.advance(30_000)` runs the commit due after a save, `advance(60_000)` the one-minute check, and `advance` waits for the check it started.
+`world.remote.goOffline()` and `goOnline()` make the remote unreachable and back; `world.remote.git(...)` inspects what was pushed.
+The bare repository refuses any push that is not a fast-forward, so a test fails if Replication ever rewrote history.
+`JARVIS_GIT_BIN` points Replication at another git executable.
+For GitHub itself, `apps/service/test/fixtures/github-git-server.ts` serves git's smart HTTP protocol (through the Machine's `git http-backend`) behind token authentication, plus `GET /repos/{owner}/{name}` with a visibility the test sets.
+`replication-private-repo.test.ts` sends `https://github.com/` there with git's `url.<base>.insteadOf`, set through `GIT_CONFIG_COUNT` in the environment, and points the GitHub connection's API URL at it, so no test-only code is needed in the service.
+
+## Recall evaluation
+
+A change to search ships only when it improves recall evaluation.
+`apps/service/test/fixtures/recall-brain/` is a synthetic Brain with its own question set in `evaluation/recall-questions.json`, mixing exact lookups (ticket numbers, repository names), paraphrases and Danish questions.
+`apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` twice and fails if either drops below its recorded baseline: keyword search only (`BASELINE`: first result 16 of 22, first three 18 of 22), and with meaning-based search on the fixture meaning model (`MEANING_BASELINE`: first result 19 of 22, first three 20 of 22).
+The fixture model knows only the concept words listed in `fixture-meaning-model.ts`; add one there when a synthetic question needs it.
+When a change improves the score, raise the baseline in the same commit.
+The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare, with meaning-based search ready both times (the report's first lines say how search ranked).
 
 ## Release
 
 ```sh
-node scripts/build-release.mjs --version 0.1.0
+node scripts/build-release.mjs --version 0.1.0                        # for this computer
+node scripts/build-release.mjs --version 0.1.0 --target windows-x64   # macos-arm64, linux-x64 or windows-x64
 ```
 
+macOS and Linux build every target; Windows builds only its own, because a Windows file system cannot mark the macOS and Linux programs executable.
 Produces in `release/0.1.0/`:
 
-- `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer (double-click or `sh`).
-- `jarvis-0.1.0-macos-arm64.tar.gz` — the same release as a folder with `install.sh`.
-- `SHA256SUMS`.
+- `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer for macOS (double-click or `sh`).
+- `Jarvis-Installer-0.1.0-linux-x64.sh` — self-extracting one-step installer for Linux (`sh`).
+- `Jarvis-Installer-0.1.0-windows-x64.cmd` — self-extracting one-step installer for Windows (double-click).
+  Its plain-ASCII batch header hands a PowerShell script (as `-EncodedCommand`) the zip's byte offset; the script copies the zip out, unpacks it with .NET and runs `install.ps1`.
+- `jarvis-0.1.0-<target>.tar.gz` (macOS, Linux) or `jarvis-0.1.0-windows-x64.zip` — the same release as a folder with `install.sh`, or `install.cmd` and `install.ps1`.
+  `scripts/zip.mjs` writes the zip, so no host needs a zip tool.
+- `SHA256SUMS`, covering every artifact built into the folder.
 
-The build downloads the official Node runtime for the pinned version from nodejs.org, verifies it against `SHASUMS256.txt`, and bundles it.
+Targets are listed in `scripts/release-targets.mjs`, the one-step installers' headers in `scripts/release-installers.mjs`.
+The build downloads the official Node runtime of the pinned version for the target from nodejs.org (the tarball for macOS and Linux, `win-x64/node.exe` for Windows), verifies it against `SHASUMS256.txt`, and bundles it.
+The release carries a `TARGET` file, and `install.sh` and `install.ps1` refuse to run on any other kind of computer.
+The Windows installer and uninstaller (`installer/install.ps1`, `installer/uninstall.ps1`) are plain ASCII, because Windows PowerShell reads a script without a byte order mark in the legacy code page.
+They switch versions with a directory junction (`current`), which needs no administrator rights, unlike a symbolic link.
 Artifacts are unsigned; notarisation is an external step (see the acceptance report).
+
+## Install test
+
+`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source.
+It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
+It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Jarvis as it was.
+What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
+The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
+On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.
+The GitHub runner's account is an administrator, so the test cannot show that registering the logon task needs no administrator rights; that is checked by hand on the owner's Windows machine.
+A CI job has no login session, so the job turns on lingering for the runner user to get a systemd user manager.
+
+To run it on Linux from a Mac, use an x86_64 container with systemd as its init, an ordinary user with lingering on (`touch /var/lib/systemd/linger/<user>`), and Google Chrome.
+Start it with `--privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw --tmpfs /run --tmpfs /run/lock`; Ubuntu 22.04 works under emulation, while 24.04's systemd fails to start services there.
+Mask `systemd-binfmt.service` in that image.
+A privileged container shares Docker Desktop's binfmt table, and systemd would otherwise unregister x86_64 emulation for every container until `docker run --privileged --rm tonistiigi/binfmt --install amd64` restores it.
 
 ## Verification
 
 ```sh
-node scripts/verify-release.mjs           # everything: checks, builds, e2e, voice, install/upgrade/restore/uninstall, live read-only
+node scripts/verify-release.mjs           # everything: checks, builds, e2e, install/upgrade/restore/uninstall, live read-only
 node scripts/verify-release.mjs --quick   # lint, typecheck, builds, Vitest only
 ```
 
 Results: `test-results/verification-summary.md` (acceptance table) and `test-results/verification-report.json`.
-Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/voice.spec.ts`.
+Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/journeys.spec.ts`.
 
 ## Rules for changes
 

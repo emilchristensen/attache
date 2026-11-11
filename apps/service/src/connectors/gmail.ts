@@ -6,7 +6,7 @@
  * subject and snippet, never bodies. The one write
  * saves a reply as a draft (create_draft); Jarvis never sends mail.
  */
-import type { ConnectorAdapter, AdapterContext, Observation, SyncResult, ExecuteResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
 import { asRemoteError, attemptStartMs, recordFailure } from "./common.ts";
@@ -302,7 +302,7 @@ export const gmailAdapter: ConnectorAdapter = {
     });
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     if (ctx.connection.readScopes.includes("inbox_recent")) {

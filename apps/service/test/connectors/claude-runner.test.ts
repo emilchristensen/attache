@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,9 @@ import { deepEqual, fullToolName, preApprovingRules } from "../../src/connectors
 import { createLogger } from "../../src/core/log.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { mountClaude, onTool, useFakeClaude, jsonAnswer, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let claude: ClaudeFixture;
@@ -67,8 +70,19 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     }
   });
 
+  it("a session's time for its calls starts once Claude Code has started, however long that takes", async () => {
+    // Starting takes longer than the whole time the calls get, as on a busy computer.
+    const quick = createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 300, sessionPerCallMs: 300 });
+    claude.nextModes = ["slow-start"];
+    const out = await quick.run(SLACK, [read("a", "C1")], { signal: signal() });
+    expect(out.get("a")!.status).toBe("ok");
+    expect(claude.sessions).toBe(1);
+  });
+
   it("a stalled read session is started once more; a stalled write is never repeated", async () => {
-    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 300 });
+    // A stalled session is cut once its calls take longer than the session time, which starts after
+    // Claude Code has started, so a short time does not cut a healthy session that was slow to start.
+    const quick = () => createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10, sessionBaseMs: 2_000, sessionPerCallMs: 1_000 });
     claude.nextModes = ["hang"];
     const out = await quick().run(SLACK, [read("a", "C1")], { signal: signal() });
     expect(out.get("a")!.status).toBe("ok");
@@ -163,6 +177,9 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
       process.env.HOME = home;
     }
     claude.mode = "hang";
+    // Cancelled before the session starts (e.g. while Jarvis lists the MCP servers): nothing is spawned.
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: AbortSignal.abort() })).rejects.toThrow(/Cancelled/);
+    expect(claude.sessions).toBe(0);
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 300);
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: ctrl.signal })).rejects.toThrow(/Cancelled/);

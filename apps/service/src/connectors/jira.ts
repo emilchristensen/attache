@@ -4,7 +4,7 @@
  * Reads are JQL searches with cursor pagination; the one write is a comment,
  * verified by reading the issue's comments back.
  */
-import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, SyncResult, ExecuteResult } from "./types.ts";
+import type { ConnectorAdapter, AdapterContext, AttentionCandidate, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
 import { asRemoteError, attemptStartMs, daysBetween, listingNote, listingState, localDateString, recordFailure, sameLooseText } from "./common.ts";
@@ -171,7 +171,7 @@ export const jiraAdapter: ConnectorAdapter = {
     }
   },
 
-  async sync(ctx): Promise<SyncResult> {
+  async refresh(ctx): Promise<RefreshResult> {
     const cov = new CoverageTracker();
     const observations: Observation[] = [];
     const seen = new Set<string>();

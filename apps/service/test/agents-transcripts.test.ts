@@ -63,7 +63,7 @@ describe("session log entries", () => {
   });
 
   it("says plainly when there was no model or nothing durable", () => {
-    const base = { agentLabel: "Codex", title: "Fix CI", cwd: "/w/api", at: "2026-10-02T09:00:00Z", continued: false, transcriptLink: "transcripts/codex/x.md" };
+    const base = { agentLabel: "Codex", title: "Fix CI", cwd: "/w/api", repositories: [], at: "2026-10-02T09:00:00Z", continued: false, transcriptLink: "transcripts/codex/x.md" };
     expect(sessionLogSection({ ...base, bullets: null })).toContain("No model is connected");
     expect(sessionLogSection({ ...base, bullets: [] })).toContain("Nothing durable");
     expect(sessionLogSection({ ...base, bullets: ["We decided X."], continued: true })).toMatch(/\*\*Fix CI\*\* \(continued\)[\s\S]*- We decided X\.[\s\S]*\]\(transcripts\/codex\/x\.md\)/);
@@ -71,22 +71,39 @@ describe("session log entries", () => {
 });
 
 describe("session-start context", () => {
-  it("is a compact index: identity, one-line gists, nested session logs with absolute links, and the recall command", async () => {
+  it("outside a project is a short index: identity, titles per type, and the recall command", async () => {
     const { buildSessionContext } = await import("../src/agents/context.ts");
     const text = buildSessionContext({
       now: new Date("2026-10-02T10:00:00Z"),
       dataFolder: "/data",
       identity: { name: "Alex", email: "e@x.dk" },
-      memory: [{ type: "project", title: "Kestrel", gist: "Codename for the 2027 billing rewrite" }, ...Array.from({ length: 20 }, (_, i) => ({ type: "project", title: `P${i}` }))],
-      recentLogs: [{ date: "2026-10-02", body: "## 12:32 · Claude Code · kestrel\n\n- Ship behind a flag.\n\nTranscript: [x](transcripts/claude-code/a.md)" }],
-      searchCommand: "jarvis search",
+      notes: [{ type: "project", title: "Kestrel" }, ...Array.from({ length: 40 }, (_, i) => ({ type: "project", title: `P${i}` }))],
+      searchCommand: { line: "jarvis search", powershell: null },
     });
     expect(text).toContain("- Name: Alex");
-    expect(text).toContain("- Kestrel: Codename for the 2027 billing rewrite");
-    expect(text).toContain("- Also: P14; P15; P16; P17; P18; P19");
-    expect(text).toContain("##### 12:32 · Claude Code · kestrel");
-    expect(text).toContain("](/data/evidence/sessions/transcripts/claude-code/a.md)");
+    expect(text).toContain("- Projects (41): Kestrel; P0; P1;");
+    expect(text).toContain("; P28; and 11 more");
     expect(text).toMatch(/ {4}jarvis search "your query"$/m);
+    expect(text).not.toContain("PowerShell");
+  });
+
+  it("gives the search command in the form each Harness's shell runs", async () => {
+    const { searchCommand } = await import("../src/agents/search-command.ts");
+    const { buildSessionContext } = await import("../src/agents/context.ts");
+    // macOS and Linux: one POSIX command.
+    expect(searchCommand({ os: "macos", execPath: "/opt/jarvis/node", entry: "/opt/jarvis/jarvis-service.mjs", stateDir: "/s/it's" })).toEqual({
+      line: `'/opt/jarvis/node' '/opt/jarvis/jarvis-service.mjs' search --state-dir '/s/it'\\''s'`,
+      powershell: null,
+    });
+    // Windows: Git Bash (Claude Code) and cmd.exe run the quoted line; PowerShell (Codex) needs the call operator first.
+    const windows = searchCommand({ os: "windows", execPath: "C:\\Jarvis\\node.exe", entry: "C:\\Jarvis\\jarvis-service.mjs", stateDir: "C:\\Jarvis\\state" });
+    expect(windows).toEqual({
+      line: `"C:/Jarvis/node.exe" "C:/Jarvis/jarvis-service.mjs" search --state-dir "C:/Jarvis/state"`,
+      powershell: `& "C:/Jarvis/node.exe" "C:/Jarvis/jarvis-service.mjs" search --state-dir "C:/Jarvis/state"`,
+    });
+    const text = buildSessionContext({ now: new Date("2026-10-02T10:00:00Z"), dataFolder: "C:/data", identity: null, notes: [], searchCommand: windows });
+    expect(text).toContain(`    ${windows.line} "your query"`);
+    expect(text).toContain(`    ${windows.powershell} "your query"`);
   });
 
   it("strips a model's whole-bullet bold", () => {

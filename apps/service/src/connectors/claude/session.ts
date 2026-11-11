@@ -10,12 +10,13 @@
  * from the raw `tool_result` blocks in the event stream, never from the
  * model's own summary.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteError } from "../http.ts";
 import { findClaudeCli } from "../../models/providers.ts";
+import { launchTool, spawnTool, UnlaunchableToolError } from "../../platform/launch.ts";
 import { deepEqual, fullToolName, type CallOutcome, type PlannedCall, type ServerInfo } from "./plan.ts";
 
 export const CONNECTOR_MODEL = "claude-haiku-4-5-20251001";
@@ -37,8 +38,17 @@ export interface SessionRequest {
   /** Tool prefixes of other MCP servers to hide from the model (saves context, never needed). */
   hideServers: string[];
   signal: AbortSignal;
+  /** How long the calls may take, counted from Claude Code's init, so a slow start never eats into it. */
   timeoutMs: number;
+  /** How long Claude Code may take to start (load, connect its MCP servers) before init; `STARTUP_MS` unless given. */
+  startupMs?: number;
 }
+
+/**
+ * How long Claude Code may take from launch to init: starting Node, reading its
+ * settings and connecting every MCP server it loads, which waits for slow ones.
+ */
+export const STARTUP_MS = 120_000;
 
 export interface SessionOutput {
   server: ServerInfo | null;
@@ -108,11 +118,13 @@ function classifyFailure(text: string): RemoteError {
 
 /** Run one session. Throws RemoteError for failures of the session itself; per-call failures are outcomes. */
 export async function runSession(req: SessionRequest): Promise<SessionOutput> {
+  // An abort listener never fires for a signal that is already aborted, so a session started after cancelling would run to its timeout.
+  if (req.signal.aborted) throw new RemoteError("Cancelled", "error");
   const bin = findClaudeCli();
-  if (!bin) throw new RemoteError("Claude Code is not installed on this Mac. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
+  if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
   const cwd = CONNECTOR_CWD;
   mkdirSync(cwd, { recursive: true });
-  const child = spawn(bin, sessionArgs(req), {
+  const child = startClaude(bin, sessionArgs(req), {
     cwd,
     env: {
       ...process.env,
@@ -124,9 +136,28 @@ export async function runSession(req: SessionRequest): Promise<SessionOutput> {
       MCP_CONNECTION_NONBLOCKING: "false",
       MAX_MCP_OUTPUT_TOKENS: "50000",
     },
-    stdio: ["pipe", "pipe", "pipe"],
   });
   return drive(child, req);
+}
+
+/** A Claude Code CLI Jarvis cannot start is not configured, never a crash. */
+function notConfiguredWhenUnlaunchable<T>(start: () => T): T {
+  try {
+    return start();
+  } catch (e) {
+    if (e instanceof UnlaunchableToolError) throw new RemoteError(e.message, "not_configured");
+    throw e;
+  }
+}
+
+/** How to run the Claude Code CLI with these arguments. */
+export function claudeLaunch(bin: string, args: string[]) {
+  return notConfiguredWhenUnlaunchable(() => launchTool(bin, args));
+}
+
+/** Start the Claude Code CLI with its streams piped and no console window. */
+function startClaude(bin: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }): ChildProcessWithoutNullStreams {
+  return notConfiguredWhenUnlaunchable(() => spawnTool(bin, args, options));
 }
 
 function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Promise<SessionOutput> {
@@ -168,8 +199,10 @@ function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Prom
     if (out.violations.length >= 3) stop();
   };
 
+  let started = () => {};
   const onEvent = (ev: Record<string, unknown>) => {
     if (ev.type === "system" && ev.subtype === "init") {
+      started();
       const servers = (ev.mcp_servers ?? []) as Array<{ name: string; status: string; source?: string }>;
       const s = servers.find((x) => x.name === req.server);
       out.server = s ? { name: s.name, status: s.status, source: s.source ?? null } : null;
@@ -219,10 +252,19 @@ function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Prom
   };
 
   return new Promise<SessionOutput>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (!allDone()) failure ??= new RemoteError(`Claude Code did not finish the connector calls within ${Math.round(req.timeoutMs / 1000)} seconds`, "offline");
-      stop();
-    }, req.timeoutMs);
+    const startupMs = req.startupMs ?? STARTUP_MS;
+    const cutAfter = (ms: number, why: string) =>
+      setTimeout(() => {
+        if (!allDone()) failure ??= new RemoteError(why, "offline");
+        stop();
+      }, ms);
+    // Starting and the calls each have their own time: a slow start on a busy computer never cuts the calls short.
+    let timer = cutAfter(startupMs, `Claude Code did not finish starting within ${Math.round(startupMs / 1000)} seconds`);
+    started = () => {
+      clearTimeout(timer);
+      timer = cutAfter(req.timeoutMs, `Claude Code did not finish the connector calls within ${Math.round(req.timeoutMs / 1000)} seconds`);
+      started = () => {};
+    };
     const onAbort = () => {
       failure = new RemoteError("Cancelled", "error");
       stop();

@@ -3,27 +3,47 @@ import { existsSync } from "node:fs";
 import type { ConnectionKind, FeatureId, JobView } from "@jarvis/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
-import { resolvePaths, type ServicePaths } from "./core/paths.ts";
-import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
+import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
+import { MachineStore } from "./core/machine.ts";
+import { AutoAcceptStore } from "./agents/auto-accept.ts";
+import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
+import { currentOs } from "./platform/os.ts";
+import { DesktopNotifications, notifierFor } from "./platform/notifier/index.ts";
 import { ConfigStore } from "./core/config.ts";
+import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
 import { FolderWatcher } from "./memory/watcher.ts";
+import { MeaningSearch, type MeaningOptions } from "./meaning/service.ts";
+import { configuredMeaningModel } from "./meaning/model.ts";
+import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { ConnectionManager } from "./connectors/manager.ts";
 import { createClaudeConnectorRunner } from "./connectors/claude/runner.ts";
 import { ADAPTERS } from "./connectors/index.ts";
 import { JobQueue } from "./jobs/queue.ts";
-import { Scheduler } from "./jobs/scheduler.ts";
+import { LATER, Scheduler } from "./jobs/scheduler.ts";
 import { ActionService } from "./actions/service.ts";
-import { ConversationService } from "./conversation/service.ts";
-import { FEATURES, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
+import { FEATURES, SOURCE_KINDS, computeStatus, effectiveFeatures, featureDef, isEnabled } from "./capabilities/registry.ts";
 import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { wakeSnoozed } from "./attention/engine.ts";
-import { SpeechService } from "./speech/service.ts";
+import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
+import { systemClock, type Clock } from "./replication/clock.ts";
+import { Replication } from "./replication/replication.ts";
+import { Proposals } from "./memory/proposals.ts";
+import { defaultSeams } from "./replication/seams.ts";
+import type { GitHubAccess } from "./replication/github.ts";
+import { connectionSecretKey } from "./connectors/manager.ts";
+import { resolveEndpoint } from "./connectors/test-endpoints.ts";
+import { REPLICATION_SOURCE, syncReplicationItems } from "./replication/blocked-inbox.ts";
+import { brainFileReader, raiseMergeNotices, SETTLED_BY_EDIT, settledMergeNotices } from "./replication/merge-notice-inbox.ts";
+import { CaptureArrivals } from "./consolidation/arrivals.ts";
+import { queueCaptureConsolidation } from "./consolidation/capture.ts";
+import { Reader } from "./reader/reader.ts";
+import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -31,6 +51,12 @@ export interface AppOptions {
   quiet?: boolean;
   schedulerTickMs?: number;
   jobConcurrency?: number;
+  /** Drives Replication's timers; tests pass a clock they move by hand. */
+  clock?: Clock;
+  /** The meaning model and how to load it; by default the configured model on ONNX Runtime. */
+  meaning?: Partial<MeaningOptions>;
+  /** Lease commits per generation of the Reader lease; tests make it small to see the history stay bounded. */
+  leaseGenerationCommits?: number;
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
@@ -41,16 +67,29 @@ export class App {
   readonly instance: string;
   readonly db: Db;
   readonly log: Logger;
-  readonly secrets: CredentialStore;
+  readonly secrets: SecretStore;
+  readonly notifications: DesktopNotifications;
   readonly config: ConfigStore;
+  readonly machine: MachineStore;
+  /** Which Harnesses save without asking, on this Machine. */
+  readonly autoAccept: AutoAcceptStore;
   readonly memory: MemoryStore;
+  readonly meaning: MeaningSearch;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
   readonly scheduler: Scheduler;
   readonly actions: ActionService;
-  readonly conversations: ConversationService;
-  readonly speech: SpeechService;
   readonly sessions: AgentSessions;
+  readonly clock: Clock;
+  readonly replication: Replication;
+  /** Which Machine runs scheduled Source refresh, briefings and Review-date inbox items. */
+  readonly reader: Reader;
+  /** The owner's inbox, kept in the Brain so it replicates. */
+  readonly inbox: Inbox;
+  /** Proposals, kept in the Brain so they replicate. */
+  readonly proposals: Proposals;
+  /** Meeting captures that arrive in the Brain on this Machine, each consolidated once. */
+  readonly captures: CaptureArrivals;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -65,16 +104,79 @@ export class App {
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
+  /** Expires stale drafts and wakes snoozed items; stopped with the app, so it never touches a closed database. */
+  private housekeeping: NodeJS.Timeout | null = null;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
     this.instance = opts.instance ?? process.env.JARVIS_INSTANCE ?? "default";
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
-    this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
+    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs(), this.instance), log: this.log });
+    void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
-    this.memory = new MemoryStore(this.db, null, this.instance);
+    this.machine = new MachineStore(this.db);
+    this.machine.get();
+    this.autoAccept = new AutoAcceptStore(this.db);
+    this.clock = opts.clock ?? systemClock;
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
+    this.replication = new Replication({
+      db: this.db,
+      log: this.log,
+      clock: this.clock,
+      seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
+      machine: () => this.machine.get(),
+      dataRoot: () => this.memory.dataRoot,
+      changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
+      latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
+      onChange: () => this.replicationChanged(),
+      // Loaded when needed: the backup module imports this one.
+      backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
+      lastSourceRefresh: () => lastSourceRefresh(this.db),
+      sourcesConnected: () => this.connections.records().some((r) => SOURCE_KINDS.includes(r.kind) && !r.settings.builtin && r.status === "connected"),
+      onLeaseChange: () => this.bus.emit("event", { type: "reader.changed" }),
+      ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}),
+    });
+    this.reader = new Reader({
+      clock: this.clock,
+      machine: () => this.machine.get(),
+      replicated: () => this.replication.view().status !== "off",
+      lease: () => this.replication.readerLease(),
+      machineName: (id) => this.replication.recordedName(id),
+      lastRefreshAt: () => lastSourceRefresh(this.db),
+    });
+    this.inbox = new Inbox({
+      db: this.db,
+      log: this.log,
+      ctx: { now: () => this.clock.now().toISOString(), machine: () => this.machine.get() },
+      dataRoot: () => this.memory.dataRoot,
+      onWrite: () => this.replication.noteWrite(),
+      onChange: () => this.bus.emit("event", { type: "attention.changed" }),
+      // This Machine's own Replication status stays here; the notices of merges replicate like any item.
+      localSources: [REPLICATION_SOURCE],
+    });
+    this.proposals = new Proposals({ db: this.db, memory: this.memory, log: this.log, clock: this.clock, machine: () => this.machine.get(), onWrite: () => this.replication.noteWrite() });
+    this.captures = new CaptureArrivals({ db: this.db, log: this.log, clock: this.clock, dataRoot: () => this.memory.dataRoot, arrived: (rel) => queueCaptureConsolidation(this, rel) });
+    // First, so a capture another Machine sent is recorded as theirs before anything looks for new captures.
+    this.replication.onPulled((paths) => this.captures.pulled(paths));
+    this.replication.onPulled((paths) => this.reindexPulled(paths));
+    this.replication.onPulled((paths) => this.inbox.pulled(paths));
+    // The Reader's briefing arrives as a deliverable; Dashboards show the newest one (`latestBriefing`).
+    this.replication.onPulled((paths) => {
+      if (paths.some((p) => p.startsWith("deliverables/briefings/"))) this.bus.emit("event", { type: "briefing.created" });
+    });
+    this.replication.onMergeNotice((notices) => {
+      if (raiseMergeNotices(this.inbox, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
+    });
     this.bus.setMaxListeners(500);
+    this.meaning = new MeaningSearch(
+      { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },
+      { model: opts.meaning?.model ?? configuredMeaningModel(), loadEmbedder: opts.meaning?.loadEmbedder ?? loadOnnxEmbedder },
+    );
+    this.memory.indexer.onChange(() => this.meaning.indexChanged());
+    // Whatever changed a note (a save, an editor, another Machine), a merge item it settled resolves.
+    this.memory.indexer.onChange(() => this.settleMergeNotices());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
     this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
@@ -83,24 +185,24 @@ export class App {
       secrets: this.secrets,
       log: this.log,
       memory: this.memory,
+      inbox: this.inbox,
       adapters: this.adapters,
       claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
+      isReader: () => this.reader.isReader(),
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db);
-    this.conversations = new ConversationService(this.db, this.memory, this.log);
-    this.speech = new SpeechService(this);
     this.wire();
     registerRunners(this);
   }
 
   private wire() {
-    this.conversations.getModel = () => this.modelSync();
-    this.conversations.getIdentity = () => this.config.get().identity;
-    this.conversations.events.on("event", (ev) => this.bus.emit("event", ev));
-    this.jobs.events.on("event", (ev) => this.bus.emit("event", { type: "job.event", event: ev }));
+    this.jobs.events.on("event", (ev) => {
+      this.bus.emit("event", { type: "job.event", event: ev });
+      if (ev.type === "succeeded") this.jobSucceeded(ev.jobId);
+    });
     this.connections.onChange = (id) => {
       this.cachedModel = null;
       this.bus.emit("event", { type: "connections.changed", id });
@@ -108,6 +210,8 @@ export class App {
     this.connections.onDisconnect = (id, kind) => {
       const agent = integrationFor(kind);
       if (agent) {
+        // Connecting the Harness again starts with auto-accept off, as a new Harness does.
+        this.autoAccept.set(agent.kind, false);
         try {
           this.sessions.hooks.uninstall(agent);
         } catch (e) {
@@ -132,18 +236,23 @@ export class App {
     };
     this.actions.authority = (a) => this.actionAuthority(a.kind, a.connectionId);
     this.scheduler.enqueue = (row, reason) => {
-      if (row.jobKind === "sync") return this.jobs.create({ kind: "sync", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
+      if (row.jobKind === "source-refresh" || row.jobKind === "briefing") {
+        // Only the Reader reads on a schedule. A Reader whose lease lapsed while asleep or offline waits for its renewal, then catches up.
+        const role = this.reader.role();
+        if (role === "lapsed") return LATER;
+        if (role === "other") return null;
+      }
+      if (row.jobKind === "source-refresh") return this.jobs.create({ kind: "source-refresh", title: `Refresh sources (${reason === "catch_up" ? "catch-up" : "scheduled"})`, input: { all: true, reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${Math.floor(Date.now() / 60_000)}` }).job.id;
       if (row.jobKind === "briefing") return this.jobs.create({ kind: "briefing", title: `Daily briefing${reason === "catch_up" ? " (catch-up)" : ""}`, input: { kind: "daily", reason }, capability: "attention", idempotencyKey: `sched:${row.id}:${new Date().toISOString().slice(0, 10)}` }).job.id;
       return null;
     };
-    this.scheduler.onResume = (gapMs) => this.bus.emit("event", { type: "service.resumed", gapMs });
+    this.scheduler.onResume = (gapMs) => {
+      this.replication.wake();
+      this.bus.emit("event", { type: "service.resumed", gapMs });
+    };
   }
 
   // ---- model ---------------------------------------------------------------
-
-  private modelSync(): ModelProvider | null {
-    return this.cachedModel?.provider ?? null;
-  }
 
   async refreshModel(): Promise<ModelProvider | null> {
     const rec = this.connections.connected("model")[0];
@@ -169,7 +278,7 @@ export class App {
 
   featureStatuses() {
     const cfg = this.config.get();
-    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status, detail: c.kind === "speech" ? { stt: !!c.settings.stt && c.settings.stt !== "none", tts: !!c.settings.tts && c.settings.tts !== "none" } : {} }));
+    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status }));
     return computeStatus(cfg.features, conns, { dataFolder: cfg.dataFolder });
   }
 
@@ -200,7 +309,7 @@ export class App {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
       // No hooks may keep spooling or injecting memory for a feature that is off.
-      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
+      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (a.hooks && this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
     }
     this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
@@ -218,8 +327,17 @@ export class App {
 
   // ---- lifecycle -----------------------------------------------------------------
 
-  /** Open the configured data folder and make sure it is registered as the builtin vault source. */
-  openDataFolder(path: string): { created: string[] } {
+  /** Jarvis wrote a file in the data folder: Replication commits it, and a meeting capture is consolidated. */
+  private wrote(rel: string) {
+    this.replication.noteWrite();
+    this.captures.written(rel);
+  }
+
+  /**
+   * Open the configured data folder and make sure it is registered as the builtin vault source.
+   * `adopt` is for a folder the owner just chose or joined: the meeting captures already in it are not consolidated.
+   */
+  openDataFolder(path: string, opts: { adopt?: boolean } = {}): { created: string[] } {
     const r = this.memory.open(path);
     const existing = this.connections.record("vault-data");
     const now = nowIso();
@@ -230,14 +348,95 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
+    this.inbox.reconcile();
+    this.proposals.open();
+    this.captures.opened({ adopt: opts.adopt ?? false });
     this.dataWatcher?.stop();
-    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, { onChange: () => this.bus.emit("event", { type: "memory.changed" }) });
+    this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
+      onChange: () => {
+        this.captures.check();
+        this.replication.noteOutsideEdit();
+        this.bus.emit("event", { type: "memory.changed" });
+      },
+    });
     this.dataWatcher.start();
     return r;
   }
 
+  /** Make `path` this Machine's data folder: open it, index it and remember it. */
+  useDataFolder(path: string): { created: string[] } {
+    const r = this.openDataFolder(path, { adopt: true });
+    this.config.patch({ dataFolder: path });
+    this.bus.emit("event", { type: "config.changed" });
+    return r;
+  }
+
+  /** What Replication borrows from the GitHub connection: its API address and, from the secret store, its token. */
+  private githubAccess(): GitHubAccess {
+    const record = () => this.connections.records().find((r) => r.kind === "github" && r.status !== "disconnected" && r.status !== "not_configured") ?? null;
+    return {
+      connection: () => {
+        const r = record();
+        if (!r) return null;
+        const configured = typeof r.settings.apiBaseUrl === "string" && r.settings.apiBaseUrl ? r.settings.apiBaseUrl : "https://api.github.com";
+        return { id: r.id, apiBase: resolveEndpoint(configured) };
+      },
+      token: (id) => this.secrets.get(connectionSecretKey(id, "token")),
+    };
+  }
+
+  /** Replication's status may have changed: tell the Dashboard, and keep its inbox item in step. */
+  private replicationChanged() {
+    if (syncReplicationItems(this.db, this.replication.view(), this.clock.now().toISOString())) this.bus.emit("event", { type: "attention.changed" });
+    this.bus.emit("event", { type: "replication.changed" });
+    // Switching Replication on or off changes who the Reader is.
+    this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */
+  private jobSucceeded(jobId: string) {
+    const job = this.jobs.get(jobId);
+    if (!job || !isFullRefresh(job)) return;
+    this.replication.noteSourceRefresh();
+    this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /** Resolve the merge items whose note the owner has settled. */
+  private settleMergeNotices() {
+    const root = this.memory.dataRoot;
+    if (!root) return;
+    try {
+      if (this.inbox.resolve(settledMergeNotices(this.db, SETTLED_BY_EDIT, brainFileReader(root))).length) this.bus.emit("event", { type: "attention.changed" });
+    } catch (e) {
+      this.log.error("could not check the notes merges kept in two versions", { error: (e as Error).message });
+    }
+  }
+
+  /** Re-index the files another Machine changed, as soon as git wrote them. */
+  private reindexPulled(paths: readonly string[]) {
+    const root = this.memory.rootRef;
+    if (!root) return;
+    let changed = false;
+    let scan = false;
+    for (const rel of paths) {
+      try {
+        const r = this.memory.indexer.syncPath(root, rel);
+        if (r === "rescan") scan = true;
+        if (r === "changed") changed = true;
+      } catch (e) {
+        this.log.warn("could not index a file another Machine changed", { path: rel, error: (e as Error).message });
+        scan = true;
+      }
+    }
+    if (scan) {
+      const r = this.memory.indexer.scan(root);
+      if (r.indexed || r.removed) changed = true;
+    }
+    if (this.proposals.reload(paths)) changed = true;
+    if (changed) this.bus.emit("event", { type: "memory.changed" });
+  }
+
   start() {
-    this.conversations.recoverInterrupted();
     void this.connections.migrateLegacyTransports().catch((e) => this.log.error("connection migration failed", { error: (e as Error).message }));
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {
@@ -253,24 +452,31 @@ export class App {
         if (root && existsSync(root.path)) this.memory.indexer.scan(root);
       }
     }
+    this.meaning.start();
     this.scheduler.reconcile(cfg);
+    void this.notifications.start();
     this.jobs.start();
     this.scheduler.start();
     this.sessions.start();
-    const housekeeping = setInterval(() => {
+    this.replication.start();
+    this.housekeeping = setInterval(() => {
       const expired = this.actions.expireStale();
       const woke = wakeSnoozed(this.db);
       if (expired.length || woke) this.bus.emit("event", { type: "attention.changed" });
     }, 30_000);
-    housekeeping.unref();
+    this.housekeeping.unref();
     void this.refreshModel();
   }
 
   async stop() {
+    if (this.housekeeping) clearInterval(this.housekeeping);
+    this.housekeeping = null;
     this.dataWatcher?.stop();
+    await this.replication.stop();
     this.sessions.stop();
     this.scheduler.stop();
     await this.jobs.stop();
+    await this.meaning.stop();
     this.memory.releaseLock();
     this.db.close();
   }

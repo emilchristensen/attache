@@ -118,7 +118,7 @@ describe("review fixes", () => {
 
   it("#5 disconnecting during a sync stops it from storing data or reviving the connection", async () => {
     searchDelayMs = 400;
-    const sync = await svc.post("/connections/github/sync");
+    const sync = await svc.post("/connections/github/refresh");
     await new Promise((r) => setTimeout(r, 100));
     await svc.post("/connections/github/disconnect", { deleteData: true });
     await svc.waitJob(sync.job.id).catch(() => {});
@@ -131,7 +131,7 @@ describe("review fixes", () => {
 
   it("#7 secrets in source data are redacted from archived evidence", async () => {
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });
-    const s = await svc.post("/connections/github/sync");
+    const s = await svc.post("/connections/github/refresh");
     await svc.waitJob(s.job.id);
     const dir = join(svc.dataDir, "evidence/connectors/github");
     const text = readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
@@ -150,13 +150,6 @@ describe("review fixes", () => {
     const end = await Promise.race([reader.read().then((r) => r.done), new Promise((r) => setTimeout(() => r("timeout"), 2000))]);
     expect(end).toBe(true);
     expect((await fetch(`${svc.url}/api/v1/status`, { headers: { authorization: `Bearer ${other.token}` } })).status).toBe(401);
-  });
-
-  it("#9 answers interrupted by a restart become retryable errors", () => {
-    svc.app.db.prepare("insert into conversations (id, title, created_at, updated_at) values ('c-int','t',?,?)").run(new Date().toISOString(), new Date().toISOString());
-    svc.app.db.prepare("insert into messages (id, conversation_id, role, content, status, created_at, updated_at) values ('m-int','c-int','assistant','half','streaming',?,?)").run(new Date().toISOString(), new Date().toISOString());
-    expect(svc.app.conversations.recoverInterrupted()).toBe(1);
-    expect(svc.app.conversations.message("m-int")).toMatchObject({ status: "error", error: expect.stringMatching(/Interrupted by a service restart/) });
   });
 
   it("#11 a fresh event stream starts at now; a reconnect replays every missed event beyond one batch", async () => {

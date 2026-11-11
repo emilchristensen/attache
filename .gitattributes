@@ -1,0 +1,6 @@
+# Every checkout gets LF line endings, on Windows too, so fixtures, scripts
+# and snapshots are byte-identical on every operating system.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

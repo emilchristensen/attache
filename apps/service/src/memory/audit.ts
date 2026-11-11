@@ -2,11 +2,12 @@ import { join } from "node:path";
 import type { MemoryAuditEntry, MemoryAuditReport } from "@jarvis/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
-import { MAX_DETAILED_PER_TYPE } from "../agents/context.ts";
+import { notesInSessionContext } from "../agents/project-notes.ts";
+import { brainNote, type BrainNote } from "./note-links.ts";
 import { parseStateEntries, parseStateLine, slugify, type StateEntry } from "./markdown.ts";
+import { isPastReview } from "./review-date.ts";
 import { RECALL_EXCLUDE, queryTerms, search, termCoverage, type SearchHit } from "./search.ts";
 
-export const DEFAULT_STALE_DAYS = 60;
 const EVIDENCE_PER_ENTRY = 3;
 const DAY_MS = 86_400_000;
 
@@ -18,16 +19,16 @@ const LOCAL_KINDS = new Set(["capture", "note", "conversation", "agent-session"]
  * The deterministic half of a memory audit: every current fact in curated
  * memory with its age, source and the newer documents that mention its note.
  * It counts and flags; judging whether newer evidence contradicts a fact is
- * left to whoever reads the report. Read-only.
+ * left to whoever reads the report. A fact is stale only when it is past its
+ * Review date: age alone says nothing about whether it still holds. Read-only.
  */
-export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } = {}): MemoryAuditReport {
+export function auditMemory(app: App, opts: { now?: Date } = {}): MemoryAuditReport {
   const root = app.memory.dataRoot;
   if (!root) throw new Error("Choose a data folder first");
   const now = opts.now ?? new Date();
-  const staleDays = opts.staleDays ?? DEFAULT_STALE_DAYS;
   const docs = app.memory.listDocuments({ area: "memory", root: "data", limit: 2000 }).filter((d) => d.relPath !== "memory/self.md");
-  const loaded = sessionIndexed(docs);
-  const findings: MemoryAuditReport["findings"] = [];
+  const read: Array<Omit<MemoryAuditReport["findings"][number], "inSessionIndex">> = [];
+  const notes: BrainNote[] = [];
   for (const d of docs) {
     let raw: string;
     try {
@@ -36,19 +37,22 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
       continue;
     }
     const state = parseStateEntries(raw);
+    if (d.title) notes.push(brainNote({ relPath: d.relPath, type: d.docType ?? "note", title: d.title }, raw));
     const subjects = new Map<string, number>();
     for (const s of state) subjects.set(s.subject.toLowerCase(), (subjects.get(s.subject.toLowerCase()) ?? 0) + 1);
-    const entries = state.map((s) => auditEntry(app, s, now, staleDays, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
-    findings.push({
+    const entries = state.map((s) => auditEntry(app, s, now, (subjects.get(s.subject.toLowerCase()) ?? 0) > 1, mentions(app, d.title, d.relPath, s)));
+    read.push({
       relPath: d.relPath,
       absPath: join(root, d.relPath),
       title: d.title,
       type: d.docType ?? "note",
-      inSessionIndex: loaded.has(d.relPath),
       flags: state.length ? [] : ["no-current-state"],
       entries,
     });
   }
+  // Notes whose facts a project's session context carries come first: those are what sessions repeat.
+  const loaded = notesInSessionContext(notes);
+  const findings = read.map((f) => ({ ...f, inSessionIndex: loaded.has(f.relPath) }));
   const weight = (f: MemoryAuditReport["findings"][number]) => f.flags.length + f.entries.reduce((n, e) => n + e.flags.length + e.newerEvidence.length, 0);
   findings.sort((a, b) => Number(b.inSessionIndex) - Number(a.inSessionIndex) || weight(b) - weight(a) || a.relPath.localeCompare(b.relPath));
   const counts: Record<string, number> = {};
@@ -57,7 +61,6 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
   return {
     generatedAt: nowIso(),
     dataFolder: root,
-    staleDays,
     notes: findings.length,
     entries: findings.reduce((n, f) => n + f.entries.length, 0),
     counts,
@@ -66,11 +69,11 @@ export function auditMemory(app: App, opts: { staleDays?: number; now?: Date } =
   };
 }
 
-function auditEntry(app: App, s: StateEntry, now: Date, staleDays: number, duplicate: boolean, evidence: Mention[]): MemoryAuditEntry {
+function auditEntry(app: App, s: StateEntry, now: Date, duplicate: boolean, evidence: Mention[]): MemoryAuditEntry {
   const dated = Date.parse(`${s.date}T00:00:00Z`);
   const ageDays = Math.max(0, Math.floor((now.getTime() - dated) / DAY_MS));
   const flags: string[] = [];
-  if (ageDays > staleDays) flags.push("stale");
+  if (isPastReview(s.review, now)) flags.push("stale");
   if (!s.source) flags.push("unsourced");
   else if (sourceMissing(app, s.source)) flags.push("missing-source");
   if (duplicate) flags.push("duplicate-subject");
@@ -79,7 +82,7 @@ function auditEntry(app: App, s: StateEntry, now: Date, staleDays: number, dupli
     .filter((m) => m.dated > s.date)
     .slice(0, EVIDENCE_PER_ENTRY)
     .map(({ dated, ...m }) => ({ ...m, modified: new Date(`${dated}T00:00:00Z`).toISOString() }));
-  return { subject: s.subject, value: s.value, date: s.date, ageDays, source: s.source ?? null, line: s.line, flags, newerEvidence };
+  return { subject: s.subject, value: s.value, date: s.date, review: s.review ?? null, ageDays, source: s.source ?? null, line: s.line, flags, newerEvidence };
 }
 
 /** A source that names a file in the data folder which is no longer there. URLs, imports and sessions not yet archived are not checked. */
@@ -152,19 +155,6 @@ function citedPath(source: string | undefined): string | null {
   if (!m) return null;
   const rel = m[2]!.replace(/#L\d+-L\d+$/, "");
   return /^(memory|evidence|deliverables)\/.+\.md$/.test(rel) ? rel : null;
-}
-
-/** The notes whose first fact every new agent session reads (see `buildSessionContext`). */
-function sessionIndexed(docs: Array<{ relPath: string; docType: string | null; title: string }>): Set<string> {
-  const perType = new Map<string, number>();
-  const out = new Set<string>();
-  for (const d of docs.filter((x) => x.title)) {
-    const t = d.docType ?? "note";
-    const n = perType.get(t) ?? 0;
-    if (n < MAX_DETAILED_PER_TYPE) out.add(d.relPath);
-    perType.set(t, n + 1);
-  }
-  return out;
 }
 
 function duplicates(docs: Array<{ relPath: string; title: string }>): MemoryAuditReport["possibleDuplicates"] {

@@ -1,9 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { jiraAdapter } from "../../src/connectors/jira.ts";
 import { confluenceAdapter } from "../../src/connectors/confluence.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { jsonAnswer, mountClaude, onTool, useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 // Shapes mirror what the claude.ai Atlassian Rovo connector (Rovo MCP v1) returned live on 2026-10-01.
 let fx: FixtureServer;
@@ -48,7 +51,7 @@ describe("Jira and Confluence through the claude.ai Atlassian Rovo connector", (
   it("an unconnected Atlassian connector is unauthorized with the claude.ai fix, never empty", async () => {
     claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
     expect(await jiraAdapter.test(ctx("jira", []))).toMatchObject({ ok: false, state: "unauthorized", message: expect.stringMatching(/claude\.ai → Settings → Connectors/) });
-    expect((await confluenceAdapter.sync!(ctx("confluence", ["mentions"]))).coverage.state).toBe("unauthorized");
+    expect((await confluenceAdapter.refresh!(ctx("confluence", ["mentions"]))).coverage.state).toBe("unauthorized");
   });
 
   it("Jira: follows pageInfo.endCursor as nextPageToken; every scope's first page shares one session", async () => {
@@ -56,7 +59,7 @@ describe("Jira and Confluence through the claude.ai Atlassian Rovo connector", (
       if (String(a.jql).startsWith("reporter")) return jsonAnswer({ issues: { nodes: [issue("ABC-9")], pageInfo: { hasNextPage: false } } });
       return jsonAnswer(a.nextPageToken === "c2" ? { issues: { nodes: [issue("ABC-2", "2026-10-01")], pageInfo: { hasNextPage: false } } } : { issues: { nodes: [issue("ABC-1", "2026-09-29")], pageInfo: { hasNextPage: true, endCursor: "c2" } } });
     });
-    const r = await jiraAdapter.sync!(ctx("jira", ["assigned_open", "reported_open"]));
+    const r = await jiraAdapter.refresh!(ctx("jira", ["assigned_open", "reported_open"]));
     expect(r.coverage.state).toBe("complete");
     expect(r.observations.map((o) => o.externalId).sort()).toEqual(["ABC-1", "ABC-2", "ABC-9"]);
     expect(r.observations.find((o) => o.externalId === "ABC-1")!.attention).toMatchObject({ kind: "overdue_work_item" });
@@ -65,13 +68,13 @@ describe("Jira and Confluence through the claude.ai Atlassian Rovo connector", (
 
   it("Jira: hasNextPage without a cursor is partial, not complete", async () => {
     onTool(claude, SERVER, "searchJiraIssuesUsingJql", () => jsonAnswer({ issues: { nodes: [issue("ABC-1")], pageInfo: { hasNextPage: true } } }));
-    const r = await jiraAdapter.sync!(ctx("jira", ["assigned_open"]));
+    const r = await jiraAdapter.refresh!(ctx("jira", ["assigned_open"]));
     expect(r.coverage.scopes[0]).toMatchObject({ state: "partial", items: 1, note: expect.stringMatching(/no usable cursor/) });
   });
 
   it("Confluence: a full page is partial (the connector gives no total); relative dates never become timestamps or fingerprint parts", async () => {
     onTool(claude, SERVER, "searchConfluenceUsingCql", (a) => jsonAnswer({ content: { totalCount: 1, nodes: [page("1001", "Q4 planning")], webUrl: "x" }, args: a }));
-    const r = await confluenceAdapter.sync!(ctx("confluence", ["mentions"]));
+    const r = await confluenceAdapter.refresh!(ctx("confluence", ["mentions"]));
     expect(r.coverage.state).toBe("complete");
     const o = r.observations[0]!;
     expect(o).toMatchObject({ externalId: "1001", author: "Mia", url: `${SITE}/wiki/spaces/ENG/pages/1001`, attention: { key: "confluence:mention:1001" } });
@@ -79,7 +82,7 @@ describe("Jira and Confluence through the claude.ai Atlassian Rovo connector", (
     expect(o.fingerprintParts).toEqual(["Q4 planning", "Q4 planning summary"]);
     expect(calls("searchConfluenceUsingCql")[0]!.args).toMatchObject({ cloudId: CLOUD, limit: 50 });
     onTool(claude, SERVER, "searchConfluenceUsingCql", () => jsonAnswer({ content: { totalCount: 50, nodes: Array.from({ length: 50 }, (_, i) => page(String(2000 + i), `P${i}`)) } }));
-    const full = await confluenceAdapter.sync!(ctx("confluence", ["mentions"]));
+    const full = await confluenceAdapter.refresh!(ctx("confluence", ["mentions"]));
     expect(full.coverage.scopes[0]).toMatchObject({ state: "partial", items: 50, note: expect.stringMatching(/does not say whether more exist/) });
   });
 
@@ -114,6 +117,6 @@ describe("Jira and Confluence through the claude.ai Atlassian Rovo connector", (
 
   it("an error reported inside a result is classified, not read as zero items", async () => {
     onTool(claude, SERVER, "searchJiraIssuesUsingJql", () => jsonAnswer({ error: true, message: "You do not have permission to view these issues (403)" }));
-    expect((await jiraAdapter.sync!(ctx("jira", ["assigned_open"]))).coverage.state).toBe("denied");
+    expect((await jiraAdapter.refresh!(ctx("jira", ["assigned_open"]))).coverage.state).toBe("denied");
   });
 });

@@ -23,22 +23,22 @@ describe("A03 onboarding and persistence", () => {
     const early = await svc.call("POST", "/setup/complete");
     expect(early.body.error.code).toBe("needs_data_folder");
     await svc.post("/setup/data-folder", { path: svc.dataDir });
-    await svc.put("/features", { changes: { voice: true, drafts: false }, cascade: true });
-    await svc.call("PATCH", "/config", { schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
+    await svc.put("/features", { changes: { sessions: false, drafts: false }, cascade: true });
+    await svc.call("PATCH", "/config", { schedules: { refreshEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
     const done = await svc.post("/setup/complete");
     expect(done.config.setupCompleted).toBe(true);
     const statuses = Object.fromEntries(done.features.map((f: any) => [f.id, f.readiness]));
-    expect(statuses).toMatchObject({ recall: "ready", conversation: "partial", capture: "ready", attention: "ready", drafts: "disabled", voice: "needs_setup" });
+    expect(statuses).toMatchObject({ recall: "ready", capture: "ready", attention: "ready", drafts: "disabled", sessions: "disabled" });
     const stateDir = svc.stateDir;
     const dataDir = svc.dataDir;
     await svc.stop();
     const again = await startTestService({ stateDir, dataDir, setup: false });
     running.push(again);
     const cfg = await again.get("/config");
-    expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
-    expect(cfg.features).toMatchObject({ voice: true, drafts: false, attention: true });
+    expect(cfg.config).toMatchObject({ setupCompleted: true, dataFolder: dataDir, schedules: { refreshEveryMinutes: 45, briefingAt: "07:30" }, notifications: { desktop: true } });
+    expect(cfg.features).toMatchObject({ sessions: false, drafts: false, attention: true });
     // Search works before any model is connected.
-    await again.post("/memory/capture", { text: "The espresso machine needs descaling every Friday.", source: { kind: "user", ref: "t" } });
+    await again.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Espresso machine", facts: [{ subject: "Upkeep", value: "Needs descaling every Friday" }] }] });
     expect((await again.get("/memory/search?q=espresso descaling")).hits.length).toBeGreaterThan(0);
   });
 });
@@ -56,7 +56,7 @@ describe("A04 configuration drives backend behaviour", () => {
     expect(s1.filter((s: any) => s.capability === "attention").every((s: any) => s.enabled)).toBe(true);
     // Queue work, then disable attention: triggers stop, queued jobs are cancelled, endpoints refuse.
     svc.app.jobs.stop();
-    const queued = svc.app.jobs.create({ kind: "sync", title: "q", input: { all: true }, capability: "attention" }).job;
+    const queued = svc.app.jobs.create({ kind: "source-refresh", title: "q", input: { all: true }, capability: "attention" }).job;
     const off = await svc.put("/features", { changes: { attention: false }, cascade: true });
     expect(off.removed).toEqual(["drafts"]);
     expect(off.effects.cancelledJobs).toContain(queued.id);
@@ -64,7 +64,7 @@ describe("A04 configuration drives backend behaviour", () => {
     const s2 = await svc.get("/schedules");
     expect(s2.filter((s: any) => s.capability === "attention").every((s: any) => !s.enabled && s.nextRunAt === null)).toBe(true);
     expect((await svc.call("GET", "/attention")).body.error.code).toBe("feature_disabled");
-    expect((await svc.call("POST", "/connections/github/sync")).body.error.code).toBe("feature_disabled");
+    expect((await svc.call("POST", "/connections/github/refresh")).body.error.code).toBe("feature_disabled");
     // Scheduler tick enqueues nothing for a disabled capability.
     expect(svc.app.scheduler.tick(new Date(Date.now() + 86_400_000))).toEqual([]);
     const on = await svc.put("/features", { changes: { attention: true, drafts: true }, cascade: true });
@@ -72,7 +72,7 @@ describe("A04 configuration drives backend behaviour", () => {
     const s3 = await svc.get("/schedules");
     expect(s3.filter((s: any) => s.capability === "attention").every((s: any) => s.enabled && s.nextRunAt)).toBe(true);
     svc.app.jobs.start();
-    const sync = await svc.post("/connections/github/sync");
+    const sync = await svc.post("/connections/github/refresh");
     await svc.waitJob(sync.job.id);
     // The fixture answers both default scopes (review requests, authored PRs), so there is one observation per scope.
     const observed = Number((svc.app.db.prepare("select count(*) n from observations where connection_id = 'github'").get() as { n: number }).n);
@@ -85,8 +85,8 @@ describe("A04 configuration drives backend behaviour", () => {
     expect(kept.deleted).toBe(false);
     expect(await svc.app.secrets.get("conn:github:token")).toBeNull();
     expect(svc.app.db.prepare("select count(*) n from observations where connection_id = 'github'").get()).toMatchObject({ n: observed });
-    expect((await svc.call("POST", "/connections/github/sync")).body.error.code).toBe("disconnected");
-    await svc.post("/jobs", { kind: "sync", input: { connectionId: "github" } }).then((r) => svc.waitJob(r.job.id));
+    expect((await svc.call("POST", "/connections/github/refresh")).body.error.code).toBe("disconnected");
+    await svc.post("/jobs", { kind: "source-refresh", input: { connectionId: "github" } }).then((r) => svc.waitJob(r.job.id));
     expect(fx.requests.length).toBe(before);
     // Reconnect then disconnect deleting data.
     await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: fx.url } });
@@ -125,7 +125,7 @@ describe("A13 security boundaries", () => {
     expect((await raw("/health", { headers: { origin: "https://evil.example" } })).status).toBe(403);
     // The Obsidian plugin is gone, so its app origin is refused like any other.
     expect((await raw("/health", { headers: { origin: "app://obsidian.md" } })).status).toBe(403);
-    const noCsrf = await raw("/memory/capture", { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify({ text: "x", source: { kind: "user", ref: "x" } }) });
+    const noCsrf = await raw("/memory/save", { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify({ items: [{ action: "create", type: "note", title: "x", facts: [{ subject: "x", value: "x" }] }] }) });
     expect(noCsrf.status).toBe(403);
     // Host header rebinding (raw HTTP so the header is not normalised).
     const http = await import("node:http");
@@ -141,7 +141,7 @@ describe("A13 security boundaries", () => {
     expect(trav.status).toBe(400);
     // Protected identity cannot be written through memory endpoints.
     await svc.post("/setup/identity", { name: "Test User", email: "t@example.com", confirm: true });
-    const prot = await svc.call("POST", "/memory/correct", { relPath: "memory/self.md", subject: "Name", value: "Mallory", reason: "x" });
+    const prot = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/self.md", facts: [{ subject: "Name", value: "Mallory", reason: "x" }] }] });
     expect(prot.status).toBe(403);
     expect(readFileSync(join(svc.dataDir, "memory/self.md"), "utf8")).not.toContain("Mallory");
   });

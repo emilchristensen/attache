@@ -1,16 +1,26 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { App } from "../../src/app.ts";
+import { App, type AppOptions } from "../../src/app.ts";
 import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
+import type { Clock } from "../../src/replication/clock.ts";
 
 process.env.JARVIS_CREDENTIAL_STORE = "file";
 process.env.JARVIS_NO_NOTIFY = "1";
-// Coding-agent hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
-process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home-"));
+// Harness hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
+process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home æøå-"));
 // The command skills tell agents to run: the CLI from source, since tests have no bundle.
 process.env.JARVIS_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts");
+
+/**
+ * A new temporary folder whose path has a space and non-ASCII letters, as an
+ * owner's folders often do ("C:\\Users\\Søren Ås"), so every test that uses the
+ * harness shows that such paths work: in hook commands, git, the index and file watching.
+ */
+export function testFolder(name: string): string {
+  return mkdtempSync(join(tmpdir(), `jarvis-it-${name} æøå-`));
+}
 
 export interface TestService {
   app: App;
@@ -27,10 +37,22 @@ export interface TestService {
   stop(): Promise<void>;
 }
 
-export async function startTestService(opts: { stateDir?: string; dataDir?: string; setup?: boolean; features?: Record<string, boolean> } = {}): Promise<TestService> {
-  const stateDir = opts.stateDir ?? mkdtempSync(join(tmpdir(), "jarvis-it-state-"));
-  const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "jarvis-it-data-")), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}` });
+export interface TestServiceOptions {
+  stateDir?: string;
+  dataDir?: string;
+  setup?: boolean;
+  features?: Record<string, boolean>;
+  /** Drives Replication's timers; the real clock when left out. */
+  clock?: Clock;
+  /** Lease commits per generation of the Reader lease ref; small in tests that check the history stays bounded. */
+  leaseGenerationCommits?: number;
+  meaning?: AppOptions["meaning"];
+}
+
+export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
+  const stateDir = opts.stateDir ?? testFolder("state");
+  const dataDir = opts.dataDir ?? join(testFolder("data"), "data");
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `jarvis serve` writes, so the CLI finds this service.
@@ -68,7 +90,8 @@ export async function startTestService(opts: { stateDir?: string; dataDir?: stri
     get: (p) => ok("GET", p),
     post: (p, b = {}) => ok("POST", p, b),
     put: (p, b = {}) => ok("PUT", p, b),
-    async waitJob(id, statuses = ["succeeded", "failed", "cancelled", "blocked"], timeoutMs = 20_000) {
+    // Jobs that run fake Claude Code processes can take over 20 s while other suites load the machine; the test's own timeout still applies.
+    async waitJob(id, statuses = ["succeeded", "failed", "cancelled", "blocked"], timeoutMs = 60_000) {
       const end = Date.now() + timeoutMs;
       for (;;) {
         const r = await ok("GET", `/jobs/${id}`);
@@ -80,6 +103,8 @@ export async function startTestService(opts: { stateDir?: string; dataDir?: stri
     async stop() {
       await server.close();
       await app.stop();
+      // What `jarvis serve` does on a clean stop, so the CLI sees the service as stopped.
+      rmSync(app.paths.runtimeFile, { force: true });
     },
   };
   if (opts.setup !== false && !app.config.get().setupCompleted) {

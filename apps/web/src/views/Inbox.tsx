@@ -5,6 +5,7 @@ import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
+import { ReaderLine } from "./ReaderLine.tsx";
 
 interface Briefing {
   id: string;
@@ -17,12 +18,13 @@ interface Briefing {
   deliverablePath: string | null;
 }
 
-const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar" };
+const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar", replication: "Replication", replication_merge: "Replication" };
 const GROUPS: Array<{ id: string; title: string; match: (k: string) => boolean }> = [
   { id: "deadlines", title: "Deadlines", match: (k) => /due|overdue|deadline/.test(k) },
-  { id: "reviews", title: "Review queue", match: (k) => /review/.test(k) },
+  { id: "reviews", title: "Review queue", match: (k) => /review/.test(k) && k !== "fact-review" },
   { id: "meetings", title: "Meetings", match: (k) => /meeting|invite|event/.test(k) },
   { id: "replies", title: "Pending replies", match: (k) => /reply|mention|dm/.test(k) },
+  { id: "facts", title: "Facts to check", match: (k) => k === "fact-review" },
   { id: "other", title: "Other", match: () => true },
 ];
 
@@ -252,7 +254,7 @@ export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
     <div className="coverage" aria-label="Source freshness">
       {sources.map((s) => (
         <div key={s.id} className="src" data-source={s.id}>
-          <StatusPill state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never synced").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
+          <StatusPill state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never refreshed").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
           <span>{s.label}</span>
           <span className="when">
             {s.lastSuccessAt ? (
@@ -284,7 +286,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
   if (!attentionOn)
     return (
       <Empty title="Attention and briefings is off" action={<Link to="/settings">Turn it on in Settings</Link>}>
-        Conversation and search still work.
+        Search still works.
       </Empty>
     );
   const failed = (conns.data ?? []).filter((c) => c.status !== "not_configured" && c.status !== "disconnected" && (c.status !== "connected" || (c.coverage && !["complete", "empty"].includes(c.coverage.state))));
@@ -295,7 +297,8 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
         Sources
         <Link to="/connections">manage</Link>
       </div>
-      {conns.data ? <Coverage connections={conns.data} /> : <Loading lines={2} />}
+      <ReaderLine />
+      {conns.data ?<Coverage connections={conns.data} /> : <Loading lines={2} />}
       {failed.length > 0 && (
         <div className="state partial small" style={{ marginTop: 10 }} role="status">
           <strong style={{ color: "var(--warn)" }}>Incomplete coverage</strong>

@@ -7,10 +7,9 @@ import { slackAdapter } from "./slack.ts";
 import { gmailAdapter } from "./gmail.ts";
 import { gcalAdapter } from "./gcal.ts";
 import { modelAdapter } from "./model.ts";
-import { speechAdapter } from "./speech.ts";
 import { vaultAdapter } from "./vault.ts";
 
-/** Every connection Jarvis supports. Each entry is a real adapter with setup, test and (for sources) sync. */
+/** Every connection Jarvis supports. Each entry is a real adapter with setup, test and (for sources) Source refresh. */
 export const ADAPTERS = new Map<ConnectionKind, ConnectorAdapter>([
   ["vault", vaultAdapter],
   ["github", githubAdapter],
@@ -20,5 +19,4 @@ export const ADAPTERS = new Map<ConnectionKind, ConnectorAdapter>([
   ["gmail", gmailAdapter],
   ["gcal", gcalAdapter],
   ["model", modelAdapter],
-  ["speech", speechAdapter],
 ]);

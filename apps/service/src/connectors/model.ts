@@ -23,7 +23,7 @@ export const modelAdapter: ConnectorAdapter = {
     label: "Model",
     description: "The language model that writes answers, briefings and drafts. Search works without it.",
     authMethods: [
-      { id: "claude-cli", label: "Claude Code on this Mac (uses your Claude sign-in)", fields: [{ id: "model", label: "Model", secret: false, optional: true, placeholder: DEFAULT_MODELS["claude-cli"] }] },
+      { id: "claude-cli", label: "Claude Code on this computer (uses your Claude sign-in)", fields: [{ id: "model", label: "Model", secret: false, optional: true, placeholder: DEFAULT_MODELS["claude-cli"] }] },
       {
         id: "anthropic",
         label: "Anthropic API key",
@@ -50,7 +50,7 @@ export const modelAdapter: ConnectorAdapter = {
   async configure(ctx, fields) {
     const provider = fields.method ?? "";
     if (!["claude-cli", "anthropic", "openai-compatible"].includes(provider)) throw new RemoteError("Choose a model provider", "error");
-    if (provider === "claude-cli" && !findClaudeCli()) throw new RemoteError("Claude Code was not found on this Mac. Install it from claude.com/claude-code and sign in, or use an API key.", "not_configured");
+    if (provider === "claude-cli" && !findClaudeCli()) throw new RemoteError("Claude Code was not found on this computer. Install it from claude.com/claude-code and sign in, or use an API key.", "not_configured");
     if (provider === "anthropic" && !fields.apiKey?.trim()) throw new RemoteError("An API key is required", "unauthorized");
     if (provider === "openai-compatible") {
       try {

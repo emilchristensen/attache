@@ -12,11 +12,11 @@ const COVERAGE_TEXT: Record<string, string> = {
   offline: "Service unreachable",
   error: "Failed",
   not_configured: "Not configured",
-  never_run: "Never synced",
+  never_run: "Never refreshed",
 };
 
 export function CoverageDetail({ coverage }: { coverage: Coverage | null }) {
-  if (!coverage) return <p className="small muted">Not synced yet.</p>;
+  if (!coverage) return <p className="small muted">Not refreshed yet.</p>;
   return (
     <div className="stack-sm">
       <div className="row small">
@@ -239,8 +239,8 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
                 {busy === "test" ? "Testing…" : "Test"}
               </button>
               {definition.scopes.length > 0 && status.kind !== "model" && status.status !== "needs_auth" && (
-                <button disabled={busy !== null} onClick={() => run("sync", () => post(`/connections/${status.id}/sync`).then(onChanged), "Refresh started")}>
-                  Sync now
+                <button disabled={busy !== null} onClick={() => run("refresh", () => post(`/connections/${status.id}/refresh`).then(onChanged), "Refresh started")}>
+                  Refresh now
                 </button>
               )}
               {!builtin && (

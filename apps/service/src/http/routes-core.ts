@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import { z } from "zod";
-import { ConfigPatch, FeatureId } from "@jarvis/contracts";
+import { ConfigPatch, FeatureId, MachineRename } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -10,8 +10,7 @@ import { createPairingCode, redeemPairingCode, sessionCookie, clearedCookie } fr
 import { resolveChange, effectiveFeatures } from "../capabilities/registry.ts";
 import { planScan } from "../memory/indexer.ts";
 import { nowIso } from "../core/db.ts";
-
-const expandHome = (p: string) => p.replace(/^~(?=\/|$)/, process.env.HOME ?? "~");
+import { expandHome, platformLocations } from "../platform/locations.ts";
 
 export function dataFolderPreview(path: string) {
   const abs = resolve(expandHome(path));
@@ -85,6 +84,16 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return { config: next, revision: app.config.revision() };
   });
 
+  r.get("/machine", () => app.machine.get());
+  // Which Machine runs scheduled Source refresh and briefings, and when it last refreshed every source.
+  r.get("/reader", () => app.reader.view());
+  r.patch("/machine", async (c) => {
+    const next = app.machine.rename(await c.body(MachineRename));
+    app.replication.machineRenamed();
+    app.bus.emit("event", { type: "config.changed" });
+    return next;
+  });
+
   r.get("/capabilities", () => ({
     features: app.featureStatuses(),
     connections: app.connections.statuses(),
@@ -104,7 +113,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   });
 
   r.get("/setup/defaults", () => {
-    const home = process.env.HOME ?? "";
+    const home = platformLocations().home;
     return { home, suggestion: `${home}/Documents/Jarvis` };
   });
   r.post("/setup/data-folder/preview", async (c) => {
@@ -116,9 +125,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     const preview = dataFolderPreview(path);
     if (!preview.writable) throw new HttpError(400, "not_writable", `Jarvis cannot write to ${preview.path}`);
     mkdirSync(preview.path, { recursive: true });
-    const { created } = app.openDataFolder(preview.path);
-    app.config.patch({ dataFolder: preview.path });
-    app.bus.emit("event", { type: "config.changed" });
+    const { created } = app.useDataFolder(preview.path);
     return { path: preview.path, created, indexed: app.memory.listDocuments({ root: "data", limit: 2000 }).length };
   });
   r.post("/setup/identity", async (c) => {
@@ -132,7 +139,8 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     if (!cfg.dataFolder) throw new HttpError(409, "needs_data_folder", "Choose a data folder before finishing setup.");
     const next = app.config.patch({ setupCompleted: true });
     app.scheduler.reconcile(next);
-    if (app.featureEnabled("attention")) app.jobs.create({ kind: "sync", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
+    // A Machine that joined another's Brain leaves reading the sources to the Reader.
+    if (app.featureEnabled("attention") && app.reader.isReader()) app.jobs.create({ kind: "source-refresh", title: "First refresh of your sources", input: { all: true, reason: "setup" }, capability: "attention", idempotencyKey: "setup:first-sync" });
     app.bus.emit("event", { type: "config.changed" });
     return { config: next, features: app.featureStatuses() };
   });
@@ -151,12 +159,16 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return {
       version: VERSION,
       instance: app.instance,
+      machine: app.machine.get(),
+      replication: app.replication.view(),
+      reader: app.reader.view(),
       startedAt: app.startedAt,
       pid: process.pid,
       node: process.version,
       stateDir: app.paths.stateDir,
       dataFolder: app.config.get().dataFolder,
       credentialStore: app.secrets.kind,
+      credentialStoreNote: app.secrets.note,
       documents: Number((app.db.prepare("select count(*) n from documents").get() as { n: number }).n),
       jobs: counts,
       schedules: app.scheduler.list(),

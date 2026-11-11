@@ -4,8 +4,9 @@ import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
+import { JoinForm } from "./Replication.tsx";
 
-const STEPS = ["Data folder", "Features", "Connections", "Model, voice and schedules", "Test and finish"];
+const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
 interface Caps {
   features: FeatureStatus[];
@@ -40,7 +41,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
   return (
     <main className="setup">
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" data-state="idle" aria-hidden /> Jarvis setup
+        <span className="orb" aria-hidden /> Jarvis setup
       </div>
       <nav aria-label="Setup progress">
         <ol className="steps">
@@ -88,9 +89,11 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
   const [importPath, setImportPath] = useState("");
   const [importPreview, setImportPreview] = useState<{ path: string; filesToRead: number; sample: string[]; skippedCount: number; note: string } | null>(null);
   const { busy, run } = useAction();
+  // Once the owner is in the field, a suggestion that arrives late would mix into what they type.
+  const [ownersChoice, setOwnersChoice] = useState(false);
   useEffect(() => {
-    if (!path && defaults.data) setPath(defaults.data.suggestion);
-  }, [defaults.data, path]);
+    if (!path && !ownersChoice && defaults.data) setPath(defaults.data.suggestion);
+  }, [defaults.data, path, ownersChoice]);
   const doPreview = async () => {
     setErr(null);
     try {
@@ -115,7 +118,7 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
         <label className="field">
           Data folder
           <div className="row" style={{ flexWrap: "nowrap" }}>
-            <input value={path} onChange={(e) => { setPath(e.target.value); setPreview(null); }} spellCheck={false} aria-describedby="folder-help" />
+            <input value={path} onFocus={() => setOwnersChoice(true)} onChange={(e) => { setPath(e.target.value); setPreview(null); }} spellCheck={false} aria-describedby="folder-help" />
             <button onClick={doPreview} disabled={!path.trim()}>
               Preview
             </button>
@@ -133,6 +136,15 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
           </div>
         )}
       </div>
+      <details className="card join-brain">
+        <summary>
+          <strong>Already use Jarvis on another Machine?</strong>
+          <span className="small muted"> Join its Brain instead of starting a new one.</span>
+        </summary>
+        <div className="join-brain-body">
+          <JoinForm folder={path} primary={false} intro="With Replication set up on your other Machine, Jarvis clones that Brain into the data folder above, which must be empty or new. Leave the import and identity below as they are: they come with the Brain." onDone={onNext} />
+        </div>
+      </details>
       <div className="card stack">
         <h3>Import an existing Markdown folder or Obsidian vault (optional)</h3>
         <p className="small muted">Jarvis reads it in place and cites it. It does not copy, change or move anything in that folder.</p>
@@ -228,7 +240,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
   return (
     <section className="stack">
       <h1>Choose what Jarvis does</h1>
-      <p className="muted">Conversation and search are the core and work with just your notes. Everything else is optional, and you can change it later in Settings.</p>
+      <p className="muted">Search is the core and works with just your notes. Everything else is optional, and you can change it later in Settings.</p>
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && <FeatureList caps={caps.data} onChanged={caps.reload} />}
@@ -238,7 +250,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
 }
 
 const SOURCE_KINDS = ["github", "jira", "confluence", "slack", "gmail", "gcal"];
-const AGENT_KINDS = ["claude-code", "codex", "antigravity"];
+const HARNESS_KINDS = ["claude-code", "codex", "antigravity", "claude-desktop"];
 
 function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const caps = useResource<Caps>("/capabilities", ["connections.changed"]);
@@ -252,9 +264,9 @@ function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () =>
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && SOURCE_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
-      <h2>Coding agents</h2>
-      <p className="muted">Connect the coding agents you use. Jarvis saves each session in your data folder with a short summary of what was decided, and gives every new session your memory. Only Jarvis's own hooks are added to the agent's settings; everything else in them is left as it is.</p>
-      {caps.data && AGENT_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
+      <h2>Harnesses</h2>
+      <p className="muted">Connect the Harnesses you use. Each gets Jarvis's MCP server, so it can search, read and save to your Brain, and asks you to confirm every save. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Jarvis's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
+      {caps.data && HARNESS_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <Nav onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </section>
   );
@@ -271,7 +283,6 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
   const [sched, setSched] = useState(config.schedules);
   const [notify, setNotify] = useState(config.notifications.desktop);
   const { run } = useAction();
-  const voiceOn = caps.data?.features.find((f) => f.id === "voice")?.enabled;
   const attentionOn = caps.data?.features.find((f) => f.id === "attention")?.enabled;
   const card = (k: string) => {
     const st = caps.data?.connections.find((c) => c.kind === k);
@@ -282,26 +293,17 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
   const save = () => run("save", async () => { await patch("/config", { schedules: sched, notifications: { desktop: notify } }); onNext(); });
   return (
     <section className="stack">
-      <h1>Model, voice and schedules</h1>
+      <h1>Model and schedules</h1>
       <h2>Model</h2>
-      <p className="muted small">A model writes answers, briefings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
+      <p className="muted small">A model summarises agent sessions and writes briefings, research findings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
       {card("model")}
-      {voiceOn ? (
-        <>
-          <h2>Voice</h2>
-          <VoiceModelHelper />
-          {card("speech")}
-        </>
-      ) : (
-        <p className="small muted">Voice is off. Turn it on in the Features step to set up speech.</p>
-      )}
       {attentionOn && (
         <>
           <h2>Schedules</h2>
           <div className="card grid-2">
             <label className="field">
               Refresh sources every (minutes)
-              <input type="number" min={5} max={1440} value={sched.syncEveryMinutes} onChange={(e) => setSched({ ...sched, syncEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
+              <input type="number" min={5} max={1440} value={sched.refreshEveryMinutes} onChange={(e) => setSched({ ...sched, refreshEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
             </label>
             <label className="field">
               Daily briefing at
@@ -324,37 +326,6 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
       </p>
       <Nav onBack={onBack} onNext={save} />
     </section>
-  );
-}
-
-function VoiceModelHelper() {
-  const st = useResource<{ environment: { whisperBin: string | null; whisperModel: string | null; download: { state: string; received: number; total: number; error: string | null }; say: boolean } }>("/voice/status", ["speech.download"]);
-  const { run } = useAction();
-  useEffect(() => {
-    if (st.data?.environment.download.state !== "downloading") return;
-    const t = setInterval(st.reload, 1500);
-    return () => clearInterval(t);
-  }, [st.data?.environment.download.state, st.reload]);
-  const env = st.data?.environment;
-  if (!env) return null;
-  const d = env.download;
-  return (
-    <div className="card small stack-sm">
-      <div className="row">
-        <span>Local recognition (whisper.cpp):</span>
-        {env.whisperBin ? <StatusPill state="ready" label="installed" /> : <StatusPill state="needs_setup" label="not installed" />}
-        {!env.whisperBin && <span className="muted">Install once with <code>brew install whisper-cpp</code>, then test again.</span>}
-      </div>
-      <div className="row">
-        <span>Recognition model (148 MB):</span>
-        {env.whisperModel ? <StatusPill state="ready" label="downloaded" /> : d.state === "downloading" ? <StatusPill state="running" label={`downloading ${Math.round((d.received / d.total) * 100)}%`} /> : <button className="small" onClick={() => run("dl", () => post("/voice/model/download").then(st.reload))}>Download</button>}
-        {d.state === "failed" && <span className="error-text">Download failed: {d.error}</span>}
-      </div>
-      <div className="row">
-        <span>macOS voice:</span>
-        {env.say ? <StatusPill state="ready" label="available" /> : <StatusPill state="unavailable" label="not available" />}
-      </div>
-    </div>
   );
 }
 

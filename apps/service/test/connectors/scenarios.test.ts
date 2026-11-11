@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionKind } from "@jarvis/contracts";
 import { githubAdapter } from "../../src/connectors/github.ts";
 import { jiraAdapter } from "../../src/connectors/jira.ts";
@@ -10,6 +10,9 @@ import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-serv
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { ATLASSIAN_SITE, ATLASSIAN_TOKEN, FIXTURE_PREFIX, addJiraOverdue, installScenarios, setPrHeadSha, type ScenarioState } from "../fixtures/scenarios.ts";
 import { useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let state: ScenarioState;
@@ -39,11 +42,11 @@ const atlassianSettings = { siteUrl: ATLASSIAN_SITE, email: "alex@example.com", 
 describe("scenario fixtures drive every adapter end to end", () => {
   it("GitHub: review requests, and a new head sha changes the fingerprint", async () => {
     const c = scenarioCtx("github", { scopes: ["review_requests"], secrets: { token: "ghp_fixture" } });
-    const a = await githubAdapter.sync!(c);
+    const a = await githubAdapter.refresh!(c);
     expect(a.coverage.state).toBe("complete");
     expect(a.observations.map((o) => o.attention?.key)).toEqual(["github:pr:acme/web#42", "github:pr:acme/api#7"]);
     setPrHeadSha(state, 42, "fff000");
-    const b = await githubAdapter.sync!(c);
+    const b = await githubAdapter.refresh!(c);
     expect(b.observations[0]!.fingerprintParts).not.toEqual(a.observations[0]!.fingerprintParts);
   });
 
@@ -52,10 +55,10 @@ describe("scenario fixtures drive every adapter end to end", () => {
     const t = await jiraAdapter.test(c);
     expect(t.account).toBe("alex@example.com");
     c.connection.settings = { ...c.connection.settings, ...t.settings };
-    const a = await jiraAdapter.sync!(c);
+    const a = await jiraAdapter.refresh!(c);
     expect(a.observations.filter((o) => o.attention).map((o) => o.attention!.kind)).toEqual(["due_work_item"]);
     addJiraOverdue(state, "ABC-9", "Send invoice", 2);
-    const b = await jiraAdapter.sync!(c);
+    const b = await jiraAdapter.refresh!(c);
     expect(b.observations.find((o) => o.externalId === "ABC-9")!.attention).toMatchObject({ key: "jira:ABC-9", kind: "overdue_work_item" });
     const action = { kind: "jira.comment", target: { key: "ABC-1" }, payload: { body: "Done" }, effectKey: "e1" };
     expect((await jiraAdapter.execute!(c, action)).verified).toBe(true);
@@ -65,7 +68,7 @@ describe("scenario fixtures drive every adapter end to end", () => {
   it("Confluence: mention attention and comment round-trip through the Atlassian MCP server", async () => {
     const c = scenarioCtx("confluence", { scopes: ["mentions", "my_recent"], secrets: { apiToken: ATLASSIAN_TOKEN }, settings: atlassianSettings });
     expect((await confluenceAdapter.test(c)).ok).toBe(true);
-    const s = await confluenceAdapter.sync!(c);
+    const s = await confluenceAdapter.refresh!(c);
     expect(s.coverage.state).toBe("complete");
     expect(s.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["confluence:mention:1001"]);
     const action = { kind: "confluence.comment", target: { pageId: "1001" }, payload: { body: "Noted" }, effectKey: "e2" };
@@ -75,7 +78,7 @@ describe("scenario fixtures drive every adapter end to end", () => {
 
   it("Slack: pending DM, mention, watched channel, and a verified post through the claude.ai connector", async () => {
     const c = scenarioCtx("slack", { scopes: ["dms", "mentions", "channels"], settings: { authMethod: "claude-ai", channels: "C0000001" } });
-    const s = await slackAdapter.sync!(c);
+    const s = await slackAdapter.refresh!(c);
     expect(s.coverage.state).toBe("complete");
     expect(s.observations.filter((o) => o.attention).map((o) => o.attention!.kind).sort()).toEqual(["mention", "pending_reply"]);
     const action = { kind: "slack.post", target: { channel: "D0000001" }, payload: { text: "Looking now" }, effectKey: "e3" };
@@ -86,7 +89,7 @@ describe("scenario fixtures drive every adapter end to end", () => {
   it("Gmail: one pending reply; the reply is saved as a draft, never sent", async () => {
     const c = scenarioCtx("gmail", { scopes: ["inbox_recent"], settings: { authMethod: "claude-ai" } });
     expect((await gmailAdapter.test(c)).account).toBe("alex@example.com");
-    const s = await gmailAdapter.sync!(c);
+    const s = await gmailAdapter.refresh!(c);
     expect(s.coverage.state).toBe("complete");
     expect(s.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:thr1"]);
     const draft = s.observations.find((o) => o.attention)!.attention!.draftable!;
@@ -99,9 +102,9 @@ describe("scenario fixtures drive every adapter end to end", () => {
 
   it("Calendar: meeting prep and an invite response; a disconnected connector is unauthorized", async () => {
     const c = scenarioCtx("gcal", { scopes: ["upcoming"], settings: { authMethod: "claude-ai" } });
-    const s = await gcalAdapter.sync!(c);
+    const s = await gcalAdapter.refresh!(c);
     expect(s.observations.filter((o) => o.attention).map((o) => [o.attention!.key, o.attention!.kind])).toEqual([["gcal:evt1", "meeting_prep"], ["gcal:evt2", "invite_response"]]);
     claude.servers = claude.servers.map((x) => (x.name === "claude.ai Google Calendar" ? { ...x, status: "needs-auth" } : x));
-    expect((await gcalAdapter.sync!(c)).coverage.state).toBe("unauthorized");
+    expect((await gcalAdapter.refresh!(c)).coverage.state).toBe("unauthorized");
   });
 });

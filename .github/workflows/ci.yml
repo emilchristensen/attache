@@ -1,0 +1,146 @@
+# The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
+# on macOS, Linux and Windows, and the install test on Linux and Windows.
+# The job names are the required status checks on `main`.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # Each check runs even when an earlier one failed, so one run shows every failure.
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm lint --max-warnings 0
+
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm typecheck
+
+      - name: Unit and integration tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm test
+
+      # The Linux secret store and notifications against GNOME Keyring and dunst in a throwaway desktop session.
+      - name: Linux desktop session tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Linux' }}
+        # A mirror outage must fail this step, not hang the job until its own timeout.
+        timeout-minutes: 10
+        env:
+          JARVIS_TEST_REAL_DESKTOP: "1"
+        # apt-get runs under its own time limit: the step's limit stops the shell but not a sudo apt-get,
+        # which then holds the package lock and fails the Google Chrome step after it.
+        run: |
+          sudo timeout 3m apt-get -o Acquire::Retries=3 update
+          sudo timeout 5m apt-get -o Acquire::Retries=3 install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
+          sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts
+
+      # The Windows secret store and notifications against Credential Manager and Windows notifications.
+      - name: Windows desktop tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
+        timeout-minutes: 10
+        env:
+          JARVIS_TEST_REAL_DESKTOP: "1"
+        run: pnpm vitest run apps/service/test/windows-desktop-real.test.ts
+
+      # The journeys use the installed Google Chrome channel (playwright.config.ts).
+      - name: Google Chrome
+        id: chrome
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx playwright install chrome
+
+      - name: Browser journeys
+        if: ${{ !cancelled() && steps.chrome.outcome == 'success' }}
+        run: pnpm e2e
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Builds two releases for this computer and installs, upgrades, backs up,
+  # restores and uninstalls them in a clean profile (scripts/test-install.mjs).
+  install:
+    name: install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The test opens the installer's pairing link in the installed Google Chrome channel.
+      - name: Google Chrome
+        run: npx playwright install chrome
+
+      # A CI job has no login session, so it has no systemd user manager.
+      # Lingering starts one for the runner user, as logging in would.
+      - name: systemd user manager
+        if: runner.os == 'Linux'
+        run: |
+          sudo loginctl enable-linger "$USER"
+          for i in $(seq 1 30); do
+            [ -S "/run/user/$(id -u)/bus" ] && exit 0
+            sleep 1
+          done
+          echo "the systemd user manager did not start" >&2
+          exit 1
+
+      - name: Install test
+        run: node scripts/test-install.mjs --from 0.1.0 --to 0.1.1
+
+      - name: Upload install results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-results-${{ matrix.os }}
+          path: test-results/install-results.json
+          retention-days: 7
+          if-no-files-found: ignore

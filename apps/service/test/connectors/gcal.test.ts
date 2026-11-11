@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { gcalAdapter, looksAllDay, parseEventPage } from "../../src/connectors/gcal.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { fixtureContext } from "../fixtures/adapter-harness.ts";
 import { jsonAnswer, mountClaude, onTool, useFakeClaude, type ClaudeFixture } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let fx: FixtureServer;
 let claude: ClaudeFixture;
@@ -64,57 +67,57 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     expect(calls()[0]!.args.pageSize).toBe(1);
     claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
     expect(await gcalAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
-    expect((await gcalAdapter.sync!(ctx())).coverage.state).toBe("unauthorized");
+    expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("unauthorized");
   });
 
   it("scope: nothing read unless 'upcoming' is selected; a permission error is denied", async () => {
-    await gcalAdapter.sync!(ctx({ scopes: [] }));
+    await gcalAdapter.refresh!(ctx({ scopes: [] }));
     expect(claude.calls).toHaveLength(0);
     onTool(claude, SERVER, "list_events", () => ({ text: "PERMISSION_DENIED: insufficient scopes", isError: true }));
-    expect((await gcalAdapter.sync!(ctx())).coverage.state).toBe("denied");
+    expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("denied");
   });
 
   it("queries the next 48 hours ordered by start", async () => {
     events([]);
-    await gcalAdapter.sync!(ctx());
+    await gcalAdapter.refresh!(ctx());
     expect(calls()[0]!.args).toEqual({ startTime: "2026-09-30T10:00:00.000Z", endTime: "2026-10-02T10:00:00.000Z", orderBy: "startTime", pageSize: 100 });
   });
 
   it("pagination: follows nextPageToken; a page cap is partial", async () => {
     onTool(claude, SERVER, "list_events", (a) => jsonAnswer(a.pageToken === "p2" ? { events: [event("b")] } : { events: [event("a")], nextPageToken: "p2" }));
-    const s = await gcalAdapter.sync!(ctx());
+    const s = await gcalAdapter.refresh!(ctx());
     expect(s.observations.map((o) => o.externalId)).toEqual(["a", "b"]);
     expect(s.coverage.scopes[0]).toMatchObject({ state: "complete", pages: 2 });
     let n = 0;
     onTool(claude, SERVER, "list_events", () => jsonAnswer({ events: [event(`e${++n}`)], nextPageToken: `p${n + 1}` }));
-    expect((await gcalAdapter.sync!(ctx())).coverage.scopes[0]).toMatchObject({ state: "partial", pages: 3 });
+    expect((await gcalAdapter.refresh!(ctx())).coverage.scopes[0]).toMatchObject({ state: "partial", pages: 3 });
   });
 
   it("pagination: every page repeats the first page's time window; an error inside the result is not zero events", async () => {
     let n = 0;
     onTool(claude, SERVER, "list_events", (a) => jsonAnswer(++n < 3 ? { events: [event(`e${n}`)], nextPageToken: `p${n}` } : { events: [event("last")], args: a }));
-    await gcalAdapter.sync!(ctx());
+    await gcalAdapter.refresh!(ctx());
     const windows = new Set(calls().map((c) => `${String(c.args.startTime)}|${String(c.args.endTime)}`));
     expect(windows.size).toBe(1);
     onTool(claude, SERVER, "list_events", () => jsonAnswer({ error: "Backend Error 503" }));
-    expect((await gcalAdapter.sync!(ctx())).coverage.state).toBe("offline");
+    expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("offline");
   });
 
   it("empty result is 'empty'; a failure after page one is partial; an unreadable page is an error", async () => {
     events([]);
-    expect((await gcalAdapter.sync!(ctx())).coverage.scopes[0]).toMatchObject({ state: "empty", items: 0 });
+    expect((await gcalAdapter.refresh!(ctx())).coverage.scopes[0]).toMatchObject({ state: "empty", items: 0 });
     onTool(claude, SERVER, "list_events", (a) => (a.pageToken ? { text: "Backend Error 503", isError: true } : jsonAnswer({ events: [event("a")], nextPageToken: "p2" })));
-    const s = await gcalAdapter.sync!(ctx());
+    const s = await gcalAdapter.refresh!(ctx());
     expect(s.coverage.state).toBe("partial");
     expect(s.observations).toHaveLength(1);
     onTool(claude, SERVER, "list_events", () => ({ text: "<html>oops</html>" }));
-    expect((await gcalAdapter.sync!(ctx())).coverage.state).toBe("error");
+    expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("error");
   });
 
   it("disconnect: with Claude Code signed out nothing is read and the state is unauthorized", async () => {
     claude.mode = "not-logged-in";
     events([event("a")]);
-    expect((await gcalAdapter.sync!(ctx())).coverage.state).toBe("unauthorized");
+    expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("unauthorized");
     expect(claude.calls).toHaveLength(0);
   });
 
@@ -130,7 +133,7 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
       event("later", { start: { dateTime: iso(30) }, end: { dateTime: iso(31) } }),
       event("cancelled", { status: "cancelled" }),
     ]);
-    const s = await gcalAdapter.sync!(ctx());
+    const s = await gcalAdapter.refresh!(ctx());
     const by = Object.fromEntries(s.observations.map((o) => [o.externalId, o]));
     expect(by.cancelled).toBeUndefined();
     expect(s.observations.filter((o) => o.attention).map((o) => o.externalId)).toEqual(["prep"]);
@@ -145,9 +148,9 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
   it("invites awaiting my response become invite_response; accepting keeps the key and changes the fingerprint", async () => {
     let status = "needsAction";
     onTool(claude, SERVER, "list_events", () => jsonAnswer({ events: [event("inv", { attendees: [me(status), guest("Mia")] })] }));
-    const before = (await gcalAdapter.sync!(ctx())).observations[0]!;
+    const before = (await gcalAdapter.refresh!(ctx())).observations[0]!;
     status = "accepted";
-    const after = (await gcalAdapter.sync!(ctx())).observations[0]!;
+    const after = (await gcalAdapter.refresh!(ctx())).observations[0]!;
     expect(before.attention).toMatchObject({ key: "gcal:inv", kind: "invite_response" });
     expect(after.attention).toMatchObject({ key: "gcal:inv", kind: "meeting_prep" });
     expect(after.fingerprintParts).not.toEqual(before.fingerprintParts);

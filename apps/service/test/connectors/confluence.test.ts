@@ -53,12 +53,12 @@ describe("Confluence adapter contract (Atlassian Rovo MCP server)", () => {
 
   it("scope: mentions produce attention; space updates need configured spaces and quote them in CQL", async () => {
     atl.tools.set("searchConfluence", (args) => ({ results: String(args.cql).startsWith("mention") ? [hit("1001", "Q4 planning")] : [hit("2002")] }));
-    const r = await confluenceAdapter.sync!(ctx(["mentions", "space_updates"]));
+    const r = await confluenceAdapter.refresh!(ctx(["mentions", "space_updates"]));
     expect(r.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["confluence:mention:1001"]);
     expect(r.coverage.scopes.find((s) => s.scope.startsWith("Updates"))).toMatchObject({ state: "not_configured" });
     expect(searches()).toHaveLength(1);
     atl.calls.length = 0;
-    await confluenceAdapter.sync!(ctx(["space_updates"], { spaces: "ENG,OPS" }));
+    await confluenceAdapter.refresh!(ctx(["space_updates"], { spaces: "ENG,OPS" }));
     expect(searches()[0]!.args.cql).toContain('space in ("ENG","OPS")');
     expect(searches()[0]!.args.cloudId).toBe("cloud-1");
   });
@@ -69,16 +69,16 @@ describe("Confluence adapter contract (Atlassian Rovo MCP server)", () => {
       if (args.cursor === "c2") return { results: [hit("2")], _links: { next: "/rest/api/search?cql=x&cursor=c3" } };
       return { results: [hit("3")] };
     });
-    const r = await confluenceAdapter.sync!(ctx(["my_recent"]));
+    const r = await confluenceAdapter.refresh!(ctx(["my_recent"]));
     expect(r.observations.map((o) => o.externalId)).toEqual(["1", "2", "3"]);
     expect(r.coverage.state).toBe("complete");
     atl.tools.set("searchConfluence", (args) => ({ results: [hit(String(Number(args.cursor ?? 0) + 1))], nextCursor: String(Number(args.cursor ?? 0) + 1) }));
-    expect((await confluenceAdapter.sync!(ctx(["my_recent"]))).coverage.state).toBe("partial");
+    expect((await confluenceAdapter.refresh!(ctx(["my_recent"]))).coverage.state).toBe("partial");
   });
 
   it("pagination: a next link without a cursor is partial, never the last page", async () => {
     atl.tools.set("searchConfluence", () => ({ results: [hit("1")], _links: { next: "/rest/api/search?start=50" } }));
-    const r = await confluenceAdapter.sync!(ctx(["my_recent"]));
+    const r = await confluenceAdapter.refresh!(ctx(["my_recent"]));
     expect(r.coverage.state).toBe("partial");
     expect(r.observations).toHaveLength(1);
   });
@@ -86,15 +86,15 @@ describe("Confluence adapter contract (Atlassian Rovo MCP server)", () => {
   it("retry, empty and partial: 5xx retried, zero is empty, bad shape errors, unreadable hits are partial", async () => {
     atl.tools.set("searchConfluence", () => ({ results: [] }));
     atl.failNext = [502];
-    expect((await confluenceAdapter.sync!(ctx())).coverage.state).toBe("empty");
+    expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("empty");
     atl.tools.set("searchConfluence", () => "not json at all");
-    expect((await confluenceAdapter.sync!(ctx())).coverage.state).toBe("error");
+    expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("error");
     atl.tools.set("searchConfluence", () => ({ results: [hit("1"), { content: { title: "no id" } }] }));
-    expect((await confluenceAdapter.sync!(ctx())).coverage.state).toBe("partial");
+    expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("partial");
     atl.tools.set("searchConfluence", () => {
       throw new ToolError("Forbidden", 403);
     });
-    expect((await confluenceAdapter.sync!(ctx())).coverage.state).toBe("denied");
+    expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("denied");
   });
 
   it("execute: creates a storage-format footer comment carrying the effect marker, verified by reading it back", async () => {

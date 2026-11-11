@@ -1,12 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { type Db, nowIso, json } from "../core/db.ts";
-import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
-import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
-import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
-import { stringify as stringifyYaml } from "yaml";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { type Db, json, nowIso, tx } from "../core/db.ts";
 import { redact } from "../core/log.ts";
+import type { MachineIdentity } from "../core/machine.ts";
+import { replaceWith } from "../platform/replace-file.ts";
+import { REVIEW_STATE_DIR } from "../review-state/files.ts";
+import { ChangeLog, type ChangeMeta, type ListChangesOptions, type MemoryChange, type NewChange } from "./change-log.ts";
+import { agentSessionFile, archiveManifest, captureFile, captureTitle, connectorSnapshotFile, deliverableFile, formatSource, oneLine, sourceToYaml, sessionLogHead, withFrontmatter, wrapUpFile, type AgentSessionMeta } from "./evidence-files.ts";
+import { connectorSnapshotPath, deliverableName, sessionLogPath, wrapUpPath } from "./evidence-paths.ts";
+import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
+import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter, toLf } from "./markdown.ts";
+import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
+import { factDay } from "./review-date.ts";
+import { WriterLock } from "./writer-lock.ts";
+
+/** Kept here as well, where callers have always imported them from. */
+export type { ChangeMeta, MemoryChange } from "./change-log.ts";
+export { formatSource } from "./evidence-files.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -34,50 +45,60 @@ export interface IndexedDocument {
   mtimeMs: number;
 }
 
-export interface MemoryChange {
-  id: string;
-  docRelPath: string;
-  change: "create" | "correct" | "append" | "proposal" | "delete";
-  subject: string | null;
-  beforeValue: string | null;
-  afterValue: string | null;
-  reason: string | null;
-  source: string | null;
-  actor: string;
-  status: "applied" | "proposed" | "rejected";
-  createdAt: string;
-  decidedAt: string | null;
-}
-
 const README = `# Jarvis data folder
 
 Jarvis keeps your knowledge here as plain Markdown. You can read and edit these files in any editor, including Obsidian.
 
 - \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
-- \`evidence/\` is archived evidence: captures, conversation archives, coding-agent sessions and connector observations.
+- \`evidence/\` is archived evidence: captures, Harness sessions and connector observations (and chat archives from earlier versions).
   Jarvis cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
+- \`review/\` holds what waits for your decision: the inbox (with its dismiss and snooze decisions) and Proposals, one small JSON file per item, so every Machine shows the same.
+  It is Jarvis's own bookkeeping in JSON and is never searched.
 
 Search indexes are rebuilt from these files, so deleting the index never loses knowledge.
 Service state (jobs, approvals, settings) and credentials live outside this folder.
 `;
 
-const today = () => new Date().toISOString().slice(0, 10);
+export interface MemoryStoreOptions {
+  /** Install name; a live service of another instance on the same folder is refused. */
+  instance: string;
+  /** Where writer locks live, outside every data folder. */
+  locksDir: string;
+  /** The Machine this service runs on, read at each write so a rename applies at once. */
+  machine: () => MachineIdentity;
+  /** Told after every file the store writes or removes, e.g. so Replication commits it. */
+  onWrite?: (relPath: string) => void;
+  /** The time the store dates facts, History lines and files by; the system clock unless given. */
+  now?: () => Date;
+}
 
 export class MemoryStore {
   readonly indexer: Indexer;
-  private lockFile: string | null = null;
+  private readonly changes: ChangeLog;
+  private lock: WriterLock | null = null;
 
   private readonly db: Db;
   private root: string | null;
-  private readonly instance: string;
+  private readonly opts: MemoryStoreOptions;
 
-  constructor(db: Db, root: string | null, instance: string) {
+  constructor(db: Db, root: string | null, opts: MemoryStoreOptions) {
     this.db = db;
     this.root = root;
-    this.instance = instance;
+    this.opts = opts;
     this.indexer = new Indexer(db);
+    this.changes = new ChangeLog(db);
+  }
+
+  /** The store's clock: the service clock when the App gives one, else the system clock. */
+  now(): Date {
+    return this.opts.now?.() ?? new Date();
+  }
+
+  /** Today's day (`YYYY-MM-DD`) by the store's clock: the date a new fact or History line gets. */
+  today(): string {
+    return factDay(this.now());
   }
 
   get dataRoot(): string | null {
@@ -98,7 +119,7 @@ export class MemoryStore {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
-    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/conversations", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
+    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
       const abs = join(root, d);
       if (!existsSync(abs)) {
         mkdirSync(abs, { recursive: true });
@@ -112,41 +133,25 @@ export class MemoryStore {
     // Record what Jarvis created, so a data-deleting uninstall never removes files the user already had.
     const owned = join(root, ".jarvis", "owned.json");
     if (!existsSync(owned)) {
-      const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
+      const mine = ["memory", "evidence", "deliverables", REVIEW_STATE_DIR, ".jarvis", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
-    this.acquireLock(root);
-    this.releaseLockIfDifferent(root);
+    this.takeLock(root);
     this.root = root;
     return { created };
   }
 
-  private acquireLock(root: string) {
-    const lock = join(root, ".jarvis", "writer.lock");
-    if (existsSync(lock)) {
-      const owner = json<{ pid: number; instance: string }>(readFileSync(lock, "utf8"), { pid: 0, instance: "" });
-      const alive = owner.pid > 0 && owner.pid !== process.pid && isAlive(owner.pid);
-      if (alive && owner.instance !== this.instance) {
-        throw new PolicyError(`Another Jarvis service (pid ${owner.pid}) owns this data folder`, "actor_denied");
-      }
-    }
-    writeFileSync(lock, JSON.stringify({ pid: process.pid, instance: this.instance, at: nowIso() }));
-  }
-
-  private releaseLockIfDifferent(newRoot: string) {
-    if (this.lockFile && this.lockFile !== join(newRoot, ".jarvis", "writer.lock")) this.releaseLock();
-    this.lockFile = join(newRoot, ".jarvis", "writer.lock");
+  /** Hold the writer lock on `root`, and let go of the one on the previous folder. */
+  private takeLock(root: string) {
+    if (this.lock?.covers(root)) return;
+    const next = WriterLock.acquire(root, { instance: this.opts.instance, locksDir: this.opts.locksDir });
+    this.lock?.release();
+    this.lock = next;
   }
 
   releaseLock() {
-    if (!this.lockFile) return;
-    try {
-      const owner = json<{ pid: number }>(readFileSync(this.lockFile, "utf8"), { pid: 0 });
-      if (owner.pid === process.pid) unlinkSync(this.lockFile);
-    } catch {
-      // Already gone.
-    }
-    this.lockFile = null;
+    this.lock?.release();
+    this.lock = null;
   }
 
   close() {
@@ -156,9 +161,10 @@ export class MemoryStore {
 
   // ---- low-level -----------------------------------------------------------
 
+  /** A file's text, with LF line endings however an editor saved it. */
   read(rel: string): string {
     const abs = resolveInside(this.requireRoot(), rel);
-    return readFileSync(abs, "utf8");
+    return toLf(readFileSync(abs, "utf8"));
   }
 
   exists(rel: string): boolean {
@@ -176,9 +182,12 @@ export class MemoryStore {
     mkdirSync(dirname(abs), { recursive: true });
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
     // Archived evidence and generated deliverables never keep credentials that appeared in sources.
-    writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
-    renameSync(tmp, abs);
+    // Everything Jarvis writes is LF, whatever line breaks the text arrived with, so every Machine holds the same bytes.
+    const text = toLf(content);
+    writeFileSync(tmp, n.startsWith("memory/") ? text : redact(text));
+    replaceWith(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
+    this.opts.onWrite?.(n);
   }
 
   private uniquePath(dir: string, base: string): string {
@@ -188,23 +197,21 @@ export class MemoryStore {
     return rel;
   }
 
-  private recordChange(c: Omit<MemoryChange, "id" | "createdAt" | "decidedAt"> & { decidedAt?: string | null }): MemoryChange {
-    const change: MemoryChange = { id: randomUUID(), createdAt: nowIso(), decidedAt: c.decidedAt ?? (c.status === "applied" ? nowIso() : null), ...c };
-    this.db
-      .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at)
-         values (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(change.id, change.docRelPath, change.change, change.subject, change.beforeValue, change.afterValue, change.reason, change.source, change.actor, change.status, change.createdAt, change.decidedAt);
-    return change;
+  private recordChange(
+    c: NewChange,
+    meta: ChangeMeta = {},
+  ): MemoryChange {
+    const docHash = c.status === "applied" && this.exists(c.docRelPath) ? noteHash(this.read(c.docRelPath)) : null;
+    return this.changes.record(c, meta, docHash);
   }
 
   // ---- memory notes ----------------------------------------------------------
 
   createMemory(
-    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[] },
+    input: { type: MemoryType; title: string; state: Array<{ subject: string; value: string; date?: string; review?: string; source?: SourceRef }>; notes?: string; sources?: SourceRef[]; provenance?: string; tags?: string[]; history?: string[]; events?: string[] },
     actor: WriteActor,
     opts: { approvedProposal?: boolean } = {},
+    meta: ChangeMeta = {},
   ): { relPath: string } {
     const dir = `memory/${input.type === "person" ? "people" : input.type + "s"}`;
     const rel = this.uniquePath(dir, slugify(input.title));
@@ -215,18 +222,25 @@ export class MemoryStore {
         type: input.type,
         title: input.title,
         provenance: input.provenance ?? (actor === "user" ? "user-stated" : "inferred"),
-        created: today(),
-        updated: today(),
+        created: this.today(),
+        updated: this.today(),
         ...(input.tags?.length ? { tags: input.tags } : {}),
         sources: (input.sources ?? []).map(sourceToYaml),
       },
       title: input.title,
-      state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? today(), value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
+      state: input.state.map((s) => ({ subject: s.subject, date: s.date ?? this.today(), review: s.review, value: s.value, source: s.source ? formatSource(s.source) : sourceLabel })),
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)), `- ${today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`],
+      history: [
+        ...(input.history ?? []).map((h) => (h.startsWith("- ") ? h : `- ${h}`)),
+        `- ${this.today()} — created by ${actor}${input.provenance === "migrated" ? " (migrated, reviewed)" : ""}${sourceLabel ? ` from ${sourceLabel}` : ""}`,
+        ...(input.events ?? []).map((e) => eventLine(this.today(), e)),
+      ],
     });
     this.writeFile(rel, doc, actor, opts);
-    this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" });
+    tx(this.db, () => {
+      this.recordChange({ docRelPath: rel, change: "create", subject: null, beforeValue: null, afterValue: input.title, reason: null, source: sourceLabel ?? null, actor, status: "applied" }, meta);
+      for (const e of input.events ?? []) this.recordChange({ docRelPath: rel, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: sourceLabel ?? null, actor, status: "applied" }, meta);
+    });
     return { relPath: rel };
   }
 
@@ -234,124 +248,117 @@ export class MemoryStore {
    * Correct one current fact. The previous value is kept in History with its
    * date and source; the index is updated immediately so the next answer sees it.
    */
-  correct(rel: string, input: { subject: string; value: string; reason: string; source?: SourceRef }, actor: WriteActor, opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {}): MemoryChange {
+  correct(
+    rel: string,
+    input: { subject: string; value: string; reason: string; review?: string | null | undefined; source?: SourceRef },
+    actor: WriteActor,
+    opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {},
+    meta: ChangeMeta = {},
+  ): MemoryChange {
+    const { subject, value, reason, review, source } = input;
+    return this.update(rel, { facts: [{ subject, value, reason, ...(review ? { review } : {}) }], events: [], ...(source ? { source } : {}) }, actor, opts, meta)[0]!;
+  }
+
+  /**
+   * Correct several facts and append several events to one note in a single
+   * write, so either every part lands or none does. Each superseded value
+   * moves to History with its date and source.
+   */
+  update(
+    rel: string,
+    input: { facts: Array<{ subject: string; value: string; reason: string; review?: string | undefined }>; events: string[]; source?: SourceRef },
+    actor: WriteActor,
+    opts: { confirmedProtected?: boolean; approvedProposal?: boolean } = {},
+    meta: ChangeMeta = {},
+  ): MemoryChange[] {
     const n = normalizeRel(rel);
-    const raw = this.read(n);
     const sourceLabel = input.source ? formatSource(input.source) : actor === "user" ? "user correction" : undefined;
-    const { text, previous } = applyStateCorrection(raw, { subject: input.subject, date: today(), value: input.value, source: sourceLabel }, input.reason || "corrected");
-    const withUpdated = bumpFrontmatter(text, { updated: today() });
-    this.writeFile(n, withUpdated, actor, opts);
-    return this.recordChange({
-      docRelPath: n,
-      change: "correct",
-      subject: input.subject,
-      beforeValue: previous?.value ?? null,
-      afterValue: input.value,
-      reason: input.reason,
-      source: sourceLabel ?? null,
-      actor,
-      status: "applied",
-    });
+    let text = this.read(n);
+    const corrections: Array<{ subject: string; before: string | null; beforeReview: string | null; value: string; review: string | null; reason: string }> = [];
+    for (const f of input.facts) {
+      const out = applyStateCorrection(text, { subject: f.subject, date: this.today(), review: f.review, value: f.value, source: sourceLabel }, f.reason || "corrected");
+      text = out.text;
+      corrections.push({ subject: f.subject, before: out.previous?.value ?? null, beforeReview: out.previous?.review ?? null, value: f.value, review: f.review ?? null, reason: f.reason });
+    }
+    for (const e of input.events) text = appendHistory(text, eventLine(this.today(), e));
+    this.writeFile(n, input.facts.length ? bumpFrontmatter(text, { updated: this.today() }) : text, actor, opts);
+    return tx(this.db, () => [
+      ...corrections.map((c) => this.recordChange({ docRelPath: n, change: "correct", subject: c.subject, beforeValue: c.before, afterValue: c.value, beforeReview: c.beforeReview, afterReview: c.review, reason: c.reason, source: sourceLabel ?? null, actor, status: "applied" }, meta)),
+      ...input.events.map((e) => this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: e, reason: null, source: input.source ? formatSource(input.source) : null, actor, status: "applied" }, meta)),
+    ]);
   }
 
-  appendEvent(rel: string, text: string, actor: WriteActor): void {
+  appendEvent(rel: string, text: string, actor: WriteActor, meta: ChangeMeta = {}): void {
+    this.update(rel, { facts: [], events: [text] }, actor, {}, meta);
+  }
+
+  /**
+   * Take one subject out of Current State. The removed value is kept in History
+   * with its date and source, as a correction keeps the value it replaces.
+   */
+  removeFact(rel: string, input: { subject: string; reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
     const n = normalizeRel(rel);
-    const raw = this.read(n);
-    this.writeFile(n, appendHistory(raw, `- ${today()} — ${text.replace(/\s*\n\s*/g, " ")}`), actor);
-    this.recordChange({ docRelPath: n, change: "append", subject: null, beforeValue: null, afterValue: text, reason: null, source: null, actor, status: "applied" });
+    const { text, removed } = removeStateEntry(this.read(n), { subject: input.subject, date: this.today() }, input.reason);
+    if (!removed) throw new PolicyError(`${n} has no current “${input.subject}”`, "invalid_path");
+    this.writeFile(n, bumpFrontmatter(text, { updated: this.today() }), actor);
+    return this.recordChange({ docRelPath: n, change: "correct", subject: removed.subject, beforeValue: removed.value, afterValue: null, beforeReview: removed.review ?? null, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
-  /** Edit a note's free-text body (Notes section) as the user. */
-  replaceNotes(rel: string, notes: string): void {
+  /**
+   * Remove a curated note from the Brain and from search. The change log keeps
+   * the whole file, so the removal itself can be undone.
+   */
+  deleteMemory(rel: string, input: { reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
     const n = normalizeRel(rel);
+    if (!n.startsWith("memory/")) throw new PolicyError(`Only curated memory notes can be removed: ${n}`, "invalid_path");
+    assertWritable(n, actor);
     const raw = this.read(n);
-    const lines = raw.split("\n");
-    const start = lines.findIndex((l) => /^##\s+notes\s*$/i.test(l));
-    let out: string;
-    if (start >= 0) {
-      let end = start + 1;
-      while (end < lines.length && !/^##\s/.test(lines[end]!)) end++;
-      out = [...lines.slice(0, start + 1), notes.trim(), "", ...lines.slice(end)].join("\n");
-    } else {
-      const hist = lines.findIndex((l) => /^##\s+history\s*$/i.test(l));
-      const at = hist >= 0 ? hist : lines.length;
-      out = [...lines.slice(0, at), "## Notes", notes.trim(), "", ...lines.slice(at)].join("\n");
-    }
-    this.writeFile(n, bumpFrontmatter(out, { updated: today() }), "user");
-    this.recordChange({ docRelPath: n, change: "append", subject: "Notes", beforeValue: null, afterValue: notes.slice(0, 500), reason: "notes edited", source: null, actor: "user", status: "applied" });
+    unlinkSync(resolveInside(this.requireRoot(), n));
+    this.indexer.removeFile(this.rootRef!.id, n);
+    this.opts.onWrite?.(n);
+    return this.recordChange({ docRelPath: n, change: "delete", subject: null, beforeValue: raw, afterValue: null, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
-  // ---- proposals -----------------------------------------------------------------
-
-  propose(input: { docRelPath: string | null; subject: string; value: string; reason: string; source: string; actor: WriteActor; newDoc?: { type: MemoryType; title: string } }): MemoryChange {
-    return this.recordChange({
-      docRelPath: input.docRelPath ?? `(new ${input.newDoc?.type ?? "note"}: ${input.newDoc?.title ?? input.subject})`,
-      change: "proposal",
-      subject: input.subject,
-      beforeValue: null,
-      afterValue: JSON.stringify({ value: input.value, newDoc: input.newDoc ?? null }),
-      reason: input.reason,
-      source: input.source,
-      actor: input.actor,
-      status: "proposed",
-    });
+  /** Put a removed note back exactly as it was. */
+  restoreMemory(rel: string, raw: string, input: { reason: string }, actor: WriteActor, meta: ChangeMeta = {}): MemoryChange {
+    const n = normalizeRel(rel);
+    if (this.exists(n)) throw new PolicyError(`${n} already exists`, "invalid_path");
+    this.writeFile(n, raw, actor);
+    return this.recordChange({ docRelPath: n, change: "create", subject: null, beforeValue: null, afterValue: parseMarkdown(raw, n).title, reason: input.reason, source: null, actor, status: "applied" }, meta);
   }
 
-  decideProposal(id: string, decision: "apply" | "reject"): MemoryChange {
-    const row = this.db.prepare("select * from memory_changes where id = ? and status = 'proposed'").get(id) as Record<string, string> | undefined;
-    if (!row) throw new PolicyError("Proposal not found or already decided", "invalid_path");
-    if (decision === "reject") {
-      this.db.prepare("update memory_changes set status = 'rejected', decided_at = ? where id = ?").run(nowIso(), id);
-      return this.getChange(id)!;
-    }
-    const payload = json<{ value: string; newDoc: { type: MemoryType; title: string } | null }>(row.after_value, { value: "", newDoc: null });
-    const source: SourceRef = { kind: "user", ref: row.source ?? "proposal", observedAt: row.created_at!, label: row.source ?? undefined };
-    if (payload.newDoc) {
-      const { relPath } = this.createMemory({ type: payload.newDoc.type, title: payload.newDoc.title, state: [{ subject: row.subject!, value: payload.value }], sources: [source], provenance: "user-approved" }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ?, doc_rel_path = ? where id = ?").run(nowIso(), relPath, id);
-    } else {
-      if (isProtected(row.doc_rel_path!)) throw new PolicyError("Proposals cannot change protected records", "protected");
-      this.correct(row.doc_rel_path!, { subject: row.subject!, value: payload.value, reason: row.reason ?? "approved proposal", source }, "service", { approvedProposal: true });
-      this.db.prepare("update memory_changes set status = 'applied', decided_at = ? where id = ?").run(nowIso(), id);
-    }
-    return this.getChange(id)!;
+  // ---- Proposals kept in the change log before they moved into the Brain -------------
+
+  /** Proposals this Machine stored in its change log before Proposals became files in the Brain, oldest first. */
+  legacyProposals(): MemoryChange[] {
+    return this.changes.legacyProposals();
+  }
+
+  /** Drop change-log Proposals once they are files in the Brain. */
+  forgetLegacyProposals(ids: readonly string[]): void {
+    this.changes.forgetLegacyProposals(ids);
+  }
+
+  /** Every change one save or approval made, newest first. */
+  changesInBatch(batchId: string): MemoryChange[] {
+    return this.changes.inBatch(batchId);
   }
 
   getChange(id: string): MemoryChange | null {
-    const r = this.db.prepare("select * from memory_changes where id = ?").get(id) as Record<string, string | null> | undefined;
-    return r ? rowToChange(r) : null;
+    return this.changes.get(id);
   }
 
-  listChanges(opts: { relPath?: string; status?: string; limit?: number } = {}): MemoryChange[] {
-    const where: string[] = [];
-    const args: string[] = [];
-    if (opts.relPath) {
-      where.push("doc_rel_path = ?");
-      args.push(opts.relPath);
-    }
-    if (opts.status) {
-      where.push("status = ?");
-      args.push(opts.status);
-    }
-    const rows = this.db
-      .prepare(`select * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`)
-      .all(...args) as Array<Record<string, string | null>>;
-    return rows.map(rowToChange);
+  /** Newest first. `after` keeps only changes recorded after the change with that `seq`. */
+  listChanges(opts: ListChangesOptions = {}): MemoryChange[] {
+    return this.changes.list(opts);
   }
 
   // ---- captures, evidence, deliverables -----------------------------------------------
 
   capture(input: { text: string; title?: string; source: SourceRef; tags?: string[] }, actor: WriteActor = "user"): { relPath: string } {
-    const title = input.title?.trim() || firstWords(input.text);
-    const rel = this.uniquePath("evidence/captures", `${today()}-${slugify(title)}`);
-    const fm = { id: randomUUID(), type: "capture", title, captured_at: nowIso(), provenance: "captured", source: sourceToYaml(input.source), ...(input.tags?.length ? { tags: input.tags } : {}) };
-    const quoted = input.text
-      .trim()
-      .split("\n")
-      .map((l) => `> ${l}`)
-      .join("\n");
-    const body = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${quoted}\n\nSource: ${formatSource(input.source)}\n`;
-    this.writeFile(rel, body, actor === "user" ? "user" : "connector");
+    const title = captureTitle(input.text, input.title);
+    const rel = this.uniquePath("evidence/captures", `${this.today()}-${slugify(title)}`);
+    this.writeFile(rel, captureFile({ ...input, title }), actor === "user" ? "user" : "connector");
     return { relPath: rel };
   }
 
@@ -374,7 +381,7 @@ export class MemoryStore {
         skipped++;
         continue;
       }
-      const content = readFileSync(join(input.path, rel), "utf8");
+      const content = toLf(readFileSync(join(input.path, rel), "utf8"));
       const target = `${base}/${rel}`;
       const hash = createHash("sha256").update(content).digest("hex");
       if (this.exists(target) && createHash("sha256").update(this.read(target)).digest("hex") === hash) unchanged++;
@@ -384,78 +391,71 @@ export class MemoryStore {
       }
       rows.push(`| ${rel} | ${Buffer.byteLength(content)} | ${hash.slice(0, 16)} |`);
     }
-    const origin = input.origin ?? input.path;
-    const fm = { type: "archive", title: `Archive of ${origin}`, source_path: input.path, ...(input.origin ? { origin: input.origin } : {}), archived_at: nowIso(), files: rows.length, excluded: input.exclude, provenance: "archived-verbatim" };
-    const manifest = `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# Archive of ${origin}\n\nVerbatim copies of ${rows.length} Markdown files, at the same relative paths, so citations keep their line numbers.\n\n| File | Bytes | SHA-256 (first 16) |\n| --- | --- | --- |\n${rows.join("\n")}\n`;
-    this.writeFile(`${base}/ARCHIVE.md`, manifest, "user");
+    this.writeFile(`${base}/ARCHIVE.md`, archiveManifest({ ...input, rows }), "user");
     return { relPath: `${base}/ARCHIVE.md`, written, unchanged, excluded: skipped, files: rows.length };
   }
 
-  /** A source-linked decision: curated memory that cites the evidence it came from. */
-  recordDecision(input: { title: string; decision: string; rationale?: string; source: SourceRef; project?: string }, actor: WriteActor = "user"): { relPath: string } {
-    const state = [{ subject: "Decision", value: input.decision }];
-    if (input.project) state.push({ subject: "Project", value: input.project });
-    return this.createMemory({ type: "decision", title: input.title, state, ...(input.rationale ? { notes: input.rationale } : {}), sources: [input.source], provenance: "user-stated" }, actor);
-  }
-
   writeDeliverable(kind: "briefings" | "research" | "drafts", title: string, body: string, meta: Record<string, unknown> = {}): { relPath: string } {
-    const rel = this.uniquePath(`deliverables/${kind}`, `${today()}-${slugify(title)}`);
-    const fm = { id: randomUUID(), type: kind.replace(/s$/, ""), title, generated_at: nowIso(), provenance: "generated", ...meta };
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body.trim()}\n`, "service");
-    return { relPath: rel };
-  }
-
-  archiveConversation(conversationId: string, title: string, messages: Array<{ role: string; content: string; at: string }>): { relPath: string } {
-    const rel = `evidence/conversations/${conversationId}.md`;
-    const fm = { id: conversationId, type: "conversation", title, archived_at: nowIso(), provenance: "conversation-archive" };
-    const body = messages.map((m) => `### ${m.role} · ${m.at}\n\n${m.content.trim()}`).join("\n\n");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\n${body}\n`, "service");
+    const rel = this.uniquePath(`deliverables/${kind}`, deliverableName(this.today(), title, this.opts.machine()));
+    this.writeFile(rel, deliverableFile(kind, title, body, meta), "service");
     return { relPath: rel };
   }
 
   /**
-   * The conversation of one coding-agent session. Rewritten as the session
+   * The conversation of one Harness session. Rewritten as the session
    * grows (compaction, then the end), so one session is always one file.
    */
-  archiveAgentSession(rel: string, meta: { agent: string; agentLabel: string; sessionId: string; title: string; cwd: string | null; startedAt: string | null }, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
-    const fm = { id: meta.sessionId, type: "agent-session", title: meta.title, agent: meta.agent, cwd: meta.cwd, started_at: meta.startedAt, archived_at: nowIso(), provenance: "agent-session-archive" };
-    const body = turns.map((t) => `### ${t.role === "user" ? userName : meta.agentLabel}${t.at ? ` · ${t.at}` : ""}\n\n${t.text.trim()}`).join("\n\n");
-    const where = [meta.agentLabel, meta.cwd ? `in \`${meta.cwd}\`` : null, meta.startedAt ? `started ${meta.startedAt}` : null].filter(Boolean).join(" · ");
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${meta.title}\n\n${where}\n\n${body}\n`, "service");
+  archiveAgentSession(rel: string, meta: AgentSessionMeta, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
+    this.writeFile(rel, agentSessionFile(meta, turns, userName), "service");
     return { relPath: rel };
   }
 
   /** Append one section to the session log for `date` (YYYY-MM-DD), creating the day's file when needed. */
   appendSessionLog(date: string, section: string): { relPath: string } {
-    const rel = `evidence/sessions/${date}.md`;
-    const head = `---\n${stringifyYaml({ type: "session-log", title: `Agent sessions on ${date}`, date, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# Agent sessions on ${date}\n`;
-    const existing = this.exists(rel) ? this.read(rel).trimEnd() : head.trimEnd();
+    const machine = this.opts.machine();
+    const rel = sessionLogPath(date, machine);
+    const existing = this.exists(rel) ? this.read(rel).trimEnd() : sessionLogHead(date, machine).trimEnd();
     this.writeFile(rel, `${existing}\n\n${section.trim()}\n`, "service");
     return { relPath: rel };
   }
 
   /** Daily evidence snapshot of what a connector observed, so recall can cite it. */
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
-    const rel = `evidence/connectors/${slugify(kind)}/${today()}.md`;
-    const fm = { type: "connector-snapshot", title: `${label} on ${today()}`, source: kind, observed_at: nowIso(), provenance: "connector" };
-    const body = lines.length ? lines.join("\n") : "_The last sync returned no items._";
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${label} on ${today()}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
+    const machine = this.opts.machine();
+    const rel = connectorSnapshotPath(kind, this.today(), machine);
+    this.writeFile(rel, connectorSnapshotFile({ kind, label, day: this.today(), machine, lines }), "connector");
     return { relPath: rel };
+  }
+
+  /**
+   * The durable points of one Harness conversation, as its agent summed them
+   * up. Evidence, not curated memory: the points sit in the body, never under
+   * Current State, so recall never offers one as a current fact.
+   */
+  recordWrapUp(input: { harness: { id: string; label: string }; title: string; points: string[] }): { relPath: string; title: string; date: string } {
+    const machine = this.opts.machine();
+    const date = this.today();
+    // Redacted before it names the file: the write redacts only the content.
+    const title = redact(oneLine(input.title));
+    const planned = wrapUpPath(date, title, machine);
+    const rel = this.uniquePath(dirname(planned), basename(planned, ".md"));
+    this.writeFile(rel, wrapUpFile({ harness: input.harness, title, date, machine, points: input.points }), "service");
+    return { relPath: rel, title, date };
   }
 
   /** Protected identity record; only an explicit user settings action writes it. */
   writeIdentity(input: { name: string; email?: string; role?: string; notes?: string }, confirmed: boolean): { relPath: string } {
     const rel = "memory/self.md";
     const doc = renderMemoryDoc({
-      frontmatter: { id: "self", type: "person", title: input.name, provenance: "user-stated", protected: true, updated: today() },
+      frontmatter: { id: "self", type: "person", title: input.name, provenance: "user-stated", protected: true, updated: this.today() },
       title: input.name,
       state: [
-        { subject: "Name", date: today(), value: input.name },
-        ...(input.email ? [{ subject: "Email", date: today(), value: input.email }] : []),
-        ...(input.role ? [{ subject: "Role", date: today(), value: input.role }] : []),
+        { subject: "Name", date: this.today(), value: input.name },
+        ...(input.email ? [{ subject: "Email", date: this.today(), value: input.email }] : []),
+        ...(input.role ? [{ subject: "Role", date: this.today(), value: input.role }] : []),
       ],
       ...(input.notes ? { notes: input.notes } : {}),
-      history: [`- ${today()} — identity set from Settings`],
+      history: [`- ${this.today()} — identity set from Settings`],
     });
     this.writeFile(rel, doc, "user", { confirmedProtected: confirmed });
     return { relPath: rel };
@@ -500,49 +500,20 @@ export class MemoryStore {
   }
 }
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
-function firstWords(text: string): string {
-  const words = text.replace(/[#>*_`]/g, " ").trim().split(/\s+/).slice(0, 8).join(" ");
-  return words || "Capture";
-}
-
-export function formatSource(s: SourceRef): string {
-  const lines = s.lines ? `#L${s.lines[0]}-L${s.lines[1]}` : "";
-  const where = s.url ?? `${s.root && s.root !== "data" ? s.root + ":" : ""}${s.ref}${lines}`;
-  return `${s.label ? s.label + " " : ""}(${s.kind}: ${where}, observed ${s.observedAt.slice(0, 10)})`;
-}
-
-function sourceToYaml(s: SourceRef): Record<string, unknown> {
-  return { kind: s.kind, ref: s.ref, ...(s.root ? { root: s.root } : {}), ...(s.lines ? { lines: s.lines } : {}), ...(s.url ? { url: s.url } : {}), observed_at: s.observedAt, ...(s.label ? { label: s.label } : {}) };
+/** A History line for an event that happened today. */
+function eventLine(day: string, text: string): string {
+  return `- ${day} — ${text.replace(/\s*\n\s*/g, " ")}`;
 }
 
 function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {
   const { frontmatter, body } = splitFrontmatter(raw);
   if (!Object.keys(frontmatter).length) return raw;
-  return `---\n${stringifyYaml({ ...frontmatter, ...patch }, { lineWidth: 0 }).trimEnd()}\n---\n${body}`;
+  return withFrontmatter({ ...frontmatter, ...patch }, body);
 }
 
-function rowToChange(r: Record<string, string | null>): MemoryChange {
-  return {
-    id: r.id!,
-    docRelPath: r.doc_rel_path!,
-    change: r.change as MemoryChange["change"],
-    subject: r.subject ?? null,
-    beforeValue: r.before_value ?? null,
-    afterValue: r.after_value ?? null,
-    reason: r.reason ?? null,
-    source: r.source ?? null,
-    actor: r.actor!,
-    status: r.status as MemoryChange["status"],
-    createdAt: r.created_at!,
-    decidedAt: r.decided_at ?? null,
-  };
+/** Fingerprint of a note's text, comparable with `MemoryChange.docHash`. */
+export function noteHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
 }
+

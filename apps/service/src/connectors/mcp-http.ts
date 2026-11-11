@@ -7,6 +7,7 @@
  */
 import type { CoverageState } from "@jarvis/contracts";
 import { RemoteError, classifyStatus } from "./http.ts";
+import { sleep } from "../platform/wait.ts";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
@@ -37,7 +38,6 @@ interface PostResult {
   text: string;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function parseSse(text: string): JsonRpcResponse[] {
   const out: JsonRpcResponse[] = [];

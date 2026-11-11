@@ -9,7 +9,7 @@ import { tempDir } from "./helpers.ts";
 
 function setup() {
   const db = openDb(":memory:");
-  const store = new MemoryStore(db, null, "test");
+  const store = new MemoryStore(db, null, { instance: "test", locksDir: tempDir(), machine: () => ({ id: "00000000-0000-4000-8000-000000000001", name: "Test Machine" }) });
   const root = tempDir();
   store.open(root);
   return { db, store, root };
@@ -19,7 +19,7 @@ describe("memory store and retrieval", () => {
   it("retrieves a source-linked decision with exact line evidence", () => {
     const { db, store, root } = setup();
     const cap = store.capture({ text: "We agreed the Atlas launch moves to 14 October because QA found blocking issues.", title: "Atlas sync notes", source: { kind: "user", ref: "meeting", observedAt: "2026-09-29T10:00:00Z" } });
-    const { relPath } = store.recordDecision({ title: "Atlas launch date", decision: "Launch Atlas on 14 October", source: { kind: "capture", ref: cap.relPath, observedAt: "2026-09-29T10:00:00Z" } });
+    const { relPath } = store.createMemory({ type: "decision", title: "Atlas launch date", state: [{ subject: "Decision", value: "Launch Atlas on 14 October" }], sources: [{ kind: "capture", ref: cap.relPath, observedAt: "2026-09-29T10:00:00Z" }] }, "user");
     const hits = search(db, "When does Atlas launch?");
     expect(hits[0]?.relPath).toBe(relPath);
     const hit = hits[0]!;
@@ -30,7 +30,7 @@ describe("memory store and retrieval", () => {
 
   it("a correction replaces current state, keeps history, and changes the next retrieval", () => {
     const { db, store, root } = setup();
-    const { relPath } = store.recordDecision({ title: "Atlas launch date", decision: "Launch Atlas on 14 October", source: { kind: "user", ref: "chat", observedAt: "2026-09-29T10:00:00Z" } });
+    const { relPath } = store.createMemory({ type: "decision", title: "Atlas launch date", state: [{ subject: "Decision", value: "Launch Atlas on 14 October" }], sources: [{ kind: "user", ref: "chat", observedAt: "2026-09-29T10:00:00Z" }] }, "user");
     store.correct(relPath, { subject: "Decision", value: "Launch Atlas on 21 October", reason: "QA slipped a week" }, "user");
     const text = readFileSync(join(root, relPath), "utf8");
     const current = text.split("## History")[0]!;
@@ -77,16 +77,5 @@ describe("memory store and retrieval", () => {
     const r = store.indexer.scan(store.rootRef!);
     expect(r.indexed).toBeGreaterThanOrEqual(1);
     expect(search(db, "espresso descaling")[0]?.relPath).toBe("memory/notes/manual.md");
-  });
-
-  it("approved proposals apply; rejected proposals change nothing", () => {
-    const { db, store } = setup();
-    const { relPath } = store.createMemory({ type: "project", title: "Atlas", state: [{ subject: "Owner", value: "Mia" }] }, "user");
-    const p1 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Mentioned in standup", source: "slack", actor: "model" });
-    store.decideProposal(p1.id, "reject");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Mia");
-    const p2 = store.propose({ docRelPath: relPath, subject: "Owner", value: "Jonas", reason: "Confirmed", source: "slack", actor: "model" });
-    store.decideProposal(p2.id, "apply");
-    expect(search(db, "Atlas owner")[0]!.text).toContain("Jonas");
   });
 });

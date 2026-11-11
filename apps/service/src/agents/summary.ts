@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { repositoryLine } from "./session-log-entries.ts";
 
 /**
  * Turning a session into a session-log entry: the model is asked what is
@@ -10,7 +11,7 @@ const MAX_BULLET_CHARS = 400;
 
 export function summarySystemPrompt(userName: string): string {
   return [
-    `You summarise a finished coding-agent session for ${userName}'s second brain.`,
+    `You summarise a finished Harness session for ${userName}'s second brain.`,
     "Decide what is durably worth remembering weeks from now: decisions and their reasons, lessons learned, corrected assumptions, and stable facts about systems, people or projects.",
     "Ignore chatter, restatements of the task, file paths, command output and anything that will be false next week.",
     "Facts the session only read back from memory or notes are already remembered and do not count; decisions, reasons and lessons stated during the session do count, however briefly they were stated.",
@@ -50,8 +51,8 @@ export function parseSummary(reply: string): string[] {
 /** A readable project name: the repository for worktree checkouts, else the folder. */
 export function projectLabel(cwd: string | null): string | null {
   if (!cwd) return null;
-  const wt = /\/worktrees\/([^/]+)\/[^/]+\/?$/.exec(cwd);
-  return wt ? wt[1]! : basename(cwd.replace(/\/+$/, "")) || cwd;
+  const wt = /[\\/]worktrees[\\/]([^\\/]+)[\\/][^\\/]+[\\/]?$/.exec(cwd);
+  return wt ? wt[1]! : basename(cwd.replace(/[\\/]+$/, "")) || cwd;
 }
 
 export function localDate(iso: string | null, now = new Date()): string {
@@ -65,6 +66,8 @@ export function sessionLogSection(input: {
   agentLabel: string;
   title: string;
   cwd: string | null;
+  /** Repository keys of the folder the session ran in; they tie the entry to a project's session context. */
+  repositories: readonly string[];
   at: string | null;
   continued: boolean;
   /** null when no model was available to summarise. */
@@ -73,6 +76,7 @@ export function sessionLogSection(input: {
 }): string {
   const head = [localTime(input.at), input.agentLabel, projectLabel(input.cwd)].filter(Boolean).join(" · ");
   const lines =
-    input.bullets === null ? ["- No model is connected, so this session was saved without a summary."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
-  return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
+    input.bullets === null ? ["- No model is connected, so this session was saved without a summary, and Jarvis made no Proposals from it."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
+  const repository = repositoryLine(input.repositories);
+  return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...(repository ? [repository, ""] : []), ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
 }

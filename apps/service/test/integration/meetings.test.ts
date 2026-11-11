@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { ATLASSIAN_SITE, installScenarios } from "../fixtures/scenarios.ts";
 import { useFakeClaude } from "../fixtures/claude-connectors.ts";
+
+// Each test starts many fake Claude Code processes one after another, which is slow while other suites share the machine.
+vi.setConfig({ testTimeout: 120_000 });
 
 let svc: TestService;
 let fx: FixtureServer;
@@ -72,10 +75,10 @@ describe("meeting preparation, team recall and pending replies through claude.ai
   });
 
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {
-    await svc.post("/memory/notes", { type: "person", title: "Mia Jensen", state: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "person", title: "Mia Jensen", facts: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] }] });
     // Long enough to be indexed as several passages that all match the meeting.
     const passage = (n: number) => `Design review round ${n} with Mia Jensen. ${"Async design review notes and decisions. ".repeat(32)}`;
-    await svc.post("/memory/notes", { type: "note", title: "Design review log", state: [{ subject: "Owner", value: "Mia Jensen" }], notes: [1, 2, 3].map(passage).join("\n\n") });
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Design review log", facts: [{ subject: "Owner", value: "Mia Jensen" }], notes: [1, 2, 3].map(passage).join("\n\n") }] });
     const { job } = await svc.post("/briefings", { kind: "manual" });
     const done = await svc.waitJob(job.id);
     expect(done.job.status).toBe("succeeded");
