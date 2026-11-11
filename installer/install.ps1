@@ -17,6 +17,8 @@
 # without a byte order mark in the computer's legacy code page.
 
 $ErrorActionPreference = 'Stop'
+# Progress bars would reach a redirected error stream as serialized records.
+$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 3
 # The bundled jarvis prints UTF-8; read it as such, so paths with letters like ae, o-slash or a-ring survive.
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }

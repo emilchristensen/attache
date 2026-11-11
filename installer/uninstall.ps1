@@ -10,6 +10,7 @@
 # This file is plain ASCII on purpose (see install.ps1).
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 3
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 

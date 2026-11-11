@@ -1,11 +1,12 @@
 import { win32 } from "node:path";
 import { windowsAppData, type Env, type PlatformLocations } from "../locations.ts";
 import { runPowerShell } from "../powershell.ts";
-import type { RunResult } from "../run.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
 
 const { join } = win32;
 const WAIT_MS = 15_000;
+/** Windows PowerShell and its ScheduledTasks module can take seconds to load on a busy computer. */
+const TASK_TIMEOUT_MS = 60_000;
 /** Task states in which the service is running or about to. */
 const RUNNING = new Set(["Running", "Queued"]);
 /** Where the task definition names its owner; the script below puts the owner's account id there. */
@@ -88,19 +89,25 @@ export function logonTaskXml(loc: PlatformLocations, spec: ServiceSpec, env: Env
 `;
 }
 
-/** Every operation on the task, in one script; JARVIS_TASK_OP picks it. Task states are enum names, the same in every language. */
-const TASK_SCRIPT = `
-$name = $env:JARVIS_TASK_NAME
-$task = Get-ScheduledTask -TaskPath '\\' -TaskName $name -ErrorAction SilentlyContinue
-switch ($env:JARVIS_TASK_OP) {
-  'install' {
-    $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    Register-ScheduledTask -TaskName $name -Xml $env:JARVIS_TASK_XML.Replace('${OWNER}', $owner) -Force | Out-Null
+/**
+ * Every operation on the task, in one script; the request's `op` picks it and
+ * the reply carries the task's state. Task states are enum names, the same in
+ * every display language, unlike what schtasks.exe prints.
+ */
+const TASK_SCRIPT = String.raw`
+function Invoke-Request($req) {
+  $task = Get-ScheduledTask -TaskPath '\' -TaskName $req.name -ErrorAction SilentlyContinue
+  switch ($req.op) {
+    'install' {
+      $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+      Register-ScheduledTask -TaskName $req.name -Xml $req.xml.Replace('${OWNER}', $owner) -Force | Out-Null
+    }
+    'start' { Start-ScheduledTask -TaskPath '\' -TaskName $req.name }
+    'stop' { if ($task) { Stop-ScheduledTask -TaskPath '\' -TaskName $req.name } }
+    'uninstall' { if ($task) { Unregister-ScheduledTask -TaskPath '\' -TaskName $req.name -Confirm:$false } }
   }
-  'start' { Start-ScheduledTask -TaskPath '\\' -TaskName $name }
-  'stop' { if ($task) { Stop-ScheduledTask -TaskPath '\\' -TaskName $name } }
-  'state' { if ($task) { [string]$task.State } else { 'Missing' } }
-  'uninstall' { if ($task) { Unregister-ScheduledTask -TaskPath '\\' -TaskName $name -Confirm:$false } }
+  $now = Get-ScheduledTask -TaskPath '\' -TaskName $req.name -ErrorAction SilentlyContinue
+  return @{ ok = $true; state = $(if ($now) { [string]$now.State } else { 'Missing' }) }
 }
 `;
 
@@ -117,19 +124,15 @@ export class TaskSchedulerServiceManager implements ServiceManager {
     this.env = env;
   }
 
-  private task(op: string, vars: Record<string, string> = {}): Promise<RunResult> {
-    return runPowerShell(TASK_SCRIPT, { JARVIS_TASK_OP: op, JARVIS_TASK_NAME: this.name, ...vars });
+  /** Run one operation on the task; returns the task's state afterwards (`Missing` when there is none). */
+  private async task(op: string, extra: Record<string, string> = {}): Promise<string> {
+    const r = await runPowerShell(TASK_SCRIPT, { op, name: this.name, ...extra }, { env: this.env, timeoutMs: TASK_TIMEOUT_MS });
+    if (!r.ok) throw new Error(op === "state" ? `Task Scheduler could not say how the logon task ${this.name} is: ${r.why}` : `Task Scheduler could not ${op} the logon task ${this.name}: ${r.why}`);
+    return String(r.reply.state);
   }
 
-  private async must(op: string, vars: Record<string, string> = {}): Promise<void> {
-    const r = await this.task(op, vars);
-    if (r.code !== 0) throw new Error(`Task Scheduler could not ${op} the logon task ${this.name}: ${r.stderr.trim() || `exit ${r.code}`}`);
-  }
-
-  private async state(): Promise<string> {
-    const r = await this.task("state");
-    if (r.code !== 0) throw new Error(`Task Scheduler could not say how the logon task ${this.name} is: ${r.stderr.trim() || `exit ${r.code}`}`);
-    return r.stdout.trim();
+  private state(): Promise<string> {
+    return this.task("state");
   }
 
   private async waitFor(want: boolean, failure: string): Promise<void> {
@@ -141,7 +144,7 @@ export class TaskSchedulerServiceManager implements ServiceManager {
   }
 
   async install(spec: ServiceSpec): Promise<void> {
-    await this.must("install", { JARVIS_TASK_XML: logonTaskXml(this.loc, spec, this.env) });
+    await this.task("install", { xml: logonTaskXml(this.loc, spec, this.env) });
   }
 
   async loaded(): Promise<boolean> {
@@ -152,17 +155,17 @@ export class TaskSchedulerServiceManager implements ServiceManager {
     const state = await this.state();
     if (state === "Missing") throw new Error(`Jarvis is not set up as a background service here: the logon task ${this.name} is missing. Run the Jarvis installer again.`);
     if (RUNNING.has(state)) await this.stop();
-    await this.must("start");
+    await this.task("start");
     await this.waitFor(true, `Task Scheduler did not start the logon task ${this.name}`);
   }
 
   async stop(): Promise<void> {
-    await this.must("stop");
+    await this.task("stop");
     await this.waitFor(false, `Task Scheduler did not stop the logon task ${this.name}`);
   }
 
   async uninstall(): Promise<void> {
     await this.stop();
-    await this.must("uninstall");
+    await this.task("uninstall");
   }
 }

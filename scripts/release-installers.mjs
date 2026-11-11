@@ -27,6 +27,7 @@ const OFFSET_DIGITS = 12;
 /** What the Windows header runs: copy the zip after the header out, unpack it with .NET, run install.ps1. */
 function unpackScript(version, offset) {
   return `$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $work = Join-Path ([IO.Path]::GetTempPath()) ('jarvis-install-' + [guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($work)
 try {

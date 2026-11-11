@@ -101,10 +101,19 @@ describe("the background service on Windows", () => {
 });
 
 describe.runIf(process.platform === "win32")("the logon task in Task Scheduler", () => {
-  const inspect = async (script: string, vars: Record<string, string>) => {
-    const r = await runPowerShell(script, vars);
-    expect(r.stderr).toBe("");
-    return r.stdout.trim();
+  /** What Task Scheduler itself says about a task, as Windows PowerShell's ScheduledTasks module reports it. */
+  const inspect = async (name: string) => {
+    const script = String.raw`
+function Invoke-Request($req) {
+  $t = Get-ScheduledTask -TaskPath '\' -TaskName $req.name -ErrorAction SilentlyContinue
+  if (-not $t) { return @{ ok = $true; present = $false } }
+  $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+  return @{ ok = $true; present = $true; trigger = [string]$t.Triggers[0].CimClass.CimClassName; triggerUser = [string]$t.Triggers[0].UserId; logonType = [string]$t.Principal.LogonType; runLevel = [string]$t.Principal.RunLevel; me = @($me.Name, $me.User.Value) }
+}
+`;
+    const r = await runPowerShell(script, { name }, { timeoutMs: 60_000 });
+    if (!r.ok) throw new Error(r.why);
+    return r.reply as { present: boolean; trigger?: string; triggerUser?: string; logonType?: string; runLevel?: string; me?: string[] };
   };
 
   it("starts the bundled runtime from a folder named with æøå without a window, stops with everything it started, and is removed again", async () => {
@@ -123,14 +132,10 @@ describe.runIf(process.platform === "win32")("the logon task in Task Scheduler",
     const jarvis = (args: string[]) => jarvisCli(args, env);
     try {
       expect(jarvis(["service", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7997"]).stderr).toBe("");
-      const definition = JSON.parse(
-        await inspect(
-          "$t = Get-ScheduledTask -TaskName $env:N; $me = [Security.Principal.WindowsIdentity]::GetCurrent(); @{ trigger = $t.Triggers[0].CimClass.CimClassName; triggerUser = $t.Triggers[0].UserId; logonType = [string]$t.Principal.LogonType; runLevel = [string]$t.Principal.RunLevel; me = @($me.Name, $me.User.Value) } | ConvertTo-Json -Compress",
-          { N: task },
-        ),
-      );
-      expect(definition).toMatchObject({ trigger: "MSFT_TaskLogonTrigger", logonType: "Interactive", runLevel: "Limited" });
-      expect(definition.me.map((m: string) => m.toLowerCase())).toContain(definition.triggerUser.toLowerCase());
+      // Only the owner's own logon starts it, and it runs as the owner, without raised rights.
+      const definition = await inspect(task);
+      expect(definition).toMatchObject({ present: true, trigger: "MSFT_TaskLogonTrigger", logonType: "Interactive", runLevel: "Limited" });
+      expect(definition.me!.map((m) => m.toLowerCase())).toContain(definition.triggerUser!.toLowerCase());
 
       expect(jarvis(["start"]).stderr).toBe("");
       const started = await eventually("the task to start the release", () => (existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : null));
@@ -142,7 +147,7 @@ describe.runIf(process.platform === "win32")("the logon task in Task Scheduler",
       await eventually("the release the task started to stop", () => (alive(started.pid) ? null : true), 15_000);
 
       expect(jarvis(["service", "uninstall"]).stderr).toBe("");
-      expect(await inspect("if (Get-ScheduledTask -TaskName $env:N -ErrorAction SilentlyContinue) { 'present' } else { 'gone' }", { N: task })).toBe("gone");
+      expect(await inspect(task)).toEqual({ ok: true, present: false });
     } finally {
       jarvis(["service", "uninstall"]);
     }
