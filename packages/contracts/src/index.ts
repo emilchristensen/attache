@@ -223,9 +223,19 @@ export const CorrectionInput = z.object({
   reason: z.string().min(1).max(1000),
 });
 
+/** A calendar day written YYYY-MM-DD, as the Brain dates facts. */
+export const CalendarDay = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "must be a day written YYYY-MM-DD")
+  .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d), "must be a real calendar day");
+
 const SaveFact = z.object({
   subject: z.string().trim().min(1).max(100).describe("What the fact is about, e.g. Status or Role. One current value per subject."),
   value: z.string().trim().min(1).max(5000).describe("The current value."),
+  review: CalendarDay.optional().describe(
+    "Optional Review date, YYYY-MM-DD and after today: the day after which this fact should be checked again. Set it for a fact you expect to change, such as a status, a plan or a deadline. Past it the fact stays in the Brain, shown as unverified. Without one, a correction clears the old Review date.",
+  ),
 });
 const SaveEvent = z.string().trim().min(1).max(2000).describe("Something that happened, appended to the note's History.");
 
@@ -370,6 +380,9 @@ export interface RecentChangeView {
   subject: string | null;
   oldValue: string | null;
   newValue: string | null;
+  /** For a fact: its Review date before and after the change, null when it had none. */
+  oldReview: string | null;
+  newReview: string | null;
   source: {
     /** Harness integration kind, e.g. `claude-code`. */
     harness: string | null;
@@ -395,6 +408,8 @@ export interface MemoryAuditEntry {
   subject: string;
   value: string;
   date: string;
+  /** The day after which the fact should be checked again; null when none is set. */
+  review: string | null;
   ageDays: number;
   source: string | null;
   line: number;

@@ -1,3 +1,5 @@
+import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
+
 /**
  * The memory block a coding agent receives when a session starts. It goes
  * into every session on the machine, so it stays small: who the user is, an
@@ -8,8 +10,8 @@ export interface ContextInput {
   now: Date;
   dataFolder: string;
   identity: { name: string; email?: string; role?: string } | null;
-  /** Most recently updated first; `gist` is the note's first current fact. */
-  memory: Array<{ type: string; title: string; gist?: string }>;
+  /** Most recently updated first; `gist` is the note's first current fact, `gistReview` that fact's Review date. */
+  memory: Array<{ type: string; title: string; gist?: string; gistReview?: string }>;
   recentLogs: Array<{ date: string; body: string }>;
   searchCommand: string;
   /** The project whose repository the session runs in; absent in the global context. */
@@ -20,7 +22,7 @@ export interface ProjectSection {
   title: string;
   /** Absolute path of the project note. */
   path: string;
-  state: Array<{ subject: string; date: string; value: string }>;
+  state: Array<{ subject: string; date: string; review?: string; value: string }>;
 }
 
 /** Notes per type whose first fact (the gist) every new session reads. */
@@ -32,8 +34,11 @@ export const TYPE_LABEL: Record<string, string> = { person: "People", project: "
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
-function projectSection(p: ProjectSection): string[] {
-  const facts = p.state.map((f) => `- **${f.subject}** (${f.date}): ${f.value.replace(/\s+/g, " ").trim()}`);
+/** ` (unverified: …)` after a fact past its Review date, so a Harness does not repeat it as current. */
+const unverified = (review: string | undefined, now: Date) => (review && isPastReview(review, now) ? ` (${unverifiedLabel(review)})` : "");
+
+function projectSection(p: ProjectSection, now: Date): string[] {
+  const facts = p.state.map((f) => `- **${f.subject}** (${f.date}): ${f.value.replace(/\s+/g, " ").trim()}${unverified(f.review, now)}`);
   return [`### This session's project: ${p.title}`, "", `This session runs in one of the project's repositories. Its note: ${p.path}`, ...(facts.length ? ["", ...facts] : [])];
 }
 
@@ -44,14 +49,14 @@ export function buildSessionContext(c: ContextInput): string {
     if (c.identity.email) out.push(`- Email: ${c.identity.email}`);
     if (c.identity.role) out.push(`- Role: ${c.identity.role}`);
   }
-  if (c.project) out.push("", ...projectSection(c.project));
+  if (c.project) out.push("", ...projectSection(c.project, c.now));
   const byType = new Map<string, ContextInput["memory"]>();
   for (const m of c.memory) byType.set(m.type, [...(byType.get(m.type) ?? []), m]);
   if (byType.size) {
     out.push("", "### What Jarvis remembers", "", "Curated notes in the data folder's `memory/`, most recently updated first.");
     for (const [type, notes] of byType) {
       out.push("", `${TYPE_LABEL[type] ?? type}:`);
-      for (const n of notes.slice(0, MAX_DETAILED_PER_TYPE)) out.push(`- ${n.title}${n.gist ? `: ${clip(n.gist, MAX_GIST_CHARS)}` : ""}`);
+      for (const n of notes.slice(0, MAX_DETAILED_PER_TYPE)) out.push(`- ${n.title}${n.gist ? `: ${clip(n.gist, MAX_GIST_CHARS)}${unverified(n.gistReview, c.now)}` : ""}`);
       const rest = notes.slice(MAX_DETAILED_PER_TYPE);
       const named = rest.slice(0, MAX_TITLES_PER_TYPE);
       if (named.length) out.push(`- Also: ${named.map((n) => n.title).join("; ")}${rest.length > named.length ? `; and ${rest.length - named.length} more` : ""}`);

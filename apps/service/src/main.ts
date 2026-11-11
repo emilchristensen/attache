@@ -7,6 +7,7 @@ import { openDb } from "./core/db.ts";
 import { createBackup, restoreBackup } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, search } from "./memory/search.ts";
+import { unverifiedLabel } from "./memory/review-date.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
@@ -94,10 +95,12 @@ async function searchCmd(argv: string[]) {
       lines: [h.startLine, h.endLine],
       title: h.title,
       snippet: h.snippet,
+      review: h.review,
+      unverified: h.unverified,
     }));
     if (argv.includes("--json")) return out(JSON.stringify(hits));
     if (!hits.length) return out(`No matches for "${query}".`);
-    out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}\n    ${h.snippet}`).join("\n"));
+    out(hits.map((h) => `${h.file}:${h.lines[0]}-${h.lines[1]}  ${h.title}${h.unverified && h.review ? `  (${unverifiedLabel(h.review)})` : ""}\n    ${h.snippet}`).join("\n"));
   } finally {
     db.close();
   }
