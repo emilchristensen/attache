@@ -5,6 +5,7 @@ import type { MachineIdentity } from "../core/machine.ts";
 import type { MemoryChange } from "../memory/store.ts";
 import type { Clock, TimerHandle } from "./clock.ts";
 import { Git, GitError, gitVersion } from "./git.ts";
+import { gitMissingMessage } from "../platform/git-install.ts";
 import { authorEnv, BrainRepo } from "./brain-repo.ts";
 import { commitMessage, machineTrailer } from "./commit-message.ts";
 import { normalizeRemote, RemoteError } from "./remote.ts";
@@ -399,7 +400,7 @@ export class Replication {
     const current = this.settings.get();
     if (current) throw new ReplicationSetupError(409, "already_set_up", `Replication is already on for this Machine, with ${current.remote}.`);
     if (this.busy) throw new ReplicationSetupError(409, "busy", "Replication is being set up already. Wait for it to finish.");
-    if (!gitVersion()) throw new ReplicationSetupError(409, "git_missing", "Replication runs git, which is not installed on this Machine. Install git, then try again.");
+    if (!gitVersion()) throw new ReplicationSetupError(409, "git_missing", gitMissingMessage());
     this.busy = true;
     try {
       return await run();

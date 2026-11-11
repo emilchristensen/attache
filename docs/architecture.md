@@ -121,7 +121,11 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   Switching off deletes the row and nothing else: the data folder, its `.git` and the remote stay as they are.
   Setup on a Jarvis-managed repository whose history the remote shares (fetched into a scratch ref, `refs/jarvis/candidate`) resumes instead of refusing, and the next check merges both sides.
   A data folder other than the one Replication was set up for reads as blocked.
-- **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`), commits and pushes.
+- **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`, put first in a file the owner already had, so their own lines still apply), commits and pushes.
+  Setup and join first check that git runs (`gitVersion`), else refuse with `git_missing` and the way to install git on this operating system (`platform/git-install.ts`); on Windows git is also looked for where Git for Windows installs it, for a service whose PATH predates the install.
+- **Line endings.** The Brain is LF on every Machine.
+  Git stores and checks out LF through `.gitattributes`, and Jarvis runs git with `core.autocrlf=false` and `core.safecrlf=false`, so neither Git for Windows' default `autocrlf` nor an owner's `safecrlf` can change a note or refuse the commit of one an editor saved with CRLF.
+  Jarvis reads CRLF notes like LF ones (`toLf` in `memory/markdown.ts`, used by the parser and `MemoryStore.read`), and `MemoryStore` writes LF only, whatever line breaks a save's text came with.
   It refuses a remote whose `main` already has commits.
   Join clones `main` into an empty folder, then opens it like `/setup/data-folder`, which indexes it.
   A folder that is not empty is refused with `not_empty`, after `createBackup` archives it with the database to `backups/jarvis-backup-<time>-before-join.tar.gz`; the error's `details.backup` names the archive.

@@ -210,4 +210,25 @@ describe("Replication between Machines", () => {
     }
     expect((await single.get("/replication")).status).toBe("off");
   });
+
+  it("checks that git is installed before setting up or joining, and says how to get it on this operating system", async () => {
+    single = await startTestService();
+    const howTo = { darwin: "xcode-select --install", linux: "package manager", win32: "https://git-scm.com/download/win" }[process.platform as string] ?? "git";
+    const before = process.env.JARVIS_GIT_BIN;
+    process.env.JARVIS_GIT_BIN = join(single.stateDir, "no-git-here", process.platform === "win32" ? "git.exe" : "git");
+    try {
+      for (const [path, body] of [["/replication/setup", { remote: "owner/brain" }], ["/replication/join", { remote: "owner/brain", path: join(single.stateDir, "joined") }]] as const) {
+        const r = await single.call("POST", path, body);
+        expect(r.status).toBe(409);
+        expect(r.body.error.code).toBe("git_missing");
+        expect(r.body.error.message).toContain("git is not installed");
+        expect(r.body.error.message).toContain(howTo);
+      }
+    } finally {
+      if (before === undefined) delete process.env.JARVIS_GIT_BIN;
+      else process.env.JARVIS_GIT_BIN = before;
+    }
+    expect((await single.get("/replication")).status).toBe("off");
+    expect(existsSync(join(single.dataDir, ".git"))).toBe(false);
+  });
 });

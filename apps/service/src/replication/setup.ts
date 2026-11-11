@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { classifyFailure, Git, GitError } from "./git.ts";
 import { BRANCH, REMOTE } from "./brain-repo.ts";
 import type { ReplicationSeams } from "./seams.ts";
+import { toLf } from "../memory/markdown.ts";
 
 /** A setup or join the owner has to change something for; `status` and `code` are the API's. */
 export class ReplicationSetupError extends Error {
@@ -24,8 +25,22 @@ export class ReplicationSetupError extends Error {
  */
 export const IGNORED = [".jarvis/", ".*.tmp", ".DS_Store", "Thumbs.db", ".obsidian/workspace*.json"];
 
-/** Notes are text with LF line endings on every Machine, Windows included. */
-export const ATTRIBUTES = "* text=auto eol=lf\n";
+/**
+ * Notes are text with LF line endings on every Machine, Windows included:
+ * git stores a note an editor saved with CRLF as LF, and checks every note
+ * out as LF, whatever `core.autocrlf` says.
+ */
+export const LF_ATTRIBUTE = "* text=auto eol=lf";
+
+/**
+ * Pin the Brain to LF. The line goes first, as the default: an owner's own
+ * attributes for some files (say, `*.png binary`) come after it and still apply.
+ */
+function pinLineEndings(file: string): void {
+  const existing = existsSync(file) ? toLf(readFileSync(file, "utf8")) : "";
+  if (existing.split("\n").some((l) => l.trim() === LF_ATTRIBUTE)) return;
+  writeFileSync(file, `${LF_ATTRIBUTE}\n${existing}`);
+}
 
 /** Marks a repository as one Jarvis made, so setup can be finished after it was interrupted. */
 const MANAGED_KEY = "jarvis.managed";
@@ -87,7 +102,7 @@ export function prepareRepository(git: Git, remote: string): void {
   }
   git.okSync(["config", MANAGED_KEY, "true"]);
   ensureLines(join(root, ".gitignore"), IGNORED);
-  if (!existsSync(join(root, ".gitattributes"))) writeFileSync(join(root, ".gitattributes"), ATTRIBUTES);
+  pinLineEndings(join(root, ".gitattributes"));
   const remotes = git.okSync(["remote"]).split("\n").map((r) => r.trim());
   git.okSync(remotes.includes(REMOTE) ? ["remote", "set-url", REMOTE, remote] : ["remote", "add", REMOTE, remote]);
 }

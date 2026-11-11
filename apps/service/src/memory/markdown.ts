@@ -40,9 +40,19 @@ export interface StateEntry {
   line: number;
 }
 
-const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const FM_RE = /^---\n([\s\S]*?)\n---\n?/;
 
-export function splitFrontmatter(raw: string): { frontmatter: Record<string, unknown>; body: string; bodyStartLine: number; error?: string } {
+/**
+ * A note's text with LF line endings. An editor on Windows may save a note
+ * with CRLF; Jarvis reads it the same, and everything it writes is LF, as
+ * the Brain repository stores it on every Machine.
+ */
+export function toLf(text: string): string {
+  return text.includes("\r\n") ? text.replace(/\r\n/g, "\n") : text;
+}
+
+export function splitFrontmatter(text: string): { frontmatter: Record<string, unknown>; body: string; bodyStartLine: number; error?: string } {
+  const raw = toLf(text);
   const m = FM_RE.exec(raw);
   if (!m) return { frontmatter: {}, body: raw, bodyStartLine: 1 };
   let frontmatter: Record<string, unknown> = {};
@@ -104,12 +114,12 @@ const STATE_RE = /^- \*\*(.+?)\*\* \((\d{4}-\d{2}-\d{2})(?:\s*,\s*[Rr]eview:?\s*
 
 /** One `- **Subject** (date[, review date]): value — source: …` line, or null when the line is not a state entry. */
 export function parseStateLine(line: string): Omit<StateEntry, "line"> | null {
-  const m = STATE_RE.exec(line);
+  const m = STATE_RE.exec(line.endsWith("\r") ? line.slice(0, -1) : line);
   return m ? { subject: m[1]!, date: m[2]!, ...(m[3] ? { review: m[3] } : {}), value: m[4]!, ...(m[5] ? { source: m[5] } : {}) } : null;
 }
 
 export function parseStateEntries(raw: string): StateEntry[] {
-  const lines = raw.split("\n");
+  const lines = toLf(raw).split("\n");
   const out: StateEntry[] = [];
   let inState = false;
   lines.forEach((line, i) => {
@@ -168,7 +178,7 @@ export function applyStateCorrection(
   entry: StateEntryInput,
   reason: string,
 ): { text: string; previous: StateEntry | null } {
-  const lines = raw.split("\n");
+  const lines = toLf(raw).split("\n");
   const entries = parseStateEntries(raw);
   const previous = entries.find((e) => e.subject.toLowerCase() === entry.subject.toLowerCase()) ?? null;
   const newLine = formatStateEntry(entry);
@@ -202,7 +212,7 @@ export function applyStateCorrection(
 export function removeStateEntry(raw: string, entry: { subject: string; date: string }, reason: string): { text: string; removed: StateEntry | null } {
   const removed = parseStateEntries(raw).find((e) => e.subject.toLowerCase() === entry.subject.toLowerCase()) ?? null;
   if (!removed) return { text: raw, removed: null };
-  const lines = raw.split("\n");
+  const lines = toLf(raw).split("\n");
   let end = removed.line;
   while (end < lines.length && /^\s+\S/.test(lines[end]!)) end++;
   const text = [...lines.slice(0, removed.line - 1), ...lines.slice(end)].join("\n");
@@ -218,7 +228,7 @@ export function formerValueLine(date: string, former: Omit<StateEntry, "line">, 
 }
 
 export function appendHistory(raw: string, line: string): string {
-  const trimmed = raw.replace(/\s+$/, "");
+  const trimmed = toLf(raw).replace(/\s+$/, "");
   if (/^#{1,6}\s+history\s*$/im.test(trimmed)) {
     // History is the last section by construction; if not, append at file end regardless.
     return `${trimmed}\n${line}\n`;
