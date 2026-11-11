@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, writeFileSync, rmSync } from "node:fs";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
@@ -11,7 +11,7 @@ import { unverifiedLabel } from "./memory/review-date.ts";
 import { AgentHooks } from "./agents/install.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
-import { auditCommand, saveCommand, type CliIo } from "./cli/memory-commands.ts";
+import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
 import { credentialsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
 import { currentOs } from "./platform/os.ts";
 import { openUrl } from "./platform/open-url.ts";
@@ -106,7 +106,7 @@ async function searchCmd(argv: string[]) {
   }
 }
 
-/** Inspect or remove this install's coding-agent hooks (the uninstaller calls `agent-hooks uninstall`). */
+/** Inspect or remove this install's hooks and MCP server in each Harness (the uninstaller calls `agent-hooks uninstall`). */
 async function agentHooksCmd(argv: string[]) {
   const paths = resolvePaths(arg("state-dir", argv));
   const hooks = new AgentHooks(paths.stateDir, paths.backupsDir);
@@ -118,21 +118,21 @@ async function agentHooksCmd(argv: string[]) {
   if (sub === "status") {
     return out(JSON.stringify(agents.map((a) => {
       const s = hooks.status(a);
-      return { agent: a.kind, path: s.path, hooks: s.installed.length, current: s.current, rules: s.rules, skills: s.skills };
+      return { agent: a.kind, path: s.path, hooks: s.installed.length, mcp: s.mcp.registered ? s.mcp.path : null, current: s.current, rules: s.rules };
     })));
   }
   if (sub === "uninstall") {
     const results = hooks.uninstallAll(agents);
     out(JSON.stringify(results));
     const failed = results.filter((r) => r.error);
-    if (failed.length) throw new Error(`Could not remove the Jarvis hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the entries that mention jarvis-agent-hook by hand.`);
+    if (failed.length) throw new Error(`Could not remove the Jarvis hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention jarvis-agent-hook and the MCP server that runs \`jarvis mcp\` by hand.`);
     return;
   }
-  throw new Error("Usage: jarvis agent-hooks status|uninstall [--agent claude-code|codex|antigravity]");
+  throw new Error(`Usage: jarvis agent-hooks status|uninstall [--agent ${AGENT_INTEGRATIONS.map((a) => a.kind).join("|")}]`);
 }
 
 function cliIo(): CliIo {
-  return { out, readStdin: () => (process.stdin.isTTY ? "" : readFileSync(0, "utf8")), cwd: process.cwd(), env: process.env };
+  return { out, cwd: process.cwd() };
 }
 
 function platformIo(argv: string[]): PlatformCliIo {
@@ -157,8 +157,6 @@ async function main() {
       return searchCmd(argv);
     case "agent-hooks":
       return agentHooksCmd(argv);
-    case "save":
-      return saveCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "audit":
       return auditCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "mcp":
@@ -196,7 +194,7 @@ async function main() {
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, save, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, paths`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, paths`);
   }
 }
 
