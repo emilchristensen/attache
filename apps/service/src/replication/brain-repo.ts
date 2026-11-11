@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Git, GitError } from "./git.ts";
 import { machineTrailer, type StagedEntry } from "./commit-message.ts";
@@ -9,6 +9,8 @@ export const BRANCH = "main";
 export const REMOTE = "origin";
 const TRACKING = `refs/remotes/${REMOTE}/${BRANCH}`;
 const MACHINE_EMAIL_DOMAIN = "machine.jarvis.invalid";
+/** Locks, under `.git`, that the git commands Replication runs take while they change the repository. */
+const LOCK_FILES = ["index.lock", "HEAD.lock", "ORIG_HEAD.lock", `refs/heads/${BRANCH}.lock`, `${TRACKING}.lock`];
 
 export type CommitOutcome = { kind: "nothing" } | { kind: "committed"; staged: StagedEntry[] } | { kind: "refused"; verdict: Exclude<GuardVerdict, { ok: true }> };
 
@@ -105,11 +107,36 @@ export class BrainRepo {
     return { kind: "committed", staged };
   }
 
-  /** A merge a crash interrupted is abandoned, so the next check starts it again cleanly. */
-  abortInterruptedMerge(): boolean {
-    if (!existsSync(join(this.root, ".git", "MERGE_HEAD"))) return false;
+  /**
+   * Remove the lock files a git command leaves behind when it is killed, as in
+   * a crash. Only locks older than `before` (when this service started) are
+   * removed: a lock made since then belongs to a git command that is still running.
+   */
+  removeStaleLocks(before: number): string[] {
+    const removed: string[] = [];
+    for (const rel of LOCK_FILES) {
+      const abs = join(this.root, ".git", rel);
+      try {
+        if (statSync(abs).mtimeMs > before) continue;
+      } catch {
+        continue;
+      }
+      rmSync(abs, { force: true });
+      removed.push(rel);
+    }
+    return removed;
+  }
+
+  /**
+   * A merge a crash interrupted is abandoned, so the next check starts it again
+   * cleanly. Returns the files the abandoned merge had changed, which are back
+   * as they were before it, or null when no merge was in progress.
+   */
+  abortInterruptedMerge(): string[] | null {
+    if (!existsSync(join(this.root, ".git", "MERGE_HEAD"))) return null;
+    const touched = splitZ(this.git.okSync(["diff", "--name-only", "--no-renames", "-z", "HEAD"]));
     this.git.okSync(["merge", "--abort"]);
-    return true;
+    return touched;
   }
 
   /** Commits on this Machine that the remote does not have yet. */

@@ -5,6 +5,8 @@
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
 
+import { deletedAndChangedRule } from "./deleted-and-changed.ts";
+
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
   /** Null when a commit does not say (made outside Jarvis). */
@@ -32,6 +34,8 @@ export interface MergeNotice {
   path: string;
   kind: string;
   message: string;
+  /** A short headline for the inbox item; a generic one naming the path when left out. */
+  title?: string;
 }
 
 export interface MergeOutcome {
@@ -89,5 +93,6 @@ export const MACHINE_CREDENTIALS: GitCredentials = { config: () => [], env: () =
 
 /** The seams in use. Merge rules, guards and credentials are added here as they are built. */
 export function defaultSeams(): ReplicationSeams {
-  return { mergeRules: [], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
+  // A note deleted on one side and changed on the other comes first: the rules for notes both sides changed need both versions.
+  return { mergeRules: [deletedAndChangedRule], commitGuards: [], remoteGuards: [], credentials: MACHINE_CREDENTIALS };
 }

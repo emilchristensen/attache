@@ -32,6 +32,7 @@ import { agentAdapter } from "./connectors/agent.ts";
 import { systemClock, type Clock } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { defaultSeams } from "./replication/seams.ts";
+import { raiseMergeNotices } from "./replication/merge-notice-inbox.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -105,8 +106,13 @@ export class App {
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.bus.emit("event", { type: "replication.changed" }),
+      // Loaded when needed: the backup module imports this one.
+      backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
     });
     this.replication.onPulled((paths) => this.reindexPulled(paths));
+    this.replication.onMergeNotice((notices) => {
+      if (raiseMergeNotices(this.db, notices, this.clock.now()).length) this.bus.emit("event", { type: "attention.changed" });
+    });
     this.bus.setMaxListeners(500);
     this.meaning = new MeaningSearch(
       { db: this.db, modelsDir: this.paths.modelsDir, log: this.log, emit: () => this.bus.emit("event", { type: "meaning.changed" }) },

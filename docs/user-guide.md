@@ -270,6 +270,9 @@ Each Machine needs git installed.
   A repository that already holds a Brain is refused, so two Brains are never mixed.
 - **Join** from another Machine: `jarvis replication join owner/jarvis-brain --data-folder ~/Documents/Jarvis`.
   The folder must be empty or not exist yet.
+  A folder that is not empty may hold a Brain of its own, and Jarvis never merges two Brains, so the join is refused.
+  Jarvis backs that folder up first, together with its database, to the `backups/` folder, and the refusal names the archive; it changes nothing in the folder.
+  Move the folder aside or name an empty one, then join again; `jarvis restore` brings the backup back if you need it.
   Jarvis clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
 - **Status:** `jarvis replication status` says off, up to date, offline, unauthorized or blocked, with the cause when there is one.
   `jarvis replication check` replicates now instead of waiting for the next check.
@@ -285,9 +288,29 @@ What happens on its own:
 - Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
 - A note is never left with conflict markers.
   Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
+- If the service stops in the middle of a merge, for example in a crash or a power cut, it abandons the half-done merge when it starts again, leaves the folder as it was before, and merges again.
+- A note you delete, in Jarvis or in an editor, disappears from every Machine and from their search.
+- A note deleted on one Machine and changed on another before they saw each other's change is kept, with the change, on every Machine.
+  One inbox item names the note and both Machines; delete the note again if it should go.
 
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
+
+### Deleted notes stay in git history
+
+Deleting a note removes it from the Brain, not from the repository's history: every earlier version stays in git, on GitHub and on every Machine's copy.
+Jarvis never rewrites history, so it cannot erase it for you.
+To purge a note that must not be kept, for example one holding a secret:
+
+1. Check that `jarvis replication status` says up to date on every Machine, so nothing is waiting to be pushed, then run `jarvis stop` on every Machine.
+2. On one Machine, clone the repository into a new folder outside the data folder and rewrite its history without the file, for example with [git filter-repo](https://github.com/newren/git-filter-repo): `git filter-repo --invert-paths --path memory/notes/the-note.md`.
+   filter-repo removes the clone's remote, so add it back (`git remote add origin <repository>`) and run `git push --force origin main`.
+   On GitHub, branch protection must allow the force-push, and GitHub support can remove cached views of old commits.
+3. On every Machine, in the data folder, replace the old history with the rewritten one: `git fetch origin`, `git reset --hard origin/main`, `git reflog expire --expire=now --all` and `git gc --prune=now`.
+   Otherwise the next merge would bring the old history back.
+4. Run `jarvis start` on every Machine, and delete the clone from step 2.
+
+A secret that was ever pushed should be treated as exposed: rotate it as well.
 
 ## Where things live
 
