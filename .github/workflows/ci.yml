@@ -35,22 +35,30 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        id: install
         run: pnpm install --frozen-lockfile
 
+      # Each check runs even when an earlier one failed, so one run shows every failure.
       - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm lint --max-warnings 0
 
       - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm typecheck
 
       - name: Unit and integration tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm test
 
       # The journeys use the installed Google Chrome channel; the runner images ship it.
       - name: Google Chrome
+        id: chrome
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npx playwright install chrome || npx playwright install --force chrome
 
       - name: Browser journeys
+        if: ${{ !cancelled() && steps.chrome.outcome == 'success' }}
         run: pnpm e2e
 
       - name: Upload test results

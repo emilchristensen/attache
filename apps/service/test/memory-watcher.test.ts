@@ -160,4 +160,15 @@ describe("FolderWatcher", () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(s.paths()).toEqual(["memory/notes/z.md"]);
   });
+
+  it("watches the folder again once it comes back after going missing", async () => {
+    const s = setup();
+    const w = await watcher(s, { retryMs: 50 });
+    rmSync(s.path, { recursive: true });
+    await until(() => !w.watching);
+    note(s.path, "memory/notes/z.md");
+    await until(() => s.paths().join() === "memory/notes/z.md");
+    note(s.path, "memory/notes/z.md", "The zebrafish migration slipped to December.");
+    await until(() => search(s.db, "December").length === 1);
+  });
 });

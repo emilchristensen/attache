@@ -95,9 +95,11 @@ export class FolderWatcher {
       }
     }
     // A missing root (unmounted or moved away) would look like every file was deleted.
-    if (scan && !existsSync(this.root.path)) {
-      this.log.warn("data folder is missing; index left as it was", { root: this.root.id, path: this.root.path });
+    if (!existsSync(this.root.path)) {
+      if (scan) this.log.warn("data folder is missing; index left as it was", { root: this.root.id, path: this.root.path });
       scan = false;
+      // The OS watcher of a removed folder may stay silent forever (Linux): re-arm once it is back.
+      if (this.fsWatcher) this.fail(new Error("data folder is missing"));
     }
     if (scan) {
       const r = this.indexer.scan(this.root);
@@ -108,6 +110,11 @@ export class FolderWatcher {
   }
 
   private arm(): void {
+    // Some platforms watch a missing folder without an error (Linux on Node 24.18), so check first.
+    if (!existsSync(this.root.path)) {
+      this.fail(new Error("data folder is missing"));
+      return;
+    }
     try {
       this.fsWatcher = watch(this.root.path, { recursive: true, persistent: false }, (_event, filename) => this.queue(filename ? String(filename) : null));
       this.fsWatcher.on("error", (e) => this.fail(e));
