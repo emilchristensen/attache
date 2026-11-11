@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdir
 import { basename, dirname, join } from "node:path";
 import { type Db, nowIso, json, tx } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
-import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter } from "./markdown.ts";
+import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, removeStateEntry, renderMemoryDoc, slugify, splitFrontmatter, toLf } from "./markdown.ts";
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
@@ -194,9 +194,10 @@ export class MemoryStore {
 
   // ---- low-level -----------------------------------------------------------
 
+  /** A file's text, with LF line endings however an editor saved it. */
   read(rel: string): string {
     const abs = resolveInside(this.requireRoot(), rel);
-    return readFileSync(abs, "utf8");
+    return toLf(readFileSync(abs, "utf8"));
   }
 
   exists(rel: string): boolean {
@@ -214,7 +215,9 @@ export class MemoryStore {
     mkdirSync(dirname(abs), { recursive: true });
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
     // Archived evidence and generated deliverables never keep credentials that appeared in sources.
-    writeFileSync(tmp, n.startsWith("memory/") ? content : redact(content));
+    // Everything Jarvis writes is LF, whatever line breaks the text arrived with, so every Machine holds the same bytes.
+    const text = toLf(content);
+    writeFileSync(tmp, n.startsWith("memory/") ? text : redact(text));
     replaceWith(tmp, abs);
     this.indexer.indexFile(this.rootRef!, n);
     this.opts.onWrite?.(n);
@@ -446,7 +449,7 @@ export class MemoryStore {
         skipped++;
         continue;
       }
-      const content = readFileSync(join(input.path, rel), "utf8");
+      const content = toLf(readFileSync(join(input.path, rel), "utf8"));
       const target = `${base}/${rel}`;
       const hash = createHash("sha256").update(content).digest("hex");
       if (this.exists(target) && createHash("sha256").update(this.read(target)).digest("hex") === hash) unchanged++;

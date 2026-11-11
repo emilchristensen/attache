@@ -264,6 +264,7 @@ The old value keeps its Review date in History, and reverting a correction bring
 
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Jarvis picks up your edits within a few seconds.
+A note an editor on Windows saved with CRLF line endings reads the same as any other; whatever Jarvis writes uses LF line endings.
 There is no Obsidian plugin; use the Dashboard in the browser to search, review attention items and decide on Proposals.
 
 ## Meaning-based search
@@ -355,6 +356,11 @@ The lock that enforces this lives outside the data folder, in `~/Library/Applica
 Replication keeps the Brain the same on every Machine you run Jarvis on, through a private git repository.
 It is off until you switch it on; a Brain on one Machine works exactly as before.
 Each Machine needs git installed.
+Setting up and joining check for it first, and when git is missing they say how to install it on that Machine: `xcode-select --install` or `brew install git` on macOS, the distribution's package manager on Linux, Git for Windows (https://git-scm.com/download/win or `winget install --id Git.Git -e`) on Windows.
+On Windows, Jarvis also finds Git for Windows where its installer puts it, so you need not restart Jarvis after installing it.
+Machines on macOS, Linux and Windows share one Brain.
+The Brain's repository keeps every note with LF line endings, whatever git's own `core.autocrlf` setting is.
+A note Jarvis writes on Windows has the same bytes on every Machine, and one an editor on Windows saved with CRLF reaches the other Machines with LF.
 
 Replication is in the Dashboard under **Settings → Replication**, and in the terminal as `jarvis replication`.
 

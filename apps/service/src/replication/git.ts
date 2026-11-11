@@ -2,7 +2,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { redact } from "../core/log.ts";
 import { launchTool, type Launch } from "../platform/launch.ts";
-import { platformLocations, toolCandidates } from "../platform/locations.ts";
+import { gitCandidates } from "../platform/git-install.ts";
 
 /**
  * The git to run: `JARVIS_GIT_BIN`, else the first one in the usual install
@@ -11,7 +11,7 @@ import { platformLocations, toolCandidates } from "../platform/locations.ts";
  */
 export function gitBinary(): string {
   if (process.env.JARVIS_GIT_BIN) return process.env.JARVIS_GIT_BIN;
-  return toolCandidates(platformLocations(), "git").find((p) => existsSync(p)) ?? "git";
+  return gitCandidates().find((p) => existsSync(p)) ?? "git";
 }
 
 /** Why a git command failed, in the terms Replication reports. */
@@ -54,8 +54,10 @@ const MAX_OUTPUT = 256 * 1024 * 1024;
 /**
  * Settings that keep git predictable whatever the owner's own git config says:
  * no hooks, no signing prompts, LF files, raw file names, never the `ext` transport.
+ * A note an editor saved with CRLF is committed as LF (the Brain's
+ * `.gitattributes`); `core.safecrlf` would refuse that commit, so it is off.
  */
-const SAFE_CONFIG = ["core.hooksPath=.git/jarvis-no-hooks", "commit.gpgsign=false", "tag.gpgsign=false", "core.autocrlf=false", "core.quotePath=false", "protocol.ext.allow=never", "advice.detachedHead=false"];
+const SAFE_CONFIG = ["core.hooksPath=.git/jarvis-no-hooks", "commit.gpgsign=false", "tag.gpgsign=false", "core.autocrlf=false", "core.safecrlf=false", "core.quotePath=false", "protocol.ext.allow=never", "advice.detachedHead=false"];
 
 const SAFE_ENV = { GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C", LANGUAGE: "C" };
 

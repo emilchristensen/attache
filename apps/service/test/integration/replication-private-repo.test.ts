@@ -1,13 +1,15 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { startGitHubGitServer, type GitHubGitServer } from "../fixtures/github-git-server.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
-import { startTestService, type TestService } from "./harness.ts";
+import { startTestService, testFolder, type TestService } from "./harness.ts";
 
 // Each test drives git through the credential helper, which runs the CLI from source: slow under load.
 vi.setConfig({ testTimeout: 90_000 });
 
+const MAIN = join(import.meta.dirname, "../../src/main.ts");
 const CHECK = 60_000;
 const AFTER_WRITE = 30_000;
 const VISIBILITY_TTL = 5 * 60_000;
@@ -60,6 +62,17 @@ const connectGitHub = (svc: TestService, token: string) => svc.post("/connection
 const saveNote = (m: TestService, title: string) => m.post("/memory/save", { items: [{ action: "create", type: "note", title, facts: [{ subject: "Fact", value: `${title} is replicated` }] }] });
 
 const pushedFiles = (repo: { owner: string; name: string }) => github.git(repo.owner, repo.name, "ls-tree", "-r", "--name-only", "main");
+
+/** The `user:password` pairs git sent for the repository; empty when it sent none. */
+function basicCredentials(repo: { full: string }): Set<string> {
+  return new Set(
+    github.requests
+      .filter((r) => r.url.startsWith(`/git/${repo.full}.git`))
+      .map((r) => r.authorization)
+      .filter((a): a is string => !!a?.startsWith("Basic "))
+      .map((a) => Buffer.from(a.slice(6), "base64").toString("utf8")),
+  );
+}
 
 async function inbox(m: TestService): Promise<Array<{ kind: string; title: string; summary: string; why: string }>> {
   return ((await m.get("/attention")).items as Array<{ kind: string; title: string; summary: string; why: string }>).filter((i) => i.kind.startsWith("replication_"));
@@ -117,11 +130,8 @@ describe("Replication to a private GitHub repository", () => {
     expect((await mac.get("/replication")).status).toBe("up_to_date");
 
     // Git authenticated with the token, which the credential helper read from the secret store.
-    const gitCalls = github.requests.filter((r) => r.url.startsWith(`/git/${repo.full}.git`));
-    const basic = gitCalls.map((r) => r.authorization).filter((a): a is string => !!a?.startsWith("Basic "));
-    expect(basic.length).toBeGreaterThan(0);
-    expect(new Set(basic.map((a) => Buffer.from(a.slice(6), "base64").toString("utf8")))).toEqual(new Set([`x-access-token:${TOKEN}`]));
-    expect(gitCalls.every((r) => !r.url.includes(TOKEN))).toBe(true);
+    expect(basicCredentials(repo)).toEqual(new Set([`x-access-token:${TOKEN}`]));
+    expect(github.requests.every((r) => !r.url.includes(TOKEN))).toBe(true);
 
     expect(readFileSync(join(mac.dataDir, ".git", "config"), "utf8")).toContain(`url = https://github.com/${repo.full}.git`);
     for (const file of [...everyFileUnder(join(mac.dataDir, ".git")), ...everyFileUnder(join(mac.stateDir, "logs"))]) {
@@ -210,6 +220,44 @@ describe("Replication to a private GitHub repository", () => {
     expect(after.status).toBe("up_to_date");
     expect(pushedFiles(repo)).toContain("memory/notes/pulsar-hiring.md");
     expect(await inbox(mac)).toEqual([]);
+  });
+
+  it("never asks the Machine's own credential helper, as Git for Windows sets up Git Credential Manager", async () => {
+    const own = testFolder("own-helper");
+    const asked = join(own, "asked").replace(/\\/g, "/");
+    const config = join(own, "gitconfig");
+    writeFileSync(config, `[credential]\n\thelper = "!f() { echo asked >> '${asked}'; echo username=intruder; echo password=not-the-token; }; f"\n`);
+    const before = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = config;
+    try {
+      const repo = newRepo();
+      const mac = await machine();
+      await mac.post("/replication/setup", { remote: repo.full });
+      await saveNote(mac, "Aurora budget");
+      await mac.clock.advance(AFTER_WRITE);
+      expect(pushedFiles(repo)).toContain("memory/notes/aurora-budget.md");
+      expect(basicCredentials(repo)).toEqual(new Set([`x-access-token:${TOKEN}`]));
+      expect(existsSync(asked)).toBe(false);
+    } finally {
+      process.env.GIT_CONFIG_GLOBAL = before;
+    }
+  });
+
+  it("runs the credential helper from an install folder whose path has spaces and non-ASCII letters", async () => {
+    // As `C:\Users\Søren Ås\AppData\Local\Jarvis` on Windows: the helper's command line must still reach the `jarvis` executable.
+    const install = testFolder("install");
+    const script = join(install, "jarvis-service.mjs");
+    writeFileSync(script, `await import(${JSON.stringify(pathToFileURL(MAIN).href)});\n`);
+    const before = process.env.JARVIS_CLI_SCRIPT;
+    process.env.JARVIS_CLI_SCRIPT = script;
+    try {
+      const repo = newRepo();
+      const mac = await machine();
+      expect((await mac.post("/replication/setup", { remote: repo.full })).status).toBe("up_to_date");
+      expect(basicCredentials(repo)).toEqual(new Set([`x-access-token:${TOKEN}`]));
+    } finally {
+      process.env.JARVIS_CLI_SCRIPT = before;
+    }
   });
 
   it("refuses setup when GitHub rejects the connection's token, asking to reconnect", async () => {

@@ -8,7 +8,7 @@ import { latestBriefing } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
-import { parseMarkdown, parseStateEntries } from "../memory/markdown.ts";
+import { parseMarkdown, parseStateEntries, toLf } from "../memory/markdown.ts";
 import { isPastReview } from "../memory/review-date.ts";
 import { json } from "../core/db.ts";
 import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
@@ -88,7 +88,7 @@ export function registerDataRoutes(r: Router, app: App) {
     const base = rootPath(app, root);
     const abs = resolveInside(base, rel);
     if (!existsSync(abs)) throw new HttpError(404, "not_found", `${rel} no longer exists. The index will drop it on the next refresh.`);
-    const raw = readFileSync(abs, "utf8");
+    const raw = toLf(readFileSync(abs, "utf8"));
     const parsed = parseMarkdown(raw, rel);
     const doc = app.db.prepare("select id, area, doc_type as docType, indexed_at as indexedAt from documents where root = ? and rel_path = ?").get(root, rel) as Record<string, unknown> | undefined;
     const rootLabel = root === "data" ? "Jarvis data folder" : (app.connections.record(root.replace(/^import:/, ""))?.label ?? root);
