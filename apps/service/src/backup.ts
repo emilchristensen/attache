@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -7,9 +6,11 @@ import type { App } from "./app.ts";
 import { VERSION } from "./app.ts";
 import { nowIso } from "./core/db.ts";
 import { platformLocations } from "./platform/locations.ts";
+import { run } from "./platform/run.ts";
 
-function tar(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => execFile(platformLocations().tar, args, { maxBuffer: 8 * 1024 * 1024 }, (err, _o, stderr) => (err ? reject(new Error(`tar failed: ${stderr || err.message}`)) : resolve())));
+async function tar(args: string[]): Promise<void> {
+  const r = await run(platformLocations().tar, args);
+  if (r.code !== 0) throw new Error(`tar failed: ${r.stderr || `exit code ${r.code}`}`);
 }
 
 export interface BackupManifest {

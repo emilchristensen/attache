@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { posix } from "node:path";
 import { randomUUID } from "node:crypto";
 import { run, type RunResult } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { replaceWith } from "../replace-file.ts";
 
 const { join } = posix;
 const SYSTEMCTL = "systemctl";
@@ -96,7 +97,7 @@ export class SystemdServiceManager implements ServiceManager {
     mkdirSync(dir, { recursive: true });
     const tmp = join(dir, `.${randomUUID()}.tmp`);
     writeFileSync(tmp, systemdUnit(this.loc.home, spec));
-    renameSync(tmp, this.definition);
+    replaceWith(tmp, this.definition);
     // Enabling by path also links the unit in when the user manager does not
     // look in this folder (an XDG_CONFIG_HOME it does not share), and reloads it.
     await this.must(["enable", this.definition]);

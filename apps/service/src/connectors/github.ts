@@ -1,6 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { platformLocations, toolCandidates } from "../platform/locations.ts";
+import { run } from "../platform/run.ts";
 import type { ConnectorAdapter, AdapterContext, Observation, SyncResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite, nextLink, paginate } from "./http.ts";
@@ -28,18 +28,13 @@ function repoOf(item: SearchItem): string {
 }
 
 async function ghCliToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    // Services started at login often lack the owner's PATH, so the usual install folders come first.
-    const candidates = [...toolCandidates(platformLocations(), "gh").filter((p) => existsSync(p)), "gh"];
-    const tryNext = (i: number) => {
-      if (i >= candidates.length) return resolve(null);
-      execFile(candidates[i]!, ["auth", "token"], { timeout: 5000 }, (err, stdout) => {
-        if (err || !stdout.trim()) return tryNext(i + 1);
-        resolve(stdout.trim());
-      });
-    };
-    tryNext(0);
-  });
+  // Services started at login often lack the owner's PATH, so the usual install folders come first.
+  const candidates = [...toolCandidates(platformLocations(), "gh").filter((p) => existsSync(p)), "gh"];
+  for (const candidate of candidates) {
+    const r = await run(candidate, ["auth", "token"], { timeoutMs: 5000 });
+    if (r.code === 0 && r.stdout.trim()) return r.stdout.trim();
+  }
+  return null;
 }
 
 function base(ctx: AdapterContext): string {

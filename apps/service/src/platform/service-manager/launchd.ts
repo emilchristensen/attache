@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { run } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
 import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { replaceWith } from "../replace-file.ts";
 
 const LAUNCHCTL = "/bin/launchctl";
 const STOP_WAIT_MS = 10_000;
@@ -64,7 +65,7 @@ export class LaunchdServiceManager implements ServiceManager {
     mkdirSync(this.loc.serviceDefinitionDir!, { recursive: true });
     const tmp = join(this.loc.serviceDefinitionDir!, `.${randomUUID()}.tmp`);
     writeFileSync(tmp, launchAgentPlist(this.name, this.loc.home, spec));
-    renameSync(tmp, this.definition);
+    replaceWith(tmp, this.definition);
   }
 
   async loaded(): Promise<boolean> {

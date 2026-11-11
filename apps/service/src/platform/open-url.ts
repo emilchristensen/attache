@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { launchTool } from "./launch.ts";
 import type { Os } from "./os.ts";
 
 const OPENERS: Readonly<Record<Os, (url: string) => [string, string[]]>> = {
@@ -11,7 +12,13 @@ const OPENERS: Readonly<Record<Os, (url: string) => [string, string[]]>> = {
 /** Open a URL in the owner's default browser. Best effort: a missing opener is ignored, the URL is printed anyway. */
 export function openUrl(os: Os, url: string): void {
   const [cmd, args] = OPENERS[os](url);
-  const child = spawn(cmd, args, { stdio: "ignore", detached: true });
+  let launch;
+  try {
+    launch = launchTool(cmd, args, os);
+  } catch {
+    return;
+  }
+  const child = spawn(launch.command, launch.args, { stdio: "ignore", detached: true });
   child.on("error", () => {});
   child.unref();
 }

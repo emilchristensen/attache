@@ -1,6 +1,7 @@
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { redact } from "../core/log.ts";
+import { launchTool, type Launch } from "../platform/launch.ts";
 import { platformLocations, toolCandidates } from "../platform/locations.ts";
 
 /**
@@ -111,9 +112,14 @@ export class Git {
     return new Git({ ...this.opts, env: { ...this.opts.env, ...env } }, this.bin);
   }
 
-  private argv(args: readonly string[]): string[] {
+  private launch(args: readonly string[]): Launch {
     assertNoRewrite(args);
-    return [...[...SAFE_CONFIG, ...(this.opts.config ?? [])].flatMap((c) => ["-c", c]), ...args];
+    const argv = [...[...SAFE_CONFIG, ...(this.opts.config ?? [])].flatMap((c) => ["-c", c]), ...args];
+    try {
+      return launchTool(this.bin, argv);
+    } catch (e) {
+      throw new GitError("failed", args[0] ?? "", (e as Error).message);
+    }
   }
 
   private env(): NodeJS.ProcessEnv {
@@ -126,7 +132,8 @@ export class Git {
    * data folder at the same moment.
    */
   runSync(args: readonly string[], input?: string): GitResult {
-    const r = spawnSync(this.bin, this.argv(args), { cwd: this.opts.cwd, env: this.env(), encoding: "utf8", maxBuffer: MAX_OUTPUT, ...(input !== undefined ? { input } : {}), windowsHide: true });
+    const { command, args: argv } = this.launch(args);
+    const r = spawnSync(command, argv, { cwd: this.opts.cwd, env: this.env(), encoding: "utf8", maxBuffer: MAX_OUTPUT, ...(input !== undefined ? { input } : {}), windowsHide: true });
     if (r.error) throw new GitError("failed", args[0] ?? "", (r.error as Error).message);
     return { code: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
   }
@@ -141,7 +148,8 @@ export class Git {
   /** Run a command that may wait on the network, without holding up the service. */
   run(args: readonly string[]): Promise<GitResult> {
     return new Promise((resolve, reject) => {
-      execFile(this.bin, this.argv(args), { cwd: this.opts.cwd, env: this.env(), encoding: "utf8", maxBuffer: MAX_OUTPUT, timeout: this.opts.timeoutMs ?? NETWORK_TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
+      const { command, args: argv } = this.launch(args);
+      execFile(command, argv, { cwd: this.opts.cwd, env: this.env(), encoding: "utf8", maxBuffer: MAX_OUTPUT, timeout: this.opts.timeoutMs ?? NETWORK_TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
         if (err && (err as { killed?: boolean }).killed) return reject(new GitError("offline", args[0] ?? "", `fatal: the remote did not answer within ${Math.round((this.opts.timeoutMs ?? NETWORK_TIMEOUT_MS) / 1000)} seconds`));
         if (err && typeof (err as { code?: unknown }).code !== "number") return reject(new GitError("failed", args[0] ?? "", `${stderr}\n${err.message}`));
         resolve({ code: err ? Number((err as { code?: number }).code) : 0, stdout, stderr });
@@ -159,6 +167,12 @@ export class Git {
 
 /** Whether git can be run at all on this Machine. */
 export function gitVersion(bin = gitBinary()): string | null {
-  const r = spawnSync(bin, ["--version"], { encoding: "utf8", windowsHide: true });
+  let launch: Launch;
+  try {
+    launch = launchTool(bin, ["--version"]);
+  } catch {
+    return null;
+  }
+  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", windowsHide: true });
   return r.status === 0 ? r.stdout.trim() : null;
 }
