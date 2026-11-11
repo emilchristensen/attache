@@ -23,10 +23,12 @@ function Invoke-Request($req) {
   $null = New-ItemProperty -LiteralPath $key -Name DisplayName -Value ([string]$req.name) -PropertyType String -Force
 
   $null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+  $null = [Windows.UI.Notifications.NotificationSetting, Windows.UI.Notifications, ContentType = WindowsRuntime]
   $null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
   $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier([string]$req.app)
-  $setting = [string]$notifier.Setting
-  if ($setting -ne 'Enabled') { return @{ ok = $true; enabled = $false; setting = $setting } }
+  # Where Windows cannot say (no setting comes back), the notification is handed over all the same.
+  $setting = $notifier.Setting
+  if ($null -ne $setting -and [string]$setting -ne 'Enabled') { return @{ ok = $true; enabled = $false; setting = [string]$setting } }
   if ([string]$req.op -ne 'show') { return @{ ok = $true; enabled = $true } }
 
   $xml = New-Object Windows.Data.Xml.Dom.XmlDocument

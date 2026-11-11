@@ -18,7 +18,6 @@ $source = @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 
 public static class JarvisCredentials {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -27,7 +26,7 @@ public static class JarvisCredentials {
     public uint Type;
     public string TargetName;
     public string Comment;
-    public FILETIME LastWritten;
+    public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
     public uint CredentialBlobSize;
     public IntPtr CredentialBlob;
     public uint Persist;
