@@ -256,6 +256,8 @@ function drive(child: ChildProcessWithoutNullStreams, req: SessionRequest): Prom
       if (!out.server && !out.otherServers.length && code !== 0 && !finished) return reject(classifyFailure(stderr || `exit code ${code}`));
       resolve(out);
     });
+    // A run cancelled while the session was starting never fires "abort" again; without this it waits out the whole timeout.
+    if (req.signal.aborted) return onAbort();
     send({ type: "user", message: { role: "user", content: planMessage(req.calls, req.server) }, parent_tool_use_id: null, session_id: "" });
   });
 }
