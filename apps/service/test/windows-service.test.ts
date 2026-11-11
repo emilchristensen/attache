@@ -43,8 +43,11 @@ async function healthyService(stateDir: string, notPid?: number) {
 }
 
 const supervisors: ChildProcess[] = [];
+/** Supervisors started by a stand-in host rather than by the test, by pid. */
+const strays: number[] = [];
 afterEach(() => {
   for (const s of supervisors.splice(0)) s.kill("SIGKILL");
+  for (const pid of strays.splice(0)) if (alive(pid)) process.kill(pid, "SIGKILL");
 });
 
 describe("the background service on Windows", () => {
@@ -195,15 +198,20 @@ describe("the entry point of the Windows logon task", () => {
   it("stops, with the service, when the console host the task started it in is gone, as ending the task leaves it", async () => {
     const stateDir = join(tempDir("jarvis-supervised-"), "state");
     const args = ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("jarvis-supervised-home-")];
-    // A stand-in for the console host: it starts the supervisor and is then ended without a word to it.
-    const host = spawn(process.execPath, ["-e", `require("node:child_process").spawn(process.execPath, ${JSON.stringify(args)}, { stdio: "ignore" }); setInterval(() => {}, 1000);`], {
+    // A stand-in for the console host: it starts the supervisor, says which process that is, and is then
+    // ended without a word to it. Ending the console host leaves the supervisor running, so the stand-in
+    // starts it detached: Node on Windows would otherwise end it along with the stand-in.
+    const host = spawn(process.execPath, ["-e", `process.stdout.write(String(require("node:child_process").spawn(process.execPath, ${JSON.stringify(args)}, { stdio: "ignore", detached: true }).pid)); setInterval(() => {}, 1000);`], {
       env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1" }),
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "ignore"],
     });
     supervisors.push(host);
+    const supervisorPid = await new Promise<number>((r) => host.stdout!.once("data", (d: Buffer) => r(Number(d.toString()))));
+    strays.push(supervisorPid);
     const service = await healthyService(stateDir);
     host.kill("SIGKILL");
-    await eventually("the service to stop after its host", () => (alive(service.pid) ? null : true), 20_000);
+    await eventually("the supervisor to stop after its host", () => (alive(supervisorPid) ? null : true), 20_000);
+    await eventually("the service to stop with its supervisor", () => (alive(service.pid) ? null : true), 20_000);
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
     expect(readFileSync(join(stateDir, "logs", "service.err.log"), "utf8")).toContain("stopping (the task that started it has ended)");
   });
