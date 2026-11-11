@@ -1,5 +1,5 @@
 import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@jarvis/contracts";
-import { AGENT_KINDS } from "../agents/integrations.ts";
+import { HOOK_AGENT_KINDS } from "../agents/integrations.ts";
 
 /**
  * The single server-side definition of what Jarvis can do. The setup
@@ -89,7 +89,7 @@ export const FEATURES: FeatureDefinition[] = [
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
-      { kinds: AGENT_KINDS, label: "A coding agent (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
+      { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
       { kinds: ["model"], label: "A model to summarise sessions", required: false, missingEffect: "Sessions are saved without a summary." },
     ],
     schedules: [],
