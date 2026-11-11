@@ -90,7 +90,7 @@ describe("per-Machine evidence", () => {
 });
 
 describe("evidence written before the change", () => {
-  it("is still found by search, the session context and the audit", async () => {
+  it("is still found by search and the audit", async () => {
     const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-legacy-")), "data");
     const yesterday = daysAgo(1);
     mkdirSync(join(dataDir, "evidence/sessions"), { recursive: true });
@@ -115,29 +115,23 @@ describe("evidence written before the change", () => {
     const snapshotHits = (await svc.get(`/memory/search?q=${encodeURIComponent("Heliotrope budget approved")}`)).hits;
     expect(snapshotHits.some((h: { relPath: string }) => h.relPath === `evidence/connectors/slack/${yesterday}.md`)).toBe(true);
 
-    const contextFile = join(svc.stateDir, "agents/session-context.md");
-    const end = Date.now() + 10_000;
-    while (!existsSync(contextFile) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
-    const context = readFileSync(contextFile, "utf8");
-    expect(context).toContain(`#### ${yesterday}`);
-    expect(context).toContain("vendor contract lapsed");
-
     const audit = await svc.get("/memory/audit");
     const status = audit.findings.find((f: { relPath: string }) => f.relPath === "memory/projects/quasar-rollout.md").entries[0];
     expect(status.newerEvidence.map((e: { relPath: string }) => e.relPath)).toContain(`evidence/sessions/${yesterday}.md`);
   });
 
-  it("the session context shows the old and the new log of the same day together", async () => {
+  it("a project's session context reads every Machine's log of a day", async () => {
     const svc = await start({ features: { sessions: true } });
+    await svc.post("/memory/notes", { type: "project", title: "Quasar rollout", state: [{ subject: "Repositories", value: "acme/quasar" }] });
     const date = today();
-    const legacy = `---\ntype: session-log\ntitle: Agent sessions on ${date}\ndate: ${date}\nprovenance: agent-session-summary\n---\n# Agent sessions on ${date}\n\n## Claude Code · Before the upgrade\n\n- Written by the previous version.\n`;
-    writeFileSync(join(svc.dataDir, "evidence/sessions", `${date}.md`), legacy);
-    svc.app.memory.appendSessionLog(date, "## Codex · After the upgrade\n\n- Written per Machine.");
+    const other = `---\ntype: session-log\ntitle: Agent sessions on ${date}\ndate: ${date}\nmachine: Desk\nprovenance: agent-session-summary\n---\n# Agent sessions on ${date}\n\n## 08:00 · Claude Code · quasar\n\n**Before lunch**\n\nRepository: github.com/acme/quasar\n\n- Written on the other Machine.\n`;
+    writeFileSync(join(svc.dataDir, "evidence/sessions", `${date}-desk-12345678.md`), other);
+    svc.app.memory.appendSessionLog(date, "## 14:00 · Codex · quasar\n\n**After lunch**\n\nRepository: github.com/acme/quasar\n\n- Written on this Machine.");
     svc.app.sessions.refreshContext();
-    const context = readFileSync(join(svc.stateDir, "agents/session-context.md"), "utf8");
-    expect(context.match(new RegExp(`#### ${date}`, "g"))).toHaveLength(1);
-    expect(context).toContain("Written by the previous version.");
-    expect(context).toContain("Written per Machine.");
+    const context = readFileSync(join(svc.stateDir, "agents/projects/quasar-rollout.md"), "utf8");
+    expect(context).toContain(`##### ${date} 14:00 · Codex · quasar`);
+    expect(context).toContain(`##### ${date} 08:00 · Claude Code · quasar`);
+    expect(context.indexOf("Written on this Machine.")).toBeLessThan(context.indexOf("Written on the other Machine."));
   });
 });
 

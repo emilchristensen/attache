@@ -63,7 +63,7 @@ beforeAll(async () => {
   installFixtureModel(fx);
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
-  await svc.post("/memory/notes", { type: "project", title: "Orion migration", state: [{ subject: "Status", value: "Cutover planned" }] });
+  await svc.post("/memory/notes", { type: "project", title: "Orion migration", state: [{ subject: "Status", value: "Cutover planned" }, { subject: "Repositories", value: "acme/orion" }] });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture-model" } });
 });
 afterAll(async () => {
@@ -140,7 +140,7 @@ describe("coding-agent sessions", () => {
     // s1 was archived above, so the fact cites its transcript.
     expect(note).toMatch(/Cutover moved to November — source: Claude Code session in jarvis-it-agentwork-\w+ \(agent-session: evidence\/sessions\/transcripts\/claude-code\/\d{4}-\d{2}-\d{2}-s1\.md/);
     const audit = await shell(skill.split("\n").find((l) => / search "<topic>"$/.test(l))!.trim().replace(/ search .*/, " audit"));
-    expect(audit.stdout).toContain("## Orion migration [project, first fact in every session's index]");
+    expect(audit.stdout).toContain("## Orion migration [project, in a project's session context]");
   });
 
   it("a compaction then the end of the same session adds only the new turns", async () => {
@@ -157,6 +157,26 @@ describe("coding-agent sessions", () => {
     expect(log.match(/weekend cutover/g)).toHaveLength(1);
     expect(log).toContain("(continued)");
     expect(log).toContain("keep the old ledger read-only");
+  });
+
+  it("a session summarised in a project's repository starts that project's next sessions", async () => {
+    const repo = join(work, "orion-checkout");
+    mkdirSync(repo, { recursive: true });
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+    execFileSync("git", ["remote", "add", "origin", "git@github.com:acme/orion.git"], { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
+    const transcript = join(work, "s-orion.jsonl");
+    writeFileSync(transcript, claudeTranscript("s-orion", repo, [["How do we migrate the ledger?", "We decided to migrate the ledger table by table."]]));
+    runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: "s-orion", transcript_path: transcript, cwd: repo, reason: "exit" });
+    await until(() => jobsFor("s-orion").some((j) => j.status === "succeeded"));
+
+    const start = (cwd: string) => JSON.parse(runHook(join(HOME, ".claude/settings.json"), "SessionStart", { session_id: "s-next", cwd, source: "startup" })).hookSpecificOutput.additionalContext as string;
+    const ctx = await until(() => {
+      const c = start(repo);
+      return c.includes("migrate the ledger table by table") && c;
+    });
+    expect(ctx).toContain("### This session's project: Orion migration");
+    // A session elsewhere does not get it.
+    expect(start(work)).not.toContain("migrate the ledger table by table");
   });
 
   it("sessions are saved even when Jarvis was not running", async () => {

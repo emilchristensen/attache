@@ -102,7 +102,7 @@ The structure already separates state from events, so the audit is about whether
 
 Call the \`audit\` tool.
 It lists every current fact with its date, age, source and flags, plus newer passages about that fact.
-Notes marked "first fact in every session's index" are the ones every new agent session reads; check those first, because a stale fact there misleads every session.
+Notes marked "in a project's session context" are the ones every new session in that project reads; check those first, because a stale fact there misleads every one of those sessions.
 
 The flags are leads, not verdicts:
 
@@ -116,7 +116,7 @@ The counts line is deterministic; quote it, so the next audit can be compared wi
 
 ## 2. Judge each fact
 
-For every fact with newer evidence, and every stale fact in the session index, read the newer passages at the cited lines with the \`read\` tool and put the fact in one pile:
+For every fact with newer evidence, and every stale fact in a session context, read the newer passages at the cited lines with the \`read\` tool and put the fact in one pile:
 
 - **Contradicted:** something newer disagrees. This is rot, and the headline.
 - **Unsupported:** nothing backs it up. Often it was true once and the evidence was never written down.
@@ -127,7 +127,7 @@ Use the \`search\` tool when you need more context.
 
 ## 3. Report
 
-Lead with the single most damaging finding, for example: "The session index says the Orion cutover is in October; the 2026-09-12 session log says it moved to November."
+Lead with the single most damaging finding, for example: "The Orion session context says the cutover is in October; the 2026-09-12 session log says it moved to November."
 Then list the contradicted facts, then the unsupported ones, each with the note path, the current value, and the evidence path and line.
 List possible duplicate notes, but never merge them yourself; a wrong merge loses information.
 Say plainly when a value that should be in memory was never written down anywhere, because no correction can fix that.
