@@ -187,5 +187,6 @@ Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e
 - Every remote call goes through `connectors/http.ts` and records coverage per scope; a failure must never look like an empty result.
 - External side effects run inside `ctx.effect(key, run, find)` so restarts cannot repeat them.
 - Features are defined once in `capabilities/registry.ts`; endpoints check them with `requireFeature`.
+- Service code starts tools with `run`, `spawnTool` or `launchTool` and replaces files with `replaceWith` from `platform/`, and `pnpm lint` rejects a `node:child_process` import or an fs `rename` outside `platform/`, so Windows shims, console windows and locked files are handled in one place.
 - Database migrations are append-only in `core/db.ts`.
 - Code runs under Node type stripping: no enums, no parameter properties (`erasableSyntaxOnly`).
