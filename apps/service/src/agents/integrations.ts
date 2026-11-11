@@ -106,7 +106,6 @@ export const claudeDesktop: AgentIntegration = {
 
 export const AGENT_INTEGRATIONS: AgentIntegration[] = [claudeCode, codex, antigravity, claudeDesktop];
 export type AgentKind = AgentIntegration["kind"];
-export const AGENT_KINDS = AGENT_INTEGRATIONS.map((a) => a.kind);
 /** The Harnesses whose sessions Jarvis saves through hooks. */
 export const HOOK_AGENT_KINDS = AGENT_INTEGRATIONS.filter((a) => a.hooks).map((a) => a.kind);
 export const integrationFor = (kind: string) => AGENT_INTEGRATIONS.find((a) => a.kind === kind) ?? null;
