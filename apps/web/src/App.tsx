@@ -10,7 +10,6 @@ import { DraftsView } from "./views/Drafts.tsx";
 import { JobsView } from "./views/Jobs.tsx";
 import { ConnectionsView } from "./views/Connections.tsx";
 import { SettingsView } from "./views/Settings.tsx";
-import { voice } from "./voice.ts";
 
 interface Session {
   client: { id: string; name: string; kind: string };
@@ -52,7 +51,7 @@ function Pair({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="setup" style={{ maxWidth: 520 }}>
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" data-state="idle" aria-hidden /> Jarvis
+        <span className="orb" aria-hidden /> Jarvis
       </div>
       <div className="card stack" style={{ marginTop: 24 }}>
         <h1>Pair this browser</h1>
@@ -93,7 +92,6 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       const typing = t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable;
-      if (e.key === "Escape" && voice.interrupt()) return;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "/") {
         e.preventDefault();
@@ -120,7 +118,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="brand">
-          <span className="orb" data-state="idle" aria-hidden /> Jarvis
+          <span className="orb" aria-hidden /> Jarvis
         </div>
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={`g then ${n.key}`}>
@@ -130,7 +128,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
         ))}
         <div className="spacer" />
         <div className="kbd-hint">
-          <kbd>/</kbd> ask · <kbd>g</kbd> then a letter to jump · <kbd>Esc</kbd> stops speech
+          <kbd>/</kbd> ask · <kbd>g</kbd> then a letter to jump
         </div>
       </nav>
       <div className="main">
@@ -166,7 +164,6 @@ export function App() {
         setSession(s);
         setState("ready");
         hub.start();
-        api<{ modes: { stt: string; tts: string } }>("/voice/status").then((v) => (voice.modes = v.modes)).catch(() => {});
       })
       .catch((e: ApiError) => {
         setErr(e);
