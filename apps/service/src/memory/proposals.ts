@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { MemorySaveItem, SourceRefInput, type ProposalInput, type ProposalView } from "@jarvis/contracts";
 import { json } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";
@@ -49,7 +50,8 @@ export function decideProposal(memory: MemoryStore, id: string, decision: "apply
   const payload = readPayload(row);
   if (!payload) throw new HttpError(409, "unreadable_proposal", "This Proposal can no longer be read, so it cannot be applied. Reject it instead.");
   const [step] = checkItems(memory, [payload.item]);
-  const written = writeItem(memory, step!, payload.source, { actor: "service", provenance: "user-approved" });
+  // Its own batch id, as a save has, so the changes it makes show and revert as one.
+  const written = writeItem(memory, step!, payload.source, { actor: "service", provenance: "user-approved" }, { batchId: randomUUID() });
   return toView(memory.settleProposal(id, "applied", written.relPath));
 }
 

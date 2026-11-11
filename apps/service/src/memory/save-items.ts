@@ -2,7 +2,7 @@ import type { MemorySaveItem } from "@jarvis/contracts";
 import { HttpError } from "../http/router.ts";
 import { slugify } from "./markdown.ts";
 import { isProtected, normalizeRel } from "./policy.ts";
-import { formatSource, type MemoryStore, type SourceRef } from "./store.ts";
+import { formatSource, type ChangeMeta, type MemoryStore, type SourceRef } from "./store.ts";
 
 type CreateItem = Extract<MemorySaveItem, { action: "create" }>;
 type UpdateItem = Extract<MemorySaveItem, { action: "update" }>;
@@ -38,8 +38,11 @@ export function checkItems(memory: MemoryStore, items: readonly MemorySaveItem[]
   return plan;
 }
 
-/** Write one checked item to its note in a single file write, so every part lands or none does. */
-export function writeItem(memory: MemoryStore, step: CheckedItem, source: SourceRef | null, writer: ItemWriter): WrittenItem {
+/**
+ * Write one checked item to its note in a single file write, so every part lands or none does.
+ * `meta` goes into the change log with every change: items written together share one batch id.
+ */
+export function writeItem(memory: MemoryStore, step: CheckedItem, source: SourceRef | null, writer: ItemWriter, meta: ChangeMeta): WrittenItem {
   const label = source ? formatSource(source) : null;
   const events = (step.item.events ?? []).map((text) => (label ? `${text} (source: ${label})` : text));
   const opts = { approvedProposal: writer.actor === "service" };
@@ -49,12 +52,13 @@ export function writeItem(memory: MemoryStore, step: CheckedItem, source: Source
       { type: item.type, title: item.title, state: item.facts, ...(item.notes?.trim() ? { notes: item.notes } : {}), sources: source ? [source] : [], provenance: writer.provenance, ...(item.tags?.length ? { tags: item.tags } : {}), events },
       writer.actor,
       opts,
+      meta,
     );
     return { action: "created", relPath, title: item.title, facts: item.facts.length, events: events.length };
   }
   const { item, relPath, title } = step;
   const facts = item.facts ?? [];
-  memory.update(relPath, { facts, events, ...(source ? { source } : {}) }, writer.actor, opts);
+  memory.update(relPath, { facts, events, ...(source ? { source } : {}) }, writer.actor, opts, meta);
   return { action: "updated", relPath, title, facts: facts.length, events: events.length };
 }
 
