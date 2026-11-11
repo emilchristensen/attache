@@ -4,6 +4,13 @@ import { createLogger } from "../../src/core/log.ts";
 import { createClaudeConnectorRunner } from "../../src/connectors/claude/runner.ts";
 import type { ConnectionKind } from "@jarvis/contracts";
 
+/**
+ * One connector runner for every context in a test file, as the service keeps
+ * one: it lists Claude Code's MCP servers once, instead of starting an extra
+ * Claude Code session before every adapter call.
+ */
+const claudeRunner = createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10 });
+
 /** Build an adapter context whose endpoints point at a fixture server. */
 export function fixtureContext(opts: {
   kind: ConnectionKind;
@@ -40,6 +47,6 @@ export function fixtureContext(opts: {
     now: () => opts.now ?? new Date("2026-09-30T10:00:00Z"),
     endpoint: () => opts.baseUrl,
     selfEmail: opts.selfEmail ?? null,
-    claude: createClaudeConnectorRunner(createLogger(null, { quiet: true }), { pendingDelayMs: 10 }),
+    claude: claudeRunner,
   };
 }
