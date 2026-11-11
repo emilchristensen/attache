@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import type { ConnectionKind, FeatureId, JobView } from "@jarvis/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
-import { resolvePaths, type ServicePaths } from "./core/paths.ts";
+import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
+import { MachineStore } from "./core/machine.ts";
 import { createCredentialStore, type CredentialStore } from "./core/secrets.ts";
 import { ConfigStore } from "./core/config.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -43,6 +44,7 @@ export class App {
   readonly log: Logger;
   readonly secrets: CredentialStore;
   readonly config: ConfigStore;
+  readonly machine: MachineStore;
   readonly memory: MemoryStore;
   readonly connections: ConnectionManager;
   readonly jobs: JobQueue;
@@ -73,7 +75,9 @@ export class App {
     this.db = openDb(this.paths.dbFile);
     this.secrets = createCredentialStore({ stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
     this.config = new ConfigStore(this.db);
-    this.memory = new MemoryStore(this.db, null, this.instance);
+    this.machine = new MachineStore(this.db);
+    this.machine.get();
+    this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get() });
     this.bus.setMaxListeners(500);
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.

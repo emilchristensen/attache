@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Db, nowIso, json } from "../core/db.ts";
 import { Indexer, planScan, type IndexRoot } from "./indexer.ts";
@@ -7,6 +7,9 @@ import { applyStateCorrection, appendHistory, parseMarkdown, parseStateEntries, 
 import { assertWritable, isProtected, normalizeRel, resolveInside, type WriteActor, PolicyError } from "./policy.ts";
 import { stringify as stringifyYaml } from "yaml";
 import { redact } from "../core/log.ts";
+import type { MachineIdentity } from "../core/machine.ts";
+import { connectorSnapshotPath, sessionLogPath } from "./evidence-paths.ts";
+import { WriterLock } from "./writer-lock.ts";
 
 export const MEMORY_TYPES = ["person", "project", "decision", "note"] as const;
 export type MemoryType = (typeof MEMORY_TYPES)[number];
@@ -65,18 +68,27 @@ Service state (jobs, approvals, settings) and credentials live outside this fold
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+export interface MemoryStoreOptions {
+  /** Install name; a live service of another instance on the same folder is refused. */
+  instance: string;
+  /** Where writer locks live, outside every data folder. */
+  locksDir: string;
+  /** The Machine this service runs on, read at each write so a rename applies at once. */
+  machine: () => MachineIdentity;
+}
+
 export class MemoryStore {
   readonly indexer: Indexer;
-  private lockFile: string | null = null;
+  private lock: WriterLock | null = null;
 
   private readonly db: Db;
   private root: string | null;
-  private readonly instance: string;
+  private readonly opts: MemoryStoreOptions;
 
-  constructor(db: Db, root: string | null, instance: string) {
+  constructor(db: Db, root: string | null, opts: MemoryStoreOptions) {
     this.db = db;
     this.root = root;
-    this.instance = instance;
+    this.opts = opts;
     this.indexer = new Indexer(db);
   }
 
@@ -115,38 +127,22 @@ export class MemoryStore {
       const mine = ["memory", "evidence", "deliverables", ".jarvis", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
-    this.acquireLock(root);
-    this.releaseLockIfDifferent(root);
+    this.takeLock(root);
     this.root = root;
     return { created };
   }
 
-  private acquireLock(root: string) {
-    const lock = join(root, ".jarvis", "writer.lock");
-    if (existsSync(lock)) {
-      const owner = json<{ pid: number; instance: string }>(readFileSync(lock, "utf8"), { pid: 0, instance: "" });
-      const alive = owner.pid > 0 && owner.pid !== process.pid && isAlive(owner.pid);
-      if (alive && owner.instance !== this.instance) {
-        throw new PolicyError(`Another Jarvis service (pid ${owner.pid}) owns this data folder`, "actor_denied");
-      }
-    }
-    writeFileSync(lock, JSON.stringify({ pid: process.pid, instance: this.instance, at: nowIso() }));
-  }
-
-  private releaseLockIfDifferent(newRoot: string) {
-    if (this.lockFile && this.lockFile !== join(newRoot, ".jarvis", "writer.lock")) this.releaseLock();
-    this.lockFile = join(newRoot, ".jarvis", "writer.lock");
+  /** Hold the writer lock on `root`, and let go of the one on the previous folder. */
+  private takeLock(root: string) {
+    if (this.lock?.covers(root)) return;
+    const next = WriterLock.acquire(root, { instance: this.opts.instance, locksDir: this.opts.locksDir });
+    this.lock?.release();
+    this.lock = next;
   }
 
   releaseLock() {
-    if (!this.lockFile) return;
-    try {
-      const owner = json<{ pid: number }>(readFileSync(this.lockFile, "utf8"), { pid: 0 });
-      if (owner.pid === process.pid) unlinkSync(this.lockFile);
-    } catch {
-      // Already gone.
-    }
-    this.lockFile = null;
+    this.lock?.release();
+    this.lock = null;
   }
 
   close() {
@@ -427,8 +423,10 @@ export class MemoryStore {
 
   /** Append one section to the session log for `date` (YYYY-MM-DD), creating the day's file when needed. */
   appendSessionLog(date: string, section: string): { relPath: string } {
-    const rel = `evidence/sessions/${date}.md`;
-    const head = `---\n${stringifyYaml({ type: "session-log", title: `Agent sessions on ${date}`, date, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# Agent sessions on ${date}\n`;
+    const machine = this.opts.machine();
+    const rel = sessionLogPath(date, machine);
+    const title = `Agent sessions on ${date} (${machine.name})`;
+    const head = `---\n${stringifyYaml({ type: "session-log", title, date, machine: machine.name, machine_id: machine.id, provenance: "agent-session-summary" }, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n`;
     const existing = this.exists(rel) ? this.read(rel).trimEnd() : head.trimEnd();
     this.writeFile(rel, `${existing}\n\n${section.trim()}\n`, "service");
     return { relPath: rel };
@@ -436,10 +434,12 @@ export class MemoryStore {
 
   /** Daily evidence snapshot of what a connector observed, so recall can cite it. */
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
-    const rel = `evidence/connectors/${slugify(kind)}/${today()}.md`;
-    const fm = { type: "connector-snapshot", title: `${label} on ${today()}`, source: kind, observed_at: nowIso(), provenance: "connector" };
-    const body = lines.length ? lines.join("\n") : "_The last sync returned no items._";
-    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${label} on ${today()}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
+    const machine = this.opts.machine();
+    const rel = connectorSnapshotPath(kind, today(), machine);
+    const title = `${label} on ${today()} (${machine.name})`;
+    const fm = { type: "connector-snapshot", title, source: kind, machine: machine.name, machine_id: machine.id, observed_at: nowIso(), provenance: "connector" };
+    const body = lines.length ? lines.join("\n") : "_The last Source refresh returned no items._";
+    this.writeFile(rel, `---\n${stringifyYaml(fm, { lineWidth: 0 }).trimEnd()}\n---\n# ${title}\n\nLatest observation at ${nowIso()}.\n\n${body}\n`, "connector");
     return { relPath: rel };
   }
 
@@ -497,15 +497,6 @@ export class MemoryStore {
     const abs = resolveInside(this.requireRoot(), dir);
     if (!existsSync(abs)) return [];
     return readdirSync(abs).filter((f) => f.endsWith(".md"));
-  }
-}
-
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
   }
 }
 

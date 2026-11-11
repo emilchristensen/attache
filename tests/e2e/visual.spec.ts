@@ -51,6 +51,8 @@ test("screens", async ({ browser }) => {
       await page.waitForTimeout(600);
       await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png`, fullPage: false });
     }
+    // Below the fold of the settings screenshot.
+    await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
   }
   await page.goto(stack.url);
   await page.locator(".msg.assistant button.cite").first().click();

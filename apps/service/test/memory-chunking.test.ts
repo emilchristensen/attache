@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { migrate, openDb } from "../src/core/db.ts";
+import { MIGRATIONS, openDb } from "../src/core/db.ts";
 import { MemoryStore } from "../src/memory/store.ts";
 import { documentBlocks, search } from "../src/memory/search.ts";
 import { splitLong } from "../src/memory/chunker.ts";
@@ -10,7 +10,7 @@ import { tempDir } from "./helpers.ts";
 
 function setup() {
   const db = openDb(":memory:");
-  const store = new MemoryStore(db, null, "test");
+  const store = new MemoryStore(db, null, { instance: "test", locksDir: tempDir(), machine: () => ({ id: "00000000-0000-4000-8000-000000000001", name: "Test Machine" }) });
   const root = tempDir();
   store.open(root);
   return { db, store, root };
@@ -129,12 +129,12 @@ describe("upgrading an index built by an earlier version", () => {
   it("re-chunks every document on the next scan", () => {
     const { db, store } = setup();
     bigProject(store);
-    const version = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
     store.indexer.scan(store.rootRef!);
     expect(store.indexer.scan(store.rootRef!).indexed).toBe(0);
-    // Replay the migration that invalidates the index, as an upgrade from the previous version would.
-    db.exec(`pragma user_version = ${version - 1}`);
-    migrate(db);
+    // Replay the migration that invalidates the index, as an upgrade from the version before it would.
+    const reindex = MIGRATIONS.findIndex((m) => m.includes("update documents set hash = ''"));
+    expect(reindex).toBeGreaterThan(0);
+    db.exec(MIGRATIONS[reindex]!);
     const rescanned = store.indexer.scan(store.rootRef!);
     expect(rescanned.indexed).toBeGreaterThan(0);
     expect(rescanned.unchanged).toBe(0);

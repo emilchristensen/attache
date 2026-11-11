@@ -95,7 +95,8 @@ Connect each agent you use under Connections → *Coding agents*; the card says 
   Your other settings and hooks are kept, the file is backed up to Jarvis's `backups/` folder first, and **Disconnect** removes exactly what Jarvis added.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
-- **Session log:** each session gets an entry in `evidence/sessions/<date>.md` with what was decided and learned, written by your model.
+- **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
+  Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Jarvis named Machines keep their `<date>.md` name and are still searched and shown.
   Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Memory in new sessions:** every new session starts with a short block about you, an index of what Jarvis remembers, the latest session logs, and a command the agent can run to search Jarvis for more (`jarvis search "…"`).
@@ -153,12 +154,24 @@ If a service is unreachable, its coverage shows *offline* and it is retried at t
 - **Uninstall:** `~/.local/bin/jarvis-uninstall` removes the app and service, removes Jarvis's hooks from your coding agents, and keeps your data.
   `jarvis-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
 
+## This Machine
+
+Jarvis gives the computer it runs on an id and a name.
+The name starts as the computer's hostname; change it in **Settings → This Machine**.
+The id never changes.
+Session logs and connector snapshots carry the name in their file name, for example `evidence/sessions/2026-11-11-work-mac-3f9a2c1d.md`, so you can tell which computer wrote them.
+Renaming the Machine affects files written from then on; earlier files keep their name.
+
+Only one Jarvis service can use a data folder at a time.
+The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Jarvis/locks`.
+
 ## Where things live
 
 | What | Where |
 | --- | --- |
 | Your knowledge (Markdown) | The data folder you chose |
-| Service state (settings, jobs, drafts, receipts, logs, backups) | `~/Library/Application Support/Jarvis/state` |
+| Service state (settings, jobs, drafts, receipts, logs, backups, this Machine's id and name) | `~/Library/Application Support/Jarvis/state` |
+| Writer locks (one per data folder in use) | `~/Library/Application Support/Jarvis/locks` |
 | Credentials | macOS Keychain, service `dev.jarvis.default` |
 | App | `~/Library/Application Support/Jarvis/current` |
 | Command line | `~/.local/bin/jarvis` (`status`, `start`, `stop`, `pair`, `search`, `save`, `audit`, `agent-hooks`, `backup`, `restore`), `~/.local/bin/jarvis-uninstall` |

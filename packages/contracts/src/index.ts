@@ -124,6 +124,21 @@ export const ConfigPatch = z.object({
 });
 export type ConfigPatch = z.infer<typeof ConfigPatch>;
 
+/** The computer this service runs on. The id never changes; the owner can rename it. */
+export const MACHINE_NAME_MAX = 64;
+export const MachineView = z.object({ id: z.string(), name: z.string() });
+export type MachineView = z.infer<typeof MachineView>;
+
+export const MachineRename = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Give the Machine a name")
+    .max(MACHINE_NAME_MAX, `Keep the Machine's name to ${MACHINE_NAME_MAX} characters`)
+    .refine((n) => !/\p{Cc}/u.test(n), "A Machine's name cannot hold control characters"),
+});
+export type MachineRename = z.infer<typeof MachineRename>;
+
 // ---------------------------------------------------------------------------
 // Memory
 
