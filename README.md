@@ -19,7 +19,7 @@ You can also read and edit the notes in Obsidian or any other Markdown editor.
 - Capture and memory: import a Markdown folder or Obsidian vault read-only, capture notes and source-linked decisions, and correct facts while keeping dated history.
 - Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
 - Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
-- Replication (opt-in): every Machine you run Jarvis on keeps the same Brain through a private git repository, with history, offline saves that catch up later, and hand edits included.
+- Replication (opt-in): every Machine you run Jarvis on keeps the same Brain through a private git repository, with history, offline saves that catch up later, hand edits included, and the same inbox with the same dismiss and snooze decisions on every Machine.
 - Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.
 
 Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic, OpenAI-compatible).

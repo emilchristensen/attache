@@ -272,6 +272,14 @@ What happens on its own:
 - A note is never left with conflict markers.
   Until the merge rules for notes arrive, a file both Machines changed in the same place blocks Replication, and the cause names it; edit the file on one Machine to match the other and Replication carries on.
 
+The inbox replicates with the Brain:
+
+- An item raised on one Machine shows on all of them.
+- Dismissing or snoozing an item on one Machine applies on every Machine.
+- A dismissed item whose source changed reopens everywhere, marked "changed since your decision".
+- When two Machines decided differently on the same item before hearing of each other, the later decision wins.
+- Inbox items live in the Brain's `review/inbox/` folder, one small file per item, and never show up in search.
+
 The repository holds the whole Brain in plain text, so keep it private.
 Files that belong to one computer stay out of it: Jarvis's own `.jarvis/` folder, temporary files, `.DS_Store` and Obsidian's workspace layout.
 

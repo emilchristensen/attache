@@ -4,6 +4,7 @@ import { type Db, json, nowIso, tx } from "../core/db.ts";
 import { fingerprint } from "./fingerprint.ts";
 import type { AttentionCandidate } from "../connectors/types.ts";
 import { isFullyCovered } from "../connectors/types.ts";
+import { deriveState, INBOX_RECORD_VERSION, type InboxDecisionKind, type InboxDecisionPart, type InboxItemPart, type InboxMachine, type InboxRecord } from "./inbox-record.ts";
 
 export interface CandidateWithSource extends AttentionCandidate {
   sourceKind: string;
@@ -19,17 +20,138 @@ export interface ApplyResult {
   resolved: string[];
   keptDismissed: string[];
   reopened: string[];
+  /** Keys whose replicated record changed, so its file in the Brain must be written. */
+  touched: string[];
 }
+
+/** When "now" is and which Machine is writing; tests and old callers get the system clock and no Machine. */
+export interface InboxContext {
+  now: () => string;
+  machine: () => InboxMachine | null;
+}
+
+const SYSTEM: InboxContext = { now: nowIso, machine: () => null };
 
 interface ItemRow {
   id: string;
   item_key: string;
   fingerprint: string;
-  state: string;
-  snooze_until: string | null;
-  decided_fingerprint: string | null;
+  kind: string;
+  title: string;
+  summary: string;
+  why: string | null;
   source_kind: string;
   connection_id: string | null;
+  evidence: string;
+  url: string | null;
+  due_at: string | null;
+  priority: number;
+  state: AttentionItemView["state"];
+  snooze_until: string | null;
+  decided_fingerprint: string | null;
+  first_seen_at: string;
+  updated_at: string;
+  last_briefing_id: string | null;
+  action_id: string | null;
+  draftable: string | null;
+  resolved_at: string | null;
+  decision: string | null;
+  machine: string | null;
+}
+
+function rowByKey(db: Db, key: string): ItemRow | undefined {
+  return db.prepare("select * from attention_items where item_key = ?").get(key) as unknown as ItemRow | undefined;
+}
+
+/** The replicated record of a row: everything but this Machine's own links (drafts, briefings). */
+export function recordOfRow(r: ItemRow): InboxRecord {
+  return {
+    version: INBOX_RECORD_VERSION,
+    id: r.id,
+    key: r.item_key,
+    item: {
+      fingerprint: r.fingerprint,
+      kind: r.kind,
+      title: r.title,
+      summary: r.summary,
+      why: r.why ?? null,
+      sourceKind: r.source_kind,
+      connectionId: r.connection_id ?? null,
+      url: r.url ?? null,
+      dueAt: r.due_at ?? null,
+      priority: Number(r.priority),
+      evidence: json(r.evidence, []),
+      draftable: json(r.draftable, null),
+      firstSeenAt: r.first_seen_at,
+      updatedAt: r.updated_at,
+      resolvedAt: r.resolved_at ?? null,
+      machine: json(r.machine, null),
+    },
+    decision: json<InboxDecisionPart | null>(r.decision, null),
+  };
+}
+
+export function recordByKey(db: Db, key: string): InboxRecord | null {
+  const r = rowByKey(db, key);
+  return r ? recordOfRow(r) : null;
+}
+
+export function allRecords(db: Db): InboxRecord[] {
+  return (db.prepare("select * from attention_items order by item_key").all() as unknown as ItemRow[]).map(recordOfRow);
+}
+
+/**
+ * Store a record as this Machine's row, with its state worked out at `now`.
+ * The row keeps its local links to drafts and briefings; `briefingId` replaces the briefing link when given.
+ */
+export function storeRecord(db: Db, rec: InboxRecord, now: string, briefingId?: string | null): AttentionItemView["state"] {
+  const { item, decision } = rec;
+  const derived = deriveState(item, decision, now);
+  const values = [
+    rec.id, item.fingerprint, item.kind, item.title, item.summary, item.why, item.sourceKind, item.connectionId, JSON.stringify(item.evidence), item.url, item.dueAt, item.priority,
+    derived.state, derived.snoozeUntil, derived.decidedFingerprint, item.firstSeenAt, item.updatedAt, item.draftable ? JSON.stringify(item.draftable) : null,
+    item.resolvedAt, decision ? JSON.stringify(decision) : null, item.machine ? JSON.stringify(item.machine) : null,
+  ] as const;
+  const prev = rowByKey(db, rec.key);
+  if (!prev) {
+    db.prepare(
+      `insert into attention_items (id, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, snooze_until, decided_fingerprint, first_seen_at, updated_at, draftable, resolved_at, decision, machine, item_key, last_briefing_id)
+       values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(...values, rec.key, briefingId ?? null);
+  } else {
+    db.prepare(
+      `update attention_items set id = ?, fingerprint = ?, kind = ?, title = ?, summary = ?, why = ?, source_kind = ?, connection_id = ?, evidence = ?, url = ?, due_at = ?, priority = ?,
+         state = ?, snooze_until = ?, decided_fingerprint = ?, first_seen_at = ?, updated_at = ?, draftable = ?, resolved_at = ?, decision = ?, machine = ?, last_briefing_id = ?
+       where item_key = ?`,
+    ).run(...values, briefingId === undefined ? prev.last_briefing_id : briefingId, rec.key);
+  }
+  return derived.state;
+}
+
+function itemOf(c: CandidateWithSource, firstSeenAt: string, now: string, machine: InboxMachine | null): InboxItemPart {
+  return {
+    fingerprint: c.fingerprint,
+    kind: c.kind,
+    title: c.title,
+    summary: c.summary,
+    why: c.why ?? null,
+    sourceKind: c.sourceKind,
+    connectionId: c.connectionId,
+    url: c.url ?? null,
+    dueAt: c.dueAt ?? null,
+    priority: c.priority,
+    evidence: c.evidence,
+    draftable: c.draftable ?? null,
+    firstSeenAt,
+    updatedAt: now,
+    resolvedAt: null,
+    machine,
+  };
+}
+
+/** Whether the source said something new about the item, beyond when it last looked. */
+function reworded(prev: InboxItemPart, c: CandidateWithSource): boolean {
+  return prev.title !== c.title || prev.summary !== c.summary || JSON.stringify(prev.draftable) !== JSON.stringify(c.draftable ?? null);
 }
 
 /**
@@ -45,73 +167,120 @@ export function applyCandidates(
   source: { sourceKind: string; connectionId: string | null; coverage: Coverage; previousCoverage: Coverage | null },
   candidates: CandidateWithSource[],
   briefingId: string | null = null,
+  ctx: InboxContext = SYSTEM,
 ): ApplyResult {
-  const out: ApplyResult = { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [] };
-  const now = nowIso();
+  const out: ApplyResult = { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] };
+  const now = ctx.now();
+  const machine = ctx.machine();
   tx(db, () => {
     const existing = db
-      .prepare(`select id, item_key, fingerprint, state, snooze_until, decided_fingerprint, source_kind, connection_id from attention_items where source_kind = ? and coalesce(connection_id,'') = coalesce(?, '')`)
+      .prepare("select * from attention_items where source_kind = ? and coalesce(connection_id,'') = coalesce(?, '')")
       .all(source.sourceKind, source.connectionId) as unknown as ItemRow[];
-    const byKey = new Map(existing.map((r) => [r.item_key, r]));
     const seen = new Set<string>();
     for (const c of candidates) {
       if (seen.has(c.key)) continue;
       seen.add(c.key);
-      const prev = byKey.get(c.key) ?? (db.prepare("select id, item_key, fingerprint, state, snooze_until, decided_fingerprint, source_kind, connection_id from attention_items where item_key = ?").get(c.key) as unknown as ItemRow | undefined);
+      const prev = rowByKey(db, c.key);
       if (!prev) {
-        db.prepare(
-          `insert into attention_items (id, item_key, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, first_seen_at, updated_at, last_briefing_id, draftable)
-           values (?,?,?,?,?,?,?,?,?,?,?,?,?, 'open', ?, ?, ?, ?)`,
-        ).run(randomUUID(), c.key, c.fingerprint, c.kind, c.title, c.summary, c.why, c.sourceKind, c.connectionId, JSON.stringify(c.evidence), c.url ?? null, c.dueAt ?? null, c.priority, now, now, briefingId, c.draftable ? JSON.stringify(c.draftable) : null);
+        storeRecord(db, { version: INBOX_RECORD_VERSION, id: randomUUID(), key: c.key, item: itemOf(c, now, now, machine), decision: null }, now, briefingId);
         out.created.push(c.key);
+        out.touched.push(c.key);
         continue;
       }
-      // A user "done" decision on this exact evidence also stays closed; an auto-resolved item that reappears reopens.
-      if (prev.fingerprint === c.fingerprint && (prev.state !== "resolved" || prev.decided_fingerprint === c.fingerprint)) {
+      const rec = recordOfRow(prev);
+      if (prev.fingerprint === c.fingerprint && !rec.item.resolvedAt) {
+        // Same evidence: refresh what it says without alerting again; it replicates only when its wording changed.
+        const again = reworded(rec.item, c);
+        storeRecord(db, { ...rec, item: { ...rec.item, title: c.title, summary: c.summary, evidence: c.evidence, draftable: c.draftable ?? null, ...(again ? { updatedAt: now, machine } : {}) } }, now);
+        if (again) out.touched.push(c.key);
         out.unchanged.push(c.key);
         if (prev.state === "dismissed") out.keptDismissed.push(c.key);
-        // Refresh evidence timestamps without touching state or alerting again.
-        db.prepare("update attention_items set evidence = ?, title = ?, summary = ?, draftable = ? where id = ?").run(JSON.stringify(c.evidence), c.title, c.summary, c.draftable ? JSON.stringify(c.draftable) : null, prev.id);
         continue;
       }
-      // Evidence changed (or a resolved item came back).
-      let state = "open";
-      if (prev.state === "snoozed" && prev.snooze_until && prev.snooze_until > now) state = "snoozed";
-      if ((prev.state === "dismissed" || prev.state === "resolved") && prev.decided_fingerprint !== c.fingerprint) out.reopened.push(c.key);
-      db.prepare(
-        `update attention_items set fingerprint = ?, kind = ?, title = ?, summary = ?, why = ?, evidence = ?, url = ?, due_at = ?, priority = ?, state = ?, updated_at = ?, last_briefing_id = ?, source_kind = ?, connection_id = ?, draftable = ? where id = ?`,
-      ).run(c.fingerprint, c.kind, c.title, c.summary, c.why, JSON.stringify(c.evidence), c.url ?? null, c.dueAt ?? null, c.priority, state, now, briefingId, c.sourceKind, c.connectionId, c.draftable ? JSON.stringify(c.draftable) : null, prev.id);
+      // Evidence changed, or an item its source had resolved came back.
+      const state = storeRecord(db, { ...rec, item: itemOf(c, rec.item.firstSeenAt, now, machine) }, now, briefingId);
+      out.touched.push(c.key);
+      if (prev.fingerprint === c.fingerprint && state !== "open") {
+        out.unchanged.push(c.key);
+        continue;
+      }
+      if ((prev.state === "dismissed" || prev.state === "resolved") && state === "open") out.reopened.push(c.key);
       out.changed.push(c.key);
     }
     const canResolve = isFullyCovered(source.coverage) && isFullyCovered(source.previousCoverage);
     if (canResolve) {
       for (const r of existing) {
-        if (!seen.has(r.item_key) && r.state !== "resolved") {
-          db.prepare("update attention_items set state = 'resolved', updated_at = ? where id = ?").run(now, r.id);
-          out.resolved.push(r.item_key);
-        }
+        if (seen.has(r.item_key) || r.state === "resolved") continue;
+        const rec = recordOfRow(r);
+        storeRecord(db, { ...rec, item: { ...rec.item, resolvedAt: now, updatedAt: now, machine } }, now);
+        out.resolved.push(r.item_key);
+        out.touched.push(r.item_key);
       }
     }
   });
   return out;
 }
 
-export function decide(db: Db, id: string, decision: "dismiss" | "snooze" | "reopen" | "done", actor: string, until?: string): AttentionItemView {
-  const row = db.prepare("select * from attention_items where id = ?").get(id) as Record<string, string> | undefined;
+export function decide(db: Db, id: string, decision: InboxDecisionKind, actor: string, until?: string, ctx: InboxContext = SYSTEM): AttentionItemView {
+  const row = db.prepare("select * from attention_items where id = ?").get(id) as unknown as ItemRow | undefined;
   if (!row) throw new Error("not_found");
-  const now = nowIso();
+  const now = ctx.now();
   if (decision === "snooze" && (!until || until <= now)) throw new Error("Snooze needs a future time");
-  const state = decision === "dismiss" ? "dismissed" : decision === "snooze" ? "snoozed" : decision === "done" ? "resolved" : "open";
+  const part: InboxDecisionPart = { decision, fingerprint: row.fingerprint, until: decision === "snooze" ? until! : null, at: now, actor, machine: ctx.machine() };
   tx(db, () => {
-    db.prepare("update attention_items set state = ?, snooze_until = ?, decided_fingerprint = ?, updated_at = ? where id = ?").run(state, decision === "snooze" ? until! : null, decision === "reopen" ? null : row.fingerprint!, now, id);
-    db.prepare("insert into attention_decisions (item_key, fingerprint, decision, until, at, actor) values (?,?,?,?,?,?)").run(row.item_key!, row.fingerprint!, decision, until ?? null, now, actor);
+    storeRecord(db, { ...recordOfRow(row), decision: part }, now);
+    logDecision(db, row.item_key, part);
   });
   return getItem(db, id)!;
 }
 
+function logDecision(db: Db, key: string, d: InboxDecisionPart): void {
+  db.prepare("insert into attention_decisions (item_key, fingerprint, decision, until, at, actor) values (?,?,?,?,?,?)").run(key, d.fingerprint, d.decision, d.until, d.at, d.machine ? `${d.actor} on ${d.machine.name}` : d.actor);
+}
+
+/**
+ * Take in a record another Machine wrote. A decision this Machine has not seen
+ * yet is added to its decision log. Returns whether anything changed here.
+ */
+export function takeRecord(db: Db, rec: InboxRecord, now: string): boolean {
+  const prev = rowByKey(db, rec.key);
+  const before = prev ? recordOfRow(prev) : null;
+  if (before && JSON.stringify(before) === JSON.stringify(rec)) return false;
+  tx(db, () => {
+    storeRecord(db, rec, now);
+    if (rec.decision && JSON.stringify(rec.decision) !== JSON.stringify(before?.decision ?? null)) logDecision(db, rec.key, rec.decision);
+  });
+  return true;
+}
+
+/** Forget an item another Machine deleted. Returns whether it was here. */
+export function forgetItem(db: Db, key: string): boolean {
+  return Number(db.prepare("delete from attention_items where item_key = ?").run(key).changes) > 0;
+}
+
+/** A disconnected source no longer reports its items: resolve the ones still waiting. Returns their keys. */
+export function resolveConnection(db: Db, connectionId: string, ctx: InboxContext = SYSTEM): string[] {
+  const now = ctx.now();
+  const rows = db.prepare("select * from attention_items where connection_id = ? and state in ('open','snoozed')").all(connectionId) as unknown as ItemRow[];
+  tx(db, () => {
+    for (const r of rows) {
+      const rec = recordOfRow(r);
+      storeRecord(db, { ...rec, item: { ...rec.item, resolvedAt: now, updatedAt: now, machine: ctx.machine() } }, now);
+    }
+  });
+  return rows.map((r) => r.item_key);
+}
+
+/** Delete a disconnected source's items, as the owner asked. Returns their keys. */
+export function deleteConnection(db: Db, connectionId: string): string[] {
+  const keys = (db.prepare("select item_key from attention_items where connection_id = ?").all(connectionId) as Array<{ item_key: string }>).map((r) => r.item_key);
+  db.prepare("delete from attention_items where connection_id = ?").run(connectionId);
+  return keys;
+}
+
 /** Reopen snoozed items whose time has passed. */
 export function wakeSnoozed(db: Db, now = nowIso()): number {
-  return Number(db.prepare("update attention_items set state = 'open', snooze_until = null, updated_at = ? where state = 'snoozed' and snooze_until <= ?").run(now, now).changes);
+  return Number(db.prepare("update attention_items set state = case when resolved_at is null then 'open' else 'resolved' end, snooze_until = null, updated_at = ? where state = 'snoozed' and snooze_until <= ?").run(now, now).changes);
 }
 
 export function getItem(db: Db, id: string): AttentionItemView | null {
