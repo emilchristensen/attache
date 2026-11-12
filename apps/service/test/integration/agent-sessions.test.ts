@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -42,6 +42,19 @@ async function until<T>(fn: () => T | undefined | null | false, ms = 15_000): Pr
     await new Promise((r) => setTimeout(r, 50));
   }
 }
+
+const untilSpoolEmpty = () => until(() => !readdirSync(spoolDir(svc.stateDir)).some((f) => f.endsWith(".json")));
+/** Warnings and errors the service logged about one Harness session. */
+const warnings = (sessionId: string) =>
+  readFileSync(join(svc.stateDir, "logs/service.log"), "utf8")
+    .split("\n")
+    .filter((l) => l.trim())
+    .map((l) => JSON.parse(l) as { level: string; msg: string; data?: { sessionId?: string } })
+    .filter((e) => (e.level === "warn" || e.level === "error") && e.data?.sessionId === sessionId);
+const savedSessions = (sessionId: string) => {
+  const dir = join(svc.dataDir, "evidence/sessions/transcripts/claude-code");
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.includes(sessionId)) : [];
+};
 
 const distillJobs = () => svc.app.jobs.list({ kind: "session-distill", limit: 50 });
 const jobsFor = (sessionId: string) =>
@@ -151,6 +164,27 @@ describe("Harness sessions", () => {
     expect(log).toContain("keep the old ledger read-only");
   });
 
+  it("a Claude Code command that never starts a conversation is skipped quietly", async () => {
+    // What Claude Code 2.1 sends after `claude mcp list`: a SessionEnd for a session whose transcript was never written.
+    const id = "d3ba5d6a-fb45-4dff-b150-46f65ee641c8";
+    runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: id, transcript_path: join(HOME, ".claude/projects/-work", `${id}.jsonl`), cwd: work, hook_event_name: "SessionEnd", reason: "other" });
+    await untilSpoolEmpty();
+    expect(warnings(id)).toEqual([]);
+    expect(savedSessions(id)).toEqual([]);
+  });
+
+  it("a session whose transcript is gone after part of it was saved still warns", async () => {
+    const id = "s-vanished";
+    const transcript = join(work, `${id}.jsonl`);
+    writeFileSync(transcript, claudeTranscript(id, work, [["Keep this?", "We decided to keep it."]]));
+    runHook(join(HOME, ".claude/settings.json"), "PreCompact", { session_id: id, transcript_path: transcript, cwd: work, trigger: "auto" });
+    await until(() => savedSessions(id).length === 1);
+    rmSync(transcript);
+    runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: id, transcript_path: transcript, cwd: work, reason: "exit" });
+    await untilSpoolEmpty();
+    expect(warnings(id)).toEqual([expect.objectContaining({ msg: "agent session not saved", data: expect.objectContaining({ event: "session-end", reason: expect.stringContaining("Transcript not found") }) })]);
+  });
+
   it("a session summarised in a project's repository starts that project's next sessions", async () => {
     const repo = join(work, "orion-checkout");
     mkdirSync(repo, { recursive: true });
@@ -239,6 +273,13 @@ describe("Harness sessions", () => {
     writeFileSync(transcript, JSON.stringify({ some: "future format" }) + "\n");
     runHook(join(HOME, ".gemini/config/hooks.json"), "Stop", { conversationId: "conv-2", transcriptPath: transcript, workspacePaths: [work], fullyIdle: true }, { named: true });
     await until(() => existsSync(join(svc.stateDir, "agents/unparsed")) && readdirSync(join(svc.stateDir, "agents/unparsed")).some((f) => f.includes("conv-2")));
+  });
+
+  it("Antigravity: a finished turn whose transcript is missing still warns, since a turn means a conversation", async () => {
+    const id = "conv-missing";
+    runHook(join(HOME, ".gemini/config/hooks.json"), "Stop", { conversationId: id, transcriptPath: join(work, "brain", id, ".system_generated/logs/transcript.jsonl"), workspacePaths: [work], fullyIdle: true }, { named: true });
+    await untilSpoolEmpty();
+    expect(warnings(id)).toEqual([expect.objectContaining({ msg: "agent session not saved", data: expect.objectContaining({ event: "turn-end" }) })]);
   });
 
   it("long sessions are summarised in parts, so early decisions are not lost; secrets never reach the summariser", async () => {
