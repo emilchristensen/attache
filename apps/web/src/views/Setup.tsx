@@ -295,7 +295,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
     <section className="stack">
       <h1>Model and schedules</h1>
       <h2>Model</h2>
-      <p className="muted small">A model summarises agent sessions and writes briefings, research findings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
+      <p className="muted small">A model summarises agent sessions and writes Proposals, briefings, research findings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
       {card("model")}
       {attentionOn && (
         <>

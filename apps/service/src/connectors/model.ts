@@ -21,7 +21,7 @@ export const modelAdapter: ConnectorAdapter = {
   definition: {
     kind: "model",
     label: "Model",
-    description: "The language model that writes answers, briefings and drafts. Search works without it.",
+    description: "The language model that summarises agent sessions and writes Proposals, briefings, research findings and drafts. Search works without it.",
     authMethods: [
       { id: "claude-cli", label: "Claude Code on this computer (uses your Claude sign-in)", fields: [{ id: "model", label: "Model", secret: false, optional: true, placeholder: DEFAULT_MODELS["claude-cli"] }] },
       {
@@ -44,7 +44,7 @@ export const modelAdapter: ConnectorAdapter = {
     ],
     scopes: [],
     writeActions: [],
-    setupHelp: "Evidence from your notes is sent to the model you choose with each question. A local endpoint keeps it on this machine.",
+    setupHelp: "Agent sessions, meeting captures and evidence from your Brain are sent to the model you choose for this work. A local endpoint keeps them on this computer.",
     unavoidableSteps: [],
   },
   async configure(ctx, fields) {
