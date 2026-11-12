@@ -1036,6 +1036,26 @@ button.count-chip {
   padding-left: 20px;
 }
 
+/* ---- paired clients ---------------------------------------------------- */
+
+/* A paired client: its name and kind, when it was last seen, and Revoke. */
+.client-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 7px 0;
+}
+.client-row + .client-row {
+  border-top: 1px solid var(--border);
+}
+.client-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
 /* ---- setup ---------------------------------------------------------------------- */
 
 .setup {
@@ -1199,6 +1219,14 @@ button.count-chip {
   }
   .check-row > :nth-child(2) {
     justify-self: end;
+  }
+  /* The name on its own line, then when it was last seen beside Revoke. */
+  .client-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .client-name {
+    grid-column: 1 / -1;
   }
   .check-row > :nth-child(3) {
     grid-column: 1 / -1;
