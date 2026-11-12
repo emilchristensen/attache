@@ -1,7 +1,7 @@
 import { test, expect, type Page, type ConsoleMessage, type BrowserContext, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -17,6 +17,21 @@ function watch(page: Page) {
     if (m.type() === "error" && !/ERR_CONNECTION_REFUSED|Failed to load resource|net::ERR/.test(m.text())) consoleErrors.push(m.text());
   });
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+}
+
+/** The service runs on this computer with this environment, so its Documents folder is this one. */
+const DOCUMENTS = join(process.platform === "win32" ? process.env.USERPROFILE || homedir() : process.env.HOME || homedir(), "Documents");
+
+/**
+ * Fails when a view names macOS or the Mac on Linux or Windows. On macOS the
+ * Dashboard may name its own platform, such as the Keychain in Settings.
+ */
+async function expectNoMacWording(page: Page, where: string) {
+  if (process.platform === "darwin") return;
+  await page.waitForLoadState("networkidle");
+  const text = await page.locator("body").innerText();
+  const placeholders = await page.locator("input[placeholder]").evaluateAll((els) => els.map((e) => (e as HTMLInputElement).placeholder));
+  expect([text, ...placeholders].join("\n"), `macOS wording on ${where}`).not.toMatch(/macOS|\bMac\b|\/Users\//);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -71,6 +86,9 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText(`New folder: ${stack.dataDir}`)).toBeVisible();
   await expect(page.getByText("Will modify: nothing")).toBeVisible();
+  // Example folders are shaped for the computer Jarvis runs on.
+  await expect(page.getByRole("textbox", { name: "Folder to import" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
+  await expectNoMacWording(page, "setup: data folder");
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(page.getByText(/Will read 2 Markdown file/)).toBeVisible();
@@ -131,6 +149,9 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await model.getByRole("textbox", { name: "Model" }).fill("fixture-model");
   await model.getByRole("button", { name: "Connect" }).click();
   await expect(model.getByText("connected", { exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Show a desktop notification for new urgent items" })).toBeVisible();
+  await expect(page.getByText("If this Machine sleeps, missed runs are caught up once when it wakes.")).toBeVisible();
+  await expectNoMacWording(page, "setup: model and schedules");
   await page.getByRole("spinbutton", { name: /Refresh sources every/ }).fill("20");
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -703,6 +724,17 @@ test("wording: no view says sync for reading sources; a source offers Refresh no
     const text = await page.locator("body").innerText();
     expect(text, `"sync" on ${path}`).not.toMatch(/\bsync/i);
   }
+});
+
+test("wording: on Linux and Windows no view names macOS, and example folders are on this computer", async () => {
+  const page = await open("/settings");
+  await expect(page.getByRole("checkbox", { name: "Desktop notification for new urgent items" })).toBeVisible();
+  await page.getByRole("tab", { name: "Join another Machine" }).click();
+  await expect(page.getByRole("textbox", { name: /Empty folder for the Brain/ })).toHaveAttribute("placeholder", join(DOCUMENTS, "Brain"));
+  await expectNoMacWording(page, "/settings");
+  await page.goto(`${stack.url}/connections`);
+  await expect(page.getByRole("textbox", { name: "Folder path" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
+  await expectNoMacWording(page, "/connections");
 });
 
 test("no unresolved console errors across journeys", () => {

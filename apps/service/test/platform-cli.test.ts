@@ -38,6 +38,7 @@ describe("paths and Harness locations per operating system", () => {
       locksDir: "/Users/owner/Library/Application Support/Jarvis/locks",
       binDir: "/Users/owner/.local/bin",
       serviceDefinitionDir: "/Users/owner/Library/LaunchAgents",
+      documentsDir: "/Users/owner/Documents",
       tar: "/usr/bin/tar",
       claudeManagedSettings: "/Library/Application Support/ClaudeCode/managed-settings.json",
     });
@@ -56,6 +57,7 @@ describe("paths and Harness locations per operating system", () => {
       locksDir: "/home/owner/.local/state/jarvis/locks",
       binDir: "/home/owner/.local/bin",
       serviceDefinitionDir: "/home/owner/.config/systemd/user",
+      documentsDir: "/home/owner/Documents",
       claudeManagedSettings: "/etc/claude-code/managed-settings.json",
     });
     const custom = paths("linux", { HOME: "/home/owner", XDG_DATA_HOME: "/data", XDG_STATE_HOME: "/state", XDG_CONFIG_HOME: "/config" });
@@ -74,6 +76,7 @@ describe("paths and Harness locations per operating system", () => {
       locksDir: "C:\\Users\\owner\\AppData\\Local\\Jarvis\\locks",
       binDir: "C:\\Users\\owner\\AppData\\Local\\Jarvis\\bin",
       serviceDefinitionDir: null,
+      documentsDir: "C:\\Users\\owner\\Documents",
       tar: "C:\\Windows\\System32\\tar.exe",
       claudeManagedSettings: "C:\\Program Files\\ClaudeCode\\managed-settings.json",
     });

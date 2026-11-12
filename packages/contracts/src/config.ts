@@ -55,3 +55,20 @@ export const MachineRename = z.object({
     .refine((n) => !/\p{Cc}/u.test(n), "A Machine's name cannot hold control characters"),
 });
 export type MachineRename = z.infer<typeof MachineRename>;
+
+/**
+ * Folder paths shaped for the computer the service runs on, which may not be
+ * the one the browser runs on: the data folder setup suggests, and the
+ * examples the Dashboard shows in empty folder fields.
+ */
+export interface SetupDefaults {
+  home: string;
+  /** The data folder setup suggests for a new Brain. */
+  suggestion: string;
+  examples: {
+    /** A folder of notes to import. */
+    notes: string;
+    /** An empty folder to join another Machine's Brain into. */
+    brain: string;
+  };
+}
