@@ -410,6 +410,8 @@ Hook commands go through the installer's `current` symlink, so upgrades do not b
 The hook (`agents/jarvis-agent-hook.ts`, bundled as `jarvis-agent-hook.mjs`) does no network calls and never waits for the service: SessionEnd budgets are 1.5 s (Claude Code) and 3 s (Codex).
 On session end, compaction, or (Antigravity) a fully idle turn, it clones the transcript into `state/agents/spool/` and writes a small record last.
 The service ingests the spool on change, every minute and at start, so a session ends up in the data folder even if Jarvis was stopped when it ended.
+A Harness writes its transcript once a conversation starts, so a session end or compaction whose named transcript does not exist had no conversation, like the session `claude mcp list` ends, and is dropped with a debug line (`AgentSessions.hadNoConversation`).
+A missing transcript is still logged as a warning after a finished turn, or when Jarvis saved part of that session earlier, because then the transcript was lost.
 Ingest parses each agent's transcript format down to user and assistant text, dropping tool calls, tool output, thinking, injected reminders and developer-role context (where Jarvis's own memory block lands in Codex), archives it, and queues a `session-distill` job.
 That job asks the model for durable decisions and lessons, appends one entry per session (or per continuation) to the day's session log, and records how many turns are summarised so a compaction followed by the end adds only new turns.
 An entry for a session that ran in a git repository carries a `Repository: <host/owner/name>` line, read from the folder's git config when the job runs, which ties it to the project that lists that repository.

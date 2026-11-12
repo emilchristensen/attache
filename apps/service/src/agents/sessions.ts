@@ -138,7 +138,9 @@ export class AgentSessions {
     const integration = integrationFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
     if (!integration?.hooks || !copy || !existsSync(copy)) {
-      this.app.log.warn("agent session not saved", { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") });
+      const detail = { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") };
+      if (integration && this.hadNoConversation(r)) this.app.log.debug("agent session had no conversation; nothing to save", detail);
+      else this.app.log.warn("agent session not saved", detail);
       return false;
     }
     const raw = readFileSync(copy, "utf8");
@@ -166,6 +168,16 @@ export class AgentSessions {
     const row = this.row(r.agent, r.sessionId)!;
     if (row.turns > row.distilled_turns) this.scheduleSummary(r, integration.label, title, row.turns);
     return true;
+  }
+
+  /**
+   * Commands that never start a conversation (`claude mcp list`) still end a
+   * session, with a transcript that was never written. A finished turn, or a
+   * part of the session Jarvis already saved, shows there was a conversation,
+   * so its missing transcript is a failure.
+   */
+  private hadNoConversation(r: SpoolRecord): boolean {
+    return !!r.absent && r.event !== "turn-end" && !this.row(r.agent, r.sessionId);
   }
 
   /**

@@ -26,6 +26,12 @@ export interface SpoolRecord {
   copy: string | null;
   at: string;
   error?: string;
+  /**
+   * True when the Harness named a transcript that does not exist. It writes
+   * one once a conversation starts, so a session-end or compaction without one
+   * had no conversation, unless Jarvis saved part of it before it went.
+   */
+  absent?: true;
 }
 
 export const agentsDir = (stateDir: string) => join(stateDir, "agents");
@@ -35,23 +41,25 @@ export const contextFile = (stateDir: string) => join(agentsDir(stateDir), "sess
 const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) || "unknown";
 
 /** Copy the transcript and write the record last, so a record always has its complete copy. */
-export function spoolCapture(stateDir: string, input: Omit<SpoolRecord, "v" | "id" | "copy" | "at" | "error">): SpoolRecord {
+export function spoolCapture(stateDir: string, input: Omit<SpoolRecord, "v" | "id" | "copy" | "at" | "error" | "absent">): SpoolRecord {
   const dir = spoolDir(stateDir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const id = `${new Date().toISOString().replace(/[:.]/g, "-")}-${safe(input.agent)}-${safe(input.sessionId)}-${randomUUID().slice(0, 8)}`;
   let copy: string | null = null;
   let error: string | undefined;
-  if (input.sourcePath && existsSync(input.sourcePath) && statSync(input.sourcePath).isFile()) {
+  const found = input.sourcePath && existsSync(input.sourcePath) && statSync(input.sourcePath).isFile() ? input.sourcePath : null;
+  if (found) {
     copy = `${id}.transcript`;
     try {
       // A copy-on-write clone where the filesystem supports it, so even large transcripts are instant.
-      copyFileSync(input.sourcePath, join(dir, copy), constants.COPYFILE_FICLONE);
+      copyFileSync(found, join(dir, copy), constants.COPYFILE_FICLONE);
     } catch (e) {
       copy = null;
       error = `Could not copy the transcript: ${(e as Error).message}`;
     }
   } else error = input.sourcePath ? `Transcript not found at ${input.sourcePath}` : "The agent did not say where the transcript is";
-  const record: SpoolRecord = { v: 1, id, ...input, copy, at: new Date().toISOString(), ...(error ? { error } : {}) };
+  const absent = !!input.sourcePath && !found;
+  const record: SpoolRecord = { v: 1, id, ...input, copy, at: new Date().toISOString(), ...(error ? { error } : {}), ...(absent ? { absent: true } : {}) };
   const tmp = join(dir, `.${id}.tmp`);
   writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
   replaceWith(tmp, join(dir, `${id}.json`));
