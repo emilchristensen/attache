@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ConnectionDefinition, ConnectionStatus, FeatureStatus, Config, SetupDefaults } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@jarvis/contracts";
 import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
@@ -156,9 +156,9 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
         </div>
         {importPreview && (
           <div className="state partial small">
-            <strong style={{ color: "var(--text)" }}>Will read {importPreview.filesToRead} Markdown file(s) from {importPreview.path}</strong>
+            <strong style={{ color: "var(--text)" }}>Will read {plural(importPreview.filesToRead, "Markdown file")} from {importPreview.path}</strong>
             <span>{importPreview.note}</span>
-            {importPreview.skippedCount > 0 && <span>{importPreview.skippedCount} item(s) skipped (hidden folders, links or large files).</span>}
+            {importPreview.skippedCount > 0 && <span>{plural(importPreview.skippedCount, "item")} skipped (hidden folders, links or large files).</span>}
             {importPreview.sample.length > 0 && <span className="mono">{importPreview.sample.slice(0, 5).join(", ")}{importPreview.filesToRead > 5 ? ", …" : ""}</span>}
             <span>Files changed in that folder: 0</span>
           </div>
@@ -295,7 +295,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
     <section className="stack">
       <h1>Model and schedules</h1>
       <h2>Model</h2>
-      <p className="muted small">A model summarises agent sessions and writes briefings, research findings and drafts from your evidence. Without one, Jarvis still searches and shows the evidence it finds.</p>
+      <p className="muted small">Optional. Without a model, Jarvis still searches and shows the evidence it finds.</p>
       {card("model")}
       {attentionOn && (
         <>

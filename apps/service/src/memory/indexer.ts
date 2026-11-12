@@ -16,9 +16,13 @@ export interface IndexRoot {
 
 const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".jarvis", ".DS_Store"]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-/** Top-level folders of the data folder that are never recall: replicated review state (Proposals, inbox). */
-const DATA_SKIP_TOP: ReadonlySet<string> = new Set([REVIEW_STATE_DIR]);
-const NO_SKIP: ReadonlySet<string> = new Set();
+/**
+ * Jarvis's own top-level folders in the data folder, never recall and never
+ * reported as skipped: its working files, Replication's repository, and
+ * replicated review state (Proposals, inbox).
+ */
+const DATA_OWN_TOP: ReadonlySet<string> = new Set([".jarvis", ".git", REVIEW_STATE_DIR]);
+const NO_OWN: ReadonlySet<string> = new Set();
 
 export interface ScanPlan {
   read: string[];
@@ -26,8 +30,11 @@ export interface ScanPlan {
   totalBytes: number;
 }
 
-/** List what an import would read, without reading contents. */
-export function planScan(rootPath: string, limit = 50_000, skipTop: ReadonlySet<string> = NO_SKIP): ScanPlan {
+/**
+ * List what an import would read, without reading contents. Top-level folders
+ * in `ownTop` belong to Jarvis: they are left out without being listed as skipped.
+ */
+export function planScan(rootPath: string, limit = 50_000, ownTop: ReadonlySet<string> = NO_OWN): ScanPlan {
   const plan: ScanPlan = { read: [], skipped: [], totalBytes: 0 };
   const walk = (dir: string) => {
     let entries: string[];
@@ -51,7 +58,8 @@ export function planScan(rootPath: string, limit = 50_000, skipTop: ReadonlySet<
         continue;
       }
       if (st.isDirectory()) {
-        if (SKIP_DIRS.has(name) || name.startsWith(".") || (dir === rootPath && skipTop.has(name))) {
+        if (dir === rootPath && ownTop.has(name)) continue;
+        if (SKIP_DIRS.has(name) || name.startsWith(".")) {
           plan.skipped.push({ path: rel + "/", reason: "hidden or tool folder" });
           continue;
         }
@@ -73,6 +81,11 @@ export function planScan(rootPath: string, limit = 50_000, skipTop: ReadonlySet<
   };
   walk(rootPath);
   return plan;
+}
+
+/** What the index reads from the Jarvis data folder: everything but Jarvis's own folders. */
+export function planDataFolderScan(rootPath: string, limit?: number): ScanPlan {
+  return planScan(rootPath, limit, DATA_OWN_TOP);
 }
 
 export function docId(rootId: string, rel: string): string {
@@ -183,7 +196,7 @@ export class Indexer {
     const parts = rel.split(sep).join("/").split("/").filter((p) => p && p !== ".");
     if (!parts.length || parts.includes("..")) return "rescan";
     if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p) || p.startsWith("."))) return "ignored";
-    if (root.id === "data" && DATA_SKIP_TOP.has(parts[0]!)) return "ignored";
+    if (root.id === "data" && DATA_OWN_TOP.has(parts[0]!)) return "ignored";
     const n = parts.join("/");
     const isMarkdown = n.toLowerCase().endsWith(".md");
     const abs = join(root.path, n);
@@ -222,7 +235,7 @@ export class Indexer {
   /** Incremental scan: index new/changed files, drop documents whose files disappeared. */
   scan(root: IndexRoot, onlyAreas?: string[]): IndexResult {
     const result: IndexResult = { indexed: 0, unchanged: 0, removed: 0, errors: [] };
-    const plan = planScan(root.path, undefined, root.id === "data" ? DATA_SKIP_TOP : NO_SKIP);
+    const plan = root.id === "data" ? planDataFolderScan(root.path) : planScan(root.path);
     const present = new Set<string>();
     const known = new Map(
       (this.db.prepare("select rel_path, mtime_ms, hash from documents where root = ?").all(root.id) as Array<{ rel_path: string; mtime_ms: number }>).map(

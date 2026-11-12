@@ -63,6 +63,29 @@ async function open(path = "/"): Promise<Page> {
   return page;
 }
 
+test("setup keeps its place when a step grows taller than the window", async ({ playwright }) => {
+  // Headless Chrome hides scrollbars unless told otherwise; an owner's browser shows them.
+  const chrome = await playwright.chromium.launch({ channel: "chrome", headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  try {
+    const page = await chrome.newPage({ viewport: { width: 1360, height: 900 } });
+    await page.goto(stack.pairUrl());
+    await expect(page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" })).toBeVisible();
+    const column = async () => (await page.locator("main.setup").boundingBox())!.x;
+    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(false);
+    const short = await column();
+    // Previews only read: the folders are left as they are for the onboarding journey.
+    await page.getByRole("textbox", { name: /Data folder/ }).fill(stack.dataDir);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
+    await page.getByRole("button", { name: "Preview import" }).click();
+    await expect(page.getByText(/^Will read 2 Markdown files from /)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(true);
+    expect(await column()).toBe(short);
+  } finally {
+    await chrome.close();
+  }
+});
+
 test("onboarding: pair, choose folder, preview import, features, connections, model, finish", async () => {
   const page = await shared.newPage();
   watch(page);
@@ -91,7 +114,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await expectNoMacWording(page, "setup: data folder");
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
-  await expect(page.getByText(/Will read 2 Markdown file/)).toBeVisible();
+  await expect(page.getByText(/^Will read 2 Markdown files from /)).toBeVisible();
   await expect(page.getByText("Files changed in that folder: 0")).toBeVisible();
   await page.getByRole("textbox", { name: "Name" }).fill("Test User");
   await page.getByRole("textbox", { name: "Email" }).fill("alex@example.com");

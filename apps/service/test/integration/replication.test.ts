@@ -80,6 +80,36 @@ describe("Replication between Machines", () => {
     expect(message).toMatch(/Jarvis-Machine: Mac \([0-9a-f-]{36}\)/);
   });
 
+  it("says a save added a subject the note did not have, and corrected one whose value it replaced", async () => {
+    world = await startMachines(["Mac"]);
+    const [mac] = world.machines as [TestMachine];
+    await saveProject(mac, "Orion migration", "Cutover planned for October");
+    await mac.clock.advance(AFTER_WRITE);
+    await mac.post("/memory/save", {
+      confirmed: true,
+      items: [
+        {
+          action: "update",
+          path: "memory/projects/orion-migration.md",
+          facts: [
+            { subject: "Owner", value: "Platform team", reason: "kickoff" },
+            { subject: "Status", value: "Cutover moved to November", reason: "vendor delay" },
+          ],
+        },
+      ],
+    });
+    await mac.clock.advance(AFTER_WRITE);
+    const subject = world.remote.git("log", "-1", "--format=%s", "main");
+    expect(subject).toBe("Mac: added Owner, corrected Status in memory/projects/orion-migration.md");
+
+    // Added and then changed before the next commit: the commit still adds it.
+    const setBudget = (value: string) => mac.post("/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Budget", value, reason: "estimate" }] }] });
+    await setBudget("40 hours");
+    await setBudget("60 hours");
+    await mac.clock.advance(AFTER_WRITE);
+    expect(world.remote.git("log", "-1", "--format=%s", "main")).toBe("Mac: added Budget in memory/projects/orion-migration.md");
+  });
+
   it("replicates a hand edit to a note, with the edit named in history", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];

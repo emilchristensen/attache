@@ -59,6 +59,16 @@ describe("chat is gone", () => {
     expect((await svc.call("PUT", "/features", { changes: { conversation: true } })).status).toBe(400);
   });
 
+  it("the Model card says what the model does now, with no answers or questions", async () => {
+    const svc = await startTestService();
+    running.push(svc);
+    const caps = await svc.get("/capabilities");
+    const model = caps.definitions.find((d: { kind: string }) => d.kind === "model");
+    const card = `${model.description} ${model.setupHelp}`;
+    expect(card).not.toMatch(/answer|question/i);
+    for (const work of ["sessions", "Proposals", "briefings", "research", "drafts"]) expect(card).toContain(work);
+  });
+
   it("an upgrade drops stored conversations, keeps chat archives in the Brain out of recall, and keeps every other setting", async () => {
     const { stateDir, dataDir } = chatEraState();
     const svc = await startTestService({ stateDir, dataDir, setup: false });

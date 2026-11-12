@@ -432,7 +432,7 @@ What happens on its own:
 - A save is committed and pushed 30 seconds after the last write, so a burst of saves becomes one commit.
 - Edits you make by hand in an editor are committed and pushed too.
 - Every minute, at start and when the Machine wakes, Jarvis fetches the other Machines' changes and merges them; search includes them as soon as they arrive.
-- Each commit message names the files that changed, what changed in them (for example `corrected Status, added an event`) and the Machine.
+- Each commit message names the files that changed, what changed in them (for example `added Owner, corrected Status, added an event`) and the Machine.
 - Offline, saves and search carry on as usual; the status reads offline, and the Machine catches up by itself when the repository can be reached again.
 - A failing Replication never fails a save.
 - Jarvis merges and never rebases or force-pushes, so nothing another Machine pushed is ever rewritten.
