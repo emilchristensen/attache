@@ -11,6 +11,7 @@ import {
   deleteConnection,
   forgetItem,
   recordByKey,
+  rederiveStates,
   resolveConnection,
   resolveItems,
   takeRecord,
@@ -70,6 +71,17 @@ export class Inbox {
   /** A connection was disconnected: its items are resolved, or deleted when the owner asked for that. */
   disconnected(connectionId: string, deleteData: boolean): void {
     this.write(deleteData ? deleteConnection(this.d.db, connectionId) : resolveConnection(this.d.db, connectionId, this.d.ctx));
+  }
+
+  /**
+   * Work every item's state out again from its record when the service starts, whether or not
+   * a data folder opens: a state an earlier release left in the database never outlives the upgrade.
+   */
+  load(): void {
+    const keys = rederiveStates(this.d.db, this.d.ctx.now());
+    if (!keys.length) return;
+    this.d.log.info("worked inbox states out again from their records", { keys });
+    this.d.onChange();
   }
 
   /**

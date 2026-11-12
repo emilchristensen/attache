@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,6 +51,10 @@ function stateFromBefore(): { stateDir: string; dataDir: string; until: string }
   // An old dismissal whose evidence changed since: open again, marked as changed.
   item.run("i-changed", "k-changed", "f2", "Water the plants", "open", null, "f1", at(-5 * hour), at(-1 * hour));
   decision.run("k-changed", "f1", "dismiss", null, at(-4 * hour));
+  // Done, then its evidence changed and changed back: the release before set the state to open on
+  // any change, so the row says open while the decision is done on the evidence it has now (#60).
+  item.run("i-bounced", "k-bounced", "f1", "Review the pull request", "open", null, "f1", at(-5 * hour), at(-1 * hour));
+  decision.run("k-bounced", "f1", "done", null, at(-3 * hour));
   db.close();
   return { stateDir, dataDir, until };
 }
@@ -67,6 +71,7 @@ const EXPECTED = {
   "Book flights": { id: "i-done", state: "resolved", changedSinceDecision: false },
   "Reply to Anna": { id: "i-gone", state: "resolved", changedSinceDecision: false },
   "Water the plants": { id: "i-changed", state: "open", changedSinceDecision: true },
+  "Review the pull request": { id: "i-bounced", state: "resolved", changedSinceDecision: false },
 };
 
 describe("inbox items and decisions from before the inbox replicated", () => {
@@ -75,11 +80,11 @@ describe("inbox items and decisions from before the inbox replicated", () => {
     const mac = await startTestService({ stateDir: before.stateDir, dataDir: before.dataDir, clock: new ManualClock() });
     running.push(mac);
     expect(await states(mac)).toEqual(EXPECTED);
-    expect(readdirSync(join(before.dataDir, "review/inbox"))).toHaveLength(6);
+    expect(readdirSync(join(before.dataDir, "review/inbox"))).toHaveLength(7);
 
     const remote = createRemote();
     await mac.post("/replication/setup", { remote: remote.url });
-    expect(remote.git("ls-tree", "-r", "--name-only", "main").split("\n").filter((p) => p.startsWith("review/inbox/"))).toHaveLength(6);
+    expect(remote.git("ls-tree", "-r", "--name-only", "main").split("\n").filter((p) => p.startsWith("review/inbox/"))).toHaveLength(7);
 
     const pc = await startTestService({ clock: new ManualClock(), setup: false });
     running.push(pc);
@@ -87,5 +92,14 @@ describe("inbox items and decisions from before the inbox replicated", () => {
     await pc.post("/setup/complete");
     expect(await states(pc)).toEqual(EXPECTED);
     expect((await pc.get("/attention?state=snoozed")).items[0].snoozeUntil).toBe(before.until);
+  });
+
+  it("show the state their records give even when the data folder does not open (#60)", async () => {
+    const before = stateFromBefore();
+    // A data folder on a drive that is not there: the inbox still shows what the database holds.
+    rmSync(before.dataDir, { recursive: true });
+    const mac = await startTestService({ stateDir: before.stateDir, dataDir: before.dataDir, clock: new ManualClock(), setup: false });
+    running.push(mac);
+    expect(await states(mac)).toEqual(EXPECTED);
   });
 });

@@ -438,6 +438,7 @@ export class App {
 
   start() {
     void this.connections.migrateLegacyTransports().catch((e) => this.log.error("connection migration failed", { error: (e as Error).message }));
+    this.inbox.load();
     const cfg = this.config.get();
     if (cfg.dataFolder && existsSync(cfg.dataFolder)) {
       try {

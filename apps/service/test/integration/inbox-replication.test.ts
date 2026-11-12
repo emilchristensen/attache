@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 
 const CHECK = 60_000;
@@ -100,6 +101,27 @@ describe("The inbox replicates", () => {
     expect(await venue(mac)).toMatchObject({ state: "open", changedSinceDecision: true });
     await replicate(mac, pc);
     expect(await venue(pc)).toMatchObject({ state: "open", changedSinceDecision: true, title: expect.stringMatching(/Due today/) });
+  });
+
+  it("shows the state its record gives on a Machine whose database kept another one, as after an upgrade (#60)", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    writeTask(mac, day(2));
+    await refresh(mac);
+    const id = (await venue(mac))!.id;
+    await mac.post(`/attention/${id}/decision`, { decision: "done" });
+    await replicate(mac, pc);
+    expect((await venue(pc))!.state).toBe("resolved");
+
+    // An earlier release left such rows open, and the upgrade carried the decision over without working the state out again.
+    const db = new DatabaseSync(join(mac.stateDir, "jarvis.sqlite"));
+    db.prepare("update attention_items set state = 'open' where id = ?").run(id);
+    db.close();
+    const restarted = await world.restart(mac);
+
+    expect((await venue(restarted))!.state).toBe("resolved");
+    const openKeys = async (m: TestMachine) => ((await m.get("/attention")).items as Item[]).map((i) => i.key).sort();
+    expect(await openKeys(restarted)).toEqual(await openKeys(pc));
   });
 
   it.each([
