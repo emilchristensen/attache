@@ -358,12 +358,12 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
         <>
           <div className="card">
             <h3>Features</h3>
-            <div className="list">
+            <div className="check-list">
               {result.features.filter((f) => f.enabled).map((f) => (
-                <div key={f.id} className="row" style={{ padding: "7px 0", borderBottom: "1px solid var(--border)" }} data-feature-status={f.id}>
-                  <span style={{ minWidth: 190 }}>{f.label}</span>
+                <div key={f.id} className="check-row" data-feature-status={f.id}>
+                  <span>{f.label}</span>
                   <StatusPill state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
-                  <span className="small muted">{f.reason ?? ""}</span>
+                  {f.reason && <span className="small muted">{f.reason}</span>}
                 </div>
               ))}
             </div>
@@ -373,13 +373,15 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
             {result.connections.length === 0 ? (
               <p className="small muted">No connections. Jarvis will work as a notes-only workspace.</p>
             ) : (
-              result.connections.map((c) => (
-                <div key={c.id} className="row" style={{ padding: "7px 0" }}>
-                  <span style={{ minWidth: 190 }}>{c.label}</span>
-                  <StatusPill state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
-                  <span className="small muted">{c.message}</span>
-                </div>
-              ))
+              <div className="check-list">
+                {result.connections.map((c) => (
+                  <div key={c.id} className="check-row">
+                    <span>{c.label}</span>
+                    <StatusPill state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
+                    {c.message && <span className="small muted">{c.message}</span>}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </>

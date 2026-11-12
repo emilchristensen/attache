@@ -1069,6 +1069,24 @@ button.count-chip {
 .steps ol {
   display: contents;
 }
+
+/* Setup's last step: one row per feature or connection, with the labels, states and notes each in a column. */
+.check-list {
+  display: grid;
+  grid-template-columns: minmax(190px, max-content) max-content minmax(0, 1fr);
+  column-gap: 10px;
+}
+.check-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  justify-items: start;
+  padding: 7px 0;
+}
+.check-row + .check-row {
+  border-top: 1px solid var(--border);
+}
 .feature-row {
   display: flex;
   gap: 12px;
@@ -1170,6 +1188,20 @@ button.count-chip {
   }
   .page {
     padding: 16px 14px 32px;
+  }
+  /* The state beside its label, and the note below both. */
+  .check-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .check-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    row-gap: 4px;
+  }
+  .check-row > :nth-child(2) {
+    justify-self: end;
+  }
+  .check-row > :nth-child(3) {
+    grid-column: 1 / -1;
   }
   /* Subject and date on one line, the value below at full width. */
   .state-row {
