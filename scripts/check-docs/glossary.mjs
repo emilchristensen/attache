@@ -7,7 +7,7 @@
  * or `ing` ending ("syncs", "syncing"). Letters, digits, `_` and `-` around it
  * make it a different word, so `sync-state` and `asynchronously` pass.
  */
-import { plainText, readableLines } from "./markdown.mjs";
+import { findInMarkdown } from "./markdown.mjs";
 
 /**
  * Avoided words that are also the ordinary name of something else in Jarvis.
@@ -86,7 +86,7 @@ export function avoidedTermFinder(avoided, ordinaryWords = ORDINARY_WORDS) {
 
 /** Returns `{ line, term, found, preferred }` for each avoided term in Markdown a reader sees. */
 export function findAvoidedTermsInMarkdown(markdown, find) {
-  return readableLines(markdown).flatMap(({ line, content }) => find(plainText(content)).map((hit) => ({ line, ...hit })));
+  return findInMarkdown(markdown, find);
 }
 
 function escapeRegExp(text) {

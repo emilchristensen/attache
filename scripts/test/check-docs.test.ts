@@ -1,6 +1,7 @@
 /**
  * The docs check (`scripts/check-docs.mjs`): one sentence per line in Markdown,
- * and no term the glossary says to avoid in user-facing text.
+ * no term the glossary says to avoid in user-facing text, and no count written
+ * with "(s)".
  */
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -9,6 +10,7 @@ import { join } from "node:path";
 import { findSentenceViolations } from "../check-docs/sentences.mjs";
 import { avoidedTermFinder, findAvoidedTermsInMarkdown, parseAvoidedTerms } from "../check-docs/glossary.mjs";
 import { quotedStrings, userVisibleStrings } from "../check-docs/source-strings.mjs";
+import { findParenthesisedPlurals, findParenthesisedPluralsInMarkdown } from "../check-docs/plurals.mjs";
 import { checkDocs } from "../check-docs.mjs";
 
 const FIXTURES = join(import.meta.dirname, "fixtures/check-docs");
@@ -84,25 +86,50 @@ describe("avoided glossary terms", () => {
 
   it("flags avoided terms in web text: JSX text, labels, titles, placeholders and sentences in strings", () => {
     const text = fixture("web-bad.tsx");
-    expect(flaggedLines(userVisibleStrings(text, "web-bad.tsx"), find)).toEqual(linesMarkedAvoided(text));
+    expect(flaggedLines(userVisibleStrings(text, "web-bad.tsx"), find)).toEqual(linesMarked(text, "avoided"));
   });
 
   it("flags avoided terms in installer messages but not in comments or variable names", () => {
     const text = fixture("installer-bad.sh");
-    expect(flaggedLines(quotedStrings(text), find)).toEqual(linesMarkedAvoided(text));
+    expect(flaggedLines(quotedStrings(text), find)).toEqual(linesMarked(text, "avoided"));
+  });
+});
+
+describe("counts written with (s)", () => {
+  it("finds a noun with (s) or (es) after it, in any case", () => {
+    expect(findParenthesisedPlurals("3 file(s) and 2 match(es) for Job(s) in work item(s)")).toEqual([{ found: "file(s)" }, { found: "match(es)" }, { found: "Job(s)" }, { found: "item(s)" }]);
+  });
+
+  it("leaves http(s), a lone (s) and proper plurals alone", () => {
+    expect(findParenthesisedPlurals("Enter an HTTP(S) or http(s) URL; (s) on its own; 1 file, 2 files")).toEqual([]);
+  });
+
+  it("flags counts with (s) in service and web strings, but not in comments, names or http(s)", () => {
+    const text = fixture("plurals-bad.ts");
+    expect(flaggedLines(userVisibleStrings(text, "plurals-bad.ts"), findParenthesisedPlurals)).toEqual(linesMarked(text, "plural"));
+    expect(userVisibleStrings(fixture("plurals-good.ts"), "plurals-good.ts").flatMap(({ text }) => findParenthesisedPlurals(text))).toEqual([]);
+  });
+
+  it("flags counts with (s) in Markdown prose, but not in code", () => {
+    expect(findParenthesisedPluralsInMarkdown("# Files\n\nReads 2 file(s).\n\n`file(s)` in code.\n\n```\njob(s)\n```\n")).toEqual([{ line: 3, found: "file(s)" }]);
   });
 });
 
 describe("checking a repository", () => {
   const repo = join(FIXTURES, "repo");
 
-  it("checks the repository's own docs, installer and web text, and nothing else", () => {
+  it("checks the repository's own docs, installer, web and service text, and nothing else", () => {
     expect(checkDocs(repo)).toEqual({
       sentences: [{ file: "README.md", line: 4, text: "This line holds two sentences. It is flagged." }],
       terms: [
         { file: "docs/adr/0001-example.md", line: 3, term: "sync", found: "sync", preferred: ["Replication", "Source refresh"] },
         { file: "installer/install.sh", line: 2, term: "poll", found: "Polling", preferred: ["Source refresh"] },
         { file: "apps/web/src/View.tsx", line: 2, term: "second brain", found: "second brain", preferred: ["Brain"] },
+      ],
+      plurals: [
+        { file: "docs/adr/0001-example.md", line: 4, found: "file(s)" },
+        { file: "apps/web/src/View.tsx", line: 4, found: "note(s)" },
+        { file: "apps/service/src/notes.ts", line: 2, found: "event(s)" },
       ],
     });
   });
@@ -113,6 +140,8 @@ describe("checking a repository", () => {
     expect(run.stdout).toContain("README.md:4: two sentences on one line; put each sentence on its own line");
     expect(run.stdout).toContain('installer/install.sh:2: "Polling" is avoided in GLOSSARY.md; use Source refresh');
     expect(run.stdout).toContain('docs/adr/0001-example.md:3: "sync" is avoided in GLOSSARY.md; use Replication or Source refresh');
+    expect(run.stdout).toContain('apps/service/src/notes.ts:2: "event(s)" writes a count with (s); write the noun in its number ("1 event", "2 events"), with plural() from @jarvis/contracts in code');
+    expect(run.stderr).toContain("Docs check: 1 line with two sentences, 3 avoided glossary terms, 3 counts written with (s).");
   });
 
   it("passes from the command line when nothing is found", () => {
@@ -126,10 +155,12 @@ function flaggedLines(strings: { line: number; text: string }[], find: (text: st
   return [...new Set(strings.filter(({ text }) => find(text).length > 0).map(({ line }) => line))];
 }
 
-function linesMarkedAvoided(text: string): number[] {
+/** 1-based numbers of the lines with a `// <mark>`, `/* <mark>` or `# <mark>` comment. */
+function linesMarked(text: string, mark: "avoided" | "plural"): number[] {
+  const marked = new RegExp(`(//|/\\*|#) ${mark}`);
   return text
     .split("\n")
     .map((line, index) => ({ line, number: index + 1 }))
-    .filter(({ line }) => /(\/\/|\/\*|#) avoided/.test(line))
+    .filter(({ line }) => marked.test(line))
     .map(({ number }) => number);
 }

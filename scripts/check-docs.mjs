@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Docs check, run by `pnpm lint`: two writing rules the owner used to check by
- * hand.
+ * Docs check, run by `pnpm lint`: three writing rules the owner used to check
+ * by hand.
  *
  * 1. One sentence per line in Markdown (`check-docs/sentences.mjs`). A prose
  *    line must not hold two sentences; headings, tables, code, HTML, front
@@ -28,6 +28,15 @@
  *      Jarvis ("server", "client", "draft") are listed with their reason in
  *      `ORDINARY_WORDS` and not checked.
  *
+ * 3. Counts written with "(s)" (`check-docs/plurals.mjs`). Text the owner reads
+ *    says "1 file" or "2 files", never "file(s)". Read in the Markdown above,
+ *    the installer's messages, the web client's user-visible strings, and the
+ *    same kind of strings in the service and the contracts package
+ *    (`apps/service/src`, `packages/contracts/src`), whose coverage notes,
+ *    errors and replies reach the owner through the Dashboard or a Harness.
+ *    The service is read for this rule only: its strings also hold log lines
+ *    and prompts, where the glossary's words may stand.
+ *
  *   node scripts/check-docs.mjs [--root <folder>]
  *
  * Prints one `file:line: problem` line per finding and exits 1 if there is any.
@@ -38,30 +47,43 @@ import { parseArgs } from "node:util";
 import { findSentenceViolations } from "./check-docs/sentences.mjs";
 import { avoidedTermFinder, findAvoidedTermsInMarkdown, parseAvoidedTerms } from "./check-docs/glossary.mjs";
 import { quotedStrings, userVisibleStrings } from "./check-docs/source-strings.mjs";
+import { findParenthesisedPlurals, findParenthesisedPluralsInMarkdown, pluralAdvice } from "./check-docs/plurals.mjs";
+import { plural } from "../packages/contracts/src/wording.ts";
 
 const GLOSSARY = "GLOSSARY.md";
 const ROOT_MARKDOWN = ["README.md", GLOSSARY, "AGENTS.md", "CODING_STANDARDS.md"];
 const NEVER_READ = new Set(["node_modules", "release", "research", "dist", ".claude", ".agents", ".git"]);
 const INSTALLER_SCRIPTS = new Set([".sh", ".ps1", ".cmd", ".bat"]);
-const WEB_SOURCE = /\.tsx?$/;
-const NOT_WEB_TEXT = /(\.d\.ts|\.test\.tsx?)$/;
+const SOURCE = /\.tsx?$/;
+const NOT_TEXT = /(\.d\.ts|\.test\.tsx?)$/;
+/** Source folders whose strings reach the owner without being the Dashboard's own text. */
+const SERVICE_SOURCE = ["apps/service/src", "packages/contracts/src"];
 
-/** Checks a repository and returns `{ sentences, terms }`, each finding with its repository-relative `file`. */
+/** Checks a repository and returns `{ sentences, terms, plurals }`, each finding with its repository-relative `file`. */
 export function checkDocs(root) {
   const glossaryPath = join(root, GLOSSARY);
   if (!existsSync(glossaryPath)) throw new Error(`${GLOSSARY} not found in ${root}; the avoided terms come from it.`);
   const find = avoidedTermFinder(parseAvoidedTerms(readFileSync(glossaryPath, "utf8")));
   const read = (file) => readFileSync(join(root, file), "utf8");
   const markdown = markdownFiles(root);
+  const installer = installerScripts(root).map((file) => ({ file, strings: quotedStrings(read(file)) }));
+  const web = sourceFiles(root, ["apps/web/src"]).map((file) => ({ file, strings: userVisibleStrings(read(file), file) }));
+  const service = sourceFiles(root, SERVICE_SOURCE).map((file) => ({ file, strings: userVisibleStrings(read(file), file) }));
   const sentences = markdown.flatMap((file) => findSentenceViolations(read(file)).map((v) => ({ file, ...v })));
   const terms = [
     ...markdown.filter((file) => file !== GLOSSARY).flatMap((file) => findAvoidedTermsInMarkdown(read(file), find).map((v) => ({ file, ...v }))),
-    ...installerScripts(root).flatMap((file) => termsIn(file, quotedStrings(read(file)), find)),
-    ...filesUnder(root, "apps/web/src")
-      .filter((file) => WEB_SOURCE.test(file) && !NOT_WEB_TEXT.test(file))
-      .flatMap((file) => termsIn(file, userVisibleStrings(read(file), file), find)),
+    ...[...installer, ...web].flatMap(({ file, strings }) => hitsIn(file, strings, find)),
   ];
-  return { sentences, terms };
+  const plurals = [
+    ...markdown.flatMap((file) => findParenthesisedPluralsInMarkdown(read(file)).map((v) => ({ file, ...v }))),
+    ...[...installer, ...web, ...service].flatMap(({ file, strings }) => hitsIn(file, strings, findParenthesisedPlurals)),
+  ];
+  return { sentences, terms, plurals };
+}
+
+/** TypeScript sources under the folders, without declarations and tests. */
+function sourceFiles(root, folders) {
+  return folders.flatMap((folder) => filesUnder(root, folder)).filter((file) => SOURCE.test(file) && !NOT_TEXT.test(file));
 }
 
 function markdownFiles(root) {
@@ -77,7 +99,7 @@ function installerScripts(root) {
   });
 }
 
-function termsIn(file, strings, find) {
+function hitsIn(file, strings, find) {
   return strings.flatMap(({ line, text }) => find(text).map((hit) => ({ file, line, ...hit })));
 }
 
@@ -94,12 +116,14 @@ function filesUnder(root, folder) {
 }
 
 /** One line per finding, as `file:line: problem`. */
-export function formatFindings({ sentences, terms }) {
+export function formatFindings({ sentences, terms, plurals }) {
   return [
     ...sentences.map(({ file, line }) => `${file}:${line}: two sentences on one line; put each sentence on its own line`),
     ...terms.map(({ file, line, found, preferred }) => `${file}:${line}: "${found}" is avoided in ${GLOSSARY}; use ${preferred.join(" or ")}`),
+    ...plurals.map(({ file, line, found }) => `${file}:${line}: "${found}" writes a count with (s); ${pluralAdvice(found)}`),
   ];
 }
+
 
 function main() {
   const { values } = parseArgs({ options: { root: { type: "string" } } });
@@ -108,7 +132,7 @@ function main() {
   const lines = formatFindings(findings);
   if (lines.length === 0) return 0;
   console.log(lines.join("\n"));
-  console.error(`\nDocs check: ${findings.sentences.length} line(s) with two sentences, ${findings.terms.length} avoided glossary term(s).`);
+  console.error(`\nDocs check: ${plural(findings.sentences.length, "line")} with two sentences, ${plural(findings.terms.length, "avoided glossary term")}, ${plural(findings.plurals.length, "count")} written with (s).`);
   return 1;
 }
 
