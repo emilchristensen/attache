@@ -61,6 +61,7 @@ export interface ConnectionDefinition {
   /**
    * browserSignIn: after saving the fields, the user completes sign-in in the browser (OAuth).
    * reconnectHelp: what the user fixes outside Jarvis before reconnecting, for methods without browser sign-in or secrets.
+   * reconnectHelp and a field's help are one line of Markdown each: a command goes in a code span, and a URL becomes a link.
    */
   authMethods: Array<{ id: string; label: string; browserSignIn?: boolean; reconnectHelp?: string; fields: Array<{ id: string; label: string; secret: boolean; placeholder?: string; optional?: boolean; help?: string }> }>;
   scopes: Array<{ id: string; label: string; default: boolean }>;

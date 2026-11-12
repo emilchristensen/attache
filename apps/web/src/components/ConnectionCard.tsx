@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ConnectionDefinition, ConnectionStatus, Coverage } from "@jarvis/contracts";
 import { api, post, put } from "../api.ts";
-import { StatusPill, Time, useAction } from "./ui.tsx";
+import { MarkdownInline, StatusPill, Time, useAction } from "./ui.tsx";
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
@@ -177,7 +177,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
               ) : (
                 <input type={f.secret ? "password" : "text"} value={fields[f.id] ?? ""} placeholder={f.placeholder} autoComplete="off" spellCheck={false} onChange={(e) => setFields({ ...fields, [f.id]: e.target.value })} />
               )}
-              {f.help && <span className="help">{f.help}</span>}
+              {f.help && <MarkdownInline className="help" text={f.help} />}
             </label>
           ))}
           {definition.scopes.length > 0 && (
@@ -209,7 +209,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
       {!isOAuth && configured && status.status === "needs_auth" && !editing && (
         <div className="state partial small" role="status" aria-label="Sign-in needed">
           <strong style={{ color: "var(--warn)" }}>Sign-in needed</strong>
-          <span>{current?.reconnectHelp ?? `Enter new credentials for ${status.label} to reconnect.`}</span>
+          <MarkdownInline text={current?.reconnectHelp ?? `Enter new credentials for ${status.label} to reconnect.`} />
           <div className="row">
             <button className="primary" disabled={busy !== null} onClick={reconnect}>
               {busy === "reconnect" ? "Reconnecting…" : "Reconnect"}

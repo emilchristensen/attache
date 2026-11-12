@@ -789,6 +789,18 @@ test("wording: no view says sync for reading sources; a source offers Refresh no
   }
 });
 
+test("wording: connection help shows commands as code and addresses as links", async () => {
+  const page = await open("/connections");
+  const jira = page.locator('[data-connection="jira"]');
+  await expect(jira.locator("label", { hasText: "Connector name in Claude Code" }).locator("code")).toHaveText("claude mcp list");
+  await jira.getByRole("combobox", { name: "How to connect" }).selectOption("api-token");
+  const link = jira.locator("label", { hasText: /^API token/ }).getByRole("link");
+  await expect(link).toHaveAttribute("href", /^https:\/\/id\.atlassian\.com\/manage-profile\/security\/api-tokens\?/);
+  await expect(link).toHaveText("Create a token");
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(jira).not.toContainText("`");
+});
+
 test("wording: on Linux and Windows no view names macOS, and example folders are on this computer", async () => {
   const page = await open("/settings");
   await expect(page.getByRole("checkbox", { name: "Desktop notification for new urgent items" })).toBeVisible();
