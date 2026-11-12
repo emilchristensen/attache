@@ -5,3 +5,6 @@ allowBuilds:
   esbuild: true
   # Its install script only prints a version notice; nothing is built.
   protobufjs: false
+# An older Node than engines.node in package.json fails `pnpm install` instead of only warning.
+# pnpm 11 reads this setting here; it ignores engine-strict in .npmrc.
+engineStrict: true

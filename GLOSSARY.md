@@ -42,7 +42,11 @@ _Avoid_: Chat, app, UI, web client
 **Harness**:
 The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex or Antigravity.
 It is where the owner asks about the Brain and adds to it.
-_Avoid_: Agent, client, coding agent
+_Avoid_: client, coding agent
+
+**Agent**:
+The AI working inside a Harness on the owner's behalf: it searches the Brain, proposes saves and runs the audit.
+The Harness is the application; the agent is what runs in it.
 
 ### Keeping the Brain true
 

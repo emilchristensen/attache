@@ -38,11 +38,12 @@ function step(id, name, cmd, args, opts = {}) {
 
 const npx = "npx";
 step(["A01"], "Excluded platform check", process.execPath, ["scripts/check-excluded.mjs"]);
+step(["A13"], "Docs check (one sentence per line, glossary terms)", process.execPath, ["scripts/check-docs.mjs"]);
 step(["A13"], "Lint (ESLint, zero warnings)", npx, ["eslint", ".", "--max-warnings", "0"]);
 for (const pkg of ["packages/contracts", "apps/service", "apps/web"]) step(["A13"], `Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
 step(["A13"], "Build service", process.execPath, ["apps/service/build.mjs"]);
 // Through the package's own script: vite is a dependency of apps/web and is not hoisted to the root.
-step(["A13", "A12"], "Build web client", "pnpm", ["--filter", "@jarvis/web", "run", "build"]);
+step(["A13", "A12"], "Build Dashboard", "pnpm", ["--filter", "@jarvis/web", "run", "build"]);
 step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/vitest.json"], {
   extract: () => {
     try {

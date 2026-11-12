@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- Git needs synchronous runs, 256 MB of output and a start failure kept apart from an exit code, which run() does not give; every command still starts through launchTool with windowsHide.
 import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { redact } from "../core/log.ts";

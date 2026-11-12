@@ -5,7 +5,8 @@
  * Windows on x86_64), in a clean temporary profile (fresh home folder whose
  * name has a space and the letters æøå, a minimal PATH with no developer
  * tools, its own service name and port).
- * Writes test-results/install-results.json. Usage:
+ * Writes test-results/install-results.json, and when a check fails, the installed
+ * service's logs to test-results/install-logs. Usage:
  *   node scripts/test-install.mjs [--from 0.1.0 --to 0.1.1] [--port 7690]
  */
 import { execFileSync, spawn } from "node:child_process";
@@ -14,6 +15,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { installTestPlatform } from "./install-test/platform.mjs";
+import { copyLogFolder } from "./service-logs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const arg = (n, d) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : d);
@@ -29,6 +31,7 @@ const STATE = P.state;
 const DATA = join(HOME, "Documents", "Jarvis");
 const NODE = P.runtime(PREFIX);
 const SERVICE = join(PREFIX, "current", "service", "jarvis-service.mjs");
+const INSTALL_LOGS = join(ROOT, "test-results", "install-logs");
 const results = [];
 const check = (id, name, ok, detail = "") => {
   results.push({ id, name, ok: !!ok, detail });
@@ -37,6 +40,17 @@ const check = (id, name, ok, detail = "") => {
 };
 const artifact = (v) => P.artifact(ROOT, v);
 const cleanEnv = P.cleanEnv({ JARVIS_PORT: String(PORT), JARVIS_INSTANCE: INSTANCE, JARVIS_NO_OPEN: "1", TMPDIR: tmpdir(), USER: process.env.USER ?? "" });
+/**
+ * Copy a service's logs (service.log, and service.err.log and service.out.log from the service manager)
+ * to test-results/install-logs before the test removes its state folder.
+ */
+function keepLogs(stateDir, name) {
+  try {
+    copyLogFolder(join(stateDir, "logs"), join(INSTALL_LOGS, name));
+  } catch (e) {
+    console.warn(`could not keep the ${name} logs: ${e.message}`);
+  }
+}
 /** Run an installer or command-line wrapper as the owner would from a terminal. */
 const sh = (file, args = [], env = cleanEnv) => P.runScript(file, args, env);
 const jarvisCli = (args, extraEnv = {}) => P.runScript(P.command(P.binDir, "jarvis"), args, { ...cleanEnv, ...extraEnv });
@@ -140,6 +154,7 @@ function runClaudeHook(event, input) {
 }
 
 async function main() {
+  rmSync(INSTALL_LOGS, { recursive: true, force: true });
   // Always from the current source: a release left over from an earlier build would test old code.
   for (const v of [FROM, TO]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target], { stdio: "inherit" });
   const machineBefore = P.machineFingerprint();
@@ -312,6 +327,7 @@ async function main() {
     // it leaves behind is one the data-deleting uninstall below must still remove.
     svc.kill("SIGKILL");
     await Promise.race([exited, sleep(10_000)]);
+    keepLogs(freshState, "restored-state");
     for (const dir of [freshState, dirname(freshData)]) rmSync(dir, { recursive: true, force: true });
   }
 
@@ -327,6 +343,8 @@ async function main() {
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
   check("A14", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
+  // The data-deleting uninstall removes the state folder and the service's logs with it.
+  keepLogs(STATE, "state");
   sh(P.command(P.binDir, "jarvis-uninstall"), ["--delete-data", "--yes"]);
   const remaining = existsSync(DATA) ? readdirSync(DATA).sort() : [];
   check("A14", "uninstall --delete-data removes service state and only what Jarvis created in the data folder", !existsSync(STATE) && !P.loaded() && JSON.stringify(remaining) === JSON.stringify(["Existing note.md", "README.md"]), `left: ${remaining.join(", ")}`);
@@ -343,11 +361,14 @@ async function main() {
   writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, home: HOME, at: new Date().toISOString(), results }, null, 2));
   rmSync(HOME, { recursive: true, force: true });
   const failed = results.filter((r) => !r.ok).length;
+  // The logs are kept for a failed run only.
+  if (!failed) rmSync(INSTALL_LOGS, { recursive: true, force: true });
   console.log(`\n${results.length - failed}/${results.length} installation checks passed`);
 }
 
 main().catch((e) => {
   console.error(e);
+  keepLogs(STATE, "state");
   P.cleanup();
   process.exit(1);
 });
