@@ -198,8 +198,9 @@ pre,
   overflow-y: auto;
   padding: 24px 28px 48px;
 }
-.page-narrow {
-  max-width: 880px;
+/* Cap the content, not the page: the page scrolls, and its scrollbar belongs at the window's edge. */
+.page-narrow > * {
+  max-width: 824px;
 }
 
 .page-header {

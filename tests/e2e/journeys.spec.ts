@@ -366,6 +366,64 @@ test("narrow screen: bottom navigation, no horizontal overflow, all views reacha
   await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
 });
 
+/** Where a page scrolls: the scrollbar of its largest scrolling element, and the column its content sits in. */
+interface PageScroll {
+  scroller: string;
+  scrollbarLeft: number;
+  scrollbarRight: number;
+  contentLeft: number;
+  contentRight: number;
+  contentWidth: number;
+}
+
+/** Makes the page taller than any window, so it always scrolls, then measures where it scrolls. */
+function measurePageScroll(): PageScroll {
+  const root = document.documentElement;
+  // The page's content column: its header, or Home's first section, or the Setup steps.
+  const column = document.querySelector(".page-header, .inbox-col > :first-child, main.setup")!;
+  const spacer = document.createElement("div");
+  spacer.style.height = "200vh";
+  column.parentElement!.append(spacer);
+  const scrolls = (el: Element) => (el === root || /auto|scroll/.test(getComputedStyle(el).overflowY)) && el.scrollHeight > el.clientHeight + 1;
+  const candidates = [root, ...document.querySelectorAll("body *")].filter((el) => scrolls(el) && !el.closest("nav"));
+  const area = (el: Element) => el.clientWidth * el.clientHeight;
+  const el = candidates.reduce((a, b) => (area(b) > area(a) ? b : a));
+  const box = el === root ? { left: 0, right: innerWidth } : el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  const scrollbarRight = box.right - parseFloat(style.borderRightWidth);
+  const scrollbarLeft = el === root ? root.clientWidth : box.left + parseFloat(style.borderLeftWidth) + el.clientWidth;
+  const content = column.getBoundingClientRect();
+  return { scroller: el === root ? "html" : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`, scrollbarLeft, scrollbarRight, contentLeft: content.left, contentRight: content.right, contentWidth: content.width };
+}
+
+test("scrollbars: every page scrolls at the window's right edge, with its content in its column", async ({ playwright }) => {
+  // Headless Chrome hides scrollbars unless told otherwise; Linux and Windows desktops show them beside the content.
+  const chrome = await playwright.chromium.launch({ channel: "chrome", headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  try {
+    const page = await (await chrome.newContext({ storageState: await shared.storageState() })).newPage();
+    for (const viewport of [{ width: 1280, height: 800 }, { width: 600, height: 800 }]) {
+      await page.setViewportSize(viewport);
+      for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings", "/setup"]) {
+        await page.goto(`${stack.url}${path}`);
+        await expect(page.locator(".page-header, .inbox-col > :first-child, main.setup").first()).toBeVisible();
+        await page.waitForLoadState("networkidle");
+        const at = `${path} at ${viewport.width}px`;
+        const s = await page.evaluate(measurePageScroll);
+        expect(s.scrollbarRight - s.scrollbarLeft, `${at}: ${s.scroller} shows a scrollbar`).toBeGreaterThan(0);
+        expect(s.scrollbarRight, `${at}: ${s.scroller}'s scrollbar is at the window's right edge`).toBe(viewport.width);
+        expect(s.contentRight, `${at}: content stays left of the scrollbar`).toBeLessThanOrEqual(s.scrollbarLeft);
+        if (viewport.width < 1280) continue;
+        // Wide windows keep the reading columns: Settings and Connections, Home's inbox, and the centred Setup steps.
+        if (path === "/connections" || path === "/settings") expect(s.contentWidth, `${at}: content column`).toBe(824);
+        if (path === "/") expect(s.contentWidth, `${at}: inbox column`).toBe(920);
+        if (path === "/setup") expect(Math.abs(s.contentLeft - (s.scrollbarLeft - s.contentRight)), `${at}: Setup is centred`).toBeLessThanOrEqual(1);
+      }
+    }
+  } finally {
+    await chrome.close();
+  }
+});
+
 test("memory: notes, evidence and deliverables are read-only, with no capture box or correct and edit controls", async () => {
   // Notes reach the Brain from a Harness, never from the Dashboard.
   await harnessSave(stack, [{ action: "create", type: "decision", title: "Email vendor", facts: [{ subject: "Decision", value: "Keep Nimbus as email vendor for 2027" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
