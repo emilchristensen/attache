@@ -18,6 +18,7 @@ import { scanDeadlines } from "./vault.ts";
 import { scanFactReviews } from "../attention/fact-reviews.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
+import { plural } from "../core/wording.ts";
 
 export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"];
 
@@ -394,7 +395,7 @@ export class ConnectionManager {
     const reviews = rec.settings.builtin ? this.factReviews(root, docs, now) : { observations: [], errors: [] };
     const observations = [...deadlines.observations, ...reviews.observations];
     const errors = [...deadlines.errors, ...reviews.errors];
-    cov.add(`${docs.length} Markdown files indexed (${idx.indexed} updated, ${idx.removed} removed)`, idx.errors.length || errors.length ? "partial" : observations.length ? "complete" : "empty", observations.length, 1, [...idx.errors.map((e) => `${e.path}: ${e.error}`), ...errors].slice(0, 5).join("; ") || undefined);
+    cov.add(`${plural(docs.length, "Markdown file")} indexed (${idx.indexed} updated, ${idx.removed} removed)`, idx.errors.length || errors.length ? "partial" : observations.length ? "complete" : "empty", observations.length, 1, [...idx.errors.map((e) => `${e.path}: ${e.error}`), ...errors].slice(0, 5).join("; ") || undefined);
     return { coverage: cov.finish(), observations };
   }
 

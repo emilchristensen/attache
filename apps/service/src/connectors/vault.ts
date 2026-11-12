@@ -2,12 +2,13 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { ConnectorAdapter, Observation } from "./types.ts";
 import { RemoteError } from "./http.ts";
-import { planScan } from "../memory/indexer.ts";
+import { planDataFolderScan, planScan, type ScanPlan } from "../memory/indexer.ts";
 import { splitFrontmatter } from "../memory/markdown.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";
 import type { ConnectionDefinition } from "@jarvis/contracts";
+import { plural } from "../core/wording.ts";
 
 /**
  * Deadlines from Markdown: open tasks with a due date (Obsidian Tasks `📅
@@ -76,6 +77,19 @@ export function scanDeadlines(root: { id: string; path: string }, relPaths: stri
   return { observations, errors };
 }
 
+const TEST_LIMIT = 100_000;
+/** How many skipped items a test result names before it only counts the rest. */
+const SKIPPED_NAMED = 3;
+
+/** What a folder test found, naming what was skipped and why: `2 Markdown files readable, 1 skipped: big.md (larger than 2 MB)`. */
+export function scanSummary(plan: ScanPlan): string {
+  const readable = `${plural(plan.read.length, "Markdown file")} readable`;
+  if (!plan.skipped.length) return readable;
+  const named = plan.skipped.slice(0, SKIPPED_NAMED).map((s) => `${s.path} (${s.reason})`);
+  const rest = plan.skipped.length - named.length;
+  return `${readable}, ${plan.skipped.length} skipped: ${named.join(", ")}${rest ? ` and ${rest} more` : ""}`;
+}
+
 /** What the Dashboard shows for an imported folder. */
 function vaultDefinition(): ConnectionDefinition {
   return {
@@ -106,7 +120,7 @@ export const vaultAdapter: ConnectorAdapter = {
   async test(ctx) {
     const path = String(ctx.connection.settings.path ?? "");
     if (!path || !existsSync(path)) return { ok: false, state: "error", account: null, message: `Folder not found: ${path}` };
-    const plan = planScan(path, 100_000);
-    return { ok: true, state: plan.read.length ? "complete" : "empty", account: path, message: `${plan.read.length} Markdown files readable${plan.skipped.length ? `, ${plan.skipped.length} skipped` : ""}` };
+    const plan = ctx.connection.settings.builtin ? planDataFolderScan(path, TEST_LIMIT) : planScan(path, TEST_LIMIT);
+    return { ok: true, state: plan.read.length ? "complete" : "empty", account: path, message: scanSummary(plan) };
   },
 };

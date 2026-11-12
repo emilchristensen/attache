@@ -8,7 +8,8 @@ import type { App } from "../app.ts";
 import { VERSION } from "../app.ts";
 import { createPairingCode, redeemPairingCode, sessionCookie, clearedCookie } from "./security.ts";
 import { resolveChange, effectiveFeatures } from "../capabilities/registry.ts";
-import { planScan } from "../memory/indexer.ts";
+import { planDataFolderScan } from "../memory/indexer.ts";
+import { plural } from "../core/wording.ts";
 import { nowIso } from "../core/db.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";
@@ -26,7 +27,7 @@ export function dataFolderPreview(path: string) {
   } catch {
     writable = false;
   }
-  const plan = exists ? planScan(abs) : { read: [], skipped: [], totalBytes: 0 };
+  const plan = exists ? planDataFolderScan(abs) : { read: [], skipped: [], totalBytes: 0 };
   const willCreate = ["memory/", "evidence/", "deliverables/", "README.md", ".jarvis/"].filter((d) => !existsSync(resolve(abs, d)));
   return {
     path: abs,
@@ -37,7 +38,7 @@ export function dataFolderPreview(path: string) {
     willCreate,
     willModify: [] as string[],
     note: exists
-      ? `Jarvis will add ${willCreate.length ? willCreate.join(", ") : "nothing new"} and index ${plan.read.length} existing Markdown file(s). Existing files are not modified.`
+      ? `Jarvis will add ${willCreate.length ? willCreate.join(", ") : "nothing new"} and index ${plural(plan.read.length, "existing Markdown file")}. Existing files are not modified.`
       : "Jarvis will create this folder with memory/, evidence/ and deliverables/.",
   };
 }

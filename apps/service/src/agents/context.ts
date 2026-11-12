@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { plural } from "../core/wording.ts";
 import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
 import type { SearchCommand } from "./search-command.ts";
 
@@ -159,7 +160,6 @@ function indexLines(notes: ContextInput["notes"], perType: number): string[] {
 }
 
 function cutNotice(shown: Shown, all: Shown): string | null {
-  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const parts = [
     all.sessions > shown.sessions ? plural(all.sessions - shown.sessions, "older session entry", "older session entries") : null,
     shown.linked > shown.linkedFacts ? `the facts of ${plural(shown.linked - shown.linkedFacts, "linked note", "linked notes")}` : null,

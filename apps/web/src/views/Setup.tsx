@@ -5,6 +5,7 @@ import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { JoinForm } from "./Replication.tsx";
+import { plural } from "../wording.ts";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
@@ -156,9 +157,9 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
         </div>
         {importPreview && (
           <div className="state partial small">
-            <strong style={{ color: "var(--text)" }}>Will read {importPreview.filesToRead} Markdown file(s) from {importPreview.path}</strong>
+            <strong style={{ color: "var(--text)" }}>Will read {plural(importPreview.filesToRead, "Markdown file")} from {importPreview.path}</strong>
             <span>{importPreview.note}</span>
-            {importPreview.skippedCount > 0 && <span>{importPreview.skippedCount} item(s) skipped (hidden folders, links or large files).</span>}
+            {importPreview.skippedCount > 0 && <span>{plural(importPreview.skippedCount, "item")} skipped (hidden folders, links or large files).</span>}
             {importPreview.sample.length > 0 && <span className="mono">{importPreview.sample.slice(0, 5).join(", ")}{importPreview.filesToRead > 5 ? ", …" : ""}</span>}
             <span>Files changed in that folder: 0</span>
           </div>
