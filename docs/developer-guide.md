@@ -70,10 +70,18 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs once on every push and on demand, on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
-A pull request shows the checks of its head commit, so it has no run of its own.
+`.github/workflows/ci.yml` runs on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
+GitHub bills a macOS minute as 10 Linux minutes and a Windows minute as 2, so which jobs run depends on what started the run:
+
+| Started by | Jobs |
+| --- | --- |
+| A push to any branch, `main` included | `checks (ubuntu-latest)`, `checks (ubuntu-latest, current Node)`, `install (ubuntu-latest)` |
+| A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks (macos-latest)`, `checks (windows-latest)`, `install (windows-latest)` |
+| A run started by hand (`gh workflow run CI --ref <branch>`) | All of them |
+
+A pull request's macOS and Windows jobs check the commit GitHub would merge, so a draft pull request, or a branch without one, never uses macOS or Windows minutes.
 `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)` run on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`).
-`checks (ubuntu-latest, current Node)` runs the same checks on the newest Node release; it runs on Linux only, because macOS and Windows minutes cost several times more.
+`checks (ubuntu-latest, current Node)` runs the same checks on the newest Node release.
 Each job has these steps:
 
 | Step | Run it locally |
@@ -104,6 +112,7 @@ A pull request with a failing check shows the failure on GitHub.
 It needs the GitHub CLI (`gh`) signed in to an account that can read the repository.
 Branch protection on `main` requires `checks (ubuntu-latest)`, `checks (macos-latest)` and `checks (windows-latest)` to pass before a pull request can merge.
 The `checks (ubuntu-latest, current Node)` and `install` jobs are not required, so a new Node release or a slow or flaky installer run does not hold up a merge; check them before a release.
+Before a release, also start a run by hand on `main`: a push to `main` runs only the Linux jobs.
 
 ## Fixtures versus live
 
