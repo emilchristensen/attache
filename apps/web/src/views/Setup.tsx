@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ConnectionDefinition, ConnectionStatus, FeatureStatus, Config } from "@jarvis/contracts";
+import type { ConnectionDefinition, ConnectionStatus, FeatureStatus, Config, SetupDefaults } from "@jarvis/contracts";
 import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
@@ -80,7 +80,7 @@ function Nav({ onBack, onNext, nextLabel = "Continue", disabled }: { onBack?: ()
 }
 
 function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void }) {
-  const defaults = useResource<{ suggestion: string; home: string }>("/setup/defaults");
+  const defaults = useResource<SetupDefaults>("/setup/defaults");
   const [path, setPath] = useState(config.dataFolder ?? "");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [err, setErr] = useState<ApiError | null>(null);
@@ -149,7 +149,7 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
         <h3>Import an existing Markdown folder or Obsidian vault (optional)</h3>
         <p className="small muted">Jarvis reads it in place and cites it. It does not copy, change or move anything in that folder.</p>
         <div className="row" style={{ flexWrap: "nowrap" }}>
-          <input value={importPath} onChange={(e) => { setImportPath(e.target.value); setImportPreview(null); }} placeholder="/Users/you/Documents/Notes" spellCheck={false} aria-label="Folder to import" />
+          <input value={importPath} onChange={(e) => { setImportPath(e.target.value); setImportPreview(null); }} placeholder={defaults.data?.examples.notes} spellCheck={false} aria-label="Folder to import" />
           <button disabled={!importPath.trim()} onClick={() => run("ip", async () => setImportPreview(await post("/import/preview", { path: importPath })))}>
             Preview import
           </button>
@@ -313,10 +313,10 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
               <input type="checkbox" checked={sched.briefingEnabled} onChange={(e) => setSched({ ...sched, briefingEnabled: e.target.checked })} /> Prepare a daily briefing
             </label>
             <label className="check small">
-              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Show a macOS notification for new urgent items
+              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Show a desktop notification for new urgent items
             </label>
           </div>
-          <p className="small muted">Schedules run in the Jarvis service, not the browser. If the Mac sleeps, missed runs are caught up once when it wakes.</p>
+          <p className="small muted">Schedules run in the Jarvis service, not the browser. If this Machine sleeps, missed runs are caught up once when it wakes.</p>
         </>
       )}
       <h2>Action permissions</h2>

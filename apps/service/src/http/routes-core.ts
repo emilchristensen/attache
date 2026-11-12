@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import { z } from "zod";
-import { ConfigPatch, FeatureId, MachineRename } from "@jarvis/contracts";
+import { ConfigPatch, FeatureId, MachineRename, type SetupDefaults } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -10,7 +10,8 @@ import { createPairingCode, redeemPairingCode, sessionCookie, clearedCookie } fr
 import { resolveChange, effectiveFeatures } from "../capabilities/registry.ts";
 import { planScan } from "../memory/indexer.ts";
 import { nowIso } from "../core/db.ts";
-import { expandHome, platformLocations } from "../platform/locations.ts";
+import { expandHome } from "../platform/locations.ts";
+import { folderSuggestions } from "../platform/folder-suggestions.ts";
 
 export function dataFolderPreview(path: string) {
   const abs = resolve(expandHome(path));
@@ -112,10 +113,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
     return { features: app.featureStatuses(), added: result.added, removed: result.removed, effects };
   });
 
-  r.get("/setup/defaults", () => {
-    const home = platformLocations().home;
-    return { home, suggestion: `${home}/Documents/Jarvis` };
-  });
+  r.get("/setup/defaults", (): SetupDefaults => folderSuggestions());
   r.post("/setup/data-folder/preview", async (c) => {
     const { path } = await c.body(z.object({ path: z.string().min(1) }));
     return dataFolderPreview(path);

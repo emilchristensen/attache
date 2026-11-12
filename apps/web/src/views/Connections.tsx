@@ -4,6 +4,7 @@ import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
+import { useFolderExamples } from "../folder-examples.ts";
 
 interface Caps {
   features: FeatureStatus[];
@@ -13,6 +14,7 @@ interface Caps {
 
 function ImportFolder({ onDone }: { onDone: () => void }) {
   const [path, setPath] = useState("");
+  const examples = useFolderExamples();
   const [preview, setPreview] = useState<{ path: string; filesToRead: number; skippedCount: number; note: string } | null>(null);
   const { busy, run } = useAction();
   return (
@@ -20,7 +22,7 @@ function ImportFolder({ onDone }: { onDone: () => void }) {
       <h3>Import a Markdown folder or Obsidian vault</h3>
       <p className="small muted">Read-only. Jarvis indexes and cites the files where they are and never changes them.</p>
       <div className="row" style={{ flexWrap: "nowrap" }}>
-        <input value={path} onChange={(e) => { setPath(e.target.value); setPreview(null); }} placeholder="/Users/you/Documents/Notes" aria-label="Folder path" spellCheck={false} />
+        <input value={path} onChange={(e) => { setPath(e.target.value); setPreview(null); }} placeholder={examples.notes} aria-label="Folder path" spellCheck={false} />
         <button disabled={!path.trim() || busy !== null} onClick={() => run("pv", async () => setPreview(await post("/import/preview", { path })))}>
           Preview
         </button>

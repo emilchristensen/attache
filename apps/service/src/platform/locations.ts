@@ -25,6 +25,8 @@ export interface PlatformLocations {
   binDir: string;
   /** Folder of per-user service definitions (LaunchAgents, systemd user units); null where the service manager keeps none on disk. */
   serviceDefinitionDir: string | null;
+  /** The owner's Documents folder, where Jarvis suggests a data folder and draws its example folder paths from. */
+  documentsDir: string;
   /** Archive tool for backup and restore. */
   tar: string;
   /** Organisation-managed Claude Code settings, which also apply to headless sessions. */
@@ -54,6 +56,7 @@ function macos(env: Env): PlatformLocations {
     locksDir: join(installPrefix, "locks"),
     binDir: join(home, ".local", "bin"),
     serviceDefinitionDir: join(home, "Library", "LaunchAgents"),
+    documentsDir: join(home, "Documents"),
     tar: "/usr/bin/tar",
     claudeManagedSettings: "/Library/Application Support/ClaudeCode/managed-settings.json",
     toolDirs: [join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin"],
@@ -71,6 +74,7 @@ function linux(env: Env): PlatformLocations {
     locksDir: join(home, ".local", "state", "jarvis", "locks"),
     binDir: join(home, ".local", "bin"),
     serviceDefinitionDir: join(env.XDG_CONFIG_HOME || join(home, ".config"), "systemd", "user"),
+    documentsDir: join(home, "Documents"),
     tar: "tar",
     claudeManagedSettings: "/etc/claude-code/managed-settings.json",
     toolDirs: [join(home, ".local", "bin"), "/usr/local/bin", "/usr/bin"],
@@ -97,6 +101,7 @@ function windows(env: Env): PlatformLocations {
     binDir: join(installPrefix, "bin"),
     // The per-user logon task lives in Task Scheduler, not in a file.
     serviceDefinitionDir: null,
+    documentsDir: join(home, "Documents"),
     tar: join(env.SystemRoot || "C:\\Windows", "System32", "tar.exe"),
     claudeManagedSettings: join(env.ProgramFiles || "C:\\Program Files", "ClaudeCode", "managed-settings.json"),
     toolDirs: [join(home, ".local", "bin"), join(appData, "npm")],

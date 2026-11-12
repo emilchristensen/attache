@@ -58,7 +58,7 @@ function Schedules({ config, onSaved }: { config: Config; onSaved: () => void })
         <input type="checkbox" checked={s.briefingEnabled} onChange={(e) => setS({ ...s, briefingEnabled: e.target.checked })} /> Prepare a daily briefing
       </label>
       <label className="check small">
-        <input type="checkbox" checked={n} onChange={(e) => setN(e.target.checked)} /> macOS notification for new urgent items
+        <input type="checkbox" checked={n} onChange={(e) => setN(e.target.checked)} /> Desktop notification for new urgent items
       </label>
       <div>
         <button className="primary" disabled={busy !== null} onClick={() => run("s", () => patch("/config", { schedules: s, notifications: { desktop: n } }).then(onSaved), "Saved")}>

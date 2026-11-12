@@ -4,6 +4,7 @@ import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
+import { useFolderExamples } from "../folder-examples.ts";
 
 const PILL: Record<ReplicationStatus, { state: string; label: string }> = {
   off: { state: "off", label: "off" },
@@ -82,6 +83,7 @@ function StartForm({ onDone }: { onDone: (v: ReplicationView) => void }) {
 export function JoinForm({ onDone, folder: fixedFolder, intro, primary = true }: { onDone: (v: ReplicationView) => void; folder?: string; intro: string; primary?: boolean }) {
   const [remote, setRemote] = useState("");
   const [folder, setFolder] = useState("");
+  const examples = useFolderExamples(fixedFolder === undefined);
   const target = fixedFolder ?? folder;
   const { error, busy, submit } = useSubmit(onDone);
   return (
@@ -91,7 +93,7 @@ export function JoinForm({ onDone, folder: fixedFolder, intro, primary = true }:
       {fixedFolder === undefined && (
         <label className="field">
           Empty folder for the Brain
-          <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/Users/you/Documents/Brain" spellCheck={false} aria-describedby="join-folder-help" />
+          <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={examples.brain} spellCheck={false} aria-describedby="join-folder-help" />
           <span className="help" id="join-folder-help">
             Jarvis clones the Brain here and uses this folder from then on. It must be empty or new, so two Brains are never mixed; the current data folder is left as it is.
           </span>
