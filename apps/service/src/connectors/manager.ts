@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ConnectionKind, ConnectionStatus, Coverage } from "@jarvis/contracts";
+import { plural, type ConnectionKind, type ConnectionStatus, type Coverage } from "@jarvis/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
@@ -18,7 +18,6 @@ import { scanDeadlines } from "./vault.ts";
 import { scanFactReviews } from "../attention/fact-reviews.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
-import { plural } from "../core/wording.ts";
 
 export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"];
 

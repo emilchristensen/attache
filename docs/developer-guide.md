@@ -6,7 +6,7 @@ Developer setup is separate from end-user installation: users run the installer 
 
 | Path | What |
 | --- | --- |
-| `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client |
+| `packages/contracts` | Versioned API contract (`/api/v1`): zod request schemas and response types shared by every client, and wording both the service and the Dashboard show (`wording.ts`) |
 | `apps/service` | The local service: memory writer, index, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |

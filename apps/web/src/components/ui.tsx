@@ -1,7 +1,7 @@
 import { Component, createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import MarkdownIt from "markdown-it";
 import type { ApiError } from "../api.ts";
-import { plural } from "../wording.ts";
+import { plural } from "@jarvis/contracts";
 
 // ---- routing -------------------------------------------------------------------
 

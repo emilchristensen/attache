@@ -7,8 +7,7 @@ import { splitFrontmatter } from "../memory/markdown.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";
-import type { ConnectionDefinition } from "@jarvis/contracts";
-import { plural } from "../core/wording.ts";
+import { plural, type ConnectionDefinition } from "@jarvis/contracts";
 
 /**
  * Deadlines from Markdown: open tasks with a due date (Obsidian Tasks `📅

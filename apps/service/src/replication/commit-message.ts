@@ -1,3 +1,4 @@
+import { plural } from "@jarvis/contracts";
 import type { MemoryChange } from "../memory/store.ts";
 import type { MachineRef } from "./seams.ts";
 
@@ -10,10 +11,6 @@ const SUBJECT_MAX = 120;
 
 /** The trailer that names the Machine a commit came from, read back when merging. */
 export const MACHINE_TRAILER = "Jarvis-Machine";
-
-function count(n: number, one: string, many: string) {
-  return n === 1 ? one : `${n} ${many}`;
-}
 
 type FactOutcome = "added" | "corrected" | "removed";
 
@@ -48,7 +45,7 @@ function describeChanges(changes: readonly MemoryChange[]): string {
   return [
     ...created.map((c) => `created "${c.afterValue ?? c.docRelPath}"`),
     ...(["added", "corrected", "removed"] as const).filter((o) => facts[o].length).map((o) => `${o} ${facts[o].join(", ")}`),
-    ...(events ? [`added ${count(events, "an event", "events")}`] : []),
+    ...(events ? [`added ${events === 1 ? "an event" : plural(events, "event")}`] : []),
     ...(deleted && !created.length ? ["deleted the note"] : []),
   ].join(", ");
 }
@@ -66,7 +63,7 @@ export function commitMessage(machine: MachineRef, staged: readonly StagedEntry[
     return { path: s.path, what: (own.length && describeChanges(own)) || BY_GIT[s.change] };
   });
   const first = lines[0];
-  const more = lines.length > 1 ? ` (and ${count(lines.length - 1, "1 more file", "more files")})` : "";
+  const more = lines.length > 1 ? ` (and ${plural(lines.length - 1, "more file")})` : "";
   const subject = first ? `${machine.name}: ${first.what} in ${first.path}${more}` : `${machine.name}: no changes`;
   return [subject.length > SUBJECT_MAX ? `${subject.slice(0, SUBJECT_MAX - 1)}…` : subject, "", ...lines.map((l) => `- ${l.path}: ${l.what}`), "", machineTrailer(machine)].join("\n");
 }

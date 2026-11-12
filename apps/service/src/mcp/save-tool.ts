@@ -1,8 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { MemorySaveInput, type MemorySaveProposalResult, type MemorySaveResult } from "@jarvis/contracts";
-import { plural } from "../core/wording.ts";
+import { MemorySaveInput, plural, type MemorySaveProposalResult, type MemorySaveResult } from "@jarvis/contracts";
 import type { BrainAccess } from "./brain.ts";
 import { askOwner, confirmationMessage } from "./confirmation.ts";
 import { harnessSession, saveOrigin, type ServerContext } from "./harness.ts";

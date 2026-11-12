@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { plural } from "../core/wording.ts";
+import { plural } from "@jarvis/contracts";
 import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
 import type { SearchCommand } from "./search-command.ts";
 

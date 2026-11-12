@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import { z } from "zod";
-import { ConfigPatch, FeatureId, MachineRename, type SetupDefaults } from "@jarvis/contracts";
+import { ConfigPatch, FeatureId, MachineRename, plural, type SetupDefaults } from "@jarvis/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -9,7 +9,6 @@ import { VERSION } from "../app.ts";
 import { createPairingCode, redeemPairingCode, sessionCookie, clearedCookie } from "./security.ts";
 import { resolveChange, effectiveFeatures } from "../capabilities/registry.ts";
 import { planDataFolderScan } from "../memory/indexer.ts";
-import { plural } from "../core/wording.ts";
 import { nowIso } from "../core/db.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";

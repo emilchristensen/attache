@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import type { ConnectionDefinition, ConnectionStatus, FeatureStatus, Config, SetupDefaults } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@jarvis/contracts";
 import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { JoinForm } from "./Replication.tsx";
-import { plural } from "../wording.ts";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
