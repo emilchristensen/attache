@@ -535,7 +535,8 @@ label.field .help {
   gap: 10px;
   align-items: flex-start;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  /* Square, so the divider below each row runs straight instead of curling up at its ends. */
+  border-radius: 0;
   background: transparent;
   text-align: left;
   width: 100%;
