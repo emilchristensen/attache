@@ -121,7 +121,9 @@ describe("Slack adapter contract (claude.ai Slack connector)", () => {
     searchable([], []);
     expect((await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("empty");
     onTool(claude, SERVER, "slack_search_public_and_private", () => jsonAnswer({ results: "### Result 1 of 1\nChannel: ???\nText: \nno ids\n\n---\n" }));
-    expect((await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }))).coverage.state).toBe("partial");
+    const partial = await slackAdapter.refresh!(ctx(["dms"], { userId: SELF }));
+    expect(partial.coverage.state).toBe("partial");
+    expect(partial.coverage.scopes[0]!.note).toContain("1 result could not be read");
   });
 
   it("format drift: hits that no reader recognises make the scope partial, not empty", async () => {

@@ -12,6 +12,7 @@ import { RemoteError, afterWrite } from "./http.ts";
 import { asRemoteError, attemptStartMs, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
+import { plural } from "@jarvis/contracts";
 
 export interface GmailMessage {
   id: string;
@@ -237,10 +238,10 @@ async function syncInbox(ctx: AdapterContext, cov: CoverageTracker, out: Observa
     out.push(toObservation(s));
   }
   const notes = [
-    ...(r.error ? [r.error.message] : !r.complete ? [`Read the newest ${r.items.length} threads (${MAX_PAGES} pages)`] : []),
-    ...(r.unreadable + undated ? [`${r.unreadable + undated} thread(s) could not be read or dated`] : []),
+    ...(r.error ? [r.error.message] : !r.complete ? [`Read the newest ${plural(r.items.length, "thread")} (${MAX_PAGES} pages)`] : []),
+    ...(r.unreadable + undated ? [`${plural(r.unreadable + undated, "thread")} could not be read or dated`] : []),
     ...(details.error ? [`Thread details: ${details.error.message}`] : []),
-    ...(dropped ? [`${dropped} thread(s) outside the ${WINDOW_DAYS}-day window were skipped`] : []),
+    ...(dropped ? [`Skipped ${plural(dropped, "thread")} outside the ${WINDOW_DAYS}-day window`] : []),
   ];
   const complete = r.complete && !r.unreadable && !undated;
   cov.add(SCOPE_LABEL, complete ? (items ? "complete" : "empty") : "partial", items, r.pages, notes.length ? notes.join("; ") : undefined);

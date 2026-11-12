@@ -114,6 +114,14 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("error");
   });
 
+  it("events that cannot be read make the scope partial, and the note counts them", async () => {
+    events([event("a"), { nope: 1 }]);
+    const one = await gcalAdapter.refresh!(ctx());
+    expect(one.coverage.scopes[0]).toMatchObject({ state: "partial", items: 1, note: "1 event could not be read" });
+    events([event("a"), { nope: 1 }, { nope: 2 }]);
+    expect((await gcalAdapter.refresh!(ctx())).coverage.scopes[0]!.note).toBe("2 events could not be read");
+  });
+
   it("disconnect: with Claude Code signed out nothing is read and the state is unauthorized", async () => {
     claude.mode = "not-logged-in";
     events([event("a")]);

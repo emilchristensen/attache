@@ -174,7 +174,7 @@ describe("Jira adapter contract (Atlassian Rovo MCP server)", () => {
     atl.tools.set("searchJiraIssuesUsingJql", () => ({ issues: [issue("ABC-1"), { nokey: true }], isLast: true }));
     const partial = await jiraAdapter.refresh!(ctx());
     expect(partial.coverage.state).toBe("partial");
-    expect(partial.coverage.scopes[0]!.note).toMatch(/1 result\(s\) had no readable/);
+    expect(partial.coverage.scopes[0]!.note).toContain("1 result had no readable work item key");
   });
 
   it("partial coverage: one scope denied while another succeeds is partial, with the denial noted", async () => {

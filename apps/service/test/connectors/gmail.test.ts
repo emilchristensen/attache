@@ -87,7 +87,7 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
     expect(r.observations.filter((o) => o.attention).map((o) => o.attention!.key)).toEqual(["gmail:t1"]);
     expect(r.observations.map((o) => o.externalId).sort()).toEqual(["t1", "t2", "t3", "t5"]);
     expect(r.coverage).toMatchObject({ state: "complete", items: 4 });
-    expect(r.coverage.scopes[0]!.note).toMatch(/1 thread\(s\) outside the 7-day window/);
+    expect(r.coverage.scopes[0]!.note).toContain("Skipped 1 thread outside the 7-day window");
     expect(r.observations[0]!.attention!.draftable).toMatchObject({ actionKind: "gmail.draft", target: { threadId: "t1", to: "mia@client.example", replyToMessageId: "a" } });
   });
 
@@ -133,7 +133,7 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
     onTool(claude, SERVER, "get_thread", (a) => (a.threadId === "t2" ? { text: "Backend unavailable 503", isError: true } : jsonAnswer(thread("t1", [m("a", "mia@client.example", 3, ["INBOX"])]))));
     const r = await gmailAdapter.refresh!(ctx());
     expect(r.coverage).toMatchObject({ state: "partial", items: 1 });
-    expect(r.coverage.scopes[0]!.note).toMatch(/1 thread\(s\) could not be read or dated/);
+    expect(r.coverage.scopes[0]!.note).toContain("1 thread could not be read or dated");
   });
 
   it("search results that already carry dates and labels make no get_thread calls", async () => {

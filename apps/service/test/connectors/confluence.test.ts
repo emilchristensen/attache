@@ -90,7 +90,11 @@ describe("Confluence adapter contract (Atlassian Rovo MCP server)", () => {
     atl.tools.set("searchConfluence", () => "not json at all");
     expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("error");
     atl.tools.set("searchConfluence", () => ({ results: [hit("1"), { content: { title: "no id" } }] }));
-    expect((await confluenceAdapter.refresh!(ctx())).coverage.state).toBe("partial");
+    const partial = await confluenceAdapter.refresh!(ctx());
+    expect(partial.coverage.state).toBe("partial");
+    expect(partial.coverage.scopes[0]!.note).toContain("1 result had no readable page id");
+    atl.tools.set("searchConfluence", () => ({ results: [hit("1"), { content: { title: "no id" } }, { content: { title: "no id either" } }] }));
+    expect((await confluenceAdapter.refresh!(ctx())).coverage.scopes[0]!.note).toContain("2 results had no readable page id");
     atl.tools.set("searchConfluence", () => {
       throw new ToolError("Forbidden", 403);
     });
