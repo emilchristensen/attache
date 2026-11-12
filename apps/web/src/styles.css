@@ -370,10 +370,11 @@ label.field .help {
 }
 .check input {
   /* Centred on the label's first line, whatever its font size: the label's font makes 1lh its line height. */
+  --check-size: 16px;
   font: inherit;
-  margin-top: max(0px, calc((1lh - 16px) / 2));
-  width: 16px;
-  height: 16px;
+  margin-top: max(0px, calc((1lh - var(--check-size)) / 2));
+  width: var(--check-size);
+  height: var(--check-size);
   accent-color: var(--accent-strong);
   flex-shrink: 0;
 }

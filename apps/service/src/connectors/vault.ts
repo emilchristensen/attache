@@ -93,7 +93,8 @@ function vaultDefinition(): ConnectionDefinition {
 export const vaultAdapter: ConnectorAdapter = {
   kind: "vault",
   secretNames: [],
-  // A getter, so the example folder is this computer's whenever the Dashboard asks.
+  // A getter: working out the example folder at import would throw on an unsupported
+  // operating system before the command line can explain it (see `platform/os.ts`).
   get definition() {
     return vaultDefinition();
   },
