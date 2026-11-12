@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ConnectionDefinition, ConnectionStatus, Coverage } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@jarvis/contracts";
 import { api, post, put } from "../api.ts";
 import { StatusPill, Time, useAction } from "./ui.tsx";
 
@@ -50,7 +50,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
   const [method, setMethod] = useState(definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? ""));
   const [fields, setFields] = useState<Record<string, string>>({});
   const [scopes, setScopes] = useState<string[]>(configured ? status.readScopes : definition.scopes.filter((s) => s.default).map((s) => s.id));
-  const [preview, setPreview] = useState<Record<string, number> | null>(null);
+  const [preview, setPreview] = useState<DisconnectEffects | null>(null);
   const [testMsg, setTestMsg] = useState<string | null>(null);
   const m = definition.authMethods.find((x) => x.id === method) ?? definition.authMethods[0];
   // Browser sign-in follows the method being edited, or the method the connection was saved with.
@@ -248,7 +248,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
                   <button className="ghost" onClick={() => setEditing(true)}>
                     Reconfigure
                   </button>
-                  <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<Record<string, number>>(`/connections/${status.id}/disconnect-preview`)))}>
+                  <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<DisconnectEffects>(`/connections/${status.id}/disconnect-preview`)))}>
                     Disconnect…
                   </button>
                 </>
@@ -283,10 +283,10 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
         <div className="state error small" role="alertdialog" aria-label="Disconnect">
           <strong>Disconnect {status.label}?</strong>
           <span>
-            Jarvis deletes the stored credentials and stops all requests. {preview.queuedJobs} queued job(s) will be cancelled and approvals for {preview.drafts} draft(s) revoked.
+            {preview.credentials > 0 ? "Jarvis deletes the stored credentials and stops all requests." : "Jarvis stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
           </span>
           <span>
-            Retained data: {preview.observations} observation(s), {preview.attentionItems} open attention item(s){preview.indexedDocuments ? `, ${preview.indexedDocuments} indexed file(s)` : ""}.
+            Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open attention item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
           </span>
           <div className="row">
             <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: false }).then(() => { setPreview(null); onChanged(); }), "Disconnected; data kept")}>

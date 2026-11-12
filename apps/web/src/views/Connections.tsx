@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ConnectionDefinition, ConnectionStatus, FeatureStatus } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
@@ -29,9 +29,9 @@ function ImportFolder({ onDone }: { onDone: () => void }) {
       </div>
       {preview && (
         <div className="state partial small">
-          <strong style={{ color: "var(--text)" }}>Reads {preview.filesToRead} Markdown file(s) · changes 0 files</strong>
+          <strong style={{ color: "var(--text)" }}>Reads {plural(preview.filesToRead, "Markdown file")} · changes 0 files</strong>
           <span>{preview.note}</span>
-          {preview.skippedCount > 0 && <span>{preview.skippedCount} skipped (hidden folders, links, large files)</span>}
+          {preview.skippedCount > 0 && <span>{plural(preview.skippedCount, "item")} skipped (hidden folders, links or large files).</span>}
           <button className="small primary" disabled={busy !== null} onClick={() => run("imp", () => post("/import", { path: preview.path }).then(() => { setPreview(null); setPath(""); onDone(); }), "Import started")}>
             Import
           </button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ActionView, Citation } from "@jarvis/contracts";
+import { plural, type ActionView, type Citation } from "@jarvis/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -72,7 +72,7 @@ function DraftDetail({ id }: { id: string }) {
           {ctx.source && typeof ctx.source.body === "string" && ctx.source.body && <p className="small muted" style={{ whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto" }}>{ctx.source.body}</p>}
           {ctx.fetched?.changedFiles?.length ? (
             <details>
-              <summary className="small">{ctx.fetched.changedFiles.length} changed file(s)</summary>
+              <summary className="small">{plural(ctx.fetched.changedFiles.length, "changed file")}</summary>
               <ul className="small mono" style={{ paddingLeft: 18 }}>
                 {ctx.fetched.changedFiles.map((f) => (
                   <li key={f.file}>
