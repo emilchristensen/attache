@@ -22,6 +22,17 @@ describe("what testing a folder of notes says", () => {
     expect(await setupTestMessage(svc, "vault-data")).toBe("1 Markdown file readable");
   });
 
+  it("the data folder preview counts an existing folder's notes, without Jarvis's own folders", async () => {
+    svc = await startTestService({ setup: false });
+    const folder = testFolder("existing");
+    writeFileSync(join(folder, "one.md"), "# One\n");
+    mkdirSync(join(folder, "review"));
+    writeFileSync(join(folder, "review/p1.md"), "# Proposal\n");
+    const preview = await svc.post("/setup/data-folder/preview", { path: folder });
+    expect(preview.markdownFiles).toBe(1);
+    expect(preview.note).toContain("and index 1 existing Markdown file.");
+  });
+
   it("a refresh of a data folder with one note counts it as one file", async () => {
     svc = await startTestService();
     const { job } = await svc.post("/connections/vault-data/refresh");
