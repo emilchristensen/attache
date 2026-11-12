@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
@@ -21,6 +21,7 @@ import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
 import { credentialsCommand, dataFolderCommand, locksCommand, notificationsCommand, pathsCommand, serviceCommand, wrappersCommand, type PlatformCliIo } from "./cli/platform-commands.ts";
 import { currentOs } from "./platform/os.ts";
 import { openUrl } from "./platform/open-url.ts";
+import { writeFileWhole } from "./platform/replace-file.ts";
 import { runMcpServer } from "./mcp/server.ts";
 import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
 import { replicationCommand } from "./cli/replication-commands.ts";
@@ -42,7 +43,8 @@ async function serve(argv: string[]) {
   const handle = await startServer(app, { port });
   app.start();
   const runtime: Runtime = { pid: process.pid, port: handle.port, url: handle.url, version: VERSION, startedAt: app.startedAt, instance: app.instance };
-  writeFileSync(app.paths.runtimeFile, JSON.stringify(runtime, null, 2), { mode: 0o600 });
+  // Whole or not at all: the CLI reads it, and may be reading it while the service starts.
+  writeFileWhole(app.paths.runtimeFile, JSON.stringify(runtime, null, 2), { mode: 0o600 });
   app.log.info("jarvis service listening", { url: handle.url, version: VERSION, stateDir: app.paths.stateDir });
   let stopping = false;
   const stop = async (signal: string) => {

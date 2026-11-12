@@ -1,4 +1,6 @@
-import { renameSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { currentOs, type Os } from "./os.ts";
 
 /** Errors Windows gives while another program (an editor, a virus scanner, the search indexer) has the target open. */
@@ -34,4 +36,21 @@ export function replaceWith(tmp: string, target: string, os: Os = currentOs()): 
       throw e;
     }
   }
+}
+
+/**
+ * Write `data` to `target` so that a reader in another process sees the old
+ * file, or no file, until the new one is complete. Writing in place would
+ * empty the file first, and a reader that comes by before the write finishes
+ * (likely on a loaded machine) finds it empty or half written.
+ */
+export function writeFileWhole(target: string, data: string, options: { mode?: number } = {}, os: Os = currentOs()): void {
+  const tmp = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
+  try {
+    writeFileSync(tmp, data, { mode: options.mode ?? 0o666, flag: "wx" });
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+  replaceWith(tmp, target, os);
 }
