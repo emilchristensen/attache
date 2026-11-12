@@ -96,8 +96,12 @@ export function recordByKey(db: Db, key: string): InboxRecord | null {
   return r ? recordOfRow(r) : null;
 }
 
+function allRows(db: Db): ItemRow[] {
+  return db.prepare("select * from attention_items order by item_key").all() as unknown as ItemRow[];
+}
+
 export function allRecords(db: Db): InboxRecord[] {
-  return (db.prepare("select * from attention_items order by item_key").all() as unknown as ItemRow[]).map(recordOfRow);
+  return allRows(db).map(recordOfRow);
 }
 
 /**
@@ -251,6 +255,25 @@ export function takeRecord(db: Db, rec: InboxRecord, now: string): boolean {
     if (rec.decision && JSON.stringify(rec.decision) !== JSON.stringify(before?.decision ?? null)) logDecision(db, rec.key, rec.decision);
   });
   return true;
+}
+
+/**
+ * Work every item's state out again from its record, and store it where the row held another
+ * state, snooze time or decided fingerprint. Those columns are only this Machine's copy of what
+ * the record gives: a database from an earlier release can hold one the record does not give,
+ * which nothing else would correct. Returns the keys of the rows it corrected.
+ */
+export function rederiveStates(db: Db, now: string): string[] {
+  const stale = allRows(db)
+    .map((row) => ({ row, rec: recordOfRow(row) }))
+    .filter(({ row, rec }) => {
+      const d = deriveState(rec.item, rec.decision, now);
+      return d.state !== row.state || d.snoozeUntil !== (row.snooze_until ?? null) || d.decidedFingerprint !== (row.decided_fingerprint ?? null);
+    });
+  tx(db, () => {
+    for (const { rec } of stale) storeRecord(db, rec, now);
+  });
+  return stale.map(({ rec }) => rec.key);
 }
 
 /** Forget an item another Machine deleted. Returns whether it was here. */

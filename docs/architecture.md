@@ -347,6 +347,7 @@ The attention engine follows these rules:
   Items about one Machine alone (`localSources`, today its own "Replication is blocked" item) never enter the Brain.
   Files are one line of JSON, so a file both Machines changed always reaches the merge rule (`attention/inbox-merge.ts`): the newer report of the item and the later decision win, a tie is broken by Machine id, and a deletion wins.
   Files another Machine changed are taken in from `Replication.onPulled`; opening a data folder brings the database and the files together, files first, and writes out items that only the database had (the carry-over from before the inbox replicated).
+  When the service starts, whether or not a data folder opens, it works every item's state out again from its record (`Inbox.load`, `rederiveStates` in `attention/engine.ts`), so the state column is only a copy and a state an earlier release left in the database never outlives an upgrade.
   The indexer skips `review/` at the top of the data folder (`review-state/files.ts` holds the layout shared with Proposals).
 - Coverage per source per run is one of `complete`, `partial` (pagination stopped, rate limit, page cap), `denied` (scope/403), `unauthorized` (401/expired), `offline` (network), `error`, `not_configured`.
   A zero from a partial source is never shown as "nothing to do".
