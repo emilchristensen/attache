@@ -4,6 +4,7 @@ import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
+import { tabId, Tabs, type TabItem } from "../components/Tabs.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
 
 const PILL: Record<ReplicationStatus, { state: string; label: string }> = {
@@ -109,20 +110,18 @@ export function JoinForm({ onDone, folder: fixedFolder, intro, primary = true }:
   );
 }
 
+type SwitchOnMode = "start" | "join";
+const SWITCH_ON_MODES: ReadonlyArray<TabItem<SwitchOnMode>> = [
+  { id: "start", label: "Start with this Brain" },
+  { id: "join", label: "Join another Machine" },
+];
+
 function SwitchOn({ onDone }: { onDone: (v: ReplicationView) => void }) {
-  const [mode, setMode] = useState<"start" | "join">("start");
-  const tab = (id: typeof mode, label: string) => (
-    <button type="button" role="tab" id={`replication-tab-${id}`} aria-selected={mode === id} aria-controls="replication-panel" onClick={() => setMode(id)}>
-      {label}
-    </button>
-  );
+  const [mode, setMode] = useState<SwitchOnMode>("start");
   return (
-    <div>
-      <div className="tabs" role="tablist" aria-label="How to switch Replication on">
-        {tab("start", "Start with this Brain")}
-        {tab("join", "Join another Machine")}
-      </div>
-      <div role="tabpanel" id="replication-panel" aria-labelledby={`replication-tab-${mode}`}>
+    <div className="stack">
+      <Tabs label="How to switch Replication on" tabs={SWITCH_ON_MODES} selected={mode} onSelect={setMode} panelId="replication-panel" />
+      <div role="tabpanel" id="replication-panel" aria-labelledby={tabId("replication-panel", mode)}>
         {mode === "start" ? <StartForm onDone={onDone} /> : <JoinForm onDone={onDone} intro="Brings the Brain another Machine set up onto this one." />}
       </div>
     </div>

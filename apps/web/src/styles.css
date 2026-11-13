@@ -504,14 +504,43 @@ label.field .help {
   }
 }
 
+/*
+ * Tabs keep one row. A row wider than its column scrolls sideways, without a
+ * scrollbar: at an end with tabs out of view, the tabs fade out before an
+ * arrow. `Tabs.tsx` reads --tabs-edge to keep the selected tab clear of it.
+ */
+.tabs-bar {
+  /* Plain lengths, so script reads them as numbers: the arrow, then a fade to 40px. */
+  --tabs-arrow: 22px;
+  --tabs-edge: 40px;
+  position: relative;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+}
+.tabs-bar.plain {
+  border-bottom: none;
+}
 .tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 2px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs-bar[data-hidden-before] .tabs {
+  mask-image: linear-gradient(to right, transparent var(--tabs-arrow), #000 var(--tabs-edge));
+}
+.tabs-bar[data-hidden-after] .tabs {
+  mask-image: linear-gradient(to left, transparent var(--tabs-arrow), #000 var(--tabs-edge));
+}
+.tabs-bar[data-hidden-before][data-hidden-after] .tabs {
+  mask-image: linear-gradient(to right, transparent var(--tabs-arrow), #000 var(--tabs-edge), #000 calc(100% - var(--tabs-edge)), transparent calc(100% - var(--tabs-arrow)));
 }
 .tabs button {
+  flex: none;
   border: none;
   background: transparent;
   border-bottom: 2px solid transparent;
@@ -519,9 +548,38 @@ label.field .help {
   padding: 8px 12px;
   color: var(--muted);
 }
+/* Inside the tab: the row scrolls, so an outline around it would be cut off. */
+.tabs button:focus-visible {
+  outline-offset: -2px;
+}
 .tabs button[aria-selected="true"] {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+.tabs-bar > .tabs-scroll {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--tabs-arrow);
+  padding: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+}
+.tabs-bar > .tabs-scroll:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+.tabs-bar > .tabs-scroll[hidden] {
+  display: none;
+}
+.tabs-scroll.before {
+  left: 0;
+}
+.tabs-scroll.after {
+  right: 0;
 }
 
 .list {
@@ -823,15 +881,19 @@ button.count-chip {
   grid-area: review;
 }
 /*
- * Separator dots sit in the gap before each part. The first part on every line,
- * wrapped ones too, has its dot outside the box, where it is clipped, so no
- * line starts with a separator.
+ * Parts separated by dots. Each dot sits in the gap before its part. The first
+ * part on every line, wrapped ones too, has its dot outside the box, where it
+ * is clipped, so no line starts with a separator.
  */
-.item .proposal-meta {
+/* `.item .meta` sets a gap of its own, which must not narrow the dots' gap. */
+.separated,
+.item .meta.separated {
+  display: flex;
+  flex-wrap: wrap;
   column-gap: 16px;
   overflow: hidden;
 }
-.proposal-meta > span::before {
+.separated > *::before {
   content: "·";
   display: inline-block;
   width: 16px;
@@ -1164,11 +1226,27 @@ html:has(.setup) {
   margin-left: auto;
 }
 
+/* The question beside its buttons, or above them on a narrow screen. */
+.research-form {
+  flex-wrap: nowrap;
+  margin-bottom: 14px;
+}
+.research-form input {
+  flex: 1;
+  min-width: 0;
+}
+
 .split {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+}
+
+/* Scrolled to on a narrow screen, with the page's own top margin above it. */
+.split-detail {
+  min-width: 0;
+  scroll-margin-top: 16px;
 }
 
 .bottom-nav {
@@ -1178,8 +1256,9 @@ html:has(.setup) {
 /* ---- narrow screens --------------------------------------------------------------- */
 
 @media (max-width: 900px) {
+  /* Never wider than the window, however wide a row inside wants to be. */
   .split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1198,14 +1277,16 @@ html:has(.setup) {
     overflow-x: auto;
     padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
   }
+  /* Equal widths where the labels allow, and never narrower than a label, so none is cut off. */
   .bottom-nav a {
-    flex: 1 0 auto;
+    flex: 1 1 0;
+    min-width: max-content;
     text-align: center;
-    padding: 8px 10px;
-    font-size: 12.5px;
+    padding: 8px 4px;
+    font-size: 12px;
     color: var(--text-2);
     border-radius: 8px;
-    min-width: 64px;
+    white-space: nowrap;
   }
   .bottom-nav a[aria-current="page"] {
     color: var(--text);
@@ -1213,6 +1294,12 @@ html:has(.setup) {
   }
   .page {
     padding: 16px 14px 32px;
+  }
+  .research-form {
+    flex-wrap: wrap;
+  }
+  .research-form input {
+    flex-basis: 100%;
   }
   /* The state beside its label, and the note below both. */
   .check-list {
@@ -1247,7 +1334,7 @@ html:has(.setup) {
     align-items: flex-start;
     gap: 2px;
   }
-  .proposal-meta > span::before {
+  .item .proposal-meta > *::before {
     content: none;
   }
 }
@@ -1278,18 +1365,6 @@ label.field input,
 label.field textarea,
 label.field select {
   font-weight: 400;
-}
-
-@media (max-width: 720px) {
-  .bottom-nav a {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 8px 2px;
-    font-size: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 }
 
 /* ---- recent saves ------------------------------------------------------ */
@@ -1358,9 +1433,6 @@ label.field select {
 .recent-change-meta {
   font-size: 12px;
   color: var(--muted);
-  display: flex;
-  column-gap: 4px;
-  flex-wrap: wrap;
 }
 .recent-change-why {
   font-size: 12px;

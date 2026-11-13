@@ -67,12 +67,9 @@ function ChangeRow({ c, onReverted }: { c: RecentChangeView; onReverted: () => v
         <div className="recent-change-what">
           <What c={c} />
         </div>
-        <div className="recent-change-meta">
+        <div className="recent-change-meta separated">
           <span>{c.source.label}</span>
-          <span>
-            <span aria-hidden>· </span>
-            <Time iso={c.at} />
-          </span>
+          <Time iso={c.at} />
         </div>
         {!c.revert.allowed && c.revertedBy === null && <p className="recent-change-why">{c.revert.reason}</p>}
       </div>

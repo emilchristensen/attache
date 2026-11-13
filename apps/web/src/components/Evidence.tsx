@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useResource } from "../live.ts";
 import { ErrorState, Link, Loading, Markdown, StatusPill, Time } from "./ui.tsx";
+import { Tabs, type TabItem } from "./Tabs.tsx";
 
 export interface EvidenceTarget {
   root: string;
@@ -62,9 +63,15 @@ export function SourceView({ raw, lines }: { raw: string; lines?: [number, numbe
   );
 }
 
+type EvidenceMode = "source" | "rendered";
+const EVIDENCE_MODES: ReadonlyArray<TabItem<EvidenceMode>> = [
+  { id: "source", label: "Source lines" },
+  { id: "rendered", label: "Rendered" },
+];
+
 function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: () => void }) {
   const doc = useResource<DocView>(`/memory/document?root=${encodeURIComponent(target.root)}&path=${encodeURIComponent(target.relPath)}`, ["memory.changed"]);
-  const [mode, setMode] = useState<"source" | "rendered">("source");
+  const [mode, setMode] = useState<EvidenceMode>("source");
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     closeRef.current?.focus();
@@ -107,14 +114,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           {d && (
             <>
               <div className="row">
-                <div className="tabs" role="tablist" style={{ marginBottom: 0, borderBottom: "none" }}>
-                  <button role="tab" aria-selected={mode === "source"} onClick={() => setMode("source")}>
-                    Source lines
-                  </button>
-                  <button role="tab" aria-selected={mode === "rendered"} onClick={() => setMode("rendered")}>
-                    Rendered
-                  </button>
-                </div>
+                <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
                   <Link to={`/memory?path=${encodeURIComponent(d.relPath)}`}>Open in Memory</Link>
                 )}

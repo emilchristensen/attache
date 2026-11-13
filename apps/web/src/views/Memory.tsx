@@ -3,8 +3,10 @@ import type { MeaningStatus } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useLocation } from "../components/ui.tsx";
+import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { ProposalReview } from "../components/ProposalReview.tsx";
+import { Tabs } from "../components/Tabs.tsx";
 import { RecentSaves } from "./RecentSaves.tsx";
 
 interface Hit {
@@ -189,7 +191,11 @@ export function MemoryView() {
     const h = setTimeout(() => setQuery(q.trim()), 250);
     return () => clearTimeout(h);
   }, [q]);
-  const select = (root: string, relPath: string) => navigate(`/memory?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
+  const { detailRef, revealDetail } = useRevealDetail();
+  const select = (root: string, relPath: string) => {
+    navigate(`/memory?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
+    revealDetail();
+  };
   return (
     <div className="page">
       <div className="page-header">
@@ -207,13 +213,7 @@ export function MemoryView() {
         <div className="stack">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search memory and notes" aria-label="Search memory" />
           {!query && (
-            <div className="tabs" role="tablist" aria-label="Memory type">
-              {TABS.map((x) => (
-                <button key={x.id} role="tab" aria-selected={x.id === tab} onClick={() => setTab(x.id)}>
-                  {x.label}
-                </button>
-              ))}
-            </div>
+            <Tabs label="Memory type" tabs={TABS} selected={t.id} onSelect={setTab} />
           )}
           {query ? (
             <>
@@ -257,7 +257,7 @@ export function MemoryView() {
             </>
           )}
         </div>
-        <div>{selected ? <DocPanel root={selectedRoot} relPath={selected} /> : <Empty title="Select a note">People, projects, decisions and notes show their current state, history and change log here.</Empty>}</div>
+        <div ref={detailRef} className="split-detail">{selected ? <DocPanel root={selectedRoot} relPath={selected} /> : <Empty title="Select a note">People, projects, decisions and notes show their current state, history and change log here.</Empty>}</div>
       </div>
     </div>
   );

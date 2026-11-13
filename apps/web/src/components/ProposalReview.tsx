@@ -81,7 +81,7 @@ export function ProposalReview() {
               <blockquote>{p.evidence}</blockquote>
             </figure>
           )}
-          <div className="meta proposal-meta">
+          <div className="meta proposal-meta separated">
             {p.reason && <span>Why: {p.reason}</span>}
             {p.source && <span>Source: {p.source}</span>}
             <span>

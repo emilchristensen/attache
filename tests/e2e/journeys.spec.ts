@@ -643,6 +643,136 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await expect(page.getByText("No matches")).toBeVisible();
 });
 
+/** Where a tab sits in its tab bar: its row, and whether the bar shows all of it. */
+async function tabPlaces(tablist: Locator) {
+  return tablist.evaluate((list) => {
+    const bar = list.getBoundingClientRect();
+    return [...list.querySelectorAll('[role="tab"]')].map((tab) => {
+      const box = tab.getBoundingClientRect();
+      return { name: tab.textContent, top: Math.round(box.top), height: box.height, shown: box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5 };
+    });
+  });
+}
+
+/** The first character of every line an element's text runs onto. */
+function lineStarts(el: Element): string[] {
+  const starts = new Map<number, { left: number; char: string }>();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent ?? "";
+    for (let i = 0; i < text.length; i++) {
+      if (!text[i]!.trim()) continue;
+      const range = document.createRange();
+      range.setStart(node, i);
+      range.setEnd(node, i + 1);
+      const box = range.getBoundingClientRect();
+      const line = Math.round(box.top);
+      const first = starts.get(line);
+      if (!first || box.left < first.left) starts.set(line, { left: box.left, char: text[i]! });
+    }
+  }
+  return [...starts.values()].map((s) => s.char);
+}
+
+test("narrow layout: the Connections page has one name in the sidebar, the bottom bar and its heading", async () => {
+  const page = await open("/connections");
+  const sidebar = page.locator("nav.nav");
+  const bottom = page.locator(".bottom-nav");
+  // One name for the page in the sidebar, the bottom bar and the heading.
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
+  await expect(sidebar.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Sources" })).toHaveCount(0);
+    // Every label shows in full, without an ellipsis, and the bar fits the window.
+    const clipped = await bottom.getByRole("link").evaluateAll((links) => links.filter((a) => a.scrollWidth > a.clientWidth).map((a) => a.textContent));
+    expect(clipped, `bottom bar labels cut off at ${width}px`).toEqual([]);
+    expect(await bottom.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `bottom bar fits at ${width}px`).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await bottom.getByRole("link", { name: "Memory" }).click();
+  await bottom.getByRole("link", { name: "Connections" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
+});
+
+test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
+  const page = await open("/memory");
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
+    const at = `at ${viewport.width}px`;
+    await page.setViewportSize(viewport);
+    await page.goto(`${stack.url}/memory?tab=person`);
+    const tablist = page.getByRole("tablist", { name: "Memory type" });
+    await expect(tablist.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
+    const places = await tabPlaces(tablist);
+    expect(new Set(places.map((p) => p.top)).size, `Memory tabs on one row ${at}`).toBe(1);
+    expect((await tablist.boundingBox())!.height, `the tab bar is one tab high ${at}`).toBeLessThanOrEqual(places[0]!.height + 1);
+    const box = (await tablist.boundingBox())!;
+    expect(box.x + box.width, `the tab bar stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `no horizontal overflow ${at}`).toBeLessThanOrEqual(0);
+    // The tabs that do not fit are one sideways scroll away, and the bar shows there are more.
+    const more = page.locator(".tabs-scroll.after");
+    const back = page.locator(".tabs-scroll.before");
+    expect(places.find((p) => p.name === "Deliverables")!.shown, `Deliverables is out of view ${at}`).toBe(false);
+    await expect(more).toBeVisible();
+    await expect(back).toBeHidden();
+    await more.click();
+    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `scrolled to Deliverables ${at}`).toBe(true);
+    await expect(back).toBeVisible();
+    await tablist.getByRole("tab", { name: "Deliverables" }).click();
+    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
+    // Opened from a link, the selected tab is in view.
+    await page.goto(`${stack.url}/memory?tab=deliverables`);
+    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
+    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
+    // The list follows the tabs at the same distance as the tabs follow the search box.
+    await page.goto(`${stack.url}/memory?tab=project`);
+    await expect(page.locator(".split .list-item").first()).toBeVisible();
+    const search = (await page.getByRole("searchbox", { name: "Search memory" }).boundingBox())!;
+    const bar = (await page.locator(".tabs-bar").filter({ has: tablist }).boundingBox())!;
+    const list = (await page.locator(".split .list-item").first().boundingBox())!;
+    expect(Math.round(list.y - (bar.y + bar.height)), `gap below the Memory tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
+  }
+});
+
+test("narrow layout: a picked note opens in view, Recent saves never start a line with a dot, and research gets a whole row", async () => {
+  const page = await open("/memory");
+
+  // On a phone the note opens below the list, and picking one brings it into view.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${stack.url}/memory?tab=project`);
+  await page.locator(".split .list-item", { hasText: "Atlas launch" }).click();
+  await expect(page.getByRole("heading", { name: "Atlas launch", level: 2 })).toBeVisible();
+  // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
+  const noteInView = () =>
+    page.locator(".split-detail").evaluate((note) => {
+      const box = note.getBoundingClientRect();
+      return box.top <= 80 || box.bottom <= document.querySelector(".bottom-nav")!.getBoundingClientRect().top;
+    });
+  await expect.poll(noteInView, "the picked note is in view").toBe(true);
+
+  // A wrapped Recent saves line starts with its words, never with a separator dot.
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto(`${stack.url}/memory`);
+  const metas = page.getByRole("region", { name: "Recent saves" }).locator(".recent-change-meta");
+  await expect(metas.first()).toBeVisible();
+  for (const meta of await metas.all()) expect(await meta.evaluate(lineStarts)).not.toContain("·");
+
+  // The research question gets the whole row on a phone instead of a sliver beside the buttons.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${stack.url}/jobs`);
+  const question = page.getByRole("textbox", { name: "Research question" });
+  const form = await question.evaluate((input) => {
+    const f = input.closest("form")!;
+    const s = getComputedStyle(f);
+    return { width: f.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight), input: input.getBoundingClientRect().width };
+  });
+  expect(form.input, "research question width").toBeGreaterThanOrEqual(form.width - 1);
+  await expect(page.getByRole("button", { name: "Research", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Diagnostics", exact: true })).toBeVisible();
+});
+
 test("review dates: a fact shows its Review date, and one past it is marked unverified", async () => {
   const rel = "memory/projects/helix-rollout.md";
   const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);

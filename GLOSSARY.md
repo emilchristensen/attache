@@ -44,6 +44,10 @@ The agent application the owner talks to, such as Claude Code, Claude Desktop, C
 It is where the owner asks about the Brain and adds to it.
 _Avoid_: client, coding agent
 
+**Connection**:
+Jarvis's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
+The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
+
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, proposes saves and runs the audit.
 The Harness is the application; the agent is what runs in it.
