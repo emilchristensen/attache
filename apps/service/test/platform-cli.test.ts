@@ -14,9 +14,19 @@ const MAIN = join(import.meta.dirname, "../src/main.ts");
 /** A URL, because `--import` reads a Windows path's drive letter as a URL scheme. */
 const FAKE_PLATFORM = pathToFileURL(join(import.meta.dirname, "fixtures/fake-platform.mjs")).href;
 
+/**
+ * This process's environment with `overrides` in place of the inherited variables of the same name in any case.
+ * Windows names are case-insensitive: a child given both `SYSTEMROOT` and `SystemRoot` sees whichever sorts first.
+ */
+function withOverrides(overrides: Record<string, string | undefined>): Record<string, string | undefined> {
+  const replaced = new Set(Object.keys(overrides).map((name) => name.toLowerCase()));
+  const inherited = Object.entries(process.env).filter(([name]) => !replaced.has(name.toLowerCase()));
+  return { ...Object.fromEntries(inherited), ...overrides };
+}
+
 /** Run the `jarvis` executable from source, optionally as if on another operating system. */
 function jarvis(args: string[], opts: { platform?: string; env?: Record<string, string | undefined> } = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, HOME: tempDir("jarvis-cli-home-"), JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", ...opts.env };
+  const env = withOverrides({ HOME: tempDir("jarvis-cli-home-"), JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", ...opts.env });
   if (opts.platform) env.JARVIS_TEST_FAKE_PLATFORM = opts.platform;
   const r = spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env, encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
