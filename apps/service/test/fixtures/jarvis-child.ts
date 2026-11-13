@@ -94,6 +94,14 @@ export interface ReviewRequest {
 }
 
 /**
+ * How long ago the stand-in's review requests were made: ten and a half days, so Jarvis says "10 days ago".
+ * Half a day away from a whole number of days, because Jarvis reads its clock after the stand-in did, and a
+ * request exactly ten days old reads as 9 days whenever the system clock is set back a little in between
+ * (Windows Time corrects a virtual machine's clock that way).
+ */
+const REVIEW_REQUEST_AGE_MS = 10.5 * 86_400_000;
+
+/**
  * A GitHub stand-in that accepts only `token` and asks for a review, ten days
  * old and so urgent, of each pull request `prs()` lists at the time.
  */
@@ -104,7 +112,7 @@ export async function githubAskingForReviews(token: string, prs: () => ReviewReq
   fx.route("GET", "/search/issues", (req) => {
     if (!authed(req.headers)) return { status: 401, json: { message: "Bad credentials" } };
     const items = req.query.get("q")!.includes("review-requested:@me")
-      ? prs().map((p) => ({ number: p.number, title: p.title, html_url: `https://github.com/a/b/pull/${p.number}`, state: "open", draft: false, user: { login: p.author ?? "ada" }, repository_url: "https://api.github.com/repos/a/b", created_at: new Date(Date.now() - 10 * 86_400_000).toISOString(), updated_at: new Date().toISOString() }))
+      ? prs().map((p) => ({ number: p.number, title: p.title, html_url: `https://github.com/a/b/pull/${p.number}`, state: "open", draft: false, user: { login: p.author ?? "ada" }, repository_url: "https://api.github.com/repos/a/b", created_at: new Date(Date.now() - REVIEW_REQUEST_AGE_MS).toISOString(), updated_at: new Date().toISOString() }))
       : [];
     return { json: { incomplete_results: false, items } };
   });
