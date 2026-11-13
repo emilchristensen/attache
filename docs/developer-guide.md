@@ -70,8 +70,10 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on macOS, Linux and Windows (`macos-latest`, `ubuntu-latest` and `windows-latest`).
-GitHub bills a macOS minute as 10 Linux minutes and a Windows minute as 2, so which jobs run depends on what started the run:
+`.github/workflows/ci.yml` runs on macOS, Linux and Windows.
+The Linux and Windows jobs run on the owner's computer, in a throwaway Ubuntu 24.04 or Windows Server 2025 machine per job (`runs-on: jarvis-linux` and `jarvis-windows`), so they cost no Actions minutes; `docs/self-hosted-runners.md` explains them.
+Their job names keep GitHub's image names (`ubuntu-latest`, `windows-latest`), because those are the images they match and branch protection requires those names.
+macOS runs on GitHub (`macos-latest`), which bills a macOS minute as 10 Linux minutes, so which jobs run depends on what started the run:
 
 | Started by | Jobs |
 | --- | --- |
@@ -79,7 +81,7 @@ GitHub bills a macOS minute as 10 Linux minutes and a Windows minute as 2, so wh
 | A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks (macos-latest)`, `checks (windows-latest)`, `install (windows-latest)` |
 | A run started by hand (`gh workflow run CI --ref <branch>`) | All of them |
 
-A pull request's macOS and Windows jobs check the commit GitHub would merge, so a draft pull request, or a branch without one, never uses macOS or Windows minutes.
+A pull request's macOS and Windows jobs check the commit GitHub would merge, so a draft pull request, or a branch without one, never uses macOS minutes.
 `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)` run on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`).
 `checks (ubuntu-latest, current Node)` runs the same checks on the newest Node release.
 Each job has these steps:
