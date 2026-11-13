@@ -143,6 +143,14 @@ export function serviceName(os: Os, instance: string): string {
   return isDefault ? "Jarvis" : `Jarvis-${instance}`;
 }
 
+/**
+ * The name of the folder a path points to, as the owner sees it in a file browser:
+ * `C:\Notes\Work\` is `Work` on Windows. Empty for a drive or filesystem root.
+ */
+export function folderName(path: string, os: Os = currentOs()): string {
+  return pathFor(os).basename(path);
+}
+
 /** Expand a leading `~` to the home folder, as a shell would. */
 export function expandHome(path: string, loc: PlatformLocations = platformLocations()): string {
   return path.replace(/^~(?=[/\\]|$)/, loc.home);
