@@ -200,5 +200,6 @@ Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e
 - Database migrations are append-only in `core/db.ts`.
 - Code runs under Node type stripping: no enums, no parameter properties (`erasableSyntaxOnly`).
 - In Markdown, each sentence sits on its own line, and text the owner reads uses the glossary's terms.
-  `pnpm lint` checks both with `scripts/check-docs.mjs`, which reads the words to avoid from `GLOSSARY.md`, so a word added there is checked from then on.
+- A count in text the owner reads gives its noun in the right number ("1 file", "2 files"), never `file(s)`; code builds it with `plural` from `@jarvis/contracts`.
+  `pnpm lint` checks all three with `scripts/check-docs.mjs`, which reads the words to avoid from `GLOSSARY.md`, so a word added there is checked from then on.
   Its header says which files and which strings it reads; an avoided word that is also the ordinary name of something else goes in its `ORDINARY_WORDS` list, with the reason.

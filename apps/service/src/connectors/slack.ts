@@ -12,6 +12,7 @@ import { RemoteError, afterWrite } from "./http.ts";
 import { attemptStartMs, csvList, recordFailure, stringSetting } from "./common.ts";
 import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, type Stream, type StreamResult } from "./claude-adapter.ts";
 import { parseHistory, parseProfile, parseSearch, sameText, sentTs, type SlackItem } from "./slack-format.ts";
+import { plural } from "@jarvis/contracts";
 
 const WINDOW_MS = 48 * 3_600_000;
 const RECOVERY_WINDOW_MS = 7 * 86_400_000;
@@ -99,7 +100,7 @@ function observation(p: { msg: SlackItem; kind: string; awaiting: boolean; atten
 }
 
 function noteFor(r: StreamResult<SlackItem>, extra: string[] = []): string | undefined {
-  const parts = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${r.pages} pages`] : []), ...(r.unreadable ? [`${r.unreadable} result(s) could not be read`] : []), ...extra];
+  const parts = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${r.pages} pages`] : []), ...(r.unreadable ? [`${plural(r.unreadable, "result")} could not be read`] : []), ...extra];
   return parts.length ? parts.join("; ") : undefined;
 }
 

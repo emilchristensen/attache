@@ -9,7 +9,10 @@
  *   `placeholder`, `alt`, `label`) or object property (`label`, `title`,
  *   `description`, `message`, `hint`, `placeholder`, `heading`, `text`);
  * - any other string or template text with whitespace inside, such as a toast
- *   message or a sentence built in code.
+ *   message or a sentence built in code;
+ * - template text that goes on after a substitution with a space and a word,
+ *   such as the ` files` in `${n} files`, which reads as words after a number
+ *   or a name.
  * Identifiers and comments are never read, nor are module specifiers, string
  * types, or strings given to attributes that name things (`className`, `key`,
  * `id`, `type`, `href`, `data-*` and the like). A one-word string elsewhere is
@@ -32,7 +35,7 @@ export function userVisibleStrings(code, fileName) {
   const visit = (node) => {
     if (isSkipped(node)) return;
     if (ts.isJsxText(node)) found.push(...linesOf(source, node.getFullStart(), node.text));
-    else if (isStringPart(node) && (/\S\s+\S/.test(node.text) || isVisibleContext(node))) found.push(...linesOf(source, node.getStart(), node.text));
+    else if (isStringPart(node) && (/\S\s+\S/.test(node.text) || continuesSubstitution(node) || isVisibleContext(node))) found.push(...linesOf(source, node.getStart(), node.text));
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -48,6 +51,11 @@ function isSkipped(node) {
 
 function isStringPart(node) {
   return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
+}
+
+/** Template text after a substitution that starts with a space and a word: `${n} files`. */
+function continuesSubstitution(node) {
+  return (ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) && /^\s+[\p{L}\p{N}]/u.test(node.text);
 }
 
 function isVisibleContext(node) {

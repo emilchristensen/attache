@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { plural, type ConnectionKind, type ConnectionStatus, type Coverage } from "@jarvis/contracts";
+import { plural, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@jarvis/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
@@ -37,15 +37,6 @@ export interface ManagerDeps {
   claude: ClaudeConnectorRunner;
   /** Whether this Machine is the Reader, which alone raises inbox items for facts past their Review date. */
   isReader: () => boolean;
-}
-
-export interface DisconnectEffects {
-  observations: number;
-  attentionItems: number;
-  drafts: number;
-  queuedJobs: number;
-  indexedDocuments: number;
-  credentials: number;
 }
 
 export class ConnectionManager {
@@ -161,8 +152,7 @@ export class ConnectionManager {
     let id = SINGLETON_KINDS.includes(kind) ? kind : `vault-${randomUUID().slice(0, 8)}`;
     const existing = this.record(id);
     const scopes = readScopes ?? existing?.readScopes ?? a.definition.scopes.filter((s) => s.default).map((s) => s.id);
-    const invalid = scopes.filter((s) => !a.definition.scopes.some((d) => d.id === s));
-    if (invalid.length) throw new RemoteError(`Unknown scope(s): ${invalid.join(", ")}`, "error");
+    refuseUnknown("scope", scopes, a.definition.scopes);
     if (!existing) {
       this.d.db
         .prepare("insert into connections (id, kind, label, status, settings, read_scopes, write_actions, created_at, updated_at) values (?,?,?,?,?,?,?,?,?)")
@@ -216,9 +206,7 @@ export class ConnectionManager {
 
   setScopes(id: string, readScopes: string[]): ConnectionStatus {
     const rec = this.requireRecord(id);
-    const defs = this.adapter(rec.kind).definition.scopes;
-    const invalid = readScopes.filter((s) => !defs.some((d) => d.id === s));
-    if (invalid.length) throw new RemoteError(`Unknown scope(s): ${invalid.join(", ")}`, "error");
+    refuseUnknown("scope", readScopes, this.adapter(rec.kind).definition.scopes);
     this.d.db.prepare("update connections set read_scopes = ?, updated_at = ? where id = ?").run(JSON.stringify(readScopes), nowIso(), id);
     this.onChange(id);
     return this.status(this.record(id)!);
@@ -227,9 +215,7 @@ export class ConnectionManager {
   /** Write authority is granted separately from read access, per action. */
   setWriteActions(id: string, actions: string[]): { status: ConnectionStatus; revoked: string[] } {
     const rec = this.requireRecord(id);
-    const defs = this.adapter(rec.kind).definition.writeActions;
-    const invalid = actions.filter((s) => !defs.some((d) => d.id === s));
-    if (invalid.length) throw new RemoteError(`Unknown write action(s): ${invalid.join(", ")}`, "error");
+    refuseUnknown("write action", actions, this.adapter(rec.kind).definition.writeActions);
     this.d.db.prepare("update connections set write_actions = ?, updated_at = ? where id = ?").run(JSON.stringify(actions), nowIso(), id);
     this.d.db.prepare("insert into audit (at, actor, event, data) values (?,?,?,?)").run(nowIso(), "user", "write_authority_changed", JSON.stringify({ id, actions }));
     this.onChange(id);
@@ -471,6 +457,12 @@ export class ConnectionManager {
     const plan = planScan(abs);
     return { path: abs, filesToRead: plan.read.length, sample: plan.read.slice(0, 20), skipped: plan.skipped.slice(0, 50), skippedCount: plan.skipped.length, totalBytes: plan.totalBytes, filesChanged: 0, note: "Jarvis reads these files and indexes them. It does not modify, move or delete anything in this folder." };
   }
+}
+
+/** Refuses ids the connector does not define, naming each one: "2 unknown scopes: a, b". */
+function refuseUnknown(noun: string, ids: string[], defined: Array<{ id: string }>): void {
+  const unknown = ids.filter((id) => !defined.some((d) => d.id === id));
+  if (unknown.length) throw new RemoteError(`${plural(unknown.length, `unknown ${noun}`)}: ${unknown.join(", ")}`, "error");
 }
 
 function toRecord(r: Record<string, unknown>): ConnectionRecord {

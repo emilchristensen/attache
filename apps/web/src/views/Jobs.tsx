@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { JobEvent, JobView } from "@jarvis/contracts";
+import { plural, type JobEvent, type JobView } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, Markdown, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -17,7 +17,7 @@ function describe(e: JobEvent): string {
     case "progress":
       return `${Math.round(Number(d.progress ?? 0) * 100)}%${d.note ? ` — ${String(d.note)}` : ""}`;
     case "searched":
-      return `Searched “${String(d.query)}” — ${String(d.hits)} hit(s)`;
+      return `Searched “${String(d.query)}” — ${plural(Number(d.hits), "hit")}`;
     case "source_synced":
       return `Refreshed ${String(d.id)}: ${String(d.coverage)}`;
     case "retry_scheduled":

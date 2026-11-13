@@ -66,9 +66,20 @@ function serveGit(root: string, path: string, req: IncomingMessage, input: Buffe
     },
   });
   const out: Buffer[] = [];
+  let stdinError: Error | null = null;
   child.stdout.on("data", (c: Buffer) => out.push(c));
+  // git http-backend may answer and exit before it has read the whole request body; its answer still
+  // arrives on stdout, so a pipe it closed early (EPIPE) is not a failure. Any other error is answered below.
+  child.stdin.on("error", (e: NodeJS.ErrnoException) => {
+    if (e.code !== "EPIPE") stdinError = e;
+  });
   child.stdin.end(input);
   child.on("close", () => {
+    if (stdinError) {
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end(`The fixture could not pass the request to git http-backend: ${stdinError.message}`);
+      return;
+    }
     const all = Buffer.concat(out);
     const split = all.indexOf("\r\n\r\n");
     const head = all.subarray(0, split).toString("utf8");

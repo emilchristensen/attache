@@ -22,6 +22,7 @@ import {
 } from "./atlassian.ts";
 import { adfText, authorId, pick, str } from "./atlassian-shapes.ts";
 import { atlassianBackend, usesClaude } from "./atlassian-backend.ts";
+import { plural } from "@jarvis/contracts";
 
 export interface JiraIssue {
   key: string;
@@ -189,7 +190,7 @@ export const jiraAdapter: ConnectorAdapter = {
       const issues = r.items.map(normalizeIssue);
       const unreadable = issues.filter((i) => !i).length;
       const valid = issues.filter((i): i is JiraIssue => !!i);
-      const extra = [...r.notes, ...(unreadable ? [`${unreadable} result(s) had no readable work item key`] : [])];
+      const extra = [...r.notes, ...(unreadable ? [`${plural(unreadable, "result")} had no readable work item key`] : [])];
       cov.add(s.label, unreadable || r.notes.length ? "partial" : listingState({ items: valid, complete: r.complete }), valid.length, r.pages, listingNote({ complete: r.complete, error: r.error }, MAX_PAGES, extra));
       for (const issue of valid) {
         if (seen.has(issue.key)) continue;

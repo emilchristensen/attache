@@ -43,6 +43,14 @@ export function readableLines(markdown) {
   return contentLines(markdown).filter(({ content }) => content !== "" && !LINK_DEFINITION.test(content));
 }
 
+/**
+ * Runs `find` on the words of every readable line (see `plainText`) and returns
+ * each hit with its 1-based `line`.
+ */
+export function findInMarkdown(markdown, find) {
+  return readableLines(markdown).flatMap(({ line, content }) => find(plainText(content)).map((hit) => ({ line, ...hit })));
+}
+
 /** Every line outside front matter, fenced code and HTML comments. */
 function contentLines(markdown) {
   const lines = markdown.split(/\r?\n/);

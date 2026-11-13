@@ -22,6 +22,7 @@ import {
 } from "./atlassian.ts";
 import { adfText, authorId, normalizeText, pick, str } from "./atlassian-shapes.ts";
 import { atlassianBackend, usesClaude } from "./atlassian-backend.ts";
+import { plural } from "@jarvis/contracts";
 
 export interface ConfluenceHit {
   id: string;
@@ -226,7 +227,7 @@ export const confluenceAdapter: ConnectorAdapter = {
       const hits = r.items.map(normalizeHit);
       const unreadable = hits.filter((h) => !h).length;
       const valid = hits.filter((h): h is ConfluenceHit => !!h);
-      const extra = [...r.notes, ...(unreadable ? [`${unreadable} result(s) had no readable page id`] : [])];
+      const extra = [...r.notes, ...(unreadable ? [`${plural(unreadable, "result")} had no readable page id`] : [])];
       cov.add(s.label, unreadable || r.notes.length ? "partial" : listingState({ items: valid, complete: r.complete }), valid.length, r.pages, listingNote({ complete: r.complete, error: r.error }, MAX_PAGES, extra));
       for (const hit of valid) {
         if (seen.has(hit.id)) continue;

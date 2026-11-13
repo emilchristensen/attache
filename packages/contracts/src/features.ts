@@ -54,6 +54,16 @@ export interface ConnectionStatus {
   setupHelp: string;
 }
 
+/** What disconnecting a connection would do, shown before the owner confirms (`GET /connections/:id/disconnect-preview`). */
+export interface DisconnectEffects {
+  observations: number;
+  attentionItems: number;
+  drafts: number;
+  queuedJobs: number;
+  indexedDocuments: number;
+  credentials: number;
+}
+
 export interface ConnectionDefinition {
   kind: ConnectionKind;
   label: string;

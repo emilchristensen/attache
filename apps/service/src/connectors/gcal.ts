@@ -9,6 +9,7 @@ import { RemoteError } from "./http.ts";
 import { daysBetween, listingState, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
+import { plural } from "@jarvis/contracts";
 
 export interface EventTime {
   date?: string;
@@ -178,7 +179,7 @@ export const gcalAdapter: ConnectorAdapter = {
       const events = r.items.filter((e) => e.status !== "cancelled");
       const nowMs = now.getTime();
       for (const ev of events) observations.push(toObservation(ev, nowMs));
-      const notes = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${MAX_PAGES} pages`] : []), ...(r.unreadable ? [`${r.unreadable} event(s) could not be read`] : [])];
+      const notes = [...(r.error ? [r.error.message] : !r.complete ? [`Stopped after ${MAX_PAGES} pages`] : []), ...(r.unreadable ? [`${plural(r.unreadable, "event")} could not be read`] : [])];
       cov.add(SCOPE_LABEL, r.unreadable ? "partial" : listingState({ items: events, complete: r.complete }), events.length, r.pages, notes.length ? notes.join("; ") : undefined);
     } catch (e) {
       recordFailure(cov, SCOPE_LABEL, e);

@@ -24,6 +24,7 @@ interface GithubPr {
   headSha: string;
   draft: boolean;
   body: string;
+  files: Array<{ filename: string; status: string; additions: number; deletions: number; patch: string }>;
 }
 
 interface JiraIssue {
@@ -94,8 +95,8 @@ export function createScenarioState(opts: { selfEmail?: string; now?: number } =
     github: {
       login: "alex",
       prs: [
-        { repo: "acme/web", number: 42, title: "Add checkout retry", author: "mia", headSha: "a1b2c3", draft: false, body: "Retries failed payments once." },
-        { repo: "acme/api", number: 7, title: "Rate limit search", author: "bob", headSha: "d4e5f6", draft: false, body: "Adds a token bucket." },
+        { repo: "acme/web", number: 42, title: "Add checkout retry", author: "mia", headSha: "a1b2c3", draft: false, body: "Retries failed payments once.", files: [{ filename: "src/checkout/retry.ts", status: "added", additions: 24, deletions: 0, patch: "+export async function retryOnce() {}" }] },
+        { repo: "acme/api", number: 7, title: "Rate limit search", author: "bob", headSha: "d4e5f6", draft: false, body: "Adds a token bucket.", files: [{ filename: "src/search/limit.ts", status: "added", additions: 31, deletions: 0, patch: "+export class TokenBucket {}" }, { filename: "src/search/route.ts", status: "modified", additions: 3, deletions: 1, patch: "+limit.take()" }] },
       ],
       comments: new Map(),
     },
@@ -196,6 +197,10 @@ function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
   mount(fx, "GET", `${P}/repos/:owner/:repo/pulls/:n`, authed((_req, [o, r, n]) => {
     const pr = s().github.prs.find((p) => p.repo === `${o}/${r}` && p.number === Number(n));
     return pr ? json({ number: pr.number, head: { sha: pr.headSha } }) : json({ message: "Not Found" }, 404);
+  }));
+  mount(fx, "GET", `${P}/repos/:owner/:repo/pulls/:n/files`, authed((_req, [o, r, n]) => {
+    const pr = s().github.prs.find((p) => p.repo === `${o}/${r}` && p.number === Number(n));
+    return pr ? json(pr.files) : json({ message: "Not Found" }, 404);
   }));
   mount(fx, "POST", `${P}/repos/:owner/:repo/issues/:n/comments`, authed((req, [o, r, n]) => {
     const key = `${o}/${r}#${n}`;

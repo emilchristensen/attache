@@ -167,6 +167,18 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     fx.route("GET", "/gh/repos/acme/web/issues/7/comments", () => ({ json: posted }));
   });
 
+  it("unknown read scopes and write actions are refused and named, one or several", async () => {
+    const message = async (path: string, body: unknown) => {
+      const r = await svc.call("PUT", path, body);
+      expect(r.status).toBe(422);
+      return r.body.error.message;
+    };
+    expect(await message("/connections/github/scopes", { readScopes: ["everything"] })).toBe("1 unknown scope: everything");
+    expect(await message("/connections/github/scopes", { readScopes: ["everything", "more"] })).toBe("2 unknown scopes: everything, more");
+    expect(await message("/connections/github/write-actions", { writeActions: ["github.merge"], confirm: true })).toBe("1 unknown write action: github.merge");
+    expect(await message("/connections/github/write-actions", { writeActions: ["github.merge", "github.close"], confirm: true })).toBe("2 unknown write actions: github.merge, github.close");
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");

@@ -15,6 +15,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RemoteError } from "../http.ts";
+import { plural } from "@jarvis/contracts";
 import { findClaudeCli } from "../../models/providers.ts";
 import { launchTool, spawnTool, UnlaunchableToolError } from "../../platform/launch.ts";
 import { deepEqual, fullToolName, type CallOutcome, type PlannedCall, type ServerInfo } from "./plan.ts";
@@ -93,7 +94,7 @@ export function sessionArgs(req: Pick<SessionRequest, "hideServers">): string[] 
 
 export function planMessage(calls: PlannedCall[], server: string): string {
   const plan = calls.map((c) => ({ tool: fullToolName(server, c.tool), arguments: c.args }));
-  return `Make these ${calls.length} tool call(s):\n\n\`\`\`json\n${JSON.stringify(plan, null, 1)}\n\`\`\``;
+  return `Make exactly ${plural(calls.length, "tool call")}:\n\n\`\`\`json\n${JSON.stringify(plan, null, 1)}\n\`\`\``;
 }
 
 function toolResultText(content: unknown): string {

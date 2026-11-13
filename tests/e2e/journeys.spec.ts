@@ -2,8 +2,9 @@ import { test, expect, type Page, type ConsoleMessage, type BrowserContext, type
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
 
@@ -293,6 +294,44 @@ test("jobs: work continues after the tab closes; cancellation reports what happe
   await page2.getByRole("button", { name: "Cancel" }).click();
   await expect(page2.locator("[data-job-id]")).toHaveAttribute("data-status", "cancelled");
   await expect(page2.getByText("Cancelled: the work stopped before finishing.").first()).toBeVisible();
+});
+
+test("wording: counts read as words in the right number, never with (s)", async () => {
+  const page = await open("/connections");
+  await page.getByRole("textbox", { name: "Folder path" }).fill(stack.vaultDir);
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByText("Reads 2 Markdown files · changes 0 files")).toBeVisible();
+
+  await page.locator('[data-connection="github"]').getByRole("button", { name: "Disconnect…" }).click();
+  const disconnect = page.getByRole("alertdialog", { name: "Disconnect" });
+  await expect(disconnect).toContainText("Jarvis deletes the stored credentials and stops all requests.");
+  await expect(disconnect).toContainText(/\d+ queued jobs? will be cancelled and approvals for \d+ drafts? revoked\./);
+  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?\./);
+  await disconnect.getByRole("button", { name: "Cancel" }).click();
+  // A notes folder has no credentials to delete, and its indexed files are counted too.
+  const notes = page.locator(".card", { has: page.getByRole("heading", { name: basename(stack.vaultDir), exact: true }) });
+  await notes.getByRole("button", { name: "Disconnect…" }).click();
+  await expect(disconnect).toContainText("Jarvis stops reading from it.");
+  await expect(disconnect).not.toContainText("credentials");
+  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?, 2 indexed files\./);
+  await disconnect.getByRole("button", { name: "Cancel" }).click();
+
+  await page.goto(`${stack.url}/drafts`);
+  await page.getByRole("tab", { name: "Finished" }).click();
+  await page.locator(".list-item", { hasText: "acme/web#42" }).first().click();
+  await expect(page.getByText("1 changed file", { exact: true })).toBeVisible();
+
+  await page.goto(`${stack.url}/jobs`);
+  await page.locator(".list-item", { hasText: "Orion migration" }).first().click();
+  await expect(page.locator('[data-event="searched"]').first()).toHaveText(/Searched “.+” — \d+ hits?$/);
+
+  for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings"]) {
+    await page.goto(`${stack.url}${path}`);
+    await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    const text = await page.locator("body").innerText();
+    expect(findParenthesisedPlurals(text), `counts with (s) on ${path}`).toEqual([]);
+  }
 });
 
 test("feature switches: turning attention off changes the product and the backend", async () => {
