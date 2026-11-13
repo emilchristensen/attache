@@ -7,6 +7,8 @@ import { defineConfig } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "tests/e2e",
+  // One temporary folder for the whole run, removed when it ends (scripts/test-run-folder.mjs).
+  globalSetup: "./scripts/test-run-folder.mjs",
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

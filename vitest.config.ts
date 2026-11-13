@@ -6,6 +6,8 @@ export default defineConfig({
     environment: "node",
     testTimeout: 30_000,
     pool: "forks",
+    // One temporary folder for the whole run, removed when it ends (scripts/test-run-folder.mjs).
+    globalSetup: ["scripts/test-run-folder.mjs"],
     setupFiles: ["apps/service/test/setup-env.ts"],
   },
 });
