@@ -104,6 +104,9 @@ describe("A04 configuration drives backend behaviour", () => {
     mkdirSync(vault, { recursive: true });
     writeFileSync(join(vault, "Zephyr.md"), "# Zephyr\n\nZephyr budget owner is Kai.\n");
     const imp = await svc.post("/import", { path: vault });
+    // The card and the job are named after the folder, not its whole path, on every operating system.
+    expect(imp.connection.label).toBe("vault");
+    expect(imp.job.title).toBe("Import vault");
     await svc.waitJob(imp.job.id);
     expect((await svc.get("/memory/search?q=zephyr budget")).hits[0].root).toBe(`import:${imp.connection.id}`);
     await svc.post(`/connections/${imp.connection.id}/disconnect`, { deleteData: true });

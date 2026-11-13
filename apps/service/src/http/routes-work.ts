@@ -8,7 +8,7 @@ import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
 import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
-import { expandHome } from "../platform/locations.ts";
+import { expandHome, folderName } from "../platform/locations.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -256,7 +256,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   r.post("/import", async (c) => {
     requireFeature(app, "capture");
     const body = await c.body(z.object({ path: z.string().min(1), label: z.string().max(100).optional() }));
-    const { status } = await app.connections.configure("vault", { path: body.path, method: "folder", label: body.label ?? (body.path.replace(/\/+$/, "").split("/").pop() || "Imported notes") });
+    const { status } = await app.connections.configure("vault", { path: body.path, method: "folder", label: body.label ?? (folderName(body.path) || "Imported notes") });
     const { job } = app.jobs.create({ kind: "import", title: `Import ${status.label}`, input: { connectionId: status.id }, capability: "capture", connectionId: status.id });
     return { __status: 201, body: { connection: status, job } };
   });
