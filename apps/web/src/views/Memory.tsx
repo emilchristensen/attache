@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MeaningStatus } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, revealDetail, StatusPill, Time, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useLocation } from "../components/ui.tsx";
+import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { ProposalReview } from "../components/ProposalReview.tsx";
 import { Tabs } from "../components/Tabs.tsx";
@@ -190,10 +191,10 @@ export function MemoryView() {
     const h = setTimeout(() => setQuery(q.trim()), 250);
     return () => clearTimeout(h);
   }, [q]);
-  const detailRef = useRef<HTMLDivElement>(null);
+  const { detailRef, revealDetail } = useRevealDetail();
   const select = (root: string, relPath: string) => {
     navigate(`/memory?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
-    revealDetail(detailRef.current);
+    revealDetail();
   };
   return (
     <div className="page">

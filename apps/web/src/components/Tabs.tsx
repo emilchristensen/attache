@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface TabItem<T extends string> {
   id: T;
-  label: ReactNode;
+  label: string;
 }
 
 interface TabsProps<T extends string> {
@@ -11,10 +11,15 @@ interface TabsProps<T extends string> {
   tabs: ReadonlyArray<TabItem<T>>;
   selected: T;
   onSelect: (id: T) => void;
-  /** The panel the tabs control: each tab is then `<panelId>-tab-<id>`, for the panel's `aria-labelledby`. */
+  /** The panel the tabs control; the panel names its tab with `tabId`. */
   panelId?: string;
   /** Without the line under the tabs, for a bar that sits inside a row. */
   plain?: boolean;
+}
+
+/** The id of a tab that controls a panel, for the panel's `aria-labelledby`. */
+export function tabId(panelId: string, id: string): string {
+  return `${panelId}-tab-${id}`;
 }
 
 /** How far an edge's arrow and fade reach, from `--tabs-edge` in the stylesheet. */
@@ -36,7 +41,7 @@ function hiddenTabs(list: HTMLElement): Hidden {
 /** Scrolls the bar, and only the bar, so the tab shows in full beside the edge fades. */
 function bringIntoView(list: HTMLElement, tab: HTMLElement) {
   const edge = edgeWidth(list);
-  const left = tab.offsetLeft - list.offsetLeft;
+  const left = tab.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
   const right = left + tab.offsetWidth;
   if (left < list.scrollLeft + edge) list.scrollLeft = Math.max(0, left - edge);
   else if (right > list.scrollLeft + list.clientWidth - edge) list.scrollLeft = right - list.clientWidth + edge;
@@ -54,7 +59,7 @@ function Chevron({ forward }: { forward: boolean }) {
 /**
  * A row of tabs that never wraps. When the tabs are wider than their column,
  * the row scrolls sideways: the edges fade where tabs are out of view, arrows
- * there scroll by a page, and the selected tab is kept in view.
+ * there scroll by a page, and the selected or focused tab is kept in view.
  */
 export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelId, plain }: TabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -101,20 +106,21 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
             key={t.id}
             type="button"
             role="tab"
-            id={panelId ? `${panelId}-tab-${t.id}` : undefined}
+            id={panelId ? tabId(panelId, t.id) : undefined}
             aria-controls={panelId}
             aria-selected={t.id === selected}
             onClick={() => onSelect(t.id)}
+            onFocus={(e) => listRef.current && bringIntoView(listRef.current, e.currentTarget)}
           >
             {t.label}
           </button>
         ))}
       </div>
       {/* Pointer shortcuts only: keyboard focus and touch reach every tab by themselves. */}
-      <button type="button" className="tabs-scroll before" data-tabs-scroll="before" tabIndex={-1} aria-hidden hidden={!hidden.before} onClick={() => page(-1)}>
+      <button type="button" className="tabs-scroll before" tabIndex={-1} aria-hidden hidden={!hidden.before} onClick={() => page(-1)}>
         <Chevron forward={false} />
       </button>
-      <button type="button" className="tabs-scroll after" data-tabs-scroll="after" tabIndex={-1} aria-hidden hidden={!hidden.after} onClick={() => page(1)}>
+      <button type="button" className="tabs-scroll after" tabIndex={-1} aria-hidden hidden={!hidden.after} onClick={() => page(1)}>
         <Chevron forward />
       </button>
     </div>

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { plural, type ActionView, type Citation } from "@jarvis/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, revealDetail, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { Tabs, type TabItem } from "../components/Tabs.tsx";
 
@@ -197,7 +198,7 @@ export function DraftsView() {
   const statuses = filter === "open" ? "draft,approved,revoked,executing" : filter === "done" ? "succeeded,failed,unknown,rejected,expired" : "";
   const list = useResource<ActionView[]>(`/actions${statuses ? `?status=${statuses}` : ""}`, ["actions.changed", "job"]);
   const selected = loc.search.get("id");
-  const detailRef = useRef<HTMLDivElement>(null);
+  const { detailRef, revealDetail } = useRevealDetail();
   useEffect(() => {
     if (!selected && list.data?.[0]) navigate(`/drafts?id=${list.data[0].id}`, { replace: true });
   }, [list.data, selected]);
@@ -215,7 +216,7 @@ export function DraftsView() {
           {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an attention item. Drafts appear here with their context.</Empty>}
           <div className="list">
             {list.data?.map((d) => (
-              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/drafts?id=${d.id}`); revealDetail(detailRef.current); }}>
+              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/drafts?id=${d.id}`); revealDetail(); }}>
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong>{d.title}</strong>
                   <span className="row small muted">

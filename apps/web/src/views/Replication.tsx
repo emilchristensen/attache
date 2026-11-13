@@ -4,7 +4,7 @@ import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
-import { Tabs, type TabItem } from "../components/Tabs.tsx";
+import { tabId, Tabs, type TabItem } from "../components/Tabs.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
 
 const PILL: Record<ReplicationStatus, { state: string; label: string }> = {
@@ -121,7 +121,7 @@ function SwitchOn({ onDone }: { onDone: (v: ReplicationView) => void }) {
   return (
     <div className="stack">
       <Tabs label="How to switch Replication on" tabs={SWITCH_ON_MODES} selected={mode} onSelect={setMode} panelId="replication-panel" />
-      <div role="tabpanel" id="replication-panel" aria-labelledby={`replication-panel-tab-${mode}`}>
+      <div role="tabpanel" id="replication-panel" aria-labelledby={tabId("replication-panel", mode)}>
         {mode === "start" ? <StartForm onDone={onDone} /> : <JoinForm onDone={onDone} intro="Brings the Brain another Machine set up onto this one." />}
       </div>
     </div>

@@ -548,6 +548,10 @@ label.field .help {
   padding: 8px 12px;
   color: var(--muted);
 }
+/* Inside the tab: the row scrolls, so an outline around it would be cut off. */
+.tabs button:focus-visible {
+  outline-offset: -2px;
+}
 .tabs button[aria-selected="true"] {
   color: var(--text);
   border-bottom-color: var(--accent);
@@ -881,6 +885,7 @@ button.count-chip {
  * part on every line, wrapped ones too, has its dot outside the box, where it
  * is clipped, so no line starts with a separator.
  */
+/* `.item .meta` sets a gap of its own, which must not narrow the dots' gap. */
 .separated,
 .item .meta.separated {
   display: flex;

@@ -674,7 +674,7 @@ function lineStarts(el: Element): string[] {
   return [...starts.values()].map((s) => s.char);
 }
 
-test("narrow layout: Connections has one name, Memory tabs keep one row, nothing squeezed or wrapped oddly", async () => {
+test("narrow layout: the Connections page has one name in the sidebar, the bottom bar and its heading", async () => {
   const page = await open("/connections");
   const sidebar = page.locator("nav.nav");
   const bottom = page.locator(".bottom-nav");
@@ -683,7 +683,8 @@ test("narrow layout: Connections has one name, Memory tabs keep one row, nothing
   await expect(sidebar.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    await expect(bottom.getByRole("link", { name: "Connections", exact: true })).toHaveText("Connections");
+    await expect(bottom).toBeVisible();
+    await expect(bottom.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Sources" })).toHaveCount(0);
     // Every label shows in full, without an ellipsis, and the bar fits the window.
     const clipped = await bottom.getByRole("link").evaluateAll((links) => links.filter((a) => a.scrollWidth > a.clientWidth).map((a) => a.textContent));
@@ -694,8 +695,10 @@ test("narrow layout: Connections has one name, Memory tabs keep one row, nothing
   await bottom.getByRole("link", { name: "Memory" }).click();
   await bottom.getByRole("link", { name: "Connections" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
+});
 
-  // The Memory tabs keep one row, in a phone's window and in the list column of a wide one.
+test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
+  const page = await open("/memory");
   for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
     const at = `at ${viewport.width}px`;
     await page.setViewportSize(viewport);
@@ -709,8 +712,8 @@ test("narrow layout: Connections has one name, Memory tabs keep one row, nothing
     expect(box.x + box.width, `the tab bar stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `no horizontal overflow ${at}`).toBeLessThanOrEqual(0);
     // The tabs that do not fit are one sideways scroll away, and the bar shows there are more.
-    const more = page.locator('[data-tabs-scroll="after"]');
-    const back = page.locator('[data-tabs-scroll="before"]');
+    const more = page.locator(".tabs-scroll.after");
+    const back = page.locator(".tabs-scroll.before");
     expect(places.find((p) => p.name === "Deliverables")!.shown, `Deliverables is out of view ${at}`).toBe(false);
     await expect(more).toBeVisible();
     await expect(back).toBeHidden();
@@ -731,6 +734,10 @@ test("narrow layout: Connections has one name, Memory tabs keep one row, nothing
     const list = (await page.locator(".split .list-item").first().boundingBox())!;
     expect(Math.round(list.y - (bar.y + bar.height)), `gap below the Memory tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
   }
+});
+
+test("narrow layout: a picked note opens in view, Recent saves never start a line with a dot, and research gets a whole row", async () => {
+  const page = await open("/memory");
 
   // On a phone the note opens below the list, and picking one brings it into view.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -762,8 +769,8 @@ test("narrow layout: Connections has one name, Memory tabs keep one row, nothing
     return { width: f.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight), input: input.getBoundingClientRect().width };
   });
   expect(form.input, "research question width").toBeGreaterThanOrEqual(form.width - 1);
-  await expect(page.getByRole("button", { name: "Research" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Research", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Diagnostics", exact: true })).toBeVisible();
 });
 
 test("review dates: a fact shows its Review date, and one past it is marked unverified", async () => {
