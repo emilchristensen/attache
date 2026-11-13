@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { plural, type JobEvent, type JobView } from "@jarvis/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
-import { Empty, ErrorState, Loading, Markdown, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Loading, Markdown, navigate, revealDetail, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 
 const OUTCOME: Record<string, string> = {
@@ -146,6 +146,7 @@ export function JobsView() {
   const [question, setQuestion] = useState("");
   const { busy, run } = useAction();
   const selected = loc.search.get("id");
+  const detailRef = useRef<HTMLDivElement>(null);
   const create = (body: Record<string, unknown>) =>
     run("create", async () => {
       const r = await post<{ job: JobView }>("/jobs", body);
@@ -159,8 +160,7 @@ export function JobsView() {
         <span className="subtitle">Background work runs in the Jarvis service. Close this tab and it keeps going.</span>
       </div>
       <form
-        className="card row"
-        style={{ marginBottom: 14, flexWrap: "nowrap" }}
+        className="card row research-form"
         onSubmit={(e) => {
           e.preventDefault();
           void create({ kind: "research", input: { question } }).then(() => setQuestion(""));
@@ -184,7 +184,7 @@ export function JobsView() {
           {list.data?.length === 0 && <Empty title="No jobs yet">Research, briefing and draft jobs appear here with their progress and results.</Empty>}
           <div className="list">
             {list.data?.map((j) => (
-              <button key={j.id} className="list-item" aria-current={j.id === selected} onClick={() => navigate(`/jobs?id=${j.id}`)}>
+              <button key={j.id} className="list-item" aria-current={j.id === selected} onClick={() => { navigate(`/jobs?id=${j.id}`); revealDetail(detailRef.current); }}>
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong style={{ overflowWrap: "anywhere" }}>{j.title}</strong>
                   <span className="row small muted">
@@ -196,7 +196,7 @@ export function JobsView() {
             ))}
           </div>
         </div>
-        <div>{selected ? <JobDetail key={selected} id={selected} /> : <Empty title="Select a job" />}</div>
+        <div ref={detailRef} className="split-detail">{selected ? <JobDetail key={selected} id={selected} /> : <Empty title="Select a job" />}</div>
       </div>
     </div>
   );

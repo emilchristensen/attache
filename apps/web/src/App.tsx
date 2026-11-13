@@ -16,12 +16,12 @@ interface Session {
   version: string;
 }
 
-export const NAV: Array<{ to: string; label: string; short?: string; key: string }> = [
+export const NAV: Array<{ to: string; label: string; key: string }> = [
   { to: "/", label: "Home", key: "h" },
   { to: "/memory", label: "Memory", key: "m" },
   { to: "/drafts", label: "Drafts", key: "d" },
   { to: "/jobs", label: "Jobs", key: "j" },
-  { to: "/connections", label: "Connections", short: "Sources", key: "c" },
+  { to: "/connections", label: "Connections", key: "c" },
   { to: "/settings", label: "Settings", key: "s" },
 ];
 
@@ -135,7 +135,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
       <nav className="bottom-nav" aria-label="Main">
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={n.label}>
-            {n.short ?? n.label}
+            {n.label}
           </Link>
         ))}
       </nav>

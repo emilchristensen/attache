@@ -46,6 +46,42 @@ export function Link(props: { to: string; children: ReactNode; className?: strin
   );
 }
 
+// ---- list and detail ---------------------------------------------------------------
+
+/** How long a revealed detail is kept in view while its content loads. */
+const REVEAL_MS = 1500;
+/** What the owner does to scroll by themselves, which ends a reveal. */
+const OWN_SCROLL = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/**
+ * Shows the detail the owner just picked. On a narrow screen a list's detail
+ * sits below the list, out of sight, so it is scrolled into view; beside the
+ * list nothing moves. The detail is often still loading and too short to reach
+ * the top, so it is scrolled again as it grows, until the owner scrolls or
+ * shortly after.
+ */
+export function revealDetail(detail: HTMLElement | null) {
+  const list = detail?.previousElementSibling;
+  if (!detail || !list) return;
+  const below = () => detail.getBoundingClientRect().top >= list.getBoundingClientRect().bottom;
+  const show = () => {
+    if (below()) detail.scrollIntoView({ block: "start" });
+  };
+  const growing = new ResizeObserver(show);
+  const stop = () => {
+    growing.disconnect();
+    clearTimeout(timer);
+    for (const type of OWN_SCROLL) window.removeEventListener(type, stop, true);
+  };
+  const timer = setTimeout(stop, REVEAL_MS);
+  requestAnimationFrame(() => {
+    if (!below()) return stop();
+    show();
+    growing.observe(detail);
+    for (const type of OWN_SCROLL) window.addEventListener(type, stop, { capture: true, passive: true });
+  });
+}
+
 // ---- states ---------------------------------------------------------------------
 
 export function Loading({ lines = 3, label = "Loading" }: { lines?: number; label?: string }) {

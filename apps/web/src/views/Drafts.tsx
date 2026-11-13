@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { plural, type ActionView, type Citation } from "@jarvis/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, revealDetail, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
+import { Tabs, type TabItem } from "../components/Tabs.tsx";
 
 const BODY_KEY: Record<string, string> = { "slack.post": "text" };
 const KIND_LABEL: Record<string, string> = { "github.comment": "GitHub comment", "jira.comment": "Jira comment", "confluence.comment": "Confluence comment", "slack.post": "Slack message", "gmail.draft": "Gmail draft" };
@@ -183,12 +184,20 @@ function DraftDetail({ id }: { id: string }) {
   );
 }
 
+type Filter = "open" | "done" | "all";
+const FILTERS: ReadonlyArray<TabItem<Filter>> = [
+  { id: "open", label: "Needs review" },
+  { id: "done", label: "Finished" },
+  { id: "all", label: "All" },
+];
+
 export function DraftsView() {
   const loc = useLocation();
-  const [filter, setFilter] = useState<"open" | "done" | "all">("open");
+  const [filter, setFilter] = useState<Filter>("open");
   const statuses = filter === "open" ? "draft,approved,revoked,executing" : filter === "done" ? "succeeded,failed,unknown,rejected,expired" : "";
   const list = useResource<ActionView[]>(`/actions${statuses ? `?status=${statuses}` : ""}`, ["actions.changed", "job"]);
   const selected = loc.search.get("id");
+  const detailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!selected && list.data?.[0]) navigate(`/drafts?id=${list.data[0].id}`, { replace: true });
   }, [list.data, selected]);
@@ -200,19 +209,13 @@ export function DraftsView() {
       </div>
       <div className="split">
         <div className="stack">
-          <div className="tabs" role="tablist">
-            {(["open", "done", "all"] as const).map((f) => (
-              <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}>
-                {f === "open" ? "Needs review" : f === "done" ? "Finished" : "All"}
-              </button>
-            ))}
-          </div>
+          <Tabs label="Drafts to show" tabs={FILTERS} selected={filter} onSelect={setFilter} />
           {list.loading && !list.data && <Loading />}
           <ErrorState error={list.error} retry={list.reload} />
           {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an attention item. Drafts appear here with their context.</Empty>}
           <div className="list">
             {list.data?.map((d) => (
-              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => navigate(`/drafts?id=${d.id}`)}>
+              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/drafts?id=${d.id}`); revealDetail(detailRef.current); }}>
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong>{d.title}</strong>
                   <span className="row small muted">
@@ -223,7 +226,7 @@ export function DraftsView() {
             ))}
           </div>
         </div>
-        <div>{selected ? <DraftDetail id={selected} /> : <Empty title="Select a draft" />}</div>
+        <div ref={detailRef} className="split-detail">{selected ? <DraftDetail id={selected} /> : <Empty title="Select a draft" />}</div>
       </div>
     </div>
   );
