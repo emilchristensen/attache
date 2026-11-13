@@ -158,10 +158,10 @@ function Clients() {
         )}
       </div>
       {clients.loading && !clients.data && <Loading lines={2} />}
-      <div className="list">
+      <div>
         {clients.data?.map((c) => (
-          <div key={c.id} className="row" style={{ padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
-            <span style={{ flex: 1 }}>
+          <div key={c.id} className="client-row">
+            <span className="client-name">
               {c.name} <span className="pill">{c.kind}</span>
             </span>
             <span className="small muted">

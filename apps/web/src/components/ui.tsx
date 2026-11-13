@@ -145,6 +145,12 @@ export function Markdown({ text, className }: { text: string; className?: string
   return <div className={`md ${className ?? ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+/** One line of Markdown with no paragraph around it, such as a form field's help: code spans, emphasis and links. */
+export function MarkdownInline({ text, className }: { text: string; className?: string }) {
+  const html = useMemo(() => md.renderInline(text), [text]);
+  return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 // ---- toasts ---------------------------------------------------------------------------
 
 interface Toast {

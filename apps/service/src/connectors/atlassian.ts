@@ -50,7 +50,7 @@ export function atlassianAuthMethods(product: Product, extraFields: ConnectionDe
       fields: [
         site,
         { id: "email", label: "Atlassian account email", secret: false, placeholder: "you@company.com" },
-        { id: "apiToken", label: "API token", secret: true, help: `Create a token for the Atlassian MCP server (app "mcp-v2") at ${API_TOKEN_URL}. A classic unscoped token is rejected. It acts with your own ${product === "jira" ? "Jira" : "Confluence"} permissions.` },
+        { id: "apiToken", label: "API token", secret: true, help: `[Create a token](${API_TOKEN_URL}) for the Atlassian MCP server (app "mcp-v2"). A classic unscoped token is rejected. It acts with your own ${product === "jira" ? "Jira" : "Confluence"} permissions.` },
         ...extraFields,
       ],
     },
