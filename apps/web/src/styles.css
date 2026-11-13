@@ -1058,6 +1058,11 @@ button.count-chip {
 
 /* ---- setup ---------------------------------------------------------------------- */
 
+/* Setup scrolls the page: keep the scrollbar's room, so the centred steps do not shift between a short step and a long one. */
+html:has(.setup) {
+  scrollbar-gutter: stable;
+}
+
 .setup {
   max-width: 820px;
   margin: 0 auto;

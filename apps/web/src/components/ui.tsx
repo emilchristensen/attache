@@ -1,6 +1,7 @@
 import { Component, createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import MarkdownIt from "markdown-it";
 import type { ApiError } from "../api.ts";
+import { plural } from "@jarvis/contracts";
 
 // ---- routing -------------------------------------------------------------------
 
@@ -107,8 +108,7 @@ export function relTime(iso: string | null | undefined): string {
   if (!Number.isFinite(d)) return iso;
   const s = Math.round((Date.now() - d) / 1000);
   const abs = Math.abs(s);
-  const fmt = (n: number, u: string) => `${n} ${u}${n === 1 ? "" : "s"}`;
-  const v = abs < 60 ? fmt(abs, "second") : abs < 3600 ? fmt(Math.round(abs / 60), "minute") : abs < 86400 ? fmt(Math.round(abs / 3600), "hour") : fmt(Math.round(abs / 86400), "day");
+  const v = abs < 60 ? plural(abs, "second") : abs < 3600 ? plural(Math.round(abs / 60), "minute") : abs < 86400 ? plural(Math.round(abs / 3600), "hour") : plural(Math.round(abs / 86400), "day");
   if (abs < 10) return "just now";
   return s >= 0 ? `${v} ago` : `in ${v}`;
 }

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ConnectionKind, ConnectionStatus, Coverage } from "@jarvis/contracts";
+import { plural, type ConnectionKind, type ConnectionStatus, type Coverage } from "@jarvis/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
@@ -394,7 +394,7 @@ export class ConnectionManager {
     const reviews = rec.settings.builtin ? this.factReviews(root, docs, now) : { observations: [], errors: [] };
     const observations = [...deadlines.observations, ...reviews.observations];
     const errors = [...deadlines.errors, ...reviews.errors];
-    cov.add(`${docs.length} Markdown files indexed (${idx.indexed} updated, ${idx.removed} removed)`, idx.errors.length || errors.length ? "partial" : observations.length ? "complete" : "empty", observations.length, 1, [...idx.errors.map((e) => `${e.path}: ${e.error}`), ...errors].slice(0, 5).join("; ") || undefined);
+    cov.add(`${plural(docs.length, "Markdown file")} indexed (${idx.indexed} updated, ${idx.removed} removed)`, idx.errors.length || errors.length ? "partial" : observations.length ? "complete" : "empty", observations.length, 1, [...idx.errors.map((e) => `${e.path}: ${e.error}`), ...errors].slice(0, 5).join("; ") || undefined);
     return { coverage: cov.finish(), observations };
   }
 

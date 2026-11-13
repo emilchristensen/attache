@@ -12,3 +12,4 @@ export * from "./attention.ts";
 export * from "./jobs.ts";
 export * from "./actions.ts";
 export * from "./errors.ts";
+export * from "./wording.ts";
