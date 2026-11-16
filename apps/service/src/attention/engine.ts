@@ -258,10 +258,11 @@ export function takeRecord(db: Db, rec: InboxRecord, now: string): boolean {
 }
 
 /**
- * Work every item's state out again from its record, and store it where the row held another
+ * Work every item's state out again from its record at `now`, and store it where the row held another
  * state, snooze time or decided fingerprint. Those columns are only this Machine's copy of what
- * the record gives: a database from an earlier release can hold one the record does not give,
- * which nothing else would correct. Returns the keys of the rows it corrected.
+ * the record gives: it differs when a snooze has ended, or when a database from an earlier release
+ * holds one the record does not give. The record itself, its report time included, stays as it is.
+ * Returns the keys of the rows it corrected.
  */
 export function rederiveStates(db: Db, now: string): string[] {
   const stale = allRows(db)

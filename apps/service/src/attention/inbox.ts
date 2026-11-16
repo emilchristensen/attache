@@ -78,10 +78,8 @@ export class Inbox {
    * a data folder opens: a state an earlier release left in the database never outlives the upgrade.
    */
   load(): void {
-    const keys = rederiveStates(this.d.db, this.d.ctx.now());
-    if (!keys.length) return;
-    this.d.log.info("worked inbox states out again from their records", { keys });
-    this.d.onChange();
+    const keys = this.rederive();
+    if (keys.length) this.d.log.info("worked inbox states out again from their records", { keys });
   }
 
   /**
@@ -89,7 +87,14 @@ export class Inbox {
    * changes; the record keeps its report time, so it never looks newer than another Machine's report.
    */
   wake(): void {
-    if (rederiveStates(this.d.db, this.d.ctx.now()).length) this.d.onChange();
+    this.rederive();
+  }
+
+  /** Work every item's state out again from its record now, telling the Dashboard when one changed. Returns their keys. */
+  private rederive(): string[] {
+    const keys = rederiveStates(this.d.db, this.d.ctx.now());
+    if (keys.length) this.d.onChange();
+    return keys;
   }
 
   /**

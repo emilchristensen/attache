@@ -461,7 +461,7 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
-    this.keepHouse();
+    this.scheduleHousekeeping();
     void this.refreshModel();
   }
 
@@ -478,10 +478,10 @@ export class App {
     this.db.close();
   }
 
-  /** Every half minute on the service's clock: expire stale drafts and wake snoozed items. */
-  private keepHouse(): void {
+  /** Run housekeeping again in half a minute on the service's clock: expire stale drafts and wake snoozed items. */
+  private scheduleHousekeeping(): void {
     this.housekeeping = this.clock.setTimeout(() => {
-      this.keepHouse();
+      this.scheduleHousekeeping();
       if (this.actions.expireStale().length) this.bus.emit("event", { type: "attention.changed" });
       this.inbox.wake();
     }, HOUSEKEEPING_EVERY_MS);
