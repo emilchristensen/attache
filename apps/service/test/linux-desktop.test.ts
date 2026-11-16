@@ -86,8 +86,8 @@ describe("Linux secret store", () => {
       // After a restart the token is read back from the Secret Service.
       await svc.stop();
       svc = await serve(stateDir, desktop.env);
-      const tested = await svc.api("POST", "/connections/github/test");
-      expect(tested.test.ok).toBe(true);
+      expect(await svc.api("GET", "/status")).toMatchObject({ credentialStore: "secret-service", credentialStoreNote: null });
+      expect((await svc.api("POST", "/connections/github/test")).test).toMatchObject({ ok: true });
 
       expect(toolCalls(desktop)).not.toBe("");
       expect(toolCalls(desktop)).not.toContain(SECRET);
@@ -173,8 +173,8 @@ describe("Linux secret store", () => {
 
       const up = { ...down, env: { ...down.env, FAKE_SECRET_SERVICE_DOWN: undefined } };
       svc = await serve(stateDir, up.env);
-      expect((await svc.api("GET", "/status")).credentialStore).toBe("secret-service");
-      expect((await svc.api("POST", "/connections/github/test")).test.ok).toBe(true);
+      expect(await svc.api("GET", "/status")).toMatchObject({ credentialStore: "secret-service", credentialStoreNote: null });
+      expect((await svc.api("POST", "/connections/github/test")).test).toMatchObject({ ok: true });
       expect(keyringItems(up).map((i: { secret: string }) => i.secret)).toEqual([SECRET]);
       expect(existsSync(join(stateDir, "secrets.json"))).toBe(false);
       expect(toolCalls(up)).not.toContain(SECRET);
