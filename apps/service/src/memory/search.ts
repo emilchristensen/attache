@@ -188,15 +188,15 @@ const SNIPPET_LEAD = 60;
 const WORD_SNAP = 20;
 
 /**
- * About `width` characters of the plain words of `text` (no Markdown syntax),
+ * About `SNIPPET_WIDTH` characters of the plain words of `text` (no Markdown syntax),
  * starting a little before the first matched term and cut between words, with
  * `…` where it was cut.
  */
-export function makeSnippet(text: string, terms: string[], width = SNIPPET_WIDTH): string {
+export function makeSnippet(text: string, terms: string[]): string {
   const plain = collapseSpaces(markdownToPlainText(text));
   const match = firstMatch(plain.toLowerCase(), terms) ?? { start: 0, end: 0 };
   const start = cutBefore(plain, Math.max(0, match.start - SNIPPET_LEAD), match.start);
-  const end = cutAfter(plain, Math.min(plain.length, start + width), Math.max(match.end, start));
+  const end = cutAfter(plain, Math.min(plain.length, start + SNIPPET_WIDTH), Math.max(match.end, start));
   return (start > 0 ? "…" : "") + plain.slice(start, end).trim() + (end < plain.length ? "…" : "");
 }
 

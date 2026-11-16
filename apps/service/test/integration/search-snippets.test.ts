@@ -48,9 +48,27 @@ const LIMITS_TEXT = [
   "---",
   "",
   "The Pelicanpost batch sends at most 500 \\*per\\* hour, with <1% bounces. Tag runs with \\`nightly\\`.",
-  "Ops &amp; Finance watch https://status.example.com/pelican_post_batches daily.",
+  "Ops &amp; Finance watch the board (https://status.example.com/pelican_post_batches) and `www.example.com/*nightly*` daily.",
   "",
 ].join("\n");
+
+/** Link forms whose words stay and whose targets go, and a word whose underscores are not emphasis. */
+const GUIDE = "memory/notes/wallaroo-guide.md";
+const GUIDE_TEXT = [
+  "---",
+  "type: note",
+  "title: Wallaroo guide",
+  "---",
+  "",
+  "The Wallaroo guide covers [the API [v2]](https://example.com/v2), [![the diagram](d.png)](https://example.com/d), the [setup][s] page and foo__bar__baz values.",
+  "",
+  "[s]: https://example.com/setup",
+  "",
+].join("\n");
+
+/** One long line that opens markers it never closes: search must stay fast on it. */
+const LONG_LINE = "memory/notes/long-line.md";
+const LONG_LINE_TEXT = `---\ntype: note\ntitle: Long line\n---\n\n${"[".repeat(40_000)}${"**a _a ~~a ".repeat(20_000)} Kookaburra\n`;
 
 interface Hit {
   relPath: string;
@@ -68,6 +86,8 @@ beforeAll(async () => {
   mkdirSync(dirname(join(svc.dataDir, NOTE)), { recursive: true });
   writeFileSync(join(svc.dataDir, NOTE), RUNBOOK);
   writeFileSync(join(svc.dataDir, LIMITS), LIMITS_TEXT);
+  writeFileSync(join(svc.dataDir, GUIDE), GUIDE_TEXT);
+  writeFileSync(join(svc.dataDir, LONG_LINE), LONG_LINE_TEXT);
   const { job } = await svc.post("/memory/reindex");
   expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");
 });
@@ -93,7 +113,20 @@ describe("search snippets are the plain words of the note", () => {
 
   it("decodes entities and keeps escaped characters as the note wrote them", async () => {
     const hit = (await search("Pelicanpost")).find((h) => h.relPath === LIMITS);
-    expect(hit?.snippet).toBe("The Pelicanpost batch sends at most 500 *per* hour, with <1% bounces. Tag runs with `nightly`. Ops & Finance watch https://status.example.com/pelican_post_batches daily.");
+    expect(hit?.snippet).toBe("The Pelicanpost batch sends at most 500 *per* hour, with <1% bounces. Tag runs with `nightly`. Ops & Finance watch the board (https://status.example.com/pelican_post_batches) and www.example.com/*nightly* daily.");
+  });
+
+  it("keeps link text, drops every kind of link target, and keeps underscores inside a word", async () => {
+    const hit = (await search("Wallaroo guide")).find((h) => h.relPath === GUIDE);
+    expect(hit?.snippet).toBe("The Wallaroo guide covers the API [v2], the diagram, the setup page and foo__bar__baz values.");
+  });
+
+  it("answers quickly on a long line of markers that never close", async () => {
+    const started = Date.now();
+    const hit = (await search("Kookaburra")).find((h) => h.relPath === LONG_LINE);
+    // Each marker used to make the snippet scan the rest of the line: seconds of blocked service for this note.
+    expect(Date.now() - started).toBeLessThan(1_500);
+    expect(hit?.snippet).toMatch(/Kookaburra$/);
   });
 
   it("a current fact reads as its subject and value, without the list and bold markers", async () => {
@@ -132,7 +165,7 @@ describe("research without a model", () => {
     expect(line, "the note is listed").toBeTruthy();
     const html = dashboard.render(line!);
     expect(html).not.toMatch(/<(code|em)\b/);
-    expect(html).toContain('<a href="https://status.example.com/pelican_post_batches">https://status.example.com/pelican_post_batches</a>');
-    expect(html.replace(/<[^>]+>/g, "")).toContain("at most 500 *per* hour, with &lt;1% bounces. Tag runs with `nightly`. Ops &amp; Finance watch https://status.example.com/pelican_post_batches daily.");
+    expect(html).toContain('(<a href="https://status.example.com/pelican_post_batches">https://status.example.com/pelican_post_batches</a>)');
+    expect(html.replace(/<[^>]+>/g, "")).toContain("at most 500 *per* hour, with &lt;1% bounces. Tag runs with `nightly`. Ops &amp; Finance watch the board (https://status.example.com/pelican_post_batches) and www.example.com/*nightly* daily.");
   });
 });
