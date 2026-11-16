@@ -316,11 +316,6 @@ export function deleteConnection(db: Db, connectionId: string): string[] {
   return keys;
 }
 
-/** Reopen snoozed items whose time has passed. */
-export function wakeSnoozed(db: Db, now = nowIso()): number {
-  return Number(db.prepare("update attention_items set state = case when resolved_at is null then 'open' else 'resolved' end, snooze_until = null, updated_at = ? where state = 'snoozed' and snooze_until <= ?").run(now, now).changes);
-}
-
 export function getItem(db: Db, id: string): AttentionItemView | null {
   const r = db.prepare("select * from attention_items where id = ?").get(id) as Record<string, unknown> | undefined;
   return r ? toView(r) : null;

@@ -36,6 +36,7 @@ interface Item {
   state: string;
   changedSinceDecision: boolean;
   snoozeUntil: string | null;
+  updatedAt: string;
 }
 
 async function venue(m: TestMachine): Promise<Item | null> {
@@ -80,6 +81,43 @@ describe("The inbox replicates", () => {
     await mac.post(`/attention/${item.id}/decision`, { decision: "snooze", until });
     await replicate(mac, pc);
     expect(await venue(pc)).toMatchObject({ state: "snoozed", snoozeUntil: until });
+  });
+
+  it("keeps another Machine's newer report of an item after a snooze ends here (#65)", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    writeTask(mac, day(2));
+    await refresh(mac);
+    await replicate(mac, pc);
+    const id = (await venue(mac))!.id;
+    await mac.post(`/attention/${id}/decision`, { decision: "snooze", until: new Date(mac.clock.now().getTime() + 3_600_000).toISOString() });
+    await replicate(mac, pc);
+    const snoozed = (await venue(mac))!;
+    expect(snoozed.state).toBe("snoozed");
+
+    // PC's source reports a newer version, and pushes it; Mac is offline and has not heard of it.
+    await pc.clock.advance(60_000);
+    writeTask(pc, day(0));
+    await refresh(pc);
+    await pc.clock.advance(AFTER_WRITE);
+    expect((await venue(pc))!.title).toMatch(/Due today/);
+    world.remote.goOffline();
+
+    // Mac's snooze ends, on Mac's own clock, and the Dashboard hears of it.
+    const events: string[] = [];
+    const listen = (e: { type: string }) => events.push(e.type);
+    mac.app.bus.on("event", listen);
+    await mac.clock.advance(Math.max(0, pc.clock.now().getTime() - mac.clock.now().getTime()) + 2 * 3_600_000);
+    mac.app.bus.off("event", listen);
+    expect(events).toContain("attention.changed");
+    expect(await venue(mac)).toMatchObject({ state: "open", snoozeUntil: null, updatedAt: snoozed.updatedAt });
+
+    // Mac writes the item's record again; Replication merges it with PC's.
+    await mac.post(`/attention/${id}/decision`, { decision: "dismiss" });
+    world.remote.goOnline();
+    await replicate(mac, pc);
+    await mac.clock.advance(CHECK);
+    for (const m of [mac, pc]) expect(await venue(m)).toMatchObject({ title: expect.stringMatching(/Due today/), state: "open", changedSinceDecision: true });
   });
 
   it("reopens a dismissed item on every Machine when its source changed, saying it changed", async () => {

@@ -85,6 +85,14 @@ export class Inbox {
   }
 
   /**
+   * End snoozes whose time has passed. Only the state this Machine works out from each record
+   * changes; the record keeps its report time, so it never looks newer than another Machine's report.
+   */
+  wake(): void {
+    if (rederiveStates(this.d.db, this.d.ctx.now()).length) this.d.onChange();
+  }
+
+  /**
    * Bring the database and the Brain's inbox files together when a data folder
    * opens: files win (they are what every Machine agrees on), and items only
    * this Machine knows, such as those from before the inbox replicated, are written out.

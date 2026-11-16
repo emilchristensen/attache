@@ -341,6 +341,8 @@ The attention engine follows these rules:
 - A dismissal records the fingerprint it applied to.
   Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
+  Every 30 seconds on the service's clock, housekeeping works the state out again from the record (`Inbox.wake`), so a snooze that ended reopens the item without a new write.
+  The item keeps its report time (`updatedAt`): a snooze ending is not news from the source, and a bumped time would let this Machine's stale copy beat another Machine's newer report in the merge.
 - The inbox replicates (`attention/inbox.ts`, `App.inbox`).
   Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
   The state is never stored in the file: each Machine works it out the same way (`deriveState` in `attention/inbox-record.ts`): resolved by its source, else snoozed while the snooze runs, else dismissed or done while the evidence is what the owner decided on, else open.

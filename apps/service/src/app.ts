@@ -26,12 +26,11 @@ import { FEATURES, SOURCE_KINDS, computeStatus, effectiveFeatures, featureDef, i
 import { providerFor } from "./connectors/model.ts";
 import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
-import { wakeSnoozed } from "./attention/engine.ts";
 import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
-import { systemClock, type Clock } from "./replication/clock.ts";
+import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
@@ -60,6 +59,8 @@ export interface AppOptions {
 }
 
 export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
+/** How often housekeeping runs: stale drafts expire and snoozes end within this long of their time. */
+const HOUSEKEEPING_EVERY_MS = 30_000;
 
 /** Everything the service owns, wired together. Clients only reach it through the HTTP API. */
 export class App {
@@ -105,7 +106,7 @@ export class App {
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
   /** Expires stale drafts and wakes snoozed items; stopped with the app, so it never touches a closed database. */
-  private housekeeping: NodeJS.Timeout | null = null;
+  private housekeeping: TimerHandle | null = null;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
@@ -460,17 +461,12 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
-    this.housekeeping = setInterval(() => {
-      const expired = this.actions.expireStale();
-      const woke = wakeSnoozed(this.db);
-      if (expired.length || woke) this.bus.emit("event", { type: "attention.changed" });
-    }, 30_000);
-    this.housekeeping.unref();
+    this.keepHouse();
     void this.refreshModel();
   }
 
   async stop() {
-    if (this.housekeeping) clearInterval(this.housekeeping);
+    if (this.housekeeping) this.clock.clearTimeout(this.housekeeping);
     this.housekeeping = null;
     this.dataWatcher?.stop();
     await this.replication.stop();
@@ -480,6 +476,15 @@ export class App {
     await this.meaning.stop();
     this.memory.releaseLock();
     this.db.close();
+  }
+
+  /** Every half minute on the service's clock: expire stale drafts and wake snoozed items. */
+  private keepHouse(): void {
+    this.housekeeping = this.clock.setTimeout(() => {
+      this.keepHouse();
+      if (this.actions.expireStale().length) this.bus.emit("event", { type: "attention.changed" });
+      this.inbox.wake();
+    }, HOUSEKEEPING_EVERY_MS);
   }
 
   connectionKinds(): ConnectionKind[] {
