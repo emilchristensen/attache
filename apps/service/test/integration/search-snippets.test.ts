@@ -70,6 +70,21 @@ const GUIDE_TEXT = [
 const LONG_LINE = "memory/notes/long-line.md";
 const LONG_LINE_TEXT = `---\ntype: note\ntitle: Long line\n---\n\n${"[".repeat(40_000)}${"**a _a ~~a ".repeat(20_000)} Kookaburra\n`;
 
+/**
+ * URLs next to Markdown markers, which the research answer must show as the
+ * same text: in code spans, where the snippet keeps them as written, and one
+ * bare in parentheses.
+ */
+const URL_CASES = [
+  "Snorkelfish one keeps `postgres://u@h/db?q=*a*` handy.",
+  "Snorkelfish two keeps `s3://bucket/__tmp__/x` handy.",
+  "Snorkelfish three keeps `(https://a.com/page)*bold*` handy.",
+  "Snorkelfish four keeps `file:///tmp/*.log*` handy.",
+  "Snorkelfish five keeps ``https://a.com/foo)` and https://b.com/bar)` `` handy.",
+  "Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.",
+];
+const urlCase = (i: number) => `memory/notes/snorkelfish-${i + 1}.md`;
+
 interface Hit {
   relPath: string;
   title: string;
@@ -88,6 +103,7 @@ beforeAll(async () => {
   writeFileSync(join(svc.dataDir, LIMITS), LIMITS_TEXT);
   writeFileSync(join(svc.dataDir, GUIDE), GUIDE_TEXT);
   writeFileSync(join(svc.dataDir, LONG_LINE), LONG_LINE_TEXT);
+  URL_CASES.forEach((text, i) => writeFileSync(join(svc.dataDir, urlCase(i)), `---\ntype: note\ntitle: Snorkelfish ${i + 1}\n---\n\n${text}\n`));
   const { job } = await svc.post("/memory/reindex");
   expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");
 });
@@ -168,4 +184,32 @@ describe("research without a model", () => {
     expect(html).toContain('(<a href="https://status.example.com/pelican_post_batches">https://status.example.com/pelican_post_batches</a>)');
     expect(html.replace(/<[^>]+>/g, "")).toContain("at most 500 *per* hour, with &lt;1% bounces. Tag runs with `nightly`. Ops &amp; Finance watch the board (https://status.example.com/pelican_post_batches) and www.example.com/*nightly* daily.");
   });
+
+  it("shows URLs next to Markdown markers as the same text the snippet has", async () => {
+    const snippets = new Map((await search("Snorkelfish")).map((h) => [h.relPath, h.snippet]));
+    expect(snippets.get(urlCase(5))).toBe("Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.");
+    const { job } = await svc.post("/jobs", { kind: "research", input: { question: "Snorkelfish" } });
+    const done = await svc.waitJob(job.id);
+    expect(done.job.status).toBe("succeeded");
+    const lines = (done.job.result.answer as string).split("\n").filter((l) => l.startsWith("- [S"));
+    URL_CASES.forEach((_, i) => {
+      const line = lines.find((l) => l.includes(`**Snorkelfish ${i + 1}**`));
+      expect(line, `case ${i + 1} is listed`).toBeTruthy();
+      const html = dashboard.render(line!);
+      expect(html, `case ${i + 1}`).not.toMatch(/<(code|em)\b/);
+      expect(html.match(/<strong>/g), `case ${i + 1}`).toHaveLength(1);
+      expect(textOf(html), `case ${i + 1}`).toBe(`[S${lines.indexOf(line!) + 1}] Snorkelfish ${i + 1}: ${snippets.get(urlCase(i))}`);
+    });
+  });
 });
+
+/** The text a reader sees in rendered HTML. */
+function textOf(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .trim();
+}
