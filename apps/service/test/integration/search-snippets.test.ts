@@ -13,7 +13,8 @@ const NOTE = "memory/notes/ledger-cutover.md";
 
 /**
  * The match sits just after a long code span, so a window of raw Markdown
- * starts inside it; a list, a link, emphasis and a fenced `## Heading` follow.
+ * starts inside it; a list, a link, emphasis and fenced code follow, then a
+ * section under its own heading.
  */
 const RUNBOOK = [
   "---",
@@ -26,18 +27,30 @@ const RUNBOOK = [
   "- Freeze **invoice runs** at noon",
   "- Point the [billing dashboard](https://example.com/billing) at the _new_ ledger",
   "",
-  "```markdown",
-  "## Rollback",
-  "Restore the billing-v1 snapshot and reopen invoice runs.",
+  "```ts",
+  "const totals = new Map<string, number>();",
   "```",
   "",
   "Finance signs off once the totals match for three days in a row, and the old exports are archived.",
   "",
+  "## Rollback",
+  "",
+  "Restore the billing-v1 snapshot and reopen invoice runs.",
+  "",
 ].join("\n");
 
-/** Characters the owner escaped, which are literal text in the note and must stay literal in a research answer. */
+/** Characters that are literal text in the note (escaped, an entity, a bare URL) and must stay so in a research answer. */
 const LIMITS = "memory/notes/batch-limits.md";
-const LIMITS_TEXT = "---\ntype: note\ntitle: Batch limits\n---\n\nThe Pelicanpost batch sends at most 500 \\*per\\* hour, with <1% bounces.\n";
+const LIMITS_TEXT = [
+  "---",
+  "type: note",
+  "title: Batch limits",
+  "---",
+  "",
+  "The Pelicanpost batch sends at most 500 \\*per\\* hour, with <1% bounces. Tag runs with \\`nightly\\`.",
+  "Ops &amp; Finance watch https://status.example.com/pelican_post_batches daily.",
+  "",
+].join("\n");
 
 interface Hit {
   relPath: string;
@@ -61,16 +74,26 @@ beforeAll(async () => {
 afterAll(() => svc.stop());
 
 describe("search snippets are the plain words of the note", () => {
-  it("drops code, list, link, emphasis and heading syntax and keeps the words around the match", async () => {
+  it("drops code, list, link and emphasis syntax, keeps fenced code as written and the words around the match", async () => {
     const hit = (await search("Quokkaflow")).find((h) => h.relPath === NOTE);
     expect(hit, "the runbook is found").toBeTruthy();
     const { snippet } = hit!;
     expect(snippet).not.toMatch(SYNTAX);
     expect(snippet).toContain("--to ledger-v2 on staging. The Quokkaflow check compares totals.");
     expect(snippet).toContain("Freeze invoice runs at noon Point the billing dashboard at the new ledger");
-    expect(snippet).toContain("Rollback Restore the billing-v1 snapshot");
+    expect(snippet).toContain("at the new ledger const totals = new Map<string, number>();");
     // Cut at both ends, and marked so.
     expect(snippet).toMatch(/^….+…$/);
+  });
+
+  it("a section under a heading reads as its words, without the heading marker", async () => {
+    const hit = (await search("billing-v1 snapshot")).find((h) => h.relPath === NOTE);
+    expect(hit?.snippet).toBe("Restore the billing-v1 snapshot and reopen invoice runs.");
+  });
+
+  it("decodes entities and keeps escaped characters as the note wrote them", async () => {
+    const hit = (await search("Pelicanpost")).find((h) => h.relPath === LIMITS);
+    expect(hit?.snippet).toBe("The Pelicanpost batch sends at most 500 *per* hour, with <1% bounces. Tag runs with `nightly`. Ops & Finance watch https://status.example.com/pelican_post_batches daily.");
   });
 
   it("a current fact reads as its subject and value, without the list and bold markers", async () => {
@@ -101,14 +124,15 @@ describe("research without a model", () => {
     expect(readFileSync(join(svc.dataDir, relPath), "utf8")).toContain(line!);
   });
 
-  it("keeps characters the note escaped as literal text", async () => {
+  it("keeps escaped characters, entities and bare URLs literal", async () => {
     const { job } = await svc.post("/jobs", { kind: "research", input: { question: "Pelicanpost" } });
     const done = await svc.waitJob(job.id);
     expect(done.job.status).toBe("succeeded");
     const line = (done.job.result.answer as string).split("\n").find((l) => l.includes("Batch limits"));
     expect(line, "the note is listed").toBeTruthy();
     const html = dashboard.render(line!);
-    expect(html).not.toMatch(/<em>/);
-    expect(html.replace(/<[^>]+>/g, "")).toContain("at most 500 *per* hour, with &lt;1% bounces.");
+    expect(html).not.toMatch(/<(code|em)\b/);
+    expect(html).toContain('<a href="https://status.example.com/pelican_post_batches">https://status.example.com/pelican_post_batches</a>');
+    expect(html.replace(/<[^>]+>/g, "")).toContain("at most 500 *per* hour, with &lt;1% bounces. Tag runs with `nightly`. Ops &amp; Finance watch https://status.example.com/pelican_post_batches daily.");
   });
 });

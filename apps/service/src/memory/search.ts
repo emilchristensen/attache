@@ -1,6 +1,7 @@
 import type { Db } from "../core/db.ts";
 import { parseStateLine } from "./markdown.ts";
 import { markdownToPlainText } from "./plain-text.ts";
+import { collapseSpaces } from "./same-text.ts";
 import { isPastReview } from "./review-date.ts";
 
 export interface SearchHit {
@@ -161,10 +162,13 @@ function diversify<T extends { docId: string }>(sorted: T[], limit: number, perD
   return sorted.filter((h) => chosen.has(h));
 }
 
+/** A term without its last letters, so a different word ending still matches. */
+const termStem = (term: string) => term.slice(0, Math.max(3, term.length - 2));
+
 /** The share of `terms` found in `text`, forgiving a different word ending. */
 export function termCoverage(text: string, terms: string[]): number {
   const lower = text.toLowerCase();
-  const found = terms.filter((t) => lower.includes(t.slice(0, Math.max(3, t.length - 2)))).length;
+  const found = terms.filter((t) => lower.includes(termStem(t))).length;
   return found / terms.length;
 }
 
@@ -176,34 +180,45 @@ function safeJson(v: string): Record<string, unknown> {
   }
 }
 
+/** About how many characters a snippet shows. */
+const SNIPPET_WIDTH = 220;
 /** How far before the first match a snippet starts. */
 const SNIPPET_LEAD = 60;
+/** How far a cut may move to fall between words; past that it splits the word. */
+const WORD_SNAP = 20;
 
 /**
  * About `width` characters of the plain words of `text` (no Markdown syntax),
  * starting a little before the first matched term and cut between words, with
  * `…` where it was cut.
  */
-export function makeSnippet(text: string, terms: string[], width = 220): string {
-  const plain = markdownToPlainText(text).replace(/\s+/g, " ").trim();
-  const lower = plain.toLowerCase();
-  let pos = -1;
-  let matchEnd = 0;
-  for (const t of terms) {
-    const stem = t.slice(0, Math.max(3, t.length - 2));
-    const p = lower.indexOf(stem);
-    if (p >= 0 && (pos < 0 || p < pos)) [pos, matchEnd] = [p, p + stem.length];
-  }
-  let start = Math.max(0, pos - SNIPPET_LEAD);
-  let end = Math.min(plain.length, start + width);
-  // Cut between words, never moving past the match.
-  if (start > 0) {
-    const space = plain.indexOf(" ", start - 1);
-    if (space >= 0 && space < Math.max(pos, start)) start = space + 1;
-  }
-  if (end < plain.length) {
-    const space = plain.lastIndexOf(" ", end);
-    if (space > Math.max(matchEnd, start)) end = space;
-  }
+export function makeSnippet(text: string, terms: string[], width = SNIPPET_WIDTH): string {
+  const plain = collapseSpaces(markdownToPlainText(text));
+  const match = firstMatch(plain.toLowerCase(), terms) ?? { start: 0, end: 0 };
+  const start = cutBefore(plain, Math.max(0, match.start - SNIPPET_LEAD), match.start);
+  const end = cutAfter(plain, Math.min(plain.length, start + width), Math.max(match.end, start));
   return (start > 0 ? "…" : "") + plain.slice(start, end).trim() + (end < plain.length ? "…" : "");
+}
+
+/** Where the earliest term (by its stem) sits in `lower`, or null when none does. */
+function firstMatch(lower: string, terms: string[]): { start: number; end: number } | null {
+  return terms
+    .map(termStem)
+    .map((stem) => ({ start: lower.indexOf(stem), end: lower.indexOf(stem) + stem.length }))
+    .filter((m) => m.start >= 0)
+    .reduce<{ start: number; end: number } | null>((best, m) => (!best || m.start < best.start ? m : best), null);
+}
+
+/** A cut at `at` moved forward to the start of the next word, unless that passes `limit` or is too far. */
+function cutBefore(plain: string, at: number, limit: number): number {
+  if (at === 0) return 0;
+  const space = plain.indexOf(" ", at - 1);
+  return space >= 0 && space < limit && space - at < WORD_SNAP ? space + 1 : at;
+}
+
+/** A cut at `at` moved back to the end of the previous word, unless that reaches `floor` or is too far. */
+function cutAfter(plain: string, at: number, floor: number): number {
+  if (at >= plain.length) return plain.length;
+  const space = plain.lastIndexOf(" ", at);
+  return space > floor && at - space < WORD_SNAP ? space : at;
 }

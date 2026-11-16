@@ -1,4 +1,4 @@
-import { parseStateLine, splitFrontmatter, type StateEntry } from "../../memory/markdown.ts";
+import { CODE_FENCE, parseStateLine, splitFrontmatter, type StateEntry } from "../../memory/markdown.ts";
 
 /** A Current State entry with any indented lines under it, exactly as the file has it. */
 export interface FactBlock {
@@ -32,7 +32,6 @@ export const HISTORY_PLACEHOLDER = "\u0000jarvis:history\u0000";
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-const FENCE_RE = /^\s*(```|~~~)/;
 const CONTINUATION_RE = /^\s+\S/;
 const COMMENT_RE = /^\s*<!--.*-->\s*$/;
 
@@ -74,7 +73,7 @@ export function splitNote(raw: string): NoteParts | null {
   };
 
   for (const line of fm.body.split("\n")) {
-    if (FENCE_RE.test(line)) inFence = !inFence;
+    if (CODE_FENCE.test(line)) inFence = !inFence;
     const heading = inFence ? null : HEADING_RE.exec(line);
     if (heading) {
       closeSection();
