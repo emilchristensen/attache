@@ -49,7 +49,7 @@ Jarvis's access to one outside service or Harness, such as Slack, GitHub, a mode
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
 
 **Agent**:
-The AI working inside a Harness on the owner's behalf: it searches the Brain, proposes saves and runs the audit.
+The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
 The Harness is the application; the agent is what runs in it.
 
 ### Keeping the Brain true
@@ -59,7 +59,8 @@ A suggested change to the Brain that waits for the owner's decision.
 _Avoid_: Suggestion, pending change, draft
 
 **Consolidation**:
-Jarvis reading finished work, such as a Harness session or a meeting capture, and making Proposals from it.
+Jarvis reading finished work, such as a Harness session or a meeting capture, and writing what it learns to the Brain.
+When the owner switches Consolidation off, it makes Proposals instead.
 _Avoid_: Distillation, auto-save, learning
 
 **Correction**:
