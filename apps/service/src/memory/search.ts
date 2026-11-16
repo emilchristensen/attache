@@ -1,5 +1,6 @@
 import type { Db } from "../core/db.ts";
 import { parseStateLine } from "./markdown.ts";
+import { markdownToPlainText } from "./plain-text.ts";
 import { isPastReview } from "./review-date.ts";
 
 export interface SearchHit {
@@ -175,14 +176,34 @@ function safeJson(v: string): Record<string, unknown> {
   }
 }
 
+/** How far before the first match a snippet starts. */
+const SNIPPET_LEAD = 60;
+
+/**
+ * About `width` characters of the plain words of `text` (no Markdown syntax),
+ * starting a little before the first matched term and cut between words, with
+ * `…` where it was cut.
+ */
 export function makeSnippet(text: string, terms: string[], width = 220): string {
-  const lower = text.toLowerCase();
+  const plain = markdownToPlainText(text).replace(/\s+/g, " ").trim();
+  const lower = plain.toLowerCase();
   let pos = -1;
+  let matchEnd = 0;
   for (const t of terms) {
-    const p = lower.indexOf(t.slice(0, Math.max(3, t.length - 2)));
-    if (p >= 0 && (pos < 0 || p < pos)) pos = p;
+    const stem = t.slice(0, Math.max(3, t.length - 2));
+    const p = lower.indexOf(stem);
+    if (p >= 0 && (pos < 0 || p < pos)) [pos, matchEnd] = [p, p + stem.length];
   }
-  const start = Math.max(0, pos < 0 ? 0 : pos - 60);
-  const s = text.slice(start, start + width).replace(/\s+/g, " ").trim();
-  return (start > 0 ? "…" : "") + s + (start + width < text.length ? "…" : "");
+  let start = Math.max(0, pos - SNIPPET_LEAD);
+  let end = Math.min(plain.length, start + width);
+  // Cut between words, never moving past the match.
+  if (start > 0) {
+    const space = plain.indexOf(" ", start - 1);
+    if (space >= 0 && space < Math.max(pos, start)) start = space + 1;
+  }
+  if (end < plain.length) {
+    const space = plain.lastIndexOf(" ", end);
+    if (space > Math.max(matchEnd, start)) end = space;
+  }
+  return (start > 0 ? "…" : "") + plain.slice(start, end).trim() + (end < plain.length ? "…" : "");
 }
