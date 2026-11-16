@@ -12,7 +12,7 @@ const FOOTNOTE = /\[\^[^[\]\s]{1,100}\](?::(?=\s|$))?/y;
  * Reads wiki links and footnote markers while Markdown is parsed, so a
  * character the author escaped never starts one and a label keeps its own
  * formatting. A wiki link becomes a `wiki_link` token holding what it shows;
- * a footnote marker becomes nothing.
+ * a footnote marker becomes empty text.
  */
 export function vaultSyntax(md: MarkdownIt): void {
   md.inline.ruler.before("link", "vault_syntax", (state: StateInline, silent: boolean) => {
@@ -24,8 +24,11 @@ export function vaultSyntax(md: MarkdownIt): void {
     for (const pattern of [WIKI_LINK, FOOTNOTE]) {
       pattern.lastIndex = state.pos;
       const match = pattern.exec(state.src);
+      // Defensive: never read past the end of the text markdown-it handed this rule.
       if (!match || pattern.lastIndex > state.posMax) continue;
+      // A footnote marker leaves an empty text token, so emphasis around it (`*[^1]*`) still pairs and goes.
       if (pattern === WIKI_LINK) state.push(WIKI_LINK_TOKEN, "", 0).content = match[2] ?? match[1]!;
+      else state.push("text", "", 0);
       state.pos = pattern.lastIndex;
       return true;
     }

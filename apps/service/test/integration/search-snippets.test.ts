@@ -96,7 +96,7 @@ const VAULT_TEXT = [
   "- [x] Read [[Team|**Atlas**]] notes and ![[numbat-diagram.png]]",
   "- Keep \\[\\[kept\\]\\] and \\[^2\\] as typed",
   "- Visit [the site[^3]](https://x.test) and [see [[Team]]](https://x.test)",
-  "- `[x]` in code and \\[x\\] escaped stay",
+  "- `[x]` in code and \\[x\\] escaped stay, and **[^4]** goes",
   "- [ ]",
   "",
   "[^1]: Planned for March.",
@@ -167,7 +167,7 @@ describe("search snippets are the plain words of the note", () => {
 
   it("reads wiki links, embeds and footnotes as their words, drops task boxes, and keeps escaped brackets", async () => {
     const hit = (await search("Numbat rollout")).find((h) => h.relPath === VAULT);
-    expect(hit?.snippet).toBe("Ask Ada about the Numbat rollout Read Atlas notes and numbat-diagram.png Keep [[kept]] and [^2] as typed Visit the site and see Team [x] in code and [x] escaped stay Planned for March.");
+    expect(hit?.snippet).toBe("Ask Ada about the Numbat rollout Read Atlas notes and numbat-diagram.png Keep [[kept]] and [^2] as typed Visit the site and see Team [x] in code and [x] escaped stay, and goes Planned for March.");
   });
 
   it("a current fact reads as its subject and value, without the list and bold markers", async () => {
