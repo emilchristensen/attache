@@ -117,7 +117,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
     )
     .all(...ids) as Array<Omit<SearchHit, "score" | "snippet" | "meta" | "review" | "unverified"> & { meta: string }>;
 
-  let hits: Array<Omit<SearchHit, "review" | "unverified">> = rows
+  let hits: Array<Omit<SearchHit, "snippet" | "review" | "unverified">> = rows
     .filter((r) => (!opts.areas || opts.areas.includes(r.area)) && (!opts.docTypes || opts.docTypes.includes(r.docType ?? "")) && (!opts.roots || opts.roots.includes(r.root)) && !(opts.excludePrefixes ?? []).some((p) => r.root === "data" && r.relPath.startsWith(p)))
     .map((r) => {
       const meta = safeJson(r.meta);
@@ -125,7 +125,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
       const status = typeof meta.status === "string" ? meta.status : "";
       const statusWeight = status === "superseded" || status === "archived" ? 0.6 : 1;
       const score = (fused.get(r.chunkId) ?? 0) * 1000 * (AREA_WEIGHT[r.area] ?? 0.8) * (SECTION_WEIGHT[r.section] ?? 1) * statusWeight * (0.5 + coverage);
-      return { ...r, meta, score, snippet: makeSnippet(r.text, terms) };
+      return { ...r, meta, score };
     })
     .sort((a, b) => b.score - a.score || a.relPath.localeCompare(b.relPath) || a.startLine - b.startLine);
 
@@ -133,7 +133,8 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
   const cutoff = opts.relativeCutoff ?? 0.35;
   hits = hits.filter((h) => h.score >= top * cutoff);
   const now = new Date();
-  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2))).map((h) => withReview(h, now));
+  // Snippets are made only for the hits returned: each one parses its chunk's Markdown.
+  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2))).map((h) => withReview({ ...h, snippet: makeSnippet(h.text, terms) }, now));
 }
 
 /** Mark a current fact with its Review date, and as unverified once that day has passed. */

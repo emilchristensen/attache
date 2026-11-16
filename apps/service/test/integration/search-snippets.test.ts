@@ -75,14 +75,30 @@ const LONG_LINE_TEXT = `---\ntype: note\ntitle: Long line\n---\n\n${"[".repeat(4
  * same text: in code spans, where the snippet keeps them as written, and one
  * bare in parentheses.
  */
-const URL_CASES = [
-  "Snorkelfish one keeps `postgres://u@h/db?q=*a*` handy.",
-  "Snorkelfish two keeps `s3://bucket/__tmp__/x` handy.",
-  "Snorkelfish three keeps `(https://a.com/page)*bold*` handy.",
-  "Snorkelfish four keeps `file:///tmp/*.log*` handy.",
-  "Snorkelfish five keeps ``https://a.com/foo)` and https://b.com/bar)` `` handy.",
-  "Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.",
+const URL_CASES: Array<[markdown: string, words: string]> = [
+  ["Snorkelfish one keeps `postgres://u@h/db?q=*a*` handy.", "Snorkelfish one keeps postgres://u@h/db?q=*a* handy."],
+  ["Snorkelfish two keeps `s3://bucket/__tmp__/x` handy.", "Snorkelfish two keeps s3://bucket/__tmp__/x handy."],
+  ["Snorkelfish three keeps `(https://a.com/page)*bold*` handy.", "Snorkelfish three keeps (https://a.com/page)*bold* handy."],
+  ["Snorkelfish four keeps `file:///tmp/*.log*` handy.", "Snorkelfish four keeps file:///tmp/*.log* handy."],
+  ["Snorkelfish five keeps ``https://a.com/foo)` and https://b.com/bar)` `` handy.", "Snorkelfish five keeps https://a.com/foo)` and https://b.com/bar)` handy."],
+  ["Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.", "Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily."],
 ];
+
+/** Wiki links, an embed and footnotes as an imported vault writes them, task boxes, and brackets the author escaped. */
+const VAULT = "memory/notes/numbat-rollout.md";
+const VAULT_TEXT = [
+  "---",
+  "type: note",
+  "title: Numbat rollout",
+  "---",
+  "",
+  "- [ ] Ask [[People/Ada Okafor|Ada]] about the Numbat rollout[^1]",
+  "- [x] Read [[Team|**Atlas**]] notes and ![[numbat-diagram.png]]",
+  "- Keep \\[\\[kept\\]\\] and \\[^2\\] as typed",
+  "",
+  "[^1]: Planned for March.",
+  "",
+].join("\n");
 const urlCase = (i: number) => `memory/notes/snorkelfish-${i + 1}.md`;
 
 interface Hit {
@@ -103,7 +119,8 @@ beforeAll(async () => {
   writeFileSync(join(svc.dataDir, LIMITS), LIMITS_TEXT);
   writeFileSync(join(svc.dataDir, GUIDE), GUIDE_TEXT);
   writeFileSync(join(svc.dataDir, LONG_LINE), LONG_LINE_TEXT);
-  URL_CASES.forEach((text, i) => writeFileSync(join(svc.dataDir, urlCase(i)), `---\ntype: note\ntitle: Snorkelfish ${i + 1}\n---\n\n${text}\n`));
+  writeFileSync(join(svc.dataDir, VAULT), VAULT_TEXT);
+  URL_CASES.forEach(([text], i) => writeFileSync(join(svc.dataDir, urlCase(i)), `---\ntype: note\ntitle: Snorkelfish ${i + 1}\n---\n\n${text}\n`));
   const { job } = await svc.post("/memory/reindex");
   expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");
 });
@@ -143,6 +160,11 @@ describe("search snippets are the plain words of the note", () => {
     // Each marker used to make the snippet scan the rest of the line: seconds of blocked service for this note.
     expect(Date.now() - started).toBeLessThan(1_500);
     expect(hit?.snippet).toMatch(/Kookaburra$/);
+  });
+
+  it("reads wiki links, embeds and footnotes as their words, drops task boxes, and keeps escaped brackets", async () => {
+    const hit = (await search("Numbat rollout")).find((h) => h.relPath === VAULT);
+    expect(hit?.snippet).toBe("Ask Ada about the Numbat rollout Read Atlas notes and numbat-diagram.png Keep [[kept]] and [^2] as typed Planned for March.");
   });
 
   it("a current fact reads as its subject and value, without the list and bold markers", async () => {
@@ -187,7 +209,7 @@ describe("research without a model", () => {
 
   it("shows URLs next to Markdown markers as the same text the snippet has", async () => {
     const snippets = new Map((await search("Snorkelfish")).map((h) => [h.relPath, h.snippet]));
-    expect(snippets.get(urlCase(5))).toBe("Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.");
+    URL_CASES.forEach(([, words], i) => expect(snippets.get(urlCase(i)), `case ${i + 1}`).toBe(words));
     const { job } = await svc.post("/jobs", { kind: "research", input: { question: "Snorkelfish" } });
     const done = await svc.waitJob(job.id);
     expect(done.job.status).toBe("succeeded");
@@ -198,7 +220,7 @@ describe("research without a model", () => {
       const html = dashboard.render(line!);
       expect(html, `case ${i + 1}`).not.toMatch(/<(code|em)\b/);
       expect(html.match(/<strong>/g), `case ${i + 1}`).toHaveLength(1);
-      expect(textOf(html), `case ${i + 1}`).toBe(`[S${lines.indexOf(line!) + 1}] Snorkelfish ${i + 1}: ${snippets.get(urlCase(i))}`);
+      expect(textOf(html), `case ${i + 1}`).toBe(`[S${lines.indexOf(line!) + 1}] Snorkelfish ${i + 1}: ${URL_CASES[i]![1]}`);
     });
   });
 });
