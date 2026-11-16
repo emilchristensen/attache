@@ -260,17 +260,32 @@ export function takeRecord(db: Db, rec: InboxRecord, now: string): boolean {
 /**
  * Work every item's state out again from its record at `now`, and store it where the row held another
  * state, snooze time or decided fingerprint. Those columns are only this Machine's copy of what
- * the record gives: it differs when a snooze has ended, or when a database from an earlier release
- * holds one the record does not give. The record itself, its report time included, stays as it is.
- * Returns the keys of the rows it corrected.
+ * the record gives: a database from an earlier release can hold one the record does not give,
+ * which nothing else would correct. Returns the keys of the rows it corrected.
  */
 export function rederiveStates(db: Db, now: string): string[] {
-  const stale = allRows(db)
+  return rederive(db, allRows(db), now);
+}
+
+/**
+ * End the snoozes whose time has passed by `now`: the only states that change as time passes.
+ * Each row takes the state its record gives; the record, its report time included, stays as it is.
+ * Returns the keys of the items it woke.
+ */
+export function endSnoozes(db: Db, now: string): string[] {
+  const due = db.prepare("select * from attention_items where state = 'snoozed' and snooze_until <= ?").all(now) as unknown as ItemRow[];
+  return rederive(db, due, now);
+}
+
+/** Store each row's state as its record gives it at `now`, where the row held another. Returns the keys it corrected. */
+function rederive(db: Db, rows: readonly ItemRow[], now: string): string[] {
+  const stale = rows
     .map((row) => ({ row, rec: recordOfRow(row) }))
     .filter(({ row, rec }) => {
       const d = deriveState(rec.item, rec.decision, now);
       return d.state !== row.state || d.snoozeUntil !== (row.snooze_until ?? null) || d.decidedFingerprint !== (row.decided_fingerprint ?? null);
     });
+  if (!stale.length) return [];
   tx(db, () => {
     for (const { rec } of stale) storeRecord(db, rec, now);
   });
