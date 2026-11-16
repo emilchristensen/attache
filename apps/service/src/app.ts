@@ -194,7 +194,7 @@ export class App {
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
-    this.actions = new ActionService(this.db);
+    this.actions = new ActionService(this.db, () => this.clock.now());
     this.wire();
     registerRunners(this);
   }
