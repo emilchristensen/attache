@@ -84,7 +84,7 @@ const URL_CASES: Array<[markdown: string, words: string]> = [
   ["Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily.", "Snorkelfish six reads (https://github.com/a/b/blob/main/__init__.py) daily."],
 ];
 
-/** Wiki links, an embed and footnotes as an imported vault writes them, task boxes, and brackets the author escaped. */
+/** Wiki links, an embed and footnotes as an imported vault writes them, also inside link text, task boxes, and brackets the author escaped or put in code. */
 const VAULT = "memory/notes/numbat-rollout.md";
 const VAULT_TEXT = [
   "---",
@@ -95,6 +95,9 @@ const VAULT_TEXT = [
   "- [ ] Ask [[People/Ada Okafor|Ada]] about the Numbat rollout[^1]",
   "- [x] Read [[Team|**Atlas**]] notes and ![[numbat-diagram.png]]",
   "- Keep \\[\\[kept\\]\\] and \\[^2\\] as typed",
+  "- Visit [the site[^3]](https://x.test) and [see [[Team]]](https://x.test)",
+  "- `[x]` in code and \\[x\\] escaped stay",
+  "- [ ]",
   "",
   "[^1]: Planned for March.",
   "",
@@ -164,7 +167,7 @@ describe("search snippets are the plain words of the note", () => {
 
   it("reads wiki links, embeds and footnotes as their words, drops task boxes, and keeps escaped brackets", async () => {
     const hit = (await search("Numbat rollout")).find((h) => h.relPath === VAULT);
-    expect(hit?.snippet).toBe("Ask Ada about the Numbat rollout Read Atlas notes and numbat-diagram.png Keep [[kept]] and [^2] as typed Planned for March.");
+    expect(hit?.snippet).toBe("Ask Ada about the Numbat rollout Read Atlas notes and numbat-diagram.png Keep [[kept]] and [^2] as typed Visit the site and see Team [x] in code and [x] escaped stay Planned for March.");
   });
 
   it("a current fact reads as its subject and value, without the list and bold markers", async () => {

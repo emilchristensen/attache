@@ -5,8 +5,8 @@ import { vaultSyntax, WIKI_LINK_TOKEN } from "./vault-syntax.ts";
 /** Parses as the Dashboard renders a note, plus the wiki links and footnotes an imported vault writes. */
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: false }).use(vaultSyntax);
 
-/** The box that starts a task-list item. */
-const TASK_BOX = /^\[[ xX]\]\s+/;
+/** The box that starts a task-list item, as written: not escaped, not code. */
+const TASK_BOX = /^\[[ xX]\](?:\s+|$)/;
 
 /**
  * The plain words of a piece of Markdown, for showing a passage where its
@@ -23,7 +23,8 @@ export function markdownToPlainText(text: string): string {
       if (t.type === "fence" || t.type === "code_block") return [t.content.replace(/\n$/, "")];
       if (t.type !== "inline") return [];
       const words = inlineText(t.children ?? []);
-      return [tokens[i - 2]?.type === "list_item_open" ? words.replace(TASK_BOX, "") : words];
+      const taskItem = tokens[i - 2]?.type === "list_item_open" && TASK_BOX.test(t.content);
+      return [taskItem ? words.replace(TASK_BOX, "") : words];
     })
     .join("\n");
 }

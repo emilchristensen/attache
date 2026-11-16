@@ -16,13 +16,16 @@ const FOOTNOTE = /\[\^[^[\]\s]{1,100}\](?::(?=\s|$))?/y;
  */
 export function vaultSyntax(md: MarkdownIt): void {
   md.inline.ruler.before("link", "vault_syntax", (state: StateInline, silent: boolean) => {
+    // A silent run is markdown-it measuring a link's text, where a jump past a `[` reads as a
+    // nested link and drops the link. The brackets balance, and the link's text is read for real later.
+    if (silent) return false;
     const first = state.src.charCodeAt(state.pos);
     if (first !== 0x5b /* [ */ && first !== 0x21 /* ! */) return false;
     for (const pattern of [WIKI_LINK, FOOTNOTE]) {
       pattern.lastIndex = state.pos;
       const match = pattern.exec(state.src);
-      if (!match) continue;
-      if (!silent && pattern === WIKI_LINK) state.push(WIKI_LINK_TOKEN, "", 0).content = match[2] ?? match[1]!;
+      if (!match || pattern.lastIndex > state.posMax) continue;
+      if (pattern === WIKI_LINK) state.push(WIKI_LINK_TOKEN, "", 0).content = match[2] ?? match[1]!;
       state.pos = pattern.lastIndex;
       return true;
     }
