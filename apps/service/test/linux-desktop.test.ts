@@ -75,8 +75,7 @@ describe("Linux secret store", () => {
       const stateDir = newStateDir();
       let svc = await serve(stateDir, desktop.env);
       const status = await svc.api("GET", "/status");
-      expect(status.credentialStore).toBe("secret-service");
-      expect(status.credentialStoreNote).toBeNull();
+      expect(status).toMatchObject({ credentialStore: "secret-service", credentialStoreNote: null });
 
       const configured = await connectGithub(svc, fx);
       expect(JSON.stringify(configured)).not.toContain(SECRET);
