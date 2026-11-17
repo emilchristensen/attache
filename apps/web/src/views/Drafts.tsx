@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { plural, type ActionView, type Citation } from "@attache/contracts";
+import { FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -195,7 +195,7 @@ const FILTERS: ReadonlyArray<TabItem<Filter>> = [
 export function DraftsView() {
   const loc = useLocation();
   const [filter, setFilter] = useState<Filter>("open");
-  const statuses = filter === "open" ? "draft,approved,revoked,executing" : filter === "done" ? "succeeded,failed,unknown,rejected,expired" : "";
+  const statuses = filter === "open" ? OPEN_ACTION_STATUSES.join(",") : filter === "done" ? FINISHED_ACTION_STATUSES.join(",") : "";
   const list = useResource<ActionView[]>(`/actions${statuses ? `?status=${statuses}` : ""}`, ["actions.changed", "job"]);
   const selected = loc.search.get("id");
   const { detailRef, revealDetail } = useRevealDetail();

@@ -5,6 +5,7 @@ import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
+import { openDraftId } from "../linked-draft.ts";
 import { ReaderLine } from "./ReaderLine.tsx";
 
 interface Briefing {
@@ -50,6 +51,7 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
   const [snoozing, setSnoozing] = useState(false);
   const decide = (decision: string, until?: string) => run(decision, () => post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) }).then(onChanged));
   const ev = item.evidence[0];
+  const draftId = openDraftId(item);
   return (
     <article className={`item${item.priority >= 70 ? " priority-high" : ""}`} data-item-key={item.key} aria-label={item.title}>
       <div className="title">{item.title}</div>
@@ -86,13 +88,13 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
             disabled={busy !== null}
             onClick={() =>
               run("draft", async () => {
-                if (item.actionId) return navigate(`/drafts?id=${item.actionId}`);
+                if (draftId) return navigate(`/drafts?id=${draftId}`);
                 await post<{ job: JobView }>(`/attention/${item.id}/draft`, {});
                 onChanged();
-              }, item.actionId ? undefined : "Preparing a draft in the background")
+              }, draftId ? undefined : "Preparing a draft in the background")
             }
           >
-            {item.actionId ? "View draft" : "Prepare draft"}
+            {draftId ? "View draft" : "Prepare draft"}
           </button>
         )}
         {item.state === "open" ? (
