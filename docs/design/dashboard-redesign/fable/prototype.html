@@ -1,0 +1,2242 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attache Dashboard redesign - Fable prototype v6</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---- tokens ------------------------------------------------------------ */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --serif: var(--font);
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --logo-copper: #ba6249;
+  --logo-brass: #c38942;
+  --r-sm: 8px; --r: 12px; --r-lg: 16px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --nav-w: 236px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+[data-theme="light"] {
+  --paper: #fcfcfc; --side: #f7f7f8; --surface: #ffffff; --raised: #ffffff; --sunken: #f4f4f5;
+  --row-hover: rgba(24, 24, 27, .045); --row-on: rgba(24, 24, 27, .08);
+  --line: #e4e4e7; --line-btn: #d4d4d8; --line-strong: #8f8f98;
+  --ink: #18181b; --ink-2: #3f3f46; --ink-3: #66666e;
+  --accent: #4338ca; --accent-solid: #4f46e5; --accent-hover: #4338ca; --on-accent: #ffffff; --accent-soft: rgba(79, 70, 229, .14);
+  --attn: #c2780e; --attn-ink: #8a5206; --attn-soft: rgba(217, 145, 38, .16);
+  --ok: #1d724a; --danger: #b12f25; --danger-soft: rgba(212, 64, 53, .09);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 16px 40px -8px rgba(0, 0, 0, .16);
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --paper: #09090b; --side: #0c0c0e; --surface: #111113; --raised: #18181b; --sunken: #1c1c1f;
+  --row-hover: rgba(255, 255, 255, .05); --row-on: rgba(255, 255, 255, .09);
+  --line: #26262a; --line-btn: #34343a; --line-strong: #6b6b74;
+  --ink: #f4f4f5; --ink-2: #c9c9cf; --ink-3: #a1a1aa;
+  --accent: #a5a0f0; --accent-solid: #8d87e3; --accent-hover: #a5a0f0; --on-accent: #09090b; --accent-soft: rgba(141, 135, 227, .2);
+  --attn: #e0a03a; --attn-ink: #ebb65c; --attn-soft: rgba(224, 160, 58, .15);
+  --ok: #5cd69d; --danger: #e27b74; --danger-soft: rgba(226, 123, 116, .12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 18px 44px -8px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+
+/* ---- base -------------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14.5px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p, ul, ol, dl, dd { margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+h1 { font: 500 26px/1.2 var(--serif); letter-spacing: -.01em; }
+h2 { font: 600 15px/1.3 var(--font); }
+h3 { font: 600 14px/1.3 var(--font); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font: 12px/1.5 var(--mono); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+.muted { color: var(--ink-3); } .small { font-size: 12.5px; }
+.eyebrow { font: 600 11px/1 var(--font); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+kbd { font: 500 10.5px/1 var(--mono); padding: 3px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--ink-3); background: var(--surface); }
+
+/* The single attention mark. It is the logo's dot: it appears only where the owner has to act. */
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--attn); flex: none; display: inline-block; }
+.dot.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; font-weight: 500; font-size: 13.5px; white-space: nowrap; }
+.btn:hover { background: var(--sunken); }
+.btn.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(.93); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--sunken); }
+.btn.danger { color: var(--danger); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.btn kbd { margin-left: 2px; }
+
+.tag { justify-self: start; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 5px; background: var(--sunken); color: var(--ink-2); font: 500 11.5px/1 var(--font); white-space: nowrap; }
+.tag.attn { background: var(--attn-soft); color: var(--attn-ink); }
+.tag.danger { background: var(--danger-soft); color: var(--danger); }
+.tag.line { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+input[type="text"], input[type="search"], textarea, select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 7px 10px; width: 100%; }
+textarea { resize: vertical; line-height: 1.55; }
+.switch { position: relative; width: 34px; height: 20px; border-radius: 10px; background: var(--line-strong); flex: none; border: 0; cursor: pointer; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform .16s var(--ease); }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(14px); }
+
+/* ---- shell ------------------------------------------------------------- */
+.shell { display: grid; grid-template-columns: var(--nav-w) minmax(0, 1fr); height: 100%; }
+.side { display: flex; flex-direction: column; gap: var(--s4); padding: 18px 12px 12px; border-right: 1px solid var(--line); background: var(--paper); min-height: 0; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; font: 500 21px/1 var(--serif); letter-spacing: -.01em; }
+.brand .state { margin-left: auto; font: 500 11.5px/1 var(--font); color: var(--attn-ink); }
+.logo .case { fill: var(--logo-copper); } .logo path.case { fill: none; stroke: var(--logo-copper); } .logo .ldot { fill: var(--logo-brass); }
+.logo-on, .logo-off { display: inline-flex; }
+.all-clear .logo-on, body:not(.all-clear) .logo-off { display: none; }
+.all-clear .when-busy, body:not(.all-clear) .when-clear { display: none !important; }
+body:not(.partial) .when-partial, .partial .when-complete { display: none !important; }
+.logo-on .ldot { transform-box: fill-box; transform-origin: center; animation: land .42s var(--ease) both; }
+@keyframes land { from { transform: scale(0); } 70% { transform: scale(1.18); } to { transform: scale(1); } }
+.find { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); color: var(--ink-3); cursor: pointer; width: 100%; text-align: left; font-size: 13.5px; }
+.find span { flex: 1; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: var(--r-sm); color: var(--ink-2); font-weight: 500; cursor: pointer; }
+.nav a:hover { background: var(--sunken); text-decoration: none; }
+.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.nav a[aria-current="page"] svg { color: var(--accent); }
+.nav .n { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--font); color: var(--attn-ink); }
+.nav .sep { height: 1px; background: var(--line); margin: 8px 10px; }
+.pulse { margin-top: auto; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; background: var(--surface); cursor: pointer; text-align: left; }
+.pulse b { font-weight: 600; }
+.ticks { display: flex; gap: 3px; }
+.ticks i { flex: 1; height: 4px; border-radius: 2px; background: var(--line-strong); opacity: .55; }
+.ticks i.bad { background: var(--attn); opacity: 1; }
+.main { min-width: 0; overflow: auto; }
+.page { max-width: 1180px; margin: 0 auto; padding: 32px 36px 96px; }
+.screen { display: none; } .screen.on { display: block; }
+.page-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+.page-head p { color: var(--ink-3); flex: 1; min-width: 200px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
+.tabs button { background: none; border: 0; font-size: 13.5px; padding: 8px 9px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--ink-3); font-weight: 500; cursor: pointer; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .c { font-size: 12px; color: var(--ink-3); }
+
+/* ---- inbox ------------------------------------------------------------- */
+.inbox-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; align-items: start; }
+.brief { padding-bottom: 22px; }
+.brief .lede { font: 400 27px/1.28 var(--serif); letter-spacing: -.012em; margin: 10px 0 12px; max-width: 30em; text-wrap: balance; }
+.brief .lede em { font-style: normal; color: var(--attn-ink); }
+.brief ul { color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+.brief li { padding-left: 14px; position: relative; }
+.brief li::before { content: ""; position: absolute; left: 0; top: .72em; width: 5px; height: 1px; background: var(--ink-3); }
+.brief li.caveat { color: var(--attn-ink); }
+.brief .acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.queue { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.group { display: flex; align-items: center; gap: 8px; padding: 9px 14px 7px; background: var(--paper); border-bottom: 1px solid var(--line); }
+.group:not(:first-child) { border-top: 1px solid var(--line); }
+.item { border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.item > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; cursor: pointer; list-style: none; }
+.item > summary::-webkit-details-marker { display: none; }
+.item > summary:hover { background: var(--paper); }
+.item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .s { color: var(--ink-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .m { display: flex; gap: 8px; align-items: center; color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.item .due { color: var(--attn-ink); font-weight: 600; }
+.item[open] { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
+.item[open] > summary .s { display: none; }
+.item .body { padding: 0 14px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.item .body p { color: var(--ink-2); max-width: 64ch; }
+.why { font-size: 12.5px; color: var(--ink-3); }
+.excerpt { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); overflow: hidden; max-width: 680px; }
+.excerpt header { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 12px; }
+.excerpt header .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.excerpt pre { margin: 0; padding: 8px 10px; font: 12px/1.6 var(--mono); white-space: pre-wrap; color: var(--ink-2); }
+.excerpt pre mark { background: var(--attn-soft); color: var(--ink); border-radius: 2px; }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.diff { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 5px 12px; font-size: 13.5px; max-width: 680px; }
+.diff dt { font: 600 10.5px/1.9 var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.diff del { color: var(--ink-3); } .diff ins { text-decoration: none; background: var(--accent-soft); padding: 0 3px; border-radius: 3px; }
+.diff blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--line-strong); font: 400 14.5px/1.45 var(--serif); color: var(--ink-2); }
+.rail { display: flex; flex-direction: column; gap: 28px; }
+.rail h2 { margin-bottom: 4px; }
+.rail h2 span { display: block; font-weight: 400; color: var(--ink-3); font-size: 12.5px; margin-top: 2px; }
+.ledger li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.ledger li:last-child { border-bottom: 0; }
+.ledger .top { display: flex; gap: 6px; align-items: baseline; }
+.ledger .top a { font-weight: 600; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger .chg { color: var(--ink-2); }
+.ledger .src { color: var(--ink-3); font-size: 12px; }
+.ledger li.reverted .chg, .ledger li.reverted .top a { text-decoration: line-through; color: var(--ink-3); }
+.cov li { display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 13px; }
+.cov li span:last-child { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+.cov .okmark { color: var(--ink-3); }
+.clear { text-align: center; padding: 72px 20px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); }
+.clear h2 { font: 400 28px/1.2 var(--serif); margin: 18px 0 6px; }
+
+/* v2: live headline, dated briefing, count line, coverage line, decided row */
+.headline { font: 400 27px/1.28 var(--serif); letter-spacing: -.012em; margin: 0 0 18px; max-width: 30em; text-wrap: balance; }
+.headline em { font-style: normal; color: var(--attn-ink); }
+.brief ul { font: 400 15px/1.5 var(--serif); margin-top: 8px; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin: 0 0 10px; font-size: 13px; }
+.counts a { color: var(--ink-2); white-space: nowrap; } .counts a b { color: var(--ink); font-weight: 600; margin-right: 4px; }
+.counts .hid { margin-left: auto; color: var(--ink-3); }
+.coverage { border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 12px; font-size: 13px; color: var(--ink-3); background: var(--surface); }
+.coverage > summary { padding: 8px 14px; cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; }
+.coverage > summary::-webkit-details-marker { display: none; }
+.coverage > summary .chev { margin-left: auto; width: 12px; height: 12px; } .coverage[open] > summary .chev { transform: rotate(90deg); }
+.coverage.attn > summary { color: var(--attn-ink); font-weight: 500; }
+.coverage .cov { padding: 2px 14px 4px; border-top: 1px solid var(--line); color: var(--ink-2); }
+.coverage .acts { padding: 6px 14px 12px; }
+.decided { display: flex; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.decided button { margin-left: auto; }
+.quote { border-left: 2px solid var(--line-strong); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 6px; }
+.quote .eyebrow { line-height: 1.4; }
+.quote blockquote { margin: 0; font: 400 15px/1.5 var(--serif); color: var(--ink-2); }
+.dstatus { font-size: 13px; color: var(--ink-2); }
+.receipt { padding: 10px 12px; border-radius: var(--r-sm); background: var(--sunken); font-size: 13px; }
+.srcd > summary { cursor: pointer; list-style: none; } .srcd > summary::-webkit-details-marker { display: none; }
+.srcd[open] { flex-basis: 100%; order: 9; } .srcd[open] > div { margin-top: 6px; color: var(--ink-2); overflow-wrap: anywhere; }
+.history li { padding: 7px 0; font-size: 13.5px; color: var(--ink-2); border-bottom: 1px solid var(--line); } .history li:last-child { border-bottom: 0; }
+.sheet { width: min(420px, calc(100vw - 24px)); background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 8px; align-self: flex-end; margin-bottom: 84px; }
+.sheet a { display: flex; gap: 10px; align-items: center; height: 44px; padding: 0 12px; border-radius: var(--r-sm); color: var(--ink); font-weight: 500; cursor: pointer; }
+.sheet .foot { padding: 10px 12px 6px; border-top: 1px solid var(--line); margin-top: 6px; color: var(--ink-3); font-size: 12.5px; }
+.pane { display: none; } .pane.on { display: block; }
+.opt-d { border-top: 1px solid var(--line); padding: 12px 0; } .opt-d > summary { cursor: pointer; font-weight: 500; } .opt-d > summary span { color: var(--ink-3); font-weight: 400; } .opt-d .in { padding-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---- brain ------------------------------------------------------------- */
+.bigfind { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; border-radius: var(--r); border: 1px solid var(--line-strong); background: var(--surface); margin-bottom: 6px; }
+.bigfind input { border: 0; background: none; padding: 0; font-size: 16px; outline: none; }
+.brain-grid { display: grid; grid-template-columns: 168px 280px minmax(0, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); min-height: 560px; overflow: hidden; }
+.brain-grid > * { min-width: 0; }
+.facets { padding: 10px 8px; border-right: 1px solid var(--line); background: var(--paper); display: flex; flex-direction: column; gap: 1px; }
+.facets .eyebrow { padding: 10px 8px 6px; }
+.facets button { display: flex; justify-content: space-between; align-items: center; height: 30px; padding: 0 8px; border: 0; background: none; border-radius: 6px; cursor: pointer; color: var(--ink-2); font-weight: 500; font-size: 13.5px; }
+.facets button span { color: var(--ink-3); font-weight: 400; font-size: 12px; }
+.facets button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.notes { border-right: 1px solid var(--line); overflow: auto; }
+.notes li { padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.notes li[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.notes .t { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.notes .s { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader { padding: 26px 30px 40px; }
+.reader h1 { font-size: 30px; }
+.reader .path { color: var(--ink-3); margin: 6px 0 18px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.waiting { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: var(--r-sm); background: var(--attn-soft); color: var(--attn-ink); font-size: 13.5px; margin-bottom: 20px; }
+.waiting a { margin-left: auto; color: inherit; font-weight: 600; }
+.facts { border-top: 1px solid var(--line); margin: 8px 0 26px; }
+.fact { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.fact dt { font-weight: 600; }
+.fact .v { font: 400 17px/1.4 var(--serif); }
+.fact .prov { grid-column: 2 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--ink-3); font-size: 12.5px; }
+.fact time { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.timeline li { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 12px; padding: 7px 0; font-size: 13.5px; color: var(--ink-2); }
+.timeline time { color: var(--ink-3); font-size: 12.5px; }
+
+/* ---- drafts / jobs ------------------------------------------------------ */
+.split { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 28px; align-items: start; }
+.list { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.list li { padding: 11px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.list li:last-child { border-bottom: 0; }
+.list li[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.list .t { font-weight: 600; } .list .s { color: var(--ink-3); font-size: 12.5px; display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+.steps { display: flex; align-items: center; gap: 10px; margin: 14px 0 20px; font-size: 13px; color: var(--ink-3); flex-wrap: wrap; }
+.steps b { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; }
+.steps b i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 600 11px/1 var(--font); font-style: normal; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.steps b.now { color: var(--ink); font-weight: 600; } .steps b.now i { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.steps hr { flex: 0 0 28px; border: 0; border-top: 1px solid var(--line-strong); margin: 0; }
+.draft-grid { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
+.letter { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.letter .to { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-3); flex-wrap: wrap; }
+.letter textarea { min-height: 190px; font: 400 17px/1.55 var(--serif); border-color: var(--line); background: var(--paper); }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; font-size: 13px; }
+.kv dt { color: var(--ink-3); }
+.kv dd { overflow-wrap: anywhere; }
+.aside-block { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.aside-block:first-child { padding-top: 0; }
+.jobrow { display: grid; grid-template-columns: 10px minmax(0, 1fr) 150px 96px; gap: 14px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.jobrow:last-child { border-bottom: 0; }
+.jobrow .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jobrow.sel { background: var(--accent-soft); }
+.bar { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.spin { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--accent); border-right-color: transparent; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- connections / settings ------------------------------------------- */
+.conn { border-bottom: 1px solid var(--line); }
+.conn:last-child { border-bottom: 0; }
+.conn > summary { display: grid; grid-template-columns: 30px minmax(0, 1.2fr) minmax(0, 1.4fr) 130px 20px; gap: 14px; align-items: center; padding: 11px 14px; cursor: pointer; list-style: none; }
+.conn > summary::-webkit-details-marker { display: none; }
+.mono-badge { width: 30px; height: 30px; border-radius: 8px; background: var(--sunken); display: grid; place-items: center; font: 600 12px/1 var(--font); color: var(--ink-2); }
+.conn .t { font-weight: 600; } .conn .s { color: var(--ink-3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn .body { padding: 4px 14px 16px 58px; display: flex; flex-direction: column; gap: 12px; }
+.conn[open] > summary .chev { transform: rotate(90deg); }
+.notice { padding: 10px 12px; border-radius: var(--r-sm); background: var(--attn-soft); color: var(--attn-ink); font-size: 13.5px; display: flex; flex-direction: column; gap: 8px; }
+.sect { margin-bottom: 28px; }
+.sect > h2 { margin-bottom: 8px; display: flex; gap: 8px; align-items: baseline; }
+.sect > h2 span { font-weight: 400; color: var(--ink-3); font-size: 12.5px; }
+.addgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.addgrid button { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong); background: none; border-radius: var(--r); cursor: pointer; text-align: left; }
+.set-grid { display: grid; grid-template-columns: 190px minmax(0, 720px); gap: 40px; align-items: start; }
+.set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 1px; }
+.set-nav .eyebrow { padding: 14px 10px 6px; }
+.set-nav a { padding: 6px 10px; border-radius: 6px; color: var(--ink-2); font-weight: 500; font-size: 13.5px; display: flex; gap: 8px; align-items: center; }
+.set-nav a.on { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+.opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 13px 16px; border-bottom: 1px solid var(--line); align-items: center; }
+.opt:last-child { border-bottom: 0; }
+.opt .t { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.opt p { color: var(--ink-3); font-size: 13px; grid-column: 1; }
+.machine { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--line); align-items: center; font-size: 13.5px; }
+.machine:last-child { border-bottom: 0; }
+
+/* ---- setup -------------------------------------------------------------- */
+.setup { display: grid; grid-template-columns: 340px minmax(0, 1fr); min-height: 100vh; }
+.setup aside { padding: 44px 36px; border-right: 1px solid var(--line); background: var(--sunken); display: flex; flex-direction: column; gap: 28px; }
+.setup aside h1 { font-size: 32px; }
+.setup ol { display: flex; flex-direction: column; gap: 4px; counter-reset: s; }
+.setup ol li { display: flex; gap: 12px; align-items: center; padding: 8px 0; color: var(--ink-3); font-weight: 500; counter-increment: s; }
+.setup ol li::before { content: counter(s); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.setup ol li.now { color: var(--ink); } .setup ol li.now::before { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.setup ol li.done::before { content: "\2713"; background: var(--accent-soft); color: var(--accent); box-shadow: none; }
+.setup section { padding: 56px 56px 80px; max-width: 760px; display: flex; flex-direction: column; gap: 20px; }
+.preview-tree { padding: 12px 14px; font: 12.5px/1.7 var(--mono); color: var(--ink-2); white-space: pre; overflow: auto; }
+
+/* ---- palette + prototype bar ------------------------------------------ */
+.scrim { position: fixed; inset: 0; background: rgba(20, 14, 8, .38); display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 20; }
+.scrim.on { display: flex; }
+.palette { width: min(620px, calc(100vw - 32px)); background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden; animation: rise .16s var(--ease); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.palette .q { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.palette .q input { border: 0; background: none; padding: 0; font-size: 16px; outline: none; }
+.palette .eyebrow { padding: 12px 16px 6px; }
+.palette li { display: flex; gap: 10px; align-items: baseline; padding: 8px 16px; cursor: pointer; }
+.palette li.on { background: var(--accent-soft); }
+.palette li .t { font-weight: 600; } .palette li .s { color: var(--ink-3); font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette footer { padding: 9px 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; display: flex; gap: 14px; }
+.proto { position: fixed; right: 14px; bottom: 14px; z-index: 30; display: flex; gap: 4px; align-items: center; padding: 5px; border-radius: 999px; background: var(--ink); color: var(--paper); font-size: 12px; box-shadow: var(--shadow); }
+.proto button { border: 0; background: none; color: inherit; padding: 5px 10px; border-radius: 999px; cursor: pointer; font-size: 12px; opacity: .72; }
+.proto button.on { background: var(--paper); color: var(--ink); opacity: 1; }
+.proto span { padding: 0 6px 0 10px; opacity: .6; }
+.tabbar { display: none; }
+
+/* ---- v3 ------------------------------------------------------------------ */
+/* The accent is the selection and the owner's own action. Progress and "current step" are status, so they are ink. */
+.steps b.now i { background: var(--ink); color: var(--paper); }
+.steps b.done { color: var(--ink-2); } .steps b.done i { box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+.steps b.bad { color: var(--danger); font-weight: 600; } .steps b.bad i { box-shadow: inset 0 0 0 1.5px var(--danger); }
+.steps b.unk { color: var(--attn-ink); font-weight: 600; } .steps b.unk i { box-shadow: inset 0 0 0 1.5px var(--attn); }
+.setup ol li.now::before { background: var(--ink); color: var(--paper); }
+.setup ol li.done::before { background: var(--sunken); color: var(--ink-2); }
+.bar span { background: var(--ink-2); }
+.spin { border-color: var(--ink-3); border-right-color: transparent; }
+/* Reading text is 16 px or more. */
+.brief ul { font-size: 16px; }
+.quote blockquote, .diff blockquote { font-size: 16px; }
+/* The dated briefing is a disclosure: open on a desktop, closed on a narrow screen. */
+.brief { padding-bottom: 16px; }
+.brief-head { display: flex; gap: 4px 12px; align-items: center; flex-wrap: wrap; }
+.brief-head .acts { margin-left: auto; }
+.brief-toggle { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; padding: 6px 0; cursor: pointer; }
+.brief-toggle .chev { width: 12px; height: 12px; color: var(--ink-3); } .brief-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.brief .first { display: none; color: var(--ink-2); font: 400 16px/1.45 var(--serif); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brief.closed ul { display: none; } .brief.closed .first { display: block; }
+.brief ul { margin-bottom: 0; }
+.fold { position: fixed; right: 8px; top: 6px; z-index: 50; background: var(--ink); color: var(--paper); font: 11px/1.3 var(--mono); padding: 3px 7px; border-radius: 4px; }
+.headline { margin-bottom: 14px; }
+.headline .btn { vertical-align: 5px; margin-left: 8px; font-family: var(--font); letter-spacing: 0; }
+/* Count links: navigation to the group headings. Their order is fixed. */
+.counts a.zero, .counts a.zero b { color: var(--ink-3); }
+.counts .jump { display: none; }
+.item[open] > summary .t { white-space: normal; }
+.item[open] > summary { align-items: start; }
+.rowerr { display: flex; gap: 10px; align-items: center; padding: 10px 14px; color: var(--danger); font-size: 13px; }
+.rowerr .btn { margin-left: auto; color: var(--ink); }
+.nav .n .plus { color: var(--ink-3); font-weight: 400; }
+.dense .when-normal, body:not(.dense) .when-dense { display: none !important; }
+.failed .when-ok, body:not(.failed) .when-failed { display: none !important; }
+.notice.danger { background: var(--danger-soft); color: var(--danger); }
+.notice.plain { background: var(--sunken); color: var(--ink-2); }
+.notice a { color: inherit; text-decoration: underline; }
+.dproto { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border: 1px dashed var(--line-strong); border-radius: var(--r-sm); font-size: 12.5px; color: var(--ink-3); margin-bottom: 16px; }
+.dproto select { width: auto; padding: 3px 6px; font-size: 12.5px; }
+.letter textarea:disabled { color: var(--ink-2); background: var(--sunken); }
+@media (pointer: coarse) {
+  .btn, .btn.sm { height: 44px; padding: 0 14px; } .nav a, .find { height: 44px; }
+  .item > summary { min-height: 60px; } .counts a { padding: 12px 0; } .tabs button { padding: 13px 10px; }
+  .brief-toggle, .coverage > summary { min-height: 44px; }
+}
+
+/* ---- narrow ------------------------------------------------------------- */
+@media (max-width: 1080px) {
+  .inbox-grid { grid-template-columns: minmax(0, 1fr); }
+  .brain-grid { grid-template-columns: 150px minmax(0, 1fr); } .brain-grid .reader { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+  .draft-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { display: none; }
+  .page { padding: 18px 16px 120px; }
+  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 0; font-size: 11px; font-weight: 500; color: var(--ink-3); position: relative; cursor: pointer; }
+  .tabbar a[aria-current="page"] { color: var(--accent); }
+  .tabbar a .dot { position: absolute; top: 2px; left: calc(50% + 7px); box-shadow: 0 0 0 2px var(--surface); }
+  .brief .lede { font-size: 22px; }
+  .item > summary { grid-template-columns: minmax(0, 1fr); }
+  .split, .set-grid, .setup { grid-template-columns: minmax(0, 1fr); }
+  .set-nav { position: static; flex-direction: row; overflow-x: auto; } .set-nav .eyebrow { display: none; } .set-nav a { white-space: nowrap; }
+  .brain-grid { grid-template-columns: minmax(0, 1fr); } .facets { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); } .facets .eyebrow { display: none; } .facets button { gap: 6px; white-space: nowrap; }
+  .notes { border-right: 0; max-height: 200px; }
+  .reader { padding: 20px 16px; } .fact { grid-template-columns: minmax(0, 1fr) auto; } .fact .v { grid-column: 1 / -1; grid-row: 2; } .fact .prov { grid-column: 1 / -1; }
+  .conn > summary { grid-template-columns: 30px minmax(0, 1fr) auto; } .conn > summary .acc, .conn > summary .chev { display: none; } .conn .body { padding-left: 14px; }
+  .jobrow { grid-template-columns: 10px minmax(0, 1fr) 80px; } .jobrow .bar, .jobrow .what { display: none; }
+  .setup aside { padding: 24px 20px; } .setup aside ol { flex-direction: row; gap: 10px; } .setup aside ol li span { display: none; } .setup section { padding: 28px 20px 120px; }
+  .proto { bottom: 74px; right: 8px; padding: 3px; } .proto button { padding: 4px 6px; font-size: 11px; white-space: nowrap; } .proto span { display: none; }
+  #more { z-index: 40; }
+  .btn kbd, .hints { display: none !important; }
+}
+@media (max-width: 760px) {
+  .btn, .btn.sm { height: 44px; padding: 0 14px; } .counts a { padding: 10px 0; } .tabs button { padding: 13px 10px; }
+  .brief-toggle, .coverage > summary { min-height: 44px; } .item > summary { min-height: 60px; }
+  .brief-head .acts { margin-left: 0; } .brief.closed .acts { display: none; }
+  /* One row instead of three: the count links become a native "jump to" picker. */
+  .counts { flex-wrap: nowrap; align-items: center; } .counts a:not(.hid) { display: none; } .counts .jump { display: block; flex: 1; min-width: 0; height: 44px; }
+  .headline { font-size: 23px; }
+  .item .m { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---- v4: colour ---------------------------------------------------------- */
+/* One hue per Inbox type, one for the proactive area, three for status. Every hue has four steps:
+   solid (tiles, bars, pressed chips; 3:1 or better on surface, and its on-colour is 4.5:1 on it),
+   ink (text; 4.5:1 or better on its own soft step and on paper), soft (tinted background), line (border). */
+[data-theme="light"] {
+  --on-c: #ffffff;
+  --indigo: #625ad8; --indigo-ink: #3b30cf; --indigo-soft: #e7e6f9; --indigo-line: #bbb8ea;
+  --green: #218355; --green-ink: #1d724a; --green-soft: #e7f9f0; --green-line: #b8ead3;
+  --amber: #a5680d; --amber-ink: #8e5a0b; --amber-soft: #faf2e5; --amber-line: #ead6b8;
+  --red: #d44035; --red-ink: #b12f25; --red-soft: #fae7e6; --red-line: #eabbb8;
+  --rose: #dd2c67; --rose-ink: #b81e51; --rose-soft: #fae5ec; --rose-line: #eab8c9;
+  --purple: #ae46ce; --purple-ink: #9630b5; --purple-soft: #f4e7f9; --purple-line: #dfb8ea;
+  --sky: #1679ca; --sky-ink: #1366aa; --sky-soft: #e5f1fa; --sky-line: #b8d4ea;
+  --teal: #138086; --teal-ink: #116f74; --teal-soft: #e5f9fa; --teal-line: #b8e8ea;
+  --moss: #4e8321; --moss-ink: #426e1c; --moss-soft: #eff9e7; --moss-line: #cfeab8;
+  --orange: #c15710; --orange-ink: #a0480d; --orange-soft: #faeee5; --orange-line: #eaccb8;
+  --gold: #926e0c; --gold-ink: #7f600a; --gold-soft: #faf5e5; --gold-line: #eaddb8;
+  --slate: #67778e; --slate-ink: #566376; --slate-soft: #edeff2; --slate-line: #cad0d8;
+}
+[data-theme="dark"] {
+  --on-c: #09090b;
+  --indigo: #766edd; --indigo-ink: #8d87e3; --indigo-soft: #171537; --indigo-line: #2f2b64;
+  --green: #33cc85; --green-ink: #5cd69d; --green-soft: #153727; --green-line: #2b6449;
+  --amber: #d99126; --amber-ink: #eba947; --amber-soft: #372a15; --amber-line: #644d2b;
+  --red: #d85046; --red-ink: #e27b74; --red-soft: #371715; --red-line: #642f2b;
+  --rose: #dd4075; --rose-ink: #e8739a; --rose-soft: #371521; --rose-line: #642b3e;
+  --purple: #b352d1; --purple-ink: #c57adc; --purple-soft: #2f1537; --purple-line: #572b64;
+  --sky: #2688d9; --sky-ink: #4ca4eb; --sky-soft: #152837; --sky-line: #2b4a64;
+  --teal: #26d0d9; --teal-ink: #4cdee6; --teal-soft: #153637; --teal-line: #2b6164;
+  --moss: #7acc33; --moss-ink: #95d65c; --moss-soft: #253715; --moss-line: #45642b;
+  --orange: #d96e26; --orange-ink: #eb8947; --orange-soft: #372315; --orange-line: #64422b;
+  --gold: #d9a926; --gold-ink: #ebbf47; --gold-soft: #372e15; --gold-line: #64552b;
+  --slate: #6e7f96; --slate-ink: #8f9cae; --slate-soft: #20252c; --slate-line: #3c4553;
+}
+.c-indigo { --c: var(--indigo); --c-ink: var(--indigo-ink); --c-soft: var(--indigo-soft); --c-line: var(--indigo-line); }
+.c-green { --c: var(--green); --c-ink: var(--green-ink); --c-soft: var(--green-soft); --c-line: var(--green-line); }
+.c-amber { --c: var(--amber); --c-ink: var(--amber-ink); --c-soft: var(--amber-soft); --c-line: var(--amber-line); }
+.c-red { --c: var(--red); --c-ink: var(--red-ink); --c-soft: var(--red-soft); --c-line: var(--red-line); }
+.c-rose { --c: var(--rose); --c-ink: var(--rose-ink); --c-soft: var(--rose-soft); --c-line: var(--rose-line); }
+.c-purple { --c: var(--purple); --c-ink: var(--purple-ink); --c-soft: var(--purple-soft); --c-line: var(--purple-line); }
+.c-sky { --c: var(--sky); --c-ink: var(--sky-ink); --c-soft: var(--sky-soft); --c-line: var(--sky-line); }
+.c-teal { --c: var(--teal); --c-ink: var(--teal-ink); --c-soft: var(--teal-soft); --c-line: var(--teal-line); }
+.c-moss { --c: var(--moss); --c-ink: var(--moss-ink); --c-soft: var(--moss-soft); --c-line: var(--moss-line); }
+.c-orange { --c: var(--orange); --c-ink: var(--orange-ink); --c-soft: var(--orange-soft); --c-line: var(--orange-line); }
+.c-gold { --c: var(--gold); --c-ink: var(--gold-ink); --c-soft: var(--gold-soft); --c-line: var(--gold-line); }
+.c-slate { --c: var(--slate); --c-ink: var(--slate-ink); --c-soft: var(--slate-soft); --c-line: var(--slate-line); }
+.tile { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--c); color: var(--on-c); flex: none; }
+.tile svg.i { width: 14px; height: 14px; stroke-width: 1.9; }
+
+/* ---- v4: the first screen -------------------------------------------------- */
+body:not(.svc-auth) .when-auth { display: none !important; }
+.today { max-width: 880px; margin: 0 auto; padding: 28px 36px 110px; display: flex; flex-direction: column; gap: 18px; }
+.today > section { min-width: 0; }
+
+/* 1. Search the Brain. */
+.bsearch { position: relative; }
+.bsearch label { display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 16px; border-radius: 13px; background: var(--surface); border: 1.5px solid var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); cursor: text; }
+.bsearch label:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
+.bsearch label > svg.i { width: 20px; height: 20px; color: var(--accent); stroke-width: 1.9; }
+.bsearch input[type="search"] { border: 0; background: none; padding: 0; font-size: 17px; outline: none; flex: 1; min-width: 0; }
+.bsearch input::placeholder { color: var(--ink-3); opacity: 1; }
+.browse { display: flex; gap: 2px 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-3); margin: 10px 4px 0; }
+.bres { position: absolute; left: 0; right: 0; top: 60px; z-index: 8; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden; }
+.bres .eyebrow { padding: 12px 16px 6px; }
+.bres li { display: flex; gap: 10px; align-items: baseline; padding: 8px 16px; cursor: pointer; }
+.bres li.on { background: var(--accent-soft); }
+.bres li .t { font-weight: 600; white-space: nowrap; } .bres li .s { color: var(--ink-3); font-size: 12.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bres footer { padding: 9px 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12.5px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* 2. For you now: indigo. One lead card, then at most two one-line followers. */
+.pro { border: 1px solid var(--c-line); background: var(--c-soft); border-radius: var(--r-lg); padding: 18px 20px 16px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 16px; }
+.pro > .tile { width: 40px; height: 40px; border-radius: 11px; } .pro > .tile svg.i { width: 20px; height: 20px; }
+.pro .eye { font: 600 11.5px/1.4 var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--c-ink); }
+.pro .eye span { color: var(--ink-2); font-weight: 500; letter-spacing: .04em; word-spacing: .12em; }
+.pro h2 { font: 500 23px/1.25 var(--serif); letter-spacing: -.01em; margin: 4px 0 8px; text-wrap: balance; }
+.pro .lines { font: 400 16px/1.5 var(--serif); color: var(--ink-2); display: flex; flex-direction: column; gap: 2px; }
+.pro .lines li { padding-left: 14px; position: relative; }
+.pro .lines li::before { content: ""; position: absolute; left: 0; top: .72em; width: 5px; height: 1px; background: var(--c-ink); }
+.pro .lines li.caveat { color: var(--amber-ink); }
+/* Two lines lead; the rest is one press away. */
+.pro > div > .lines > li:nth-child(n+3) { display: none; } .pro > div:has(.plus[open]) > .lines > li { display: block; }
+.pro .plus > summary { cursor: pointer; list-style: none; color: var(--c-ink); font-size: 13px; font-weight: 500; padding: 6px 0 2px; display: inline-flex; gap: 4px; align-items: center; }
+.pro .plus > summary::-webkit-details-marker { display: none; }
+.pro .plus[open] > summary { display: none; }
+.pro .from { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.notechip { display: inline-flex; gap: 6px; align-items: center; height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid var(--c-line); background: var(--surface); color: var(--ink); font: 500 12.5px/1 var(--font); cursor: pointer; }
+.notechip svg.i { width: 13px; height: 13px; color: var(--c-ink); }
+.pro .acts { margin-top: 14px; }
+.pro .why { font-size: 12.5px; color: var(--ink-3); margin-top: 10px; }
+.pro .also { grid-column: 1 / -1; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--c-line); display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.pro .also b { color: var(--c-ink); font-weight: 600; }
+.pro.quiet { background: transparent; border-style: dashed; padding: 10px 14px; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; font-size: 13.5px; color: var(--ink-2); }
+.pro.quiet > .tile { width: 24px; height: 24px; border-radius: 7px; background: var(--c-soft); color: var(--c-ink); } .pro.quiet > .tile svg.i { width: 14px; height: 14px; }
+.pro.quiet b { color: var(--c-ink); font-weight: 600; }
+.pro.quiet .acts { margin: 0; }
+.menu { position: relative; } .menu > summary { list-style: none; } .menu > summary::-webkit-details-marker { display: none; }
+.menu > div { position: absolute; right: 0; top: 36px; z-index: 6; min-width: 190px; background: var(--raised); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; }
+.menu > div button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; font-size: 13.5px; }
+.menu > div button:hover { background: var(--sunken); }
+
+/* 3. Connected services: one green line when all is well, otherwise only what is wrong. */
+.status { border: 1px solid var(--c-line); background: var(--c-soft); border-radius: var(--r); padding: 9px 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.status .tile { border-radius: 50%; width: 22px; height: 22px; }
+.status b { color: var(--c-ink); font-weight: 600; }
+.status .r { margin-left: auto; font-size: 12.5px; color: var(--ink-3); display: flex; gap: 12px; align-items: center; }
+.status.neutral { border-color: var(--line); background: var(--surface); }
+.problems { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.problem { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 12px 14px; background: var(--c-soft); border-bottom: 1px solid var(--c-line); }
+.problem .w { color: var(--c-ink); font-weight: 600; }
+.problem .d { grid-column: 2; color: var(--ink-2); font-size: 13.5px; }
+.problem .btn { grid-column: 3; grid-row: 1 / span 2; }
+.problems .rest { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13px; color: var(--ink-2); }
+.problems .rest svg.i { color: var(--green); width: 15px; height: 15px; stroke-width: 2; }
+.problems .rest a { margin-left: auto; }
+
+/* 4. Inbox: every type has one hue, one icon and one word. */
+.ih { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; margin-top: 8px; }
+.ih h2 { font: 500 24px/1.2 var(--serif); letter-spacing: -.01em; }
+.ih .cnt { display: inline-flex; gap: 6px; align-items: center; font: 600 13px/1 var(--font); color: var(--attn-ink); }
+.ih .sp { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; }
+.seg button { border: 0; background: var(--surface); height: 28px; padding: 0 10px; font-size: 12.5px; font-weight: 500; color: var(--ink-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.chip { display: inline-flex; gap: 6px; align-items: center; height: 30px; padding: 0 11px 0 8px; border-radius: 15px; border: 1px solid var(--c-line); background: var(--c-soft); color: var(--c-ink); font: 600 12.5px/1 var(--font); cursor: pointer; white-space: nowrap; }
+.chip svg.i { width: 14px; height: 14px; stroke-width: 1.9; }
+.chip .n { font-weight: 500; opacity: .85; }
+.chip[aria-pressed="true"] { background: var(--c); border-color: var(--c); color: var(--on-c); }
+.chip.all { --c: var(--ink); --c-ink: var(--ink); --c-soft: var(--surface); --c-line: var(--line-strong); --on-c: var(--paper); padding-left: 11px; }
+.groups { display: flex; flex-direction: column; gap: 12px; }
+.tgroup { border: 1px solid var(--c-line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.tgroup > header { display: flex; gap: 9px; align-items: center; padding: 7px 12px 7px 10px; background: var(--c-soft); color: var(--c-ink); font: 600 13.5px/1.2 var(--font); border-bottom: 1px solid var(--c-line); }
+.tgroup > header .n { font-weight: 500; }
+.tgroup > header .hint { margin-left: auto; font-weight: 400; font-size: 12.5px; color: var(--ink-2); }
+.tgroup.flat { border-color: var(--line); }
+.tgroup .morebtn { display: flex; width: 100%; gap: 6px; align-items: center; justify-content: center; border: 0; border-top: 1px solid var(--line); background: var(--surface); color: var(--c-ink); font: 600 12.5px/1 var(--font); padding: 9px; cursor: pointer; }
+.tgroup .morebtn:hover { background: var(--c-soft); }
+.item.ti { border-left: 4px solid var(--c); }
+.item.ti[open] { box-shadow: none; }
+.item.ti > summary { padding: 9px 14px 9px 12px; }
+.item.ti > summary:hover { background: var(--c-soft); }
+.ti .k { display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--ink-3); min-width: 0; white-space: nowrap; }
+.ti .k svg.i { width: 14px; height: 14px; color: var(--c-ink); stroke-width: 1.9; }
+.ti .k b { color: var(--c-ink); font-weight: 600; }
+.ti .k span { overflow: hidden; text-overflow: ellipsis; }
+.ti .k span, .ti .m, .problem, .status, .pro .also { word-spacing: .12em; }
+.ti .t { margin-top: 1px; }
+.ti .late { color: var(--red-ink); font-weight: 600; }
+.ti .first { color: var(--ink-3); font: 400 15px/1.4 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item.ti[open] > summary .first { display: none; }
+.tails { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.tail { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); font-size: 13.5px; color: var(--ink-2); }
+.tail > summary { display: flex; gap: 10px; align-items: center; padding: 9px 14px; cursor: pointer; list-style: none; }
+.tail > summary::-webkit-details-marker { display: none; }
+.tail > summary .chev { margin-left: auto; width: 12px; height: 12px; color: var(--ink-3); } .tail[open] > summary .chev { transform: rotate(90deg); }
+.tail > summary svg.i:first-child { color: var(--c-ink, var(--ink-3)); }
+.tail .in { padding: 0 14px 10px; border-top: 1px solid var(--line); }
+.empty4 { text-align: center; padding: 40px 20px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); }
+.empty4 h3 { font: 400 24px/1.2 var(--serif); margin: 12px 0 4px; }
+
+/* Approvals */
+.appr { max-width: 880px; }
+.appr .groups { gap: 18px; }
+.backlink { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; margin-bottom: 10px; }
+.backlink svg.i { transform: rotate(180deg); width: 12px; height: 12px; }
+.tablink { margin-left: auto; align-self: center; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+
+/* Colours */
+.pals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pal { background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; }
+.pal h2 { margin-bottom: 10px; }
+.pal .sw { display: grid; grid-template-columns: 24px 132px minmax(0, 1fr); gap: 10px; align-items: center; padding: 5px 8px; border-radius: 8px; background: var(--surface); margin-bottom: 4px; border: 1px solid var(--line); }
+.pal .sw .chip { cursor: default; justify-self: start; }
+.pal .sw .hex { font: 11px/1.6 var(--mono); color: var(--ink-3); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; } .pal .sw .hex span { white-space: nowrap; }
+.pal .sw .hex i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; box-shadow: inset 0 0 0 1px var(--line); }
+.pal .neu { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.pal .neu span { display: inline-flex; gap: 6px; align-items: center; font: 11px/1 var(--mono); padding: 5px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); }
+.pal .neu i { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+.proto { flex-wrap: wrap; border-radius: 16px; max-width: calc(100vw - 28px); justify-content: flex-end; }
+.shot .proto { display: none; }
+
+@media (pointer: coarse) { .chip, .seg button { height: 44px; } .tail > summary, .tgroup .morebtn { min-height: 44px; } }
+@media (max-width: 760px) {
+  .today { padding: 16px 16px 130px; gap: 14px; }
+  .bsearch label { height: 52px; } .bsearch label kbd { display: none; } .bsearch input[type="search"] { font-size: 16px; }
+  .browse { display: none; }
+  .pro { grid-template-columns: minmax(0, 1fr); padding: 14px 14px 12px; } .pro > .tile { display: none; }
+  .pro h2 { font-size: 20px; }
+  .pro.quiet { grid-template-columns: minmax(0, 1fr); }
+  .status { flex-wrap: nowrap; align-items: flex-start; } .status .r { display: none; }
+  .problem { grid-template-columns: 24px minmax(0, 1fr); } .problems .rest a { display: none; } .problem .btn { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 6px; }
+  .seg button { height: 44px; padding: 0 12px; } .ih h2 { font-size: 22px; }
+  .item.ti > summary { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .tgroup > header .hint { display: none; } .pro .acts .btn { padding: 0 12px; }
+  .pals { grid-template-columns: minmax(0, 1fr); } .pal .sw { grid-template-columns: 24px minmax(0, 1fr); } .pal .sw .hex { grid-column: 1 / -1; }
+  .proto { left: 8px; justify-content: flex-start; }
+}
+
+/* ---- v5 -------------------------------------------------------------------- */
+/* The sidebar no longer repeats the search field. One small control beside the wordmark goes to search. */
+.brand .kfind { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 6px; border: 0; border-radius: var(--r-sm); background: none; color: var(--ink-3); cursor: pointer; }
+.brand .kfind:hover { background: var(--sunken); color: var(--ink); }
+.brand .kfind svg.i { width: 15px; height: 15px; } .brand .kfind kbd { white-space: nowrap; }
+@media (pointer: coarse) { .brand .kfind { height: 44px; } }
+
+a.btn:not(.primary) { color: var(--ink); } a.btn:hover { text-decoration: none; }
+/* Type chips: one row when they fit, and rows of even length when they do not. */
+.today, .page.appr { max-width: 932px; }
+.chips { display: block; text-wrap: balance; margin: -2.5px; }
+.chip { margin: 2.5px; vertical-align: top; padding: 0 10px 0 7px; gap: 5px; }
+.chip.all { padding-left: 10px; }
+.mix, .ctl { display: none; }
+
+/* The line that makes the numbers add up, and the tag on an item whose draft waits. */
+.arith { font-size: 13.5px; color: var(--ink-2); margin-top: -8px; }
+.arith .dot { margin: 0 6px 0 3px; vertical-align: 1px; } .arith > .dot:first-child { margin-left: 0; }
+.arith .sm { display: none; }
+.tag.held { background: var(--indigo-soft); color: var(--indigo-ink); box-shadow: inset 0 0 0 1px var(--indigo-line); }
+.tag.held svg.i { width: 12px; height: 12px; }
+.asof { font: 500 12.5px/1 var(--font); color: var(--ink-3); }
+
+/* Connected services, complete. A row is amber when the owner can fix it, red when nothing was read, slate when nothing is wrong yet. */
+.problem:last-child { border-bottom: 0; }
+.problem > svg.i { align-self: start; margin-top: 3px; justify-self: center; }
+.problem .btn { align-self: center; }
+.status .spin { margin: 0 7px; }
+.pmore > summary { display: flex; gap: 8px; align-items: center; padding: 8px 14px; cursor: pointer; list-style: none; font-size: 13px; font-weight: 500; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+.pmore > summary::-webkit-details-marker { display: none; }
+.pmore > summary svg.i { width: 12px; height: 12px; color: var(--ink-3); } .pmore[open] > summary svg.i { transform: rotate(90deg); }
+.status .sm { display: none; }
+
+/* A request that failed is never an empty list. */
+.rowerr { color: var(--red-ink); align-items: flex-start; } .rowerr svg.i { margin-top: 2px; } .rowerr span { color: var(--ink-2); } .rowerr b { color: var(--red-ink); }
+.rowerr .btn { align-self: center; }
+.tgroup.flat { border: 1px solid var(--line); }
+.tabs .c { display: inline-flex; gap: 5px; align-items: center; }
+.tgroup.flat > header { background: var(--sunken); color: var(--ink-2); border-bottom-color: var(--line); }
+.tgroup.flat > header .spin { margin: 0 8px 0 6px; }
+.item.ti.plain { --c: var(--line-strong); --c-ink: var(--ink-2); --c-soft: var(--sunken); }
+.empty4 .also { margin-top: 10px; display: inline-flex; gap: 8px; align-items: center; color: var(--ink-2); }
+.empty4.small { padding: 26px 20px; }
+
+/* For you now: the long reason on a desktop, the leaving time alone on a narrow screen. */
+.pro .why .ws, .pro .readbtn { display: none; }
+.tail.hid-n { display: none; }
+.tail .tl { display: flex; gap: 10px; align-items: center; padding: 9px 14px; color: var(--ink-2); }
+
+/* Colour vision: the Colours page can show every screen as it is seen without one cone type. */
+body[data-cvd="protan"] .main { filter: url(#cvd-protan); }
+body[data-cvd="deutan"] .main { filter: url(#cvd-deutan); }
+body[data-cvd="tritan"] .main { filter: url(#cvd-tritan); }
+body[data-cvd="grey"] .main { filter: grayscale(1); }
+.cvd { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; font-size: 13px; color: var(--ink-2); }
+.pal .rowdemo { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.pal .rowdemo .item.ti > summary { cursor: default; padding: 6px 12px; }
+
+.proto select { width: auto; border: 0; border-radius: 999px; padding: 4px 8px; font-size: 12px; background: var(--paper); color: var(--ink); max-width: 190px; }
+
+@media (max-width: 760px) {
+  .pro .eye .ago { display: none; }
+  .pro .readbtn { display: inline-flex; }
+  .pro.brief:not(.open) :is(.lines, .plus, .wide) { display: none; }
+  .pro.brief:not(.open) .acts { margin-top: 10px; }
+  .pro .why .wl { display: none; } .pro .why .ws { display: inline; }
+  .pro .why { margin-top: 8px; } .pro.prep .acts .btn { padding: 0 10px; }
+  .status .lg { display: none; } .status .sm { display: inline; }
+  .problem > svg.i { margin-top: 2px; }
+  /* The work mix stays visible: a summary of the types that have items, then one row of two native pickers. */
+  .chips { display: none; }
+  .mix { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+  .mix li { display: inline-flex; gap: 5px; align-items: center; color: var(--c-ink); font-weight: 600; white-space: nowrap; }
+  .mix li svg.i { width: 14px; height: 14px; stroke-width: 1.9; }
+  .mix li b { font-weight: 500; color: var(--ink-2); }
+  .ih .seg, .ih .hid { display: none; }
+  .ctl { display: flex; gap: 8px; } .ctl select { height: 44px; } .ctl .chips-pick { flex: 1; min-width: 0; } .ctl .ord { width: auto; flex: none; }
+  .arith { margin-top: -6px; font-size: 13px; } .arith .lg { display: none; } .arith .sm { display: inline; }
+  .tail.hid-n { display: block; } .tail.hid-n .tl { min-height: 44px; }
+  /* Two title lines before the ellipsis; the opened row shows the whole title. */
+  .ti .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .item.ti[open] > summary .t { display: block; }
+  .rowerr { flex-wrap: wrap; } .rowerr .btn { margin-left: 26px; }
+  .cvd .seg { flex-wrap: wrap; }
+}
+
+/* ---- v6: direction ------------------------------------------------------------ */
+/* Neutral zinc surfaces, one sans, hairlines, 8 px controls and 12 px cards, flat until something floats.
+   Colour is left to the things that mean something: the type hues, the proactive area, status, the dot. */
+body { font: 14px/1.5 var(--font); font-feature-settings: "cv11", "ss03"; letter-spacing: -.003em; }
+h1 { font: 600 22px/1.25 var(--font); letter-spacing: -.02em; }
+h2 { font: 600 14.5px/1.3 var(--font); letter-spacing: -.005em; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.eyebrow { font: 500 12px/1.3 var(--font); letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+kbd { font: 500 10.5px/1 var(--mono); padding: 3px 5px; border: 0; border-radius: 5px; background: var(--sunken); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+svg.i { stroke-width: 1.7; }
+
+.btn { height: 32px; padding: 0 12px; border-radius: 8px; border-color: var(--line-btn); background: var(--surface); font-size: 13px; box-shadow: 0 1px 1px rgba(0, 0, 0, .03); }
+.btn:hover { background: var(--sunken); }
+.btn.primary { background: var(--accent-solid); color: var(--on-accent); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 1px 2px rgba(0, 0, 0, .12); }
+.btn.ghost { box-shadow: none; }
+.btn.sm { height: 28px; border-radius: 7px; }
+.tag { border-radius: 6px; font-size: 11.5px; }
+.card, .queue, .list, .brain-grid, .coverage { border-radius: var(--r); }
+input[type="text"], input[type="search"], textarea, select { border-radius: 8px; }
+input[type="text"]:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Sidebar: quiet rows, a filled selection, no boxes. */
+.side { background: var(--side); gap: 14px; padding: 14px 10px 10px; }
+.brand { font: 600 15px/1 var(--font); letter-spacing: -.01em; padding: 2px 8px; gap: 9px; }
+.brand svg.logo, .brand .logo svg { width: 22px; height: 22px; }
+.nav { gap: 1px; }
+.nav a { height: 32px; padding: 0 9px; border-radius: 8px; font-size: 13.5px; color: var(--ink-2); gap: 9px; }
+.nav a svg.i { color: var(--ink-3); }
+.nav a:hover { background: var(--row-hover); }
+.nav a[aria-current="page"] { background: var(--row-on); color: var(--ink); box-shadow: none; }
+.nav a[aria-current="page"] svg.i { color: var(--ink); }
+.nav .sep { margin: 8px 9px; }
+.pulse { border-radius: var(--r); background: transparent; border-color: var(--line); padding: 9px 11px; font-size: 12.5px; }
+.pulse:hover { background: var(--row-hover); }
+.main { background: var(--paper); }
+.tabs button[aria-selected="true"] { border-bottom-color: var(--ink); }
+.set-nav a.on, .facets button[aria-selected="true"] { background: var(--row-on); box-shadow: none; }
+.facets { background: var(--side); }
+.group { background: var(--side); }
+
+/* What floats is glass: results, the palette, menus, the More sheet. */
+.bres, .palette, .menu > div, .sheet { background: color-mix(in srgb, var(--raised) 86%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.15); backdrop-filter: blur(14px) saturate(1.15); border-color: var(--line); }
+.scrim { background: rgba(0, 0, 0, .36); }
+[data-theme="dark"] .scrim { background: rgba(0, 0, 0, .6); }
+.palette li.on, .bres li.on { background: var(--row-on); }
+.palette li, .bres li { border-radius: 8px; margin: 0 6px; padding: 7px 10px; }
+
+/* 1. Search: built like a composer. Neutral, large, and the one thing with a lifted shadow. */
+.bsearch label { height: 56px; padding: 0 16px 0 18px; border-radius: 16px; border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 10px 28px -14px rgba(0, 0, 0, .18); transition: border-color .12s, box-shadow .12s; }
+.bsearch label:focus-within { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 10px 28px -14px rgba(0, 0, 0, .18); }
+.bsearch label > svg.i { color: var(--ink-3); width: 18px; height: 18px; stroke-width: 1.8; }
+.bsearch input[type="search"] { font-size: 16px; box-shadow: none; }
+.bres { top: 64px; border-radius: 14px; padding-bottom: 0; }
+.browse { gap: 6px; align-items: center; margin: 10px 2px 0; font-size: 12.5px; }
+.browse a { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--sunken); color: var(--ink-2); font-weight: 500; }
+.browse a:hover { background: var(--row-on); color: var(--ink); text-decoration: none; }
+.browse > :first-child { margin-right: 4px; }
+
+/* 2. For you now */
+.pro { border-radius: 16px; padding: 18px 20px 16px; }
+.pro > .tile { border-radius: 10px; }
+.pro .eye { font: 600 12.5px/1.4 var(--font); letter-spacing: 0; text-transform: none; }
+.pro .eye span { letter-spacing: 0; font-weight: 400; }
+.pro h2 { font: 600 19px/1.3 var(--font); letter-spacing: -.015em; margin: 3px 0 8px; }
+.pro .lines { font: 400 15px/1.55 var(--font); gap: 3px; }
+.pro .lines li::before { top: .78em; }
+.notechip { border-radius: 8px; }
+
+/* 3. Connected services */
+.status, .problems, .tail, .tgroup { border-radius: var(--r); }
+.status { padding: 10px 14px; }
+
+/* 4. Inbox */
+.ih h2 { font: 600 18px/1.2 var(--font); letter-spacing: -.015em; }
+.seg { border: 0; background: var(--sunken); padding: 2px; border-radius: 9px; gap: 2px; box-shadow: inset 0 0 0 1px var(--line); }
+.seg button { background: transparent; border-radius: 7px; height: 26px; color: var(--ink-3); }
+.seg button + button { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px var(--line); }
+.chip { height: 28px; }
+.chip.all[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.tgroup > header { font: 600 13px/1.2 var(--font); padding: 7px 12px 7px 9px; }
+.tile { border-radius: 7px; }
+.item.ti { border-left-width: 3px; }
+.item .t { font-weight: 550; letter-spacing: -.005em; }
+.ti .first { font: 400 13.5px/1.45 var(--font); }
+.item[open] { box-shadow: none; }
+.item > summary:hover { background: var(--row-hover); }
+.empty4 h3, .clear h2 { font: 600 19px/1.25 var(--font); letter-spacing: -.015em; }
+.empty4, .clear { border-color: var(--line-btn); border-radius: 16px; }
+
+/* Reading text and the rest of the app */
+.fact .v { font: 400 15px/1.5 var(--font); }
+.reader h1 { font-size: 26px; }
+.letter textarea { font: 400 15px/1.6 var(--font); background: var(--surface); border-color: var(--line-btn); }
+.quote blockquote, .diff blockquote { font: 400 15px/1.55 var(--font); }
+.diff dt { font: 500 12px/1.9 var(--font); letter-spacing: 0; text-transform: none; }
+.diff ins { background: var(--green-soft); color: var(--green-ink); }
+.setup aside { background: var(--side); } .setup aside h1 { font-size: 26px; }
+.notes li[aria-selected="true"], .list li[aria-selected="true"] { background: var(--row-on); box-shadow: inset 2px 0 0 var(--accent); }
+.jobrow.sel { background: var(--row-on); }
+.mono-badge { border-radius: 8px; }
+.switch[aria-checked="true"] { background: var(--accent-solid); }
+.tabbar { background: color-mix(in srgb, var(--surface) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.tabbar a[aria-current="page"] { color: var(--ink); }
+.proto { background: #18181b; color: #fafafa; border: 1px solid rgba(255, 255, 255, .12); }
+.proto button.on { background: #fafafa; color: #18181b; }
+.proto select { background: #fafafa; color: #18181b; }
+.pal { border-radius: 16px; }
+@media (max-width: 760px) {
+  .pro .lines, .fact .v, .letter textarea, .quote blockquote, .diff blockquote { font-size: 16px; }
+  .pro h2 { font-size: 18px; } .ih h2 { font-size: 18px; }
+  .seg button { height: 40px; }
+}
+@media (pointer: coarse) { .seg button { height: 40px; } .browse a { height: 44px; padding: 0 14px; } .nav a { height: 44px; } }
+.ti .k span, .ti .m, .problem, .status, .pro .also, .pro .eye span { word-spacing: normal; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-solid); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-inbox" viewBox="0 0 16 16"><path d="M2 9.5 3.6 3.6A1 1 0 0 1 4.6 3h6.8a1 1 0 0 1 1 .6L14 9.5v2.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M2 9.5h3.2l.8 1.5h4l.8-1.5H14"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 16 16"><path d="M3 2.5h7.5a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2z"/><path d="M3 11.5a2 2 0 0 1 2-2h7.5M6 5.5h3.5"/></symbol>
+  <symbol id="i-draft" viewBox="0 0 16 16"><path d="m2.5 13.5.6-3 7.6-7.6a1.4 1.4 0 0 1 2 0l.4.4a1.4 1.4 0 0 1 0 2L5.5 12.9z"/><path d="m9.5 4 2.5 2.5"/></symbol>
+  <symbol id="i-jobs" viewBox="0 0 16 16"><path d="M1.5 8h3l2-5 3 10 2-5h3"/></symbol>
+  <symbol id="i-conn" viewBox="0 0 16 16"><path d="M6 2v3M10 2v3M4 5h8v2.5a4 4 0 0 1-8 0zM8 11.5V14"/></symbol>
+  <symbol id="i-set" viewBox="0 0 16 16"><path d="M2 4.5h5M11 4.5h3M2 11.5h3M9 11.5h5"/><circle cx="9" cy="4.5" r="1.8"/><circle cx="7" cy="11.5" r="1.8"/></symbol>
+  <symbol id="i-find" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3.2L13 4.8"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></symbol>
+  <symbol id="i-today" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1"/></symbol>
+  <symbol id="i-appr" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="m5.3 8.2 1.9 1.9 3.5-3.9"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 16 16"><path d="M4 14V2.5M4 3h7.5L10 5.5 11.5 8H4"/></symbol>
+  <symbol id="i-pr" viewBox="0 0 16 16"><circle cx="4.5" cy="4" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/><circle cx="11.5" cy="12" r="1.5"/><path d="M4.5 5.5v5M11.5 10.5V7a2 2 0 0 0-2-2H8M9.5 3.5 8 5l1.5 1.5"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 16 16"><path d="M6.5 4 3 7.5 6.5 11M3 7.5h6a4 4 0 0 1 4 4v.5"/></symbol>
+  <symbol id="i-at" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M10.5 5.5v3.2a1.6 1.6 0 0 0 3.2 0V8a5.7 5.7 0 1 0-2.3 4.6"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 16 16"><path d="M2.5 5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1.5a1.5 1.5 0 0 0 0 3V11a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V9.5a1.5 1.5 0 0 0 0-3zM9.5 4v8"/></symbol>
+  <symbol id="i-fact" viewBox="0 0 16 16"><path d="M3 2.5h7.5a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2z"/><path d="m5.8 7.4 1.5 1.5 2.6-3"/></symbol>
+  <symbol id="i-sys" viewBox="0 0 16 16"><path d="M13 8a5 5 0 0 1-8.5 3.5M3 8a5 5 0 0 1 8.5-3.5M11.5 2v2.5H9M4.5 14v-2.5H7"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2c.4 3 1.6 5.6 6 6-4.4.4-5.6 3-6 6-.4-3-1.6-5.6-6-6 4.4-.4 5.6-3 6-6z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.5" cy="10.5" r="2.5"/><path d="M7.3 8.7 13 3M10.5 5.5l2 2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.5 14 13H2zM8 6.5v3M8 11.3v.2"/></symbol>
+  <filter id="cvd-protan" color-interpolation-filters="linearRGB"><feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0"/></filter>
+  <filter id="cvd-deutan" color-interpolation-filters="linearRGB"><feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0"/></filter>
+  <filter id="cvd-tritan" color-interpolation-filters="linearRGB"><feColorMatrix type="matrix" values="1.255528 -0.076749 -0.178779 0 0  -0.078411 0.930809 0.147602 0 0  0.004733 0.691367 0.303900 0 0  0 0 0 1 0"/></filter>
+</svg>
+
+<div class="shell" id="app">
+  <aside class="side">
+    <div class="brand">
+      <span data-logo="30"></span> Attache
+      <button class="kfind" data-open-palette aria-label="Search the Brain" title="Search the Brain"><svg class="i"><use href="#i-find"/></svg><kbd>Ctrl K</kbd></button>
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a data-go="inbox" aria-current="page"><svg class="i"><use href="#i-today"/></svg>Today<span class="n" id="n-today"></span></a>
+      <a data-go="approvals"><svg class="i"><use href="#i-appr"/></svg>Approvals<span class="n" id="n-appr"></span></a>
+      <a data-go="brain"><svg class="i"><use href="#i-brain"/></svg>Brain</a>
+      <div class="sep"></div>
+      <a data-go="jobs"><svg class="i"><use href="#i-jobs"/></svg>Jobs<span class="n" style="color:var(--ink-3)"><i class="spin"></i></span></a>
+      <a data-go="connections"><svg class="i"><use href="#i-conn"/></svg>Connections<span class="n" id="n-conn"></span></a>
+      <a data-go="settings"><svg class="i"><use href="#i-set"/></svg>Settings</a>
+    </nav>
+    <button class="pulse" data-go="settings" data-sec-go="machines" title="Open Machines and Replication in Settings">
+      <span id="foot-who"></span>
+      <span class="muted" id="foot-state"></span>
+      <span class="muted" id="foot-time"></span>
+    </button>
+  </aside>
+
+  <main class="main">
+
+    <!-- ================= TODAY (the first screen) ================= -->
+    <div class="screen on" id="s-inbox"><div class="today" id="today"></div></div>
+
+    <!-- ================= APPROVALS ================= -->
+    <div class="screen" id="s-approvals"><div class="page appr" id="approvals"></div></div>
+
+    <!-- ================= COLOUR ================= -->
+    <div class="screen" id="s-colours"><div class="page" id="colours"></div></div>
+
+    <!-- ================= BRAIN ================= -->
+    <div class="screen" id="s-brain"><div class="page">
+      <div class="page-head"><h1>Brain</h1><p>Read-only here. Every change goes through a Harness or your own edits to the Markdown files.</p><button class="btn sm ghost" title="Rebuild index, open folder"><svg class="i"><use href="#i-more"/></svg></button></div>
+      <label class="bigfind"><svg class="i"><use href="#i-find"/></svg><span class="sr-only">Search memory</span><input type="search" placeholder="Search memory, evidence and imported notes"><kbd>/</kbd></label>
+      <p class="small muted" style="margin-bottom:18px">Matching keywords only: the meaning model is not downloaded. <a href="#" data-go="settings">Download it in Settings</a></p>
+      <div class="tabs" role="tablist"><button role="tab" aria-selected="true">Library</button><button role="tab" aria-selected="false">Recent saves</button><a class="tablink" href="#" data-go="approvals"><i class="dot"></i> 2 Proposals wait in Approvals</a></div>
+      <div class="brain-grid">
+        <div class="facets" role="tablist" aria-label="Collections" aria-orientation="vertical">
+          <div class="eyebrow">Memory</div>
+          <button role="tab" aria-selected="true">People</button>
+          <button role="tab" aria-selected="false">Projects</button>
+          <button role="tab" aria-selected="false">Decisions</button>
+          <button role="tab" aria-selected="false">Notes</button>
+          <div class="eyebrow">Also searched</div>
+          <button role="tab" aria-selected="false">Imported</button>
+          <button role="tab" aria-selected="false">Evidence</button>
+          <button role="tab" aria-selected="false">Deliverables</button>
+        </div>
+        <ul class="notes" aria-label="People">
+          <li aria-selected="true"><div class="t">Priya Shah <i class="dot" title="1 Proposal waiting"></i></div><div class="s">Director of platform engineering · updated today</div></li>
+          <li><div class="t">Lena Berg <span class="tag attn">proposed</span></div><div class="s">Not in the Brain yet · Proposal waiting</div></li>
+          <li><div class="t">Mia Okafor</div><div class="s">Staff engineer, checkout · updated 3 days ago</div></li>
+          <li><div class="t">Bob Lindqvist</div><div class="s">Backend engineer, search · updated 12 Nov</div></li>
+          <li><div class="t">Anders Holm</div><div class="s">Finance controller · updated 2 Nov</div></li>
+          <li><div class="t">Sara Winther</div><div class="s">Product lead, billing · updated 28 Oct</div></li>
+          <li><div class="t">Tomas Reyes</div><div class="s">SRE on call lead · updated 19 Oct</div></li>
+        </ul>
+        <article class="reader">
+          <div class="eyebrow">Person</div>
+          <h1>Priya Shah</h1>
+          <div class="path"><span class="mono">memory/people/priya-shah.md</span><span>· updated 31 min ago</span><a href="#">Show the Markdown file</a></div>
+          <div class="waiting"><i class="dot"></i>1 Proposal waits for this note: correct "Prefers".<a href="#" data-go="approvals">Review in Approvals</a></div>
+          <h2>Current state</h2>
+          <dl class="facts">
+            <div class="fact"><dt>Role</dt><dd class="v">Director of platform engineering, owning billing, ledger and the payments roadmap through 2027</dd><time>17 Nov 2026</time><div class="prov"><details class="srcd"><summary class="tag line" title="Show the full source">Codex session</summary><div class="mono">Source: Codex session in billing-platform (agent-session: codex/91ab77c2, observed 2026-11-17)</div></details><span>review after 15 Feb 2027</span></div></div>
+            <div class="fact"><dt>Prefers</dt><dd class="v">A short call on Fridays</dd><time>10 Jan 2026</time><div class="prov"><span class="tag attn">unverified</span><span>review was due 1 Feb 2026</span><details class="srcd"><summary class="tag line" title="Show the full source">Claude Code session</summary><div class="mono">Source: Claude Code session in attache (agent-session: claude-code/2c40d1aa, observed 2026-01-10)</div></details></div></div>
+            <div class="fact"><dt>Office</dt><dd class="v">Aarhus, from the first of next month while the Copenhagen floor is rebuilt</dd><time>17 Nov 2026</time><div class="prov"><details class="srcd" open><summary class="tag line" title="Show the full source">Claude Code session</summary><div class="mono">Source: Claude Code session in af0b809d-002071834c0a03e1 (agent-session: claude-code/6f1c2b0e-visual, observed 2026-11-17)</div></details><span>auto-accepted</span><a href="#">Revert</a></div></div>
+          </dl>
+          <h2 style="margin-bottom:2px">History <span class="small muted" style="font-weight:400">as stored in the note</span></h2>
+          <ul class="history">
+            <li>2026-11-17: <b>Office</b> was "Copenhagen" (since 2025-03-02). Superseded: moving with the billing team while the Copenhagen floor is rebuilt.</li>
+            <li>2026-11-17: Agreed to own the ledger migration.</li>
+            <li>2026-11-17: <b>Prefers</b> was "Written updates on Fridays" (since 2025-09-14). Superseded: changed again.</li>
+            <li>2026-11-17: <b>Role</b> was "Engineering manager for billing" (since 2024-08-01). Superseded: promotion.</li>
+          </ul>
+          <details style="margin-top:18px"><summary style="cursor:pointer;font-weight:600">Change log <span class="small muted" style="font-weight:400">4 changes</span></summary>
+            <ol class="timeline" style="margin-top:6px">
+              <li><time>31 min ago</time><span>correction "Office" by Claude Code, was "Copenhagen" (moving with the billing team) · auto-accepted</span></li>
+              <li><time>40 min ago</time><span>event by Claude Code · auto-accepted</span></li>
+              <li><time>2 h ago</time><span>correction "Role" by Codex, was "Engineering manager for billing" (promotion) · confirmed by you</span></li>
+              <li><time>10 Jan</time><span>fact "Prefers" by Claude Code · confirmed by you</span></li>
+            </ol>
+          </details>
+        </article>
+      </div>
+    </div></div>
+
+    <!-- ================= DRAFTS ================= -->
+    <div class="screen" id="s-drafts"><div class="page">
+      <a class="backlink" href="#" data-go="approvals"><svg class="i"><use href="#i-chev"/></svg>Approvals</a>
+      <div class="page-head"><h1>Draft</h1><p>Nothing is sent until you approve a specific version. Editing cancels an earlier approval.</p></div>
+      <div class="split" style="display:block">
+        <div>
+          <div class="dproto"><label for="dstate">Prototype: show this draft as</label><select id="dstate"></select><span>Nine stored statuses and five states the Dashboard derives.</span></div>
+          <h2 style="font:600 20px/1.3 var(--font);letter-spacing:-.015em">Review acme/web#42: Add checkout retry</h2>
+          <div class="to small muted" style="margin-top:6px"><span class="tag">GitHub comment</span> to <a href="#">github.com/acme/web/pull/42 <svg class="i" style="width:12px;height:12px;vertical-align:-1px"><use href="#i-out"/></svg></a> · <b id="dver" style="color:var(--ink)">v1 · draft</b></div>
+          <div class="steps" id="dsteps" aria-label="Where this draft is">
+            <b class="now"><i>1</i><span>Draft v1</span></b><hr><b><i>2</i><span>Approved for 15 min</span></b><hr><b><i>3</i><span>Sent, with receipt</span></b>
+            <span style="flex:1"></span><span id="dexp">Expires Thu 19 Nov, 16:21</span>
+          </div>
+          <div class="draft-grid">
+            <div>
+              <div class="card letter">
+                <div class="quote"><div class="eyebrow">What this answers · mia on acme/web#42, 1 day ago</div><blockquote>"Retries failed payments once, with backoff. Could you look at the migration order before I merge?"</blockquote><div class="acts small"><details><summary>1 changed file</summary><span class="mono">src/checkout/retry.ts +48 -3</span></details><a href="#">Evidence: GitHub snapshot, 17 Nov</a></div></div>
+                <label class="eyebrow" for="dtext">Comment text</label>
+                <textarea id="dtext">Thanks for the update. I reviewed the changes and have one question about the migration order.</textarea>
+                <div id="dnote" role="status"></div>
+                <div class="acts" id="dacts"></div>
+                <div class="dstatus" id="dstatus"></div>
+              </div>
+            </div>
+            <aside>
+              <div class="aside-block"><h3>Details</h3><dl class="kv"><dt>Version</dt><dd><span id="dver2">v1</span> · <span class="mono">0634b98ff047</span></dd><dt>Prepared by</dt><dd>fixture-model</dd><dt>Expires</dt><dd>Thu 19 Nov, 16:21</dd></dl></div>
+              <div class="aside-block" style="border:0"><h3>History</h3><ol class="timeline" id="dhist"><li style="grid-template-columns:64px 1fr"><time>12 min</time><span>Created by Attache</span></li></ol></div>
+              <p class="small muted">After Approve, Send or Reject this screen stays on this draft. It never opens the next one by itself.</p>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div></div>
+
+    <!-- ================= JOBS ================= -->
+    <div class="screen" id="s-jobs"><div class="page">
+      <div class="page-head"><h1>Jobs</h1><p>Background work runs in the Attache service. Close this tab and it keeps going.</p><button class="btn sm ghost">Diagnostics</button></div>
+      <div class="card" style="padding:12px;display:flex;gap:8px;margin-bottom:20px"><input type="text" aria-label="Research question" placeholder="Research a question across your notes, e.g. What is still open on Orion?"><button class="btn primary">Research</button></div>
+      <div class="split" style="grid-template-columns:minmax(0,1fr) 340px">
+        <div>
+          <div class="eyebrow" style="margin-bottom:8px">Running</div>
+          <div class="list" style="margin-bottom:20px">
+            <div class="jobrow sel"><i class="spin"></i><span class="t">Research: What is still open on Orion?</span><span class="bar"><span style="width:62%"></span></span><span class="muted small what">Reading 14 notes</span></div>
+          </div>
+          <div class="eyebrow" style="margin-bottom:8px">Earlier today</div>
+          <div class="list">
+            <div class="jobrow"><i></i><span class="t">Source refresh: Slack</span><span class="tag attn what">blocked: sign-in needed</span><span class="muted small">4 min ago</span></div>
+            <div class="jobrow"><i></i><span class="t">Consolidate meeting capture 2026-11-17-granola-ledger-sync</span><span class="muted small what">1 change written</span><span class="muted small">9 min ago</span></div>
+            <div class="jobrow"><i></i><span class="t">Prepare draft: Review acme/web#42</span><span class="muted small what">Draft v1</span><span class="muted small">12 min ago</span></div>
+            <div class="jobrow"><i></i><span class="t">Briefing</span><span class="muted small what">Daily</span><span class="muted small">08:00</span></div>
+            <div class="jobrow"><i></i><span class="t">Source refresh: all sources</span><span class="muted small what">4 complete, 1 partial</span><span class="muted small">08:00</span></div>
+            <div class="jobrow"><i style="color:var(--danger);font-style:normal;font-weight:700" aria-label="failed">!</i><span class="t">Research: vendor contract renewal dates</span><span class="tag danger what">failed: model timed out</span><span class="muted small">Yesterday</span></div>
+          </div>
+        </div>
+        <aside class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="eyebrow">Research · running 40 s</div>
+          <h2>What is still open on Orion?</h2>
+          <div class="bar" role="progressbar" aria-valuenow="62"><span style="width:62%"></span></div>
+          <ol class="timeline"><li style="grid-template-columns:52px 1fr"><time>16:21</time><span>Queued</span></li><li style="grid-template-columns:52px 1fr"><time>16:21</time><span>Searching the Brain: 14 passages</span></li><li style="grid-template-columns:52px 1fr"><time>16:22</time><span>Reading 14 notes</span></li></ol>
+          <div class="acts"><button class="btn sm">Cancel</button></div>
+        </aside>
+      </div>
+    </div></div>
+
+    <!-- ================= CONNECTIONS ================= -->
+    <div class="screen" id="s-connections"><div class="page" style="max-width:980px">
+      <div class="page-head"><h1>Connections</h1><p>What Attache may read and write, and how complete each Source refresh was.</p><button class="btn sm">Refresh all now</button></div>
+
+      <div class="sect when-auth"><h2><i class="dot"></i> Needs you</h2>
+        <div class="card"><details class="conn" open>
+          <summary><span class="mono-badge">Sl</span><div><div class="t">Slack</div><div class="s">claude.ai connector</div></div><div class="s acc">Read: mentions, direct messages</div><span class="tag attn">sign-in needed</span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+          <div class="body"><div class="notice" role="status"><b>Sign-in needed</b>The Slack connector in claude.ai rejected the request. Reconnect it in claude.ai → Settings → Connectors, then press Reconnect.<div class="acts"><button class="btn sm primary">Reconnect</button><a class="btn sm" href="#">Open claude.ai connectors <svg class="i"><use href="#i-out"/></svg></a></div></div><p class="small muted">Last successful Source refresh: yesterday 17:30. Slack replies and mentions may be missing from the Inbox until this is fixed.</p></div>
+        </details></div>
+      </div>
+
+      <div class="sect"><h2>Notes</h2>
+        <div class="card">
+          <details class="conn"><summary><span class="mono-badge">At</span><div><div class="t">Attache data folder</div><div class="s mono">~/Documents/Attache</div></div><div class="s acc">Read and write · tasks and notes with due dates</div><span class="s">4 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+          <details class="conn"><summary><span class="mono-badge">va</span><div><div class="t">vault</div><div class="s mono">~/Obsidian/vault</div></div><div class="s acc">Read only · 212 Markdown files</div><span class="s">4 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+        </div>
+      </div>
+
+      <div class="sect"><h2>Work sources</h2>
+        <div class="card">
+          <details class="conn" open>
+            <summary><span class="mono-badge">GH</span><div><div class="t">GitHub</div><div class="s">emilc · API token</div></div><div class="s acc">Read: review requests, mentions · Write: comments</div><span class="s">4 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+            <div class="body">
+              <dl class="kv"><dt>Last Source refresh</dt><dd>Complete · 2 items, 1 page · 4 min ago</dd><dt>Reading</dt><dd>Review requests, mentions, assigned issues <a href="#">Change what Attache reads</a></dd><dt>Writing</dt><dd>Comments, only after you approve a draft <a href="#">Change</a></dd></dl>
+              <div class="acts"><button class="btn sm">Test</button><button class="btn sm">Refresh now</button><button class="btn sm ghost">Reconfigure</button><span style="flex:1"></span><button class="btn sm ghost danger">Disconnect…</button></div>
+            </div>
+          </details>
+          <details class="conn"><summary><span class="mono-badge">Gm</span><div><div class="t">Gmail</div><div class="s">claude.ai connector</div></div><div class="s acc">Read only: threads waiting for your reply</div><span class="s">partial · 4 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+          <details class="conn"><summary><span class="mono-badge">Ca</span><div><div class="t">Google Calendar</div><div class="s">claude.ai connector</div></div><div class="s acc">Read only: today's and tomorrow's meetings</div><span class="s">4 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+        </div>
+        <div class="addgrid" style="margin-top:10px"><button><span class="mono-badge">Ji</span><span><b>Jira</b><br><span class="small muted">Not connected</span></span></button><button><span class="mono-badge">Co</span><span><b>Confluence</b><br><span class="small muted">Not connected</span></span></button></div>
+      </div>
+
+      <div class="sect"><h2>Harnesses <span>where you ask the Brain and add to it</span></h2>
+        <div class="card">
+          <details class="conn"><summary><span class="mono-badge">CC</span><div><div class="t">Claude Code</div><div class="s">MCP server and hooks</div></div><div class="s acc">Searches and saves · auto-accept on</div><span class="s">session 31 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+          <details class="conn"><summary><span class="mono-badge">Cx</span><div><div class="t">Codex</div><div class="s">MCP server and hooks</div></div><div class="s acc">Searches and saves · asks before every save</div><span class="s">session 2 h ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details>
+        </div>
+        <div class="addgrid" style="margin-top:10px"><button><span class="mono-badge">CD</span><span><b>Claude Desktop</b><br><span class="small muted">Not connected</span></span></button><button><span class="mono-badge">Ag</span><span><b>Antigravity</b><br><span class="small muted">Not connected</span></span></button></div>
+      </div>
+
+      <div class="sect"><h2>Model</h2>
+        <div class="card"><details class="conn"><summary><span class="mono-badge">M</span><div><div class="t">Claude Code on this computer</div><div class="s">Uses your Claude sign-in</div></div><div class="s acc">Briefings, drafts, Consolidation</div><span class="s">used 9 min ago</span><svg class="i chev"><use href="#i-chev"/></svg></summary><div class="body"></div></details></div>
+      </div>
+    </div></div>
+
+    <!-- ================= SETTINGS ================= -->
+    <div class="screen" id="s-settings"><div class="page">
+      <div class="page-head"><h1>Settings</h1><p>Every choice from setup can be changed here.</p></div>
+      <div class="set-grid">
+        <nav class="set-nav" aria-label="Settings sections">
+          <div class="eyebrow">Attache</div>
+          <a data-sec="features">Features</a><a data-sec="schedules">Schedules and notifications</a><a data-sec="identity">Identity</a>
+          <div class="eyebrow">Brain</div>
+          <a data-sec="saving">Saving and review</a><a data-sec="meaning">Meaning-based search</a><a data-sec="backup">Backup and export</a>
+          <div class="eyebrow">Machines</div>
+          <a data-sec="machines" class="on">Machines and Replication</a><a data-sec="clients">Paired clients</a>
+          <div class="eyebrow">Service</div>
+          <a data-sec="health">Service health</a>
+        </nav>
+        <div>
+          <div class="pane on" data-pane="machines">
+            <div class="sect"><h2>This Machine</h2>
+              <label class="field" style="max-width:360px">Name, as other Machines see it<div style="display:flex;gap:8px"><input type="text" value="emil-pc"><button class="btn">Save</button></div></label>
+            </div>
+            <div class="sect"><h2>Replication <span>up to date · checked 40 s ago · sent 31 min ago</span></h2>
+              <p class="small muted" style="margin-bottom:8px">Keeps every Machine's copy of the Brain the same. A Brain on one Machine does not need it.</p>
+              <div class="card">
+                <div class="machine"><i></i><div><b>emil-pc</b> <span class="tag">this Machine</span> <span class="tag line">Reader</span><div class="small muted">Changed the Brain 31 min ago</div></div><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox"> Standby</label><label class="small" style="display:flex;gap:6px;align-items:center"><input type="radio" name="pr"> Preferred Reader</label></div>
+                <div class="machine"><i></i><div><b>Work Mac</b> <span class="tag line">silent 2 h</span><div class="small muted">Changed the Brain yesterday 17:42</div></div><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" checked> Standby</label><label class="small" style="display:flex;gap:6px;align-items:center"><input type="radio" name="pr" checked> Preferred Reader</label></div>
+              </div>
+              <div class="acts" style="margin-top:10px"><span class="mono muted">emilc/attache-brain · private</span><span style="flex:1"></span><button class="btn sm">Check now</button><button class="btn sm ghost">Join another Machine</button><button class="btn sm ghost danger">Switch off…</button></div>
+              <p class="small muted" style="margin-top:12px">Replication is not in the sidebar. When it is blocked or unauthorized, Attache raises an Inbox item, and this section and the Settings entry get the dot.</p>
+            </div>
+          </div>
+          <div class="pane" data-pane="saving">
+            <div class="sect"><h2>Auto-accept <span>this Machine only</span></h2>
+              <p class="small muted" style="margin-bottom:8px">With it on, a save from that Harness is written without asking and listed under Recently added, where a change that can still be reverted has a Revert button.</p>
+              <div class="card">
+                <div class="opt"><div class="t">Claude Code</div><button class="switch" role="switch" aria-checked="true" aria-label="Auto-accept saves from Claude Code"></button><p>Saves without asking.</p></div>
+                <div class="opt"><div class="t">Codex</div><button class="switch" role="switch" aria-checked="false" aria-label="Auto-accept saves from Codex"></button><p>Asks you to confirm every save.</p></div>
+              </div>
+            </div>
+            <div class="sect"><h2>Consolidation</h2>
+              <div class="card"><div class="opt"><div class="t">Write what sessions and meetings change straight to the Brain</div><button class="switch" role="switch" aria-checked="true" aria-label="Consolidation writes without asking"></button><p>Off: Consolidation makes Proposals for you to review in Approvals instead.</p></div></div>
+            </div>
+          </div>
+          <div class="pane" data-pane="features">
+            <div class="sect"><h2>Features</h2>
+              <div class="card">
+                <div class="opt"><div class="t">Search and recall <span class="tag">core</span></div><button class="switch" role="switch" aria-checked="true" disabled aria-label="Search and recall, always on"></button><p>Index your Markdown and search it. Works without a model.</p></div>
+                <div class="opt"><div class="t">Attention and briefings</div><button class="switch" role="switch" aria-checked="true" aria-label="Attention and briefings"></button><p>Needs: Background work · at least one source.</p></div>
+                <div class="opt"><div class="t">Drafts and approvals <span class="tag attn">partial: no model</span></div><button class="switch" role="switch" aria-checked="true" aria-label="Drafts and approvals"></button><p>Nothing is sent until you approve that exact version.</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="pane" data-pane="other"><div class="sect"><h2 id="other-title"></h2><p class="muted" id="other-text"></p><p class="small muted" style="margin-top:10px">Not drawn in this prototype. The section keeps every field and action it has today.</p></div></div>
+        </div>
+      </div>
+    </div></div>
+
+    <!-- ================= SETUP ================= -->
+    <div class="screen" id="s-setup"><div class="setup">
+      <aside>
+        <span data-logo="56" data-plain></span>
+        <div><h1>Set up Attache</h1><p class="muted" style="margin-top:8px">Five steps. Each works without the ones after it.</p></div>
+        <ol><li class="now"><span>Data folder</span></li><li><span>Features</span></li><li><span>Connections</span></li><li><span>Model and schedules</span></li><li><span>Test and finish</span></li></ol>
+        <details class="small" style="margin-top:auto"><summary>Already use Attache on another Machine?</summary><p class="muted" style="margin-top:6px">Name the Brain's repository and join into an empty folder.</p></details>
+      </aside>
+      <section>
+        <div><div class="eyebrow">Step 1 of 5</div><h1 style="font-size:32px;margin-top:10px">Where should Attache keep your knowledge?</h1><p class="muted" style="margin-top:8px">Plain Markdown in a folder you choose. Existing files are never modified.</p></div>
+        <label class="field">Data folder<div style="display:flex;gap:8px"><input type="text" value="~/Documents/Attache"><button class="btn">Preview</button></div></label>
+        <div class="card"><div class="eyebrow" style="padding:12px 14px 0">Will be created</div><div class="preview-tree">~/Documents/Attache/
+├─ memory/      people, projects, decisions, notes
+├─ evidence/    sessions, captures, connector snapshots
+├─ deliverables/
+└─ review/      Inbox items and Proposals</div></div>
+        <div class="acts"><button class="btn primary">Use this folder</button><span class="small muted">You can change every choice later in Settings.</span></div>
+        <div>
+          <details class="opt-d"><summary>Import an existing Markdown folder or Obsidian vault <span>· optional</span></summary><div class="in"><label class="field">Folder to read<div style="display:flex;gap:8px"><input type="text" placeholder="~/Obsidian/vault"><button class="btn">Preview import</button></div></label><p class="small muted">Files are read and indexed where they are. Nothing in that folder is modified.</p></div></details>
+          <details class="opt-d" style="border-bottom:1px solid var(--line)"><summary>Your identity <span>· optional</span></summary><div class="in"><label class="field">Name<input type="text" placeholder="How your sources name you"></label><label class="field">Email addresses and handles<input type="text" placeholder="you@example.com, @you"></label><p class="small muted">Lets Attache tell your own messages from the ones waiting for you. It changes only from Settings afterwards.</p></div></details>
+        </div>
+      </section>
+    </div></div>
+
+  </main>
+
+  <nav class="tabbar" aria-label="Main">
+    <a data-go="inbox" aria-current="page"><svg class="i"><use href="#i-today"/></svg>Today<i class="dot" id="tb-today"></i></a>
+    <a data-go="approvals"><svg class="i"><use href="#i-appr"/></svg>Approvals<i class="dot" id="tb-appr"></i></a>
+    <a data-open-palette><svg class="i"><use href="#i-find"/></svg>Search</a>
+    <a data-go="brain"><svg class="i"><use href="#i-brain"/></svg>Brain</a>
+    <a data-open-more><svg class="i"><use href="#i-more"/></svg>More</a>
+  </nav>
+</div>
+
+<div class="scrim" id="palette" role="dialog" aria-modal="true" aria-label="Search the Brain">
+  <div class="palette">
+    <div class="q"><svg class="i"><use href="#i-find"/></svg><input type="text" value="orion cutover" aria-label="Search or jump"><kbd>Esc</kbd></div>
+    <div class="eyebrow">In the Brain · ranked by meaning and keywords</div>
+    <ul>
+      <li class="on"><span class="t">Orion migration</span><span class="s">Status: cutover planned for the weekend of 28 Nov to avoid invoice runs · <span class="mono">memory/projects/orion.md:7</span></span><span class="tag">Project · current state</span></li>
+      <li><span class="t">Weekend cutover for Orion</span><span class="s">We chose a weekend cutover to avoid invoice runs.</span><span class="tag">Decision</span></li>
+      <li><span class="t">Granola 2026-11-17: Ledger sync</span><span class="s">Priya runs the ledger cutover rehearsal on Thursdays</span><span class="tag line">Evidence</span></li>
+    </ul>
+    <div class="eyebrow">Go to</div>
+    <ul><li><span class="t">Connections</span><span class="s"></span><kbd>G</kbd> <kbd>C</kbd></li></ul>
+    <footer><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span>Read-only: search runs nothing and changes nothing</span></footer>
+  </div>
+</div>
+
+<div class="scrim" id="more" role="dialog" aria-modal="true" aria-label="More">
+  <div class="sheet">
+    <a data-go="jobs"><svg class="i"><use href="#i-jobs"/></svg>Jobs</a>
+    <a data-go="connections"><svg class="i"><use href="#i-conn"/></svg>Connections<i class="dot when-auth" style="margin-left:auto"></i></a>
+    <a data-go="settings"><svg class="i"><use href="#i-set"/></svg>Settings</a>
+    <div class="foot"><b>emil-pc</b>, the Reader · connected to the Attache service</div>
+  </div>
+</div>
+
+<div class="proto" role="group" aria-label="Prototype controls">
+  <span>Prototype</span>
+  <button data-theme-set="light" class="on">Light</button><button data-theme-set="dark">Dark</button>
+  <span>|</span>
+  <button data-set="moment" data-val="morning">Morning</button><button data-set="moment" data-val="meeting">15 min before a meeting</button><button data-set="moment" data-val="later">Later</button>
+  <span>|</span>
+  <select data-sel="svc" aria-label="Prototype: connected services"></select>
+  <span>|</span>
+  <button data-set="day" data-val="normal">Normal day</button><button data-set="day" data-val="heavy">Heavy day</button><button data-set="day" data-val="inboxzero">Inbox empty</button><button data-set="day" data-val="clear">All clear</button>
+  <span>|</span>
+  <select data-sel="req" aria-label="A request failed"><option value="none">All requests answered</option><option value="attention">Failed: attention</option><option value="drafts">Failed: drafts</option><option value="proposals">Failed: Proposals</option><option value="all">Failed: all three</option></select>
+  <select data-sel="reqWhen" aria-label="When it failed"><option value="first">on first load</option><option value="after">after a good load</option></select>
+  <span>|</span>
+  <button data-go="colours">Colours</button><button data-go="setup">Setup</button>
+</div>
+
+<script type="application/json" id="fixture">{
+  "id": "heavy-day-v1",
+  "count": 38,
+  "rows": [
+    {
+      "id": "a1",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a2",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a3",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a4",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a5",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a6",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a7",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 7",
+      "source": "Gmail",
+      "path": "evidence/captures/orion-regional-migration-7.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a8",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 8",
+      "source": "Google Calendar",
+      "path": "evidence/captures/orion-regional-migration-8.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a9",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": "d1"
+    },
+    {
+      "id": "a10",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a11",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a12",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a13",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a14",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a15",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 7",
+      "source": "Gmail",
+      "path": "evidence/captures/orion-regional-migration-7.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a16",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 8",
+      "source": "Google Calendar",
+      "path": "evidence/captures/orion-regional-migration-8.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a17",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a18",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a19",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a20",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a21",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": "d2"
+    },
+    {
+      "id": "a22",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a23",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a24",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a25",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a26",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a27",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a28",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a29",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a30",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p1",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [
+        "Region 1 recovery owner: team 1",
+        "Region 2 recovery owner: team 2",
+        "Region 3 recovery owner: team 3",
+        "Region 4 recovery owner: team 4",
+        "Region 5 recovery owner: team 5",
+        "Region 6 recovery owner: team 6",
+        "Region 7 recovery owner: team 7",
+        "Region 8 recovery owner: team 8",
+        "Region 9 recovery owner: team 9",
+        "Region 10 recovery owner: team 10",
+        "Region 11 recovery owner: team 11",
+        "Region 12 recovery owner: team 12",
+        "Region 13 recovery owner: team 13",
+        "Region 14 recovery owner: team 14",
+        "Region 15 recovery owner: team 15"
+      ],
+      "actionId": null
+    },
+    {
+      "id": "p2",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p3",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p4",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p5",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p6",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "d3",
+      "group": "Drafts",
+      "title": "Review reply about the migration rehearsal: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "d4",
+      "group": "Drafts",
+      "title": "Review reply about the migration rehearsal: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    }
+  ],
+  "drafts": [
+    {
+      "id": "d1",
+      "status": "draft",
+      "attentionId": "a9"
+    },
+    {
+      "id": "d2",
+      "status": "approved",
+      "attentionId": "a21"
+    },
+    {
+      "id": "d3",
+      "status": "revoked"
+    },
+    {
+      "id": "d4",
+      "status": "draft"
+    }
+  ],
+  "sources": [
+    {
+      "name": "Notes",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Imported notes",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "GitHub",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Jira",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Confluence",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Slack",
+      "state": "failed",
+      "lastSuccess": "2026-11-16T17:12:00"
+    },
+    {
+      "name": "Gmail",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Google Calendar",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    }
+  ]
+}</script>
+<script>
+// The mark, as in apps/web/src/components/Logo.tsx: the dot is cut out of the case, so it sits on any background.
+let logoN = 0;
+function logo(size, dot) {
+  const id = "cut" + (logoN++);
+  return `<svg class="logo" width="${size}" height="${size}" viewBox="6 6 52 52" aria-hidden="true"><mask id="${id}"><rect width="64" height="64" fill="#fff"/><rect x="0" y="31" width="64" height="3" fill="#000"/><rect x="18" y="28" width="6" height="9" rx="2" fill="#000"/><rect x="40" y="28" width="6" height="9" rx="2" fill="#000"/>${dot ? '<circle cx="51" cy="19" r="9" fill="#000"/>' : ""}</mask><g mask="url(#${id})"><path class="case" d="M25 20v-4a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v4" stroke-width="4" stroke-linecap="round"/><rect class="case" x="8" y="19" width="48" height="33" rx="7"/></g>${dot ? '<circle class="ldot" cx="51" cy="19" r="6"/>' : ""}</svg>`;
+}
+document.querySelectorAll("[data-logo]").forEach((el) => {
+  const size = Number(el.dataset.logo);
+  el.style.display = "inline-flex";
+  el.innerHTML = "plain" in el.dataset ? logo(size, false) : `<span class="logo-on">${logo(size, true)}</span><span class="logo-off">${logo(size, false)}</span>`;
+});
+const go = (name) => {
+  document.querySelectorAll(".screen").forEach((s) => s.classList.toggle("on", s.id === "s-" + name));
+  document.querySelectorAll(".nav a, .tabbar a").forEach((a) => a.dataset.go === (name === "drafts" ? "approvals" : name) ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  document.querySelector(".side").style.display = name === "setup" ? "none" : "";
+  document.querySelector(".shell").style.gridTemplateColumns = name === "setup" ? "minmax(0,1fr)" : "";
+  document.querySelector(".main").scrollTop = 0;
+  location.hash = name;
+};
+const palette = document.getElementById("palette");
+const more = document.getElementById("more");
+
+// Settings index: one section at a time, as one route per section would show it.
+const OTHER = {
+  schedules: ["Schedules and notifications", "Refresh interval, briefing time, desktop notifications and quiet hours."],
+  identity: ["Identity", "Your name, addresses and handles. Protected: it changes only here, after you confirm."],
+  meaning: ["Meaning-based search", "Download, progress, rebuild and removal of the meaning model, and the keywords-only state."],
+  backup: ["Backup and export", "Create a backup, the list of backup files, and the command-line restore and uninstall guidance."],
+  clients: ["Paired clients", "Browsers and Harnesses paired with this service, a new pairing code, and Revoke."],
+  health: ["Service health", "Runtime, paths, where credentials are kept, indexed documents, jobs, schedules, and Rebuild index."],
+};
+function showSection(a) {
+  document.querySelectorAll("[data-sec]").forEach((x) => x.classList.toggle("on", x === a));
+  const known = document.querySelector(`[data-pane="${a.dataset.sec}"]`);
+  document.querySelectorAll("[data-pane]").forEach((x) => x.classList.toggle("on", x === (known || document.querySelector('[data-pane="other"]'))));
+  if (!known) { const [t, d] = OTHER[a.dataset.sec]; document.getElementById("other-title").textContent = t; document.getElementById("other-text").textContent = d; }
+}
+
+// A decided row stays where it was, as one line with Undo. Nothing else moves and nothing opens.
+function decide(btn) {
+  const item = btn.closest(".item");
+  const row = document.createElement("div");
+  row.className = "decided";
+  row._item = item;
+  row.setAttribute("role", "status");
+  row.innerHTML = `<span>${btn.dataset.decide}: ${item.querySelector(".t").textContent}</span>` + (btn.dataset.link ? `<button class="btn sm ghost" data-go="approvals">It will wait in Approvals</button>` : `<button class="btn sm ghost" data-undo>Undo</button>`);
+  item.replaceWith(row);
+  row.querySelector("button").focus();
+}
+
+// The draft: nine stored statuses (packages/contracts/src/actions.ts) and the states the Dashboard derives from them.
+// Approval binds to one version, the send button names that version, and the screen never leaves this draft.
+const DV = [["draft", "draft"], ["dirty", "draft with unsaved edits"], ["approved", "approved"], ["cannot", "approved, cannot send yet"], ["lapsed", "approved, approval ended"], ["revoked", "revoked by you"], ["revoked-service", "revoked by the service"], ["executing", "executing"], ["succeeded", "succeeded"], ["failed", "failed"], ["unknown", "unknown"], ["rejected", "rejected"], ["expired", "expired"], ["conflict", "changed elsewhere while you edit"]];
+const STATUS_OF = { dirty: "draft", cannot: "approved", lapsed: "approved", "revoked-service": "revoked", conflict: "draft" };
+const SAVED = document.getElementById("dtext").value;
+const draft = { v: 1, view: "draft", back: "draft", text: SAVED, left: 15 * 60 };
+const dsel = document.getElementById("dstate");
+dsel.innerHTML = DV.map(([id, label]) => `<option value="${id}">${label}</option>`).join("");
+const B = (act, label, cls = "", off = false) => `<button class="btn ${cls}" data-draft="${act}"${off ? ' disabled style="opacity:.5"' : ""}>${label}</button>`;
+const GAP = '<span style="flex:1"></span>';
+const mmss = (s) => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+function draftRender() {
+  const d = draft, v = "v" + d.v, next = "v" + (d.v + 1), view = d.view, status = STATUS_OF[view] || view;
+  const stored = view === "dirty" ? (STATUS_OF[d.back] || d.back) : status;
+  // Step line. The current step is ink, a finished step has a check, a failure is red and an unknown outcome is brass.
+  let cls = ["now", "", ""], label = [`Draft ${v}`, "Approved for 15 min", "Sent, with receipt"];
+  if (view === "approved" || view === "cannot") { cls = ["done", "now", ""]; label[1] = `Approved, ${mmss(d.left)} left`; }
+  if (view === "lapsed") label[1] = "Approval ended 16:36";
+  if (view === "revoked" || view === "revoked-service") label[1] = "Approval revoked";
+  if (view === "executing") { cls = ["done", "done", "now"]; label[1] = `Approved ${v}`; label[2] = `Sending ${v}`; }
+  if (view === "succeeded") { cls = ["done", "done", "done"]; label[1] = `Approved ${v}`; label[2] = "Sent 16:22, verified"; }
+  if (view === "failed") { cls = ["done", "done", "bad"]; label[1] = `Approved ${v}`; label[2] = "Not sent"; }
+  if (view === "unknown") { cls = ["done", "done", "unk"]; label[1] = `Approved ${v}`; label[2] = "Outcome unknown"; }
+  const steps = document.getElementById("dsteps"), finished = ["succeeded", "failed", "unknown", "rejected", "expired"].includes(view);
+  steps.style.display = view === "rejected" || view === "expired" ? "none" : "";
+  steps.querySelectorAll("b").forEach((b, i) => {
+    b.className = cls[i];
+    b.querySelector("i").textContent = cls[i] === "done" ? "✓" : cls[i] === "bad" ? "!" : cls[i] === "unk" ? "?" : i + 1;
+    b.querySelector("span").textContent = label[i];
+  });
+  document.getElementById("dexp").style.display = finished || view === "executing" ? "none" : "";
+  document.getElementById("dver").textContent = `${v} · ${stored}${view === "dirty" || view === "conflict" ? " · unsaved edits" : ""}`;
+  document.getElementById("dver2").textContent = v;
+  document.getElementById("dtext").disabled = finished || view === "executing";
+  dsel.value = view;
+  const send = (off) => B("send", `Send ${v}`, off ? "" : "primary", off), reject = GAP + B("reject", "Reject", "ghost danger");
+  const notice = (kind, html) => `<div class="notice ${kind}">${html}</div>`;
+  let acts = "", note = "", text = "";
+  if (view === "draft") {
+    acts = B("approve", `Approve ${v}`, "primary") + send(true) + reject;
+    text = d.said || "Send unlocks after approval. Approval covers exactly this version, for 15 minutes.";
+  } else if (view === "dirty") {
+    acts = B("save", `Save as ${next}`, "primary") + B("discard", "Discard changes") + B("approve", `Approve ${v}`, "", true) + send(true) + reject;
+    text = `Saving creates ${next} and replaces the text of ${v}, which is not kept${stored === "approved" ? `. It also cancels the approval of ${v}` : stored === "rejected" ? ". It also makes this a draft again" : ""}. Approve and Send wait until it is saved.`;
+  } else if (view === "approved") {
+    acts = send(false) + B("revoke", "Revoke approval") + reject;
+    text = `${v} approved at 16:21, valid until 16:36. Send posts exactly ${v} to GitHub and cannot be undone. Attache rechecks the approval and the write permission right before sending.`;
+  } else if (view === "cannot") {
+    note = notice("", `<span><b>Cannot send yet.</b> Writing (github.comment) is not authorised for GitHub. Authorise it in Connections.</span><span><a href="#" data-go="connections">Open Connections</a></span>`);
+    acts = send(true) + B("revoke", "Revoke approval") + reject;
+    text = `${v} approved at 16:21, valid until 16:36. The approval keeps running while you fix this.`;
+  } else if (view === "lapsed") {
+    note = notice("plain", `<span><b>The approval of ${v} ended at 16:36.</b> Nothing was sent.</span>`);
+    acts = B("approve", `Approve ${v} again`, "primary") + send(true) + reject;
+    text = "An approval lasts 15 minutes. The text has not changed.";
+  } else if (view === "revoked") {
+    note = notice("plain", `<span><b>You revoked the approval at 16:25.</b> Nothing was sent.</span>`);
+    acts = B("approve", `Approve ${v}`, "primary") + send(true) + reject;
+  } else if (view === "revoked-service") {
+    note = notice("", `<span><b>Attache revoked the approval at 16:25: connection disconnected.</b> Nothing was sent.</span><span>Approving again is possible, but Send stays locked until GitHub is connected. <a href="#" data-go="connections">Open Connections</a></span>`);
+    acts = B("approve", `Approve ${v}`, "primary") + send(true) + reject;
+  } else if (view === "executing") {
+    note = notice("plain", `<span><b>Sending ${v}.</b> Attache marks this sent only after GitHub confirms it. This keeps running if you close the tab.</span>`);
+  } else if (view === "succeeded") {
+    note = `<div class="receipt"><b>Receipt.</b> Verified today 16:22. Remote id <span class="mono">IC_kwDOJ8x2Zs5</span> · <a href="#">open on GitHub</a><br><span class="muted">Prototype: nothing was sent.</span></div>`;
+  } else if (view === "failed") {
+    note = notice("danger", `<span><b>Not sent.</b> GitHub refused the comment: Resource not accessible by personal access token. Nothing was posted.</span>`);
+    acts = B("copy", "Copy text") + B("again", "Prepare a new draft") + `<a class="btn" href="#">Open on GitHub <svg class="i"><use href="#i-out"/></svg></a>`;
+    text = "This draft is finished. It cannot be edited or sent again.";
+  } else if (view === "unknown") {
+    note = notice("", `<span><b>The outcome could not be verified.</b> The request may have reached GitHub. Check the pull request before you do anything else.</span>`);
+    acts = `<a class="btn" href="#">Open the pull request <svg class="i"><use href="#i-out"/></svg></a>` + B("copy", "Copy text");
+    text = "Attache will not send this draft again. If the comment is not there, prepare a new draft from its Inbox item.";
+  } else if (view === "rejected") {
+    note = notice("plain", `<span><b>You rejected ${v} at 16:30.</b> Nothing was sent.</span>`);
+    acts = B("restore", `Restore as ${next}`) + B("copy", "Copy text");
+    text = "Restoring makes it a draft again with the same text, until it expires Thu 19 Nov, 16:21.";
+  } else if (view === "expired") {
+    note = notice("plain", `<span><b>Expired Thu 19 Nov, 16:21</b>, 48 business hours after it was prepared. Nothing was sent.</span>`);
+    acts = B("copy", "Copy text") + B("again", "Prepare a new draft");
+  } else if (view === "conflict") {
+    note = notice("", `<span><b>This draft became ${next} while you were editing</b> (prepared again by Attache at 16:24). Your text is not saved, and the approval of ${v} no longer applies.</span>`);
+    acts = B("copy", "Copy my text") + B("load", `Load ${next}`, "primary") + B("approve", `Approve ${v}`, "", true) + send(true);
+  }
+  document.getElementById("dnote").innerHTML = note;
+  document.getElementById("dacts").innerHTML = acts;
+  document.getElementById("dstatus").textContent = text;
+}
+function draftLog(text) { document.getElementById("dhist").insertAdjacentHTML("afterbegin", `<li style="grid-template-columns:64px 1fr"><time>now</time><span>${text}</span></li>`); }
+function draftAct(act) {
+  const d = draft, ta = document.getElementById("dtext");
+  d.said = "";
+  if (act.startsWith("set:")) { d.view = act.slice(4); if (d.view !== "dirty" && d.view !== "conflict") ta.value = d.text; d.back = "draft"; d.left = 15 * 60; }
+  if (act === "edit" && ["draft", "approved", "cannot", "lapsed", "revoked", "revoked-service"].includes(d.view)) { d.back = d.view; d.view = "dirty"; }
+  if (act === "discard") { ta.value = d.text; d.view = d.back; }
+  if (act === "save") { const had = (STATUS_OF[d.back] || d.back) === "approved"; d.v++; d.text = ta.value; d.view = "draft"; d.said = had ? `v${d.v} saved. The approval of v${d.v - 1} no longer applies.` : `v${d.v} saved.`; draftLog(`Edited by you, v${d.v}`); }
+  if (act === "approve") { d.view = "approved"; d.left = 15 * 60; draftLog(`Approved v${d.v} by you`); }
+  if (act === "revoke") { d.view = "revoked"; draftLog("Approval revoked by you"); }
+  if (act === "send") { d.view = "executing"; draftLog(`Execution started, v${d.v}`); setTimeout(() => { if (d.view === "executing") { d.view = "succeeded"; draftLog(`Sent v${d.v}, verified`); draftRender(); } }, 1600); }
+  if (act === "sent") { d.view = "succeeded"; }
+  if (act === "reject") { d.view = "rejected"; draftLog("Rejected by you"); }
+  if (act === "restore") { d.v++; d.view = "draft"; d.said = `Restored as v${d.v}.`; draftLog(`Edited by you, v${d.v}`); }
+  if (act === "load") { d.v++; d.text = ta.value = "Thanks. The retry looks right; could you confirm the migration runs before the deploy step?"; d.view = "draft"; }
+  if (act === "copy" || act === "again") d.said = "Prototype: not simulated.";
+  draftRender();
+  if (d.said && !document.getElementById("dstatus").textContent) document.getElementById("dstatus").textContent = d.said;
+}
+document.getElementById("dtext").addEventListener("input", () => { if (draft.view !== "dirty" && draft.view !== "conflict") draftAct("edit"); });
+dsel.addEventListener("change", () => draftAct("set:" + dsel.value));
+// The countdown updates its own label only, so a focused button keeps focus. At zero the approval has ended.
+setInterval(() => {
+  if (draft.view !== "approved" && draft.view !== "cannot") return;
+  draft.left--;
+  if (draft.left <= 0) { draft.view = "lapsed"; return draftRender(); }
+  document.querySelectorAll("#dsteps b span")[1].textContent = `Approved, ${mmss(draft.left)} left`;
+}, 1000);
+draftRender();
+
+// The shared heavy day (astra/dense-fixture.json, embedded unchanged): 30 attention items, 6 Proposals, 4 drafts of which 2 are linked.
+const FIX = JSON.parse(document.getElementById("fixture").textContent);
+const LINKED = { draft: "Draft waiting", approved: "Approved, not sent", revoked: "Approval revoked" };
+// ===== v4: the first screen, Approvals and the palette ==========================================
+// Types. A family owns one hue and one icon; a kind owns the word. Kinds are the service's attention kinds
+// (apps/service/src/connectors/*.ts, attention/fact-reviews.ts, replication/blocked-inbox.ts).
+const ic = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
+const FAM = {
+  deadline: { hue: "rose", icon: "flag", many: "Deadlines" },
+  review: { hue: "purple", icon: "pr", many: "Reviews" },
+  reply: { hue: "sky", icon: "reply", many: "Replies" },
+  mention: { hue: "teal", icon: "at", many: "Mentions" },
+  meeting: { hue: "moss", icon: "cal", many: "Meetings" },
+  work: { hue: "orange", icon: "ticket", many: "Work items" },
+  fact: { hue: "gold", icon: "fact", many: "Facts to check" },
+  system: { hue: "slate", icon: "sys", many: "System" },
+};
+const FAM_ORDER = ["deadline", "review", "reply", "mention", "meeting", "work", "fact", "system"];
+const KIND = {
+  deadline: ["deadline", "Deadline"], overdue_work_item: ["work", "Work item, overdue"], due_work_item: ["work", "Work item"],
+  review_request: ["review", "Review"], pending_reply: ["reply", "Reply"], mention: ["mention", "Mention"],
+  invite_response: ["meeting", "Invite"], meeting_prep: ["meeting", "Meeting prep"], "fact-review": ["fact", "Fact to check"],
+  replication_blocked: ["system", "Replication"], replication_unauthorized: ["system", "Replication"],
+};
+const NORMAL = [
+  { id: "n1", kind: "deadline", title: "Review rollback runbook", src: "Notes", who: "Orion migration", when: "2 days overdue", late: true, age: 4300, sum: 'From "Orion migration" (Projects/Orion.md, line 10), due 15 Nov.', why: "Past its due date and still open. First seen 3 days ago.", excerpt: true },
+  { id: "n2", kind: "deadline", title: "Send the cutover plan to finance", src: "Notes", who: "Orion migration", when: "Due tomorrow", age: 2900, sum: 'From "Orion migration" (Projects/Orion.md, line 9), due 18 Nov.', why: "Due within two weeks." },
+  { id: "n0", kind: "review_request", title: "acme/web#42: Add checkout retry", src: "GitHub", who: "mia", when: "1 d", age: 1400, sum: "mia requested your review 1 day ago.", why: "You are a requested reviewer on an open pull request.", held: "Draft waiting", out: "GitHub" },
+  { id: "n3", kind: "review_request", title: "acme/api#7: Rate limit search", src: "GitHub", who: "bob", when: "1 d", age: 1500, sum: "bob requested your review 1 day ago.", why: "You are a requested reviewer on an open pull request.", draft: "GitHub" },
+  { id: "n4", kind: "pending_reply", title: "Priya Shah: the ledger rehearsal slot", src: "Gmail", who: "Priya Shah", when: "5 h", age: 300, tag: "changed since your decision", sum: '"Can you confirm Thursday 14:00 works for the rehearsal?"', why: "The latest message is from someone else and the thread is unread.", draft: "Gmail" },
+  { id: "n5", kind: "pending_reply", title: "Jonas Lind in a direct message", src: "Slack", who: "Jonas Lind", when: "40 min", age: 40, sum: '"Did finance sign off on the weekend cutover?"', why: "The latest message in this direct conversation is from someone else.", draft: "Slack" },
+  { id: "n6", kind: "mention", title: "Mentioned in #billing", src: "Slack", who: "Mia Chen", when: "2 h", age: 120, sum: '"@emil can you check the retry numbers before Thursday?"', why: "Someone @mentioned you in Slack in the last 48 hours.", draft: "Slack" },
+  { id: "n7", kind: "invite_response", title: "Vendor review with Postmark", src: "Calendar", who: "Lena Berg", when: "Thu 10:00", age: 600, sum: "Starts Thu 19 Nov 10:00 with Lena Berg and 2 others.", why: "You have not responded to this invitation yet.", out: "Calendar" },
+  { id: "n8", kind: "meeting_prep", title: "Ledger sync", src: "Calendar", who: "3 other people", when: "Today 14:00", age: 900, sum: "Starts today 14:00 with Priya Shah, Jonas Lind and Mia Chen.", why: "A meeting with other people starts within 24 hours.", out: "Calendar" },
+  { id: "n9", kind: "due_work_item", title: "ORI-214: Update the cutover checklist", src: "Jira", who: "In progress", when: "Due Fri", age: 2000, sum: "Due 20 Nov. Status: In progress.", why: "Assigned to you and due within the week.", out: "Jira" },
+  { id: "n10", kind: "fact-review", title: "Priya Shah: Prefers", src: "Brain", who: "People", when: "Review was due 1 Feb", age: 5000, sum: '"A short call on Fridays" has been unverified since its Review date, 2026-02-01. Save the fact again from a Harness to confirm or correct it.', why: "The fact is past its Review date.", note: true },
+];
+const NORMAL_APPR = {
+  drafts: [
+    { id: "d-gh", what: "GitHub comment", ver: "v1", title: "Review acme/web#42: Add checkout retry", first: "Thanks for the update. I reviewed the changes and have one question about the migration order.", answers: 'mia on acme/web#42, 1 day ago: "Retries failed payments once, with backoff. Could you look at the migration order before I merge?"', state: null, exp: "expires in 2 days" },
+    { id: "d-sl", what: "Slack message to #billing", ver: "v2", title: "Rehearsal moved to Thursday", first: "The ledger rehearsal moves to Thursday 14:00. Priya runs it; finance joins for the last half hour.", answers: "No open Inbox item: its item was marked done.", state: null, exp: "expires in 2 days" },
+  ],
+  // A draft that is being sent has nothing left to decide: it is shown under In progress and is not counted.
+  sending: [{ id: "d-run", what: "Gmail reply", ver: "v3", title: "Anders Holm: budget sign-off for the cutover" }],
+  proposals: [
+    { id: "p-a", label: "Correction", note: "Priya Shah", title: 'Correct "Prefers" on Priya Shah', age: "emil-pc · 12 min", diff: '<dt>Correction</dt><dd><b>Prefers</b>: <del>A short call on Fridays</del> → <ins>Written updates on Mondays again</ins></dd><dt>Reason</dt><dd>The Friday call clashed with the release meeting.</dd><dt>Evidence</dt><dd><blockquote>Priya asked to go back to written updates on Mondays.</blockquote></dd><dt>Source</dt><dd class="muted">Consolidation of a Claude Code session in attache · <a href="#">transcript, line 212</a></dd>' },
+    { id: "p-b", label: "New note", note: "Lena Berg", title: "New person: Lena Berg", age: "emil-pc · 20 min", diff: "<dt>Fact</dt><dd><b>Role</b>: Postmark account manager</dd><dt>Fact</dt><dd><b>Team</b>: Vendor management</dd><dt>Event</dt><dd>Introduced in the vendor call</dd><dt>Evidence</dt><dd><blockquote>Lena from Postmark joined the call; she manages our account and prefers email.</blockquote></dd>" },
+  ],
+};
+const S = { moment: "morning", svc: "ok", day: "normal", req: "none", reqWhen: "first", view: "type", filter: null, proOpen: false, more: new Set(), gone: new Set() };
+let NEED = null;
+
+// The shared heavy day keeps its values; only the presentation is derived: a kind per row, as the service would send it.
+function heavyKind(r, n) {
+  if (r.group === "Deadlines") return r.source === "Jira" ? "due_work_item" : "deadline";
+  if (r.group === "Review queue") return "review_request";
+  if (r.group === "Meetings") return n < 2 ? "invite_response" : "meeting_prep";
+  if (r.group === "Pending replies") return r.source === "Confluence" || r.source === "Slack" ? "mention" : "pending_reply";
+  return "fact-review";
+}
+// An open item whose draft is draft, approved or revoked stays in its type group with a tag. Its decision is counted in Approvals.
+const live = (id) => FIX.drafts.find((d) => d.id === id && LINKED[d.status]);
+const NOTE_SRC = ["Notes", "Imported notes", "Brain"];
+function items() {
+  if (["clear", "inboxzero"].includes(S.day) || S.svc === "off") return [];
+  let its = NORMAL;
+  if (S.day === "heavy") {
+    const seen = {};
+    its = FIX.rows.filter((r) => /^a/.test(r.id)).map((r, n) => {
+      const idx = (seen[r.group] = (seen[r.group] ?? -1) + 1), kind = heavyKind(r, idx), d = live(r.actionId);
+      return { id: r.id, kind, title: r.title, src: r.source, who: "", when: "", age: (n * 7) % 30, sum: r.path, why: "From the shared fixture heavy-day-v1.", held: d ? LINKED[d.status] : null, out: d ? r.source : null, draft: !d && ["review_request", "pending_reply", "mention"].includes(kind) ? r.source : null };
+    });
+  }
+  return S.svc === "notes" ? its.filter((i) => NOTE_SRC.includes(i.src) && !i.held) : its;
+}
+function approvals() {
+  if (S.day === "clear") return { drafts: [], proposals: [], sending: [] };
+  const notes = S.svc === "notes";
+  if (S.day !== "heavy") return { drafts: notes ? [] : NORMAL_APPR.drafts, proposals: NORMAL_APPR.proposals, sending: notes || S.day === "inboxzero" ? [] : NORMAL_APPR.sending };
+  const STATE = { approved: "Approved, not sent", revoked: "Approval revoked" };
+  return {
+    drafts: FIX.drafts.map((d, n) => {
+      const row = FIX.rows.find((r) => r.id === (d.attentionId || d.id));
+      return { id: d.id, what: n % 2 ? "Gmail reply" : "GitHub comment", ver: "v" + (n + 1), title: row.title, first: row.path, answers: d.attentionId ? `Inbox item ${d.attentionId}, still open.` : "No open Inbox item.", state: STATE[d.status] || null, exp: "expires in 2 days" };
+    }),
+    proposals: FIX.rows.filter((r) => r.group === "Proposals").map((r) => ({ id: r.id, label: r.facts.length > 1 ? `${r.facts.length} facts` : "Correction", note: r.source, title: r.title, age: "Work Mac · 20 min", diff: r.facts.map((f) => `<dt>Fact</dt><dd>${f}</dd>`).join("") + `<dt>Source</dt><dd class="mono">${r.path}</dd>` })),
+    sending: [],
+  };
+}
+const svcN = () => (S.day === "heavy" ? 8 : 5);
+const reader = () => (S.day === "heavy" ? "Work Mac" : "this Machine");
+const machine = () => (S.day === "heavy" ? "Work Mac" : "emil-pc");
+const clock = () => (S.moment === "morning" ? (S.day === "heavy" ? "09:30" : "08:10") : S.moment === "meeting" ? "13:48" : "16:20");
+// When the answers on screen were observed: the last Source refresh, and the last good load of a request that has failed since.
+const plus = (t, m) => { const [h, mi] = t.split(":").map(Number), x = h * 60 + mi + m; return String(Math.floor(x / 60)).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0"); };
+const asof = () => plus(clock(), -4);
+
+// The count (spec-dot-and-drafts.md, part 1). Each part is known, unknown or off; an unknown part adds nothing and makes the total a lower bound.
+function need() {
+  const its = items(), a = approvals();
+  const st = (p) => (S.req === p || S.req === "all" ? (S.reqWhen === "after" ? "stale" : "failed") : "ok");
+  const att = S.svc === "off" ? "off" : st("attention"), dr = st("drafts"), pr = st("proposals");
+  const linked = its.filter((i) => i.held).length;
+  const inbox = att === "ok" ? its.length - linked : att === "off" ? 0 : null;
+  // An item that names a draft is left out while the drafts cannot be seen, so the Inbox part can be too small and never too large.
+  const inboxPlus = att === "ok" && dr !== "ok" && linked > 0;
+  const drafts = dr === "ok" ? a.drafts.length : null, props = pr === "ok" ? a.proposals.length : null;
+  const apprKnown = (drafts ?? 0) + (props ?? 0), apprPlus = drafts === null || props === null;
+  const sign = svcState().sign || 0;
+  const total = (inbox ?? 0) + apprKnown + sign, exact = inbox !== null && !inboxPlus && !apprPlus;
+  // The last exact answer. An unknown part keeps the dot it had then, and nothing else.
+  const after = S.reqWhen === "after";
+  const was = { inbox: after && its.length - linked > 0, appr: after && a.drafts.length + a.proposals.length > 0 };
+  return { att, dr, pr, open: its.length, linked, inbox, inboxPlus, drafts, props, apprKnown, apprPlus, sign, total, exact, was };
+}
+
+// 1. Search the Brain. The field is the same component as the palette's input; Ctrl K focuses it on this screen.
+const narrow = () => matchMedia("(max-width: 760px)").matches;
+const searchHint = () => (narrow() ? "Search the Brain" : "Search the Brain: people, projects, decisions, evidence");
+function searchHTML() {
+  return `<section class="bsearch" aria-label="Search the Brain">
+    <label>${ic("find")}<span class="sr-only">Search the Brain</span><input type="search" id="bq" placeholder="${searchHint()}" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="bres"><kbd>Ctrl K</kbd></label>
+    <div class="bres" id="bres" hidden>
+      <div class="eyebrow">In the Brain · ranked by meaning and keywords</div>
+      <ul role="listbox">
+        <li class="on" role="option"><span class="t">Orion migration</span><span class="s">Status: cutover planned for the weekend of 28 Nov to avoid invoice runs · <span class="mono">memory/projects/orion.md:7</span></span><span class="tag">Project</span></li>
+        <li role="option"><span class="t">Weekend cutover for Orion</span><span class="s">We chose a weekend cutover to avoid invoice runs.</span><span class="tag">Decision</span></li>
+        <li role="option"><span class="t">Granola 2026-11-17: Ledger sync</span><span class="s">Priya runs the ledger cutover rehearsal on Thursdays</span><span class="tag line">Evidence</span></li>
+      </ul>
+      <footer><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><a href="#" data-go="brain">All results in Brain</a></footer>
+    </div>
+    <nav class="browse" aria-label="Browse the Brain"><span>Browse</span><a href="#" data-go="brain">People</a><a href="#" data-go="brain">Projects</a><a href="#" data-go="brain">Decisions</a><a href="#" data-go="brain">Notes</a><a href="#" data-go="brain">Recent saves</a></nav>
+  </section>`;
+}
+
+// 2. For you now. A slot: every occupant says when it applies and when it stops; the most timely one leads.
+const BRIEF_MENU = `<details class="menu wide"><summary class="btn ghost">More</summary><div><button>Prepare a new briefing</button><button>Away summary</button><button>Meeting context</button></div></details>`;
+const why = (long, short) => `<p class="why"><span class="wl">${long}</span><span class="ws">${short}</span></p>`;
+function proHTML() {
+  const heavy = S.day === "heavy", clear = S.day === "clear";
+  if (S.svc === "off") return `<section class="pro quiet c-indigo" aria-label="For you now">
+    <span class="tile">${ic("spark")}</span>
+    <div><b>For you now</b> · Nothing is prepared here while Attention and briefings is off.</div>
+  </section>`;
+  const ago = heavy ? "1 hour 30 minutes ago" : "10 minutes ago";
+  const brief = S.moment === "morning" && !S.gone.has("brief");
+  const prep = S.moment === "meeting" && !S.gone.has("prep") && !clear;
+  // The start comes from the item's dueAt. The contract has no end time, so the card does not show one.
+  if (prep) return `<section class="pro prep c-indigo" aria-label="For you now">
+    <span class="tile">${ic("spark")}</span>
+    <div>
+      <div class="eye">For you now <span>· Meeting in 12 minutes</span></div>
+      <h2>Ledger sync, starts 14:00</h2>
+      <ul class="lines"><li>With Priya Shah, Jonas Lind and Mia Chen.</li></ul>
+      <div class="from"><span>From your Brain, as the 08:00 briefing found them</span><button class="notechip">${ic("brain")}Priya Shah</button><button class="notechip">${ic("brain")}Orion migration</button><button class="notechip">${ic("brain")}Weekend cutover for Orion</button></div>
+      <div class="acts"><a class="btn primary" href="#">Open in Calendar ${ic("out")}</a><button class="btn" data-gone="prep">Done</button><button class="btn ghost" data-gone="prep">Not now</button></div>
+      ${why("Here because it starts within 15 minutes and other people attend. It leaves at 14:10, or when you press Done.", "Leaves at 14:10, or on Done.")}
+    </div>
+    <div class="also"><b>Earlier today</b><span>Daily briefing, 08:00</span><button class="btn sm">Open</button></div>
+  </section>`;
+  if (brief) return `<section class="pro brief c-indigo${S.proOpen ? " open" : ""}" aria-label="For you now">
+    <span class="tile">${ic("spark")}</span>
+    <div>
+      <div class="eye">For you now <span>· Daily briefing · 08:00<span class="ago">, ${ago}</span></span></div>
+      <h2>${clear ? "A quiet start: nothing new since yesterday evening." : heavy ? "A heavy day: seven deadlines and seven reviews are open across the Orion migration." : "Two deadlines are close, and Priya is waiting on the rehearsal slot."}</h2>
+      <ul class="lines">${clear ? "<li>No deadline falls this week.</li><li>No meeting with other people today.</li>" : heavy ? "<li>Recovery rehearsals in regions 1 to 8 still need an owner for rollback.</li><li>Four meetings today; two invitations are unanswered.</li><li>Six changes to the Brain wait for your OK in Approvals.</li>" : "<li>Review rollback runbook is 2 days overdue; the cutover plan is due tomorrow.</li><li>bob asked for a review yesterday; your comment on mia's pull request waits in Approvals.</li><li>Ledger sync is at 14:00 with Priya, Jonas and Mia.</li>"}</ul>
+      ${clear ? "" : `<details class="plus"><summary>${ic("chev")}More lines</summary><ul class="lines"><li>ORI-214 is due on Friday.</li><li>Lena Berg was introduced on the vendor call; a Proposal to add her waits in Approvals.</li><li>The invitation to Thursday's vendor review is unanswered.</li></ul></details>`}
+      <div class="acts"><button class="btn primary" data-gone="brief">Got it</button><button class="btn readbtn" data-proopen aria-expanded="${S.proOpen}">${S.proOpen ? "Show less" : "Read the briefing"}</button><button class="btn wide">Open the full briefing</button>${BRIEF_MENU}</div>
+      ${why("Here until you press Got it, or until 12:00. After that it is one line.", "Leaves at 12:00, or on Got it.")}
+    </div>
+  </section>`;
+  const next = S.moment === "morning" && !clear ? "Next: <b>Ledger sync at 14:00</b>. Its prep shows here at 13:45." : S.moment === "meeting" || clear ? "Nothing else is timely today." : "Nothing timely right now. Next: <b>Vendor review, Thu 10:00</b>.";
+  return `<section class="pro quiet c-indigo" aria-label="For you now">
+    <span class="tile">${ic("spark")}</span>
+    <div><b>For you now</b> · ${next}</div>
+    <div class="acts"><button class="btn sm" data-back="brief">Daily briefing, 08:00</button>${BRIEF_MENU.replace("btn ghost", "btn sm ghost").replace(" wide", "")}</div>
+  </section>`;
+}
+
+// 3. Connected services. Working services are never named. Green needs positive evidence from all three requests.
+// One entry per state of the decision table in DESIGN.md, section 5.1.
+const SVC_NAMES = [["ok", "Services: all fine"], ["auth", "Sign-in needed"], ["down", "One source down"], ["never", "Not read yet"], ["denied", "Access denied"], ["offline", "This Machine offline"], ["partial", "Partly read"], ["feature", "Feature partly ready"], ["model", "Model signed out"], ["notes", "Notes only"], ["off", "Attention switched off"], ["noreader", "No Reader"], ["silent", "Reader silent"], ["mixed", "Mixed problems"], ["checking", "Checking (first load)"], ["unknown", "Could not check"]];
+function svcState() {
+  const n = svcN(), t = asof(), who = reader(), ago = `Read 4 minutes ago by ${who}.`;
+  // A retry is only promised when a Reader is active and the refresh schedule is on. Both are true in these fixtures unless the row says otherwise.
+  const next = `The next automatic read is at about ${plus(t, 30)}.`;
+  const rest = (k, o = 3) => `The other ${k} sources and ${o} other connections are working. ${ago}`;
+  const all = `All ${n} sources were read 4 minutes ago by ${who}.`;
+  const B = (label, to = "connections", cls = "", sec = "") => `<button class="btn ${cls}" data-go="${to}"${sec ? ` data-sec-go="${sec}"` : ""}>${label}</button>`;
+  const R = {
+    auth: { hue: "amber", icon: "key", w: "Sign-in needed", h: "<b>Slack</b> signed you out.", d: "Not read since yesterday 17:30, so Slack replies and mentions may be missing below.", btn: B("Reconnect Slack", "connections", "primary") },
+    down: { hue: "red", icon: "alert", w: "Down", h: "<b>Slack</b> is not answering.", d: `The ${t} read failed: the request timed out. Last read yesterday 17:12. ${next}`, btn: `<button class="btn">Retry now</button>` },
+    gmail: { hue: "red", icon: "alert", w: "Down", h: "<b>Gmail</b> is not answering.", d: `The ${t} read failed: the connector answered 503. Last read ${plus(t, -30)}. ${next}`, btn: `<button class="btn">Retry now</button>` },
+    never: { hue: "slate", icon: "sys", w: "Not read yet", h: `<b>Jira</b> was connected at ${plus(t, 2)}.`, d: `No Source refresh has finished for it, so its work items are not below yet. ${next}`, btn: `<button class="btn">Refresh now</button>` },
+    denied: { hue: "amber", icon: "key", w: "Access denied", h: "<b>GitHub</b> refused one of the reads.", d: "The token may not read review requests, so reviews may be missing below. Mentions and assigned issues were read.", btn: B("Open in Connections") },
+    offline: { hue: "red", icon: "alert", w: "Offline", h: `<b>${machine()}</b> had no network at ${t}.`, d: `4 sources were not read: GitHub, Gmail, Google Calendar and Slack. Last read ${plus(t, -30)}. ${next}`, btn: `<button class="btn">Retry now</button>` },
+    partial: { hue: "amber", icon: "alert", w: "Partly read", h: "<b>Gmail</b> stopped after 3 of 5 pages.", d: "Older threads that wait for your reply may be missing below. The next read starts from the beginning.", btn: B("Open in Connections") },
+    feature: { hue: "amber", icon: "key", w: "Partly working", h: "<b>Drafts and approvals</b> has no model.", d: "Attache cannot prepare new drafts. Drafts that already wait can still be approved and sent.", btn: B("Open Settings", "settings", "", "features") },
+    model: { hue: "amber", icon: "key", w: "Sign-in needed", h: "<b>The model</b> (Claude Code on this computer) is signed out.", d: "Briefings, new drafts and Consolidation wait until you sign in. Sources are still read.", btn: B("Reconnect the model", "connections", "primary") },
+    notes: { hue: "slate", icon: "brain", w: "Notes only", h: `Your notes were read 4 minutes ago by ${who}.`, d: "No work source is connected, so the Inbox holds only deadlines and facts from your notes.", btn: B("Connect a work source") },
+    off: { hue: "slate", icon: "sys", w: "Switched off", h: "<b>Attention and briefings</b> is off.", d: "Sources are not read for the Inbox and no briefing is made. Search, Proposals and drafts still work.", btn: B("Open Settings", "settings", "", "features") },
+    noreader: { hue: "red", icon: "alert", w: "Not reading", h: "<b>No Machine is the Reader.</b>", d: "Nothing is read until a Machine takes the role, and nothing retries by itself. Last read yesterday 17:42 by Work Mac.", btn: B("Machines and Replication", "settings", "", "machines") },
+    silent: { hue: "red", icon: "alert", w: "Not reading", h: "<b>Work Mac</b>, the Reader, has been silent for 2 hours.", d: `Sources were last read at ${plus(t, -120)}. This Machine takes over only if it is a Standby, so nothing retries until then.`, btn: B("Machines and Replication", "settings", "", "machines") },
+    unknown: { hue: "slate", icon: "alert", w: "Could not check", h: "The connections request failed.", d: `Attache cannot say which services work right now. The last answer, at ${t}, was that all ${n} sources had been read.`, btn: `<button class="btn" data-retry>Retry</button>` },
+  };
+  return ({
+    ok: { mode: "green", scope: all },
+    auth: { rows: [R.auth], rest: rest(n - 1), sign: 1, scope: "Slack was not read, so replies and mentions there may be missing.", read: n - 1 },
+    down: { rows: [R.down], rest: rest(n - 1), scope: "Slack was not read, so replies and mentions there may be missing.", read: n - 1 },
+    never: { rows: [R.never], rest: rest(n), scope: "Jira has not been read yet, so its work items may be missing.", read: n },
+    denied: { rows: [R.denied], rest: rest(n - 1), scope: "GitHub review requests could not be read, so reviews may be missing.", read: n - 1 },
+    offline: { rows: [R.offline], rest: `Your notes were read at ${t}. The 3 other connections are signed in.`, scope: "Only your notes were read; 4 sources were not.", read: 1 },
+    partial: { rows: [R.partial], rest: rest(n - 1), scope: "Gmail was only partly read, so older threads may be missing.", read: n - 1 },
+    feature: { rows: [R.feature], rest: all, scope: all },
+    model: { rows: [R.model], rest: all, sign: 1, scope: all },
+    notes: { rows: [R.notes], rest: null, scope: "Only your notes are read." },
+    off: { rows: [R.off], rest: null, scope: "" },
+    noreader: { rows: [R.noreader], rest: null, scope: "Sources have not been read since yesterday 17:42." },
+    silent: { rows: [R.silent], rest: null, scope: `Sources were last read at ${plus(t, -120)}.` },
+    mixed: { rows: [R.auth, R.gmail, R.feature, R.never], rest: rest(n - 2, 2), sign: 1, scope: "Slack and Gmail were not read, and Jira has not been read yet.", read: n - 2 },
+    checking: { mode: "checking", scope: "Connected services are still being checked." },
+    unknown: { rows: [R.unknown], rest: null, scope: "Connected services could not be checked, so this may be incomplete." },
+  })[S.svc];
+}
+function statusHTML() {
+  const sv = svcState(), n = svcN();
+  if (sv.mode === "green") return `<section class="status c-green" aria-label="Connected services" role="status">
+    <span class="tile">${ic("check")}</span><span><b>All good.</b> <span class="lg">All ${n} sources were read, and the 3 other connections work.</span><span class="sm">${n} sources read 4 min ago.</span></span><span class="r">Read 4 minutes ago by ${reader()}.<a href="#" data-go="connections">Connections</a></span>
+  </section>`;
+  if (sv.mode === "checking") return `<section class="status neutral" aria-label="Connected services" role="status"><i class="spin"></i><span><b>Checking</b> your connected services.</span></section>`;
+  const row = (p) => `<div class="problem c-${p.hue}">${ic(p.icon).replace('class="i"', 'class="i" style="color:var(--c)"')}<div><span class="w">${p.w}</span> · ${p.h}</div><div class="d">${p.d}</div>${p.btn}</div>`;
+  const first = sv.rows.slice(0, 3), more = sv.rows.slice(3);
+  return `<section class="problems" aria-label="Connected services" role="status">${first.map(row).join("")}${more.length ? `<details class="pmore"><summary>${ic("chev")}${more.length} more: ${more.map((p) => p.w.toLowerCase()).join(", ")}</summary>${more.map(row).join("")}</details>` : ""}${sv.rest ? `<div class="rest">${ic("check")}<span>${sv.rest}</span><a href="#" data-go="connections" class="small">Connections</a></div>` : ""}</section>`;
+}
+
+// 4. Inbox.
+const famOf = (i) => KIND[i.kind] ? KIND[i.kind][0] : "system";
+const errBox = (w, h, d) => `<div class="problems" role="alert"><div class="problem c-red">${ic("alert").replace('class="i"', 'class="i" style="color:var(--c)"')}<div><span class="w">${w}</span> · ${h}</div><div class="d">${d}</div><button class="btn" data-retry>Retry</button></div></div>`;
+function rowHTML(i) {
+  const f = FAM[famOf(i)], word = KIND[i.kind] ? KIND[i.kind][1] : "Other";
+  const first = i.held ? `<button class="btn sm primary" data-go="drafts">View draft</button>` : i.draft ? `<button class="btn sm primary" data-decide="Draft requested" data-link="1">Prepare draft</button>` : i.note ? `<button class="btn sm primary" data-go="brain">Open note</button>` : `<button class="btn sm primary" data-decide="Done">Done</button>`;
+  const out = i.draft || i.out ? `<a class="btn sm" href="#">Open in ${i.draft || i.out} ${ic("out")}</a>` : "";
+  const ex = i.excerpt ? `<div class="excerpt"><header><span class="mono">vault / Projects/Orion.md</span><span>lines 8-10</span><a href="#">Open evidence</a></header><pre>## Tasks
+- [ ] Send the cutover plan to finance 📅 2026-11-18
+<mark>- [ ] Review rollback runbook due:2026-11-15</mark></pre></div>` : "";
+  const held = i.held ? `<span class="tag held">${ic("draft")}${NEED.dr === "failed" ? "Has a draft, not loaded" : i.held}</span>` : "";
+  const heldWhy = i.held ? `<div class="why">A draft is prepared for this item, so its decision is counted in Approvals and not here. Approve and Send are on the draft's page.</div>` : "";
+  return `<details class="item ti c-${f.hue}" data-id="${i.id}"><summary><div><div class="k">${ic(f.icon)}<b>${word}</b><span>${[i.src, i.who].filter(Boolean).join(" · ")}</span></div><div class="t">${i.title}</div></div><div class="m">${held}${i.tag ? `<span class="tag attn">${i.tag}</span>` : ""}${i.when ? `<span${i.late ? ' class="late"' : ""}>${i.when}</span>` : ""}</div></summary>
+    <div class="body"><p>${i.sum}</p>${ex}<div class="why">Why this is here: ${i.why}</div>${heldWhy}<div class="acts">${first}${out}${i.held || i.draft || i.note ? '<button class="btn sm ghost" data-decide="Done">Done</button>' : ""}<button class="btn sm ghost">Snooze</button><button class="btn sm ghost" data-decide="Dismissed">Dismiss</button></div></div></details>`;
+}
+function inboxHTML() {
+  const its = items(), c = NEED, sv = svcState(), t = asof();
+  const fams = FAM_ORDER.filter((f) => its.some((i) => famOf(i) === f));
+  const per = (f) => its.filter((i) => famOf(i) === f);
+  const failed = c.att === "failed", stale = c.att === "stale", off = c.att === "off";
+  const wrap = (inner) => `<section aria-labelledby="inbox-h" style="display:flex;flex-direction:column;gap:14px">${inner}</section>`;
+  const cnt = stale ? `<span class="asof">as of ${t}, not refreshed</span>` : c.inbox ? `<span class="cnt"><i class="dot"></i>${c.inboxPlus ? "At least " : ""}${c.inbox} need you</span>` : "";
+  const tools = its.length && !failed ? `<div class="seg" role="group" aria-label="Order"><button data-view="type" aria-pressed="${S.view === "type"}">By type</button><button data-view="time" aria-pressed="${S.view === "time"}">Newest first</button></div><a href="#" class="small muted hid">Hidden 3</a>` : "";
+  const head = `<div class="ih"><h2 id="inbox-h">Inbox</h2>${cnt}<span class="sp"></span>${tools}</div>`;
+  // Approvals, as the Inbox can honestly name them: a number, a lower bound, or "not loaded".
+  const apprN = c.apprPlus ? (c.apprKnown ? `at least ${c.apprKnown}` : "") : String(c.apprKnown);
+  const apprLink = `<a href="#" data-go="approvals"><b>Approvals</b></a>`;
+  const retry = ` <a href="#" data-retry>Retry</a>`;
+  let arith = "";
+  if (!failed && !stale && c.linked && c.dr === "ok") arith = `<p class="arith"><span class="lg">${c.open} open items: ${c.inbox} need you here, and ${c.linked === 1 ? "1 has" : c.linked + " have"} a draft waiting in</span><span class="sm">${c.open} open items. ${c.linked === 1 ? "1 has" : c.linked + " have"} a draft in</span><i class="dot"></i>${apprLink}${apprN ? ` (${apprN} waiting).` : "."}</p>`;
+  else if (!failed && !stale && c.linked) arith = `<p class="arith"><span>${c.open} open items: at least ${c.inbox} need you here. ${c.linked === 1 ? "1 has a draft" : c.linked + " have drafts"}, and drafts could not be ${c.dr === "stale" ? "refreshed" : "loaded"}, so ${c.linked === 1 ? "it is" : "they are"} not counted.${retry}</span></p>`;
+  else if (c.apprKnown) arith = `<p class="arith"><i class="dot"></i><span>Also waiting: <a href="#" data-go="approvals"><b>${apprN} approvals</b></a>, on their own page.</span></p>`;
+  else if (c.apprPlus && !failed) arith = `<p class="arith"><span>Approvals could not be ${c.dr === "stale" || c.pr === "stale" ? "refreshed" : "loaded"}, so Attache does not know what waits there.${retry}</span></p>`;
+
+  if (off) return wrap(`${head}${arith}<div class="empty4 small"><h3 style="margin-top:0">The Inbox is switched off.</h3><p class="muted">Nothing is read for it, so this is not a claim that nothing needs you.</p></div>`);
+  // A request that failed on first load shows the error in the Inbox's place. It never shows an empty state.
+  if (failed) return wrap(`${head}${arith}${errBox("Could not load", "The Inbox request failed.", "Nothing is listed, because an empty list here would read as nothing needs you. The count leaves the Inbox out until it loads.")}`);
+  if (!its.length) {
+    const zero = c.exact && c.total === 0, healthy = sv.mode === "green";
+    const title = stale ? `No open Inbox items as of ${t}.` : zero ? (healthy ? "Nothing needs you." : sv.read ? `Nothing found in the ${sv.read} ${sv.read === 1 ? "source that was" : "sources that were"} read.` : "Nothing found in what was read.") : "No open Inbox items.";
+    const also = c.apprKnown ? `<p class="also"><i class="dot"></i><span><a href="#" data-go="approvals"><b>${apprN} approvals</b></a> wait on their own page.</span></p>` : "";
+    const unk = c.apprPlus ? `<p class="muted" style="margin-top:6px">Approvals could not be loaded, so Attache cannot say that nothing needs you.${retry}</p>` : "";
+    const sign = c.sign ? `<p class="muted" style="margin-top:6px">A connection needs your sign-in, above.</p>` : "";
+    return wrap(`${head}${stale ? errBox("Could not refresh", `Showing the Inbox as it was at ${t}.`, "It was empty then. Attache does not know whether it still is.") : ""}<div class="empty4${zero && healthy ? "" : " small"}">${zero && healthy ? "<span data-logo4></span>" : ""}<h3${zero && healthy ? "" : ' style="margin-top:0"'}>${title}</h3><p class="muted">${sv.scope}</p>${also}${unk}${sign}</div>`);
+  }
+  const chips = `<div class="chips" role="group" aria-label="Open items by type"><button class="chip all" data-filter="" aria-pressed="${!S.filter}">All <span class="n">${its.length}</span></button>${fams.map((f) => `<button class="chip c-${FAM[f].hue}" data-filter="${f}" aria-pressed="${S.filter === f}">${ic(FAM[f].icon)}${FAM[f].many} <span class="n">${per(f).length}</span></button>`).join("")}</div>
+    <ul class="mix" aria-label="Open items by type">${fams.map((f) => `<li class="c-${FAM[f].hue}">${ic(FAM[f].icon)}<span>${FAM[f].many}</span><b>${per(f).length}</b></li>`).join("")}</ul>
+    <div class="ctl"><select class="chips-pick" aria-label="Show one type"><option value="">All types (${its.length})</option>${fams.map((f) => `<option value="${f}"${S.filter === f ? " selected" : ""}>${FAM[f].many} (${per(f).length})</option>`).join("")}</select><select class="ord" aria-label="Order"><option value="type"${S.view === "type" ? " selected" : ""}>By type</option><option value="time"${S.view === "time" ? " selected" : ""}>Newest first</option></select></div>`;
+  let list;
+  if (S.view === "time" && !S.filter) list = `<div class="tgroup flat">${[...its].sort((a, b) => a.age - b.age).map(rowHTML).join("")}</div>`;
+  else list = (S.filter ? [S.filter] : fams).map((f) => {
+    const rows = per(f), all = S.filter || S.more.has(f) || rows.length <= 3, shown = all ? rows : rows.slice(0, 3);
+    return `<section class="tgroup c-${FAM[f].hue}" aria-label="${FAM[f].many}"><header><span class="tile">${ic(FAM[f].icon)}</span>${FAM[f].many} <span class="n">${rows.length}</span></header>${shown.map(rowHTML).join("")}${all ? "" : `<button class="morebtn" data-more="${f}">Show all ${rows.length} ${FAM[f].many.toLowerCase()} ${ic("chev")}</button>`}</section>`;
+  }).join("");
+  const tails = `<div class="tails">
+    <details class="tail"><summary>${ic("brain")}<span>4 changes reached the Brain without your review in the last 7 days.</span>${ic("chev").replace('class="i"', 'class="i chev"')}</summary><div class="in"><ul class="ledger">
+      <li><div class="top"><a href="#">Ledger cutover rehearsal</a><span class="tag line">consolidated</span></div><div class="chg">Created the note</div><div class="acts" style="justify-content:space-between"><span class="src">Meeting "Ledger sync" · 9 min ago</span><button class="btn sm ghost">Revert</button></div></li>
+      <li><div class="top"><a href="#">Priya Shah</a><span class="tag line">auto-accepted</span></div><div class="chg"><b>Office</b>: <del class="muted">Copenhagen</del> → Aarhus, from the first of next month</div><div class="acts" style="justify-content:space-between"><span class="src">Claude Code · 31 min ago</span><button class="btn sm ghost">Revert</button></div></li>
+      <li><div class="top"><a href="#">Priya Shah</a><span class="tag line">auto-accepted</span></div><div class="chg">Event: Agreed to own the ledger migration</div><div class="src">Claude Code · 40 min ago · events cannot be reverted</div></li>
+    </ul><a class="small" href="#" data-go="brain">All changes in Brain, Recent saves</a></div></details>
+    <a class="tail hid-n" href="#"><span class="tl">${ic("more")}<span>Hidden: 3 snoozed or dismissed items</span></span></a>
+  </div>`;
+  const banner = stale ? errBox("Could not refresh", `Showing the Inbox as it was at ${t}.`, `These ${its.length} items may have changed since. The count leaves them out until the Inbox loads again.`) : "";
+  return wrap(`${head}${banner}${arith}${chips}<div class="groups">${list}</div>${tails}`);
+}
+
+function approvalsHTML() {
+  const a = approvals(), c = NEED, t = asof();
+  const draft = (d) => `<details class="item ti c-indigo" data-id="${d.id}"><summary><div><div class="k">${ic("draft")}<b>Draft</b><span>${d.what} · ${d.ver}</span></div><div class="t">${d.title}</div><div class="first">${d.first}</div></div><div class="m">${d.state ? `<span class="tag attn">${d.state}</span>` : ""}<span>${d.exp}</span></div></summary>
+    <div class="body"><div class="quote"><div class="eyebrow">What this answers</div><blockquote>${d.answers}</blockquote></div><p style="font:400 15px/1.55 var(--font);color:var(--ink)">${d.first}</p><div class="acts"><button class="btn sm primary" data-go="drafts">Review and approve ${d.ver}</button><button class="btn sm" data-decide="Rejected">Reject</button></div><div class="why">Approve and Send are separate presses on the draft's own page. Nothing is sent from this list.</div></div></details>`;
+  const prop = (p) => `<details class="item ti c-gold" data-id="${p.id}"><summary><div><div class="k">${ic("fact")}<b>Proposal</b><span>${p.label} · ${p.note}</span></div><div class="t">${p.title}</div></div><div class="m"><span>${p.age}</span></div></summary>
+    <div class="body"><dl class="diff">${p.diff}</dl><div class="acts"><button class="btn sm primary" data-decide="Applied">Apply</button><button class="btn sm" data-decide="Rejected">Reject</button><button class="btn sm ghost" data-go="brain">Open note</button></div></div></details>`;
+  const send = (d) => `<details class="item ti plain" data-id="${d.id}"><summary><div><div class="k">${ic("draft")}<b>Sending</b><span>${d.what} · ${d.ver}</span></div><div class="t">${d.title}</div></div><div class="m"><span>started 20 seconds ago</span></div></summary>
+    <div class="body"><p>Attache marks this sent only after Gmail confirms it. It keeps running if you close the tab, and it moves to Finished with its receipt.</p><div class="acts"><button class="btn sm" data-go="drafts" data-dstate="executing">Open the draft</button></div></div></details>`;
+  const err = (what, state) => `<div class="rowerr">${ic("alert")}<span>${state === "failed" ? `<b>${what} could not be loaded.</b> This is not an empty list: Attache does not know what waits here.` : `<b>${what} could not be refreshed.</b> These are the rows from ${t}. They may have changed, and the count leaves them out.`}</span><button class="btn sm" data-retry>Retry</button></div>`;
+  const grp = (hue, icon, name, hint, state, rows, what) => (state === "ok" && !rows.length ? "" : `<section class="tgroup c-${hue}" aria-label="${name}"><header><span class="tile">${ic(icon)}</span>${name} ${state === "ok" ? `<span class="n">${rows.length}</span>` : state === "stale" ? `<span class="n">as of ${t}</span>` : ""}<span class="hint">${hint}</span></header>${state === "ok" ? "" : err(what, state)}${state === "failed" ? "" : rows.join("")}</section>`);
+  const groups = grp("indigo", "draft", "Drafts to send", "Nothing is sent until you approve one version, then send it", c.dr, a.drafts.map(draft), "Drafts")
+    + grp("gold", "fact", "Changes to the Brain", "Proposals: Apply writes them, Reject discards them", c.pr, a.proposals.map(prop), "Proposals");
+  const sending = a.sending.length ? `<section class="tgroup flat" aria-label="In progress"><header><i class="spin"></i>In progress <span class="n">${a.sending.length}</span><span class="hint">Being sent. Nothing to decide, so it is not counted</span></header>${a.sending.map(send).join("")}</section>` : "";
+  const none = !c.apprPlus && !c.apprKnown;
+  const body = `${none ? `<div class="empty4"><span data-logo4></span><h3>Nothing waits for your OK.</h3><p class="muted">Drafts and Proposals appear here when Attache prepares them.</p></div>` : ""}<div class="groups"${none && sending ? ' style="margin-top:18px"' : ""}>${groups}${sending}</div>`;
+  const label = c.apprKnown ? `<span class="c"><i class="dot"></i> ${c.apprKnown}${c.apprPlus ? "+" : ""}</span>` : c.apprPlus && c.was.appr ? `<span class="c"><i class="dot"></i></span>` : "";
+  return `<div class="page-head"><h1>Approvals</h1><p>What Attache prepared and will not do without your OK.</p></div>
+    <div class="tabs" role="tablist"><button role="tab" aria-selected="true">Waiting ${label}</button><button role="tab" aria-selected="false">Finished</button></div>${body}`;
+}
+
+// The palette, read back from the stylesheet so this page and DESIGN.md cannot disagree.
+const HUES = [["indigo", "spark", "Accent · Draft"], ["green", "check", "All good"], ["amber", "key", "Sign-in needed"], ["red", "alert", "Down · overdue"], ["rose", "flag", "Deadline"], ["purple", "pr", "Review"], ["sky", "reply", "Reply"], ["teal", "at", "Mention"], ["moss", "cal", "Meeting"], ["orange", "ticket", "Work item"], ["gold", "fact", "Fact · Proposal"], ["slate", "sys", "System"]];
+const CVD = [["", "Full colour"], ["protan", "Protanopia"], ["deutan", "Deuteranopia"], ["tritan", "Tritanopia"], ["grey", "Greyscale"]];
+function coloursHTML() {
+  // One row per type, as it stands in the Inbox: the bar, the icon and the word together.
+  const demo = FAM_ORDER.map((f) => `<div class="item ti c-${FAM[f].hue}"><summary><div class="k">${ic(FAM[f].icon)}<b>${FAM[f].many}</b></div></summary></div>`).join("");
+  const panel = (t) => `<div class="pal" data-theme="${t}"><h2>${t === "light" ? "Light" : "Dark"}</h2>${HUES.map(([h, i, w]) => `<div class="sw c-${h}" data-hue="${h}"><span class="tile">${ic(i)}</span><span class="chip">${ic(i)}${w}</span><span class="hex"></span></div>`).join("")}<div class="neu" data-neu></div><div class="rowdemo">${demo}</div></div>`;
+  return `<div class="page-head"><h1>Colour</h1><p>One hue per Inbox type, one for the proactive area, three for status. Each hue has four steps: solid, ink, soft and line. Colour never stands alone: every use carries an icon and a word.</p></div>
+    <div class="cvd"><span>Seen as</span><div class="seg" role="group" aria-label="Seen as">${CVD.map(([v, l]) => `<button data-cvd="${v}" aria-pressed="${(document.body.dataset.cvd || "") === v}">${l}</button>`).join("")}</div><span class="muted">A simulation of colour vision without one cone type. It applies to every screen until it is set back.</span></div>
+    <div class="pals">${panel("light")}${panel("dark")}</div>`;
+}
+function fillColours() {
+  document.querySelectorAll(".pal").forEach((p) => {
+    const cs = getComputedStyle(p), v = (n) => cs.getPropertyValue(n).trim();
+    p.querySelectorAll(".sw").forEach((sw) => {
+      const h = sw.dataset.hue, names = h === "copper" ? ["--indigo", "--indigo-ink", "--indigo-soft", "--indigo-line"] : ["--" + h, `--${h}-ink`, `--${h}-soft`, `--${h}-line`];
+      sw.querySelector(".hex").innerHTML = names.map((n, k) => `<span><i style="background:${v(n)}"></i>${["solid", "ink", "soft", "line"][k]} ${v(n)}</span>`).join("");
+    });
+    p.querySelector("[data-neu]").innerHTML = ["--paper", "--surface", "--sunken", "--line", "--line-strong", "--ink", "--ink-2", "--ink-3", "--accent-solid", "--attn"].map((n) => `<span><i style="background:${v(n)}"></i>${n.slice(2)} ${v(n)}</span>`).join("");
+  });
+}
+
+function render() {
+  const c = (NEED = need());
+  // The dot: on for a known decision, off for an exact zero, and otherwise as it last was.
+  const dotOn = c.total > 0 || (!c.exact && (c.was.inbox || c.was.appr));
+  document.body.classList.toggle("all-clear", !dotOn);
+  document.body.classList.toggle("svc-auth", S.svc === "auth" || S.svc === "mixed");
+  const num = (n, plus) => `<i class="dot"></i><span>${n}${plus ? '<span class="plus">+</span>' : ""}</span>`;
+  const kept = '<i class="dot kept" title="As it last was. The number is not known."></i>';
+  const today = c.inbox ? num(c.inbox, c.inboxPlus) : c.inbox === null && c.was.inbox ? kept : "";
+  const appr = c.apprKnown ? num(c.apprKnown, c.apprPlus) : c.apprPlus && c.was.appr ? kept : "";
+  document.getElementById("n-today").innerHTML = today;
+  document.getElementById("n-appr").innerHTML = appr;
+  document.getElementById("n-conn").innerHTML = c.sign ? '<i class="dot"></i>' : "";
+  document.getElementById("tb-today").hidden = !today;
+  document.getElementById("tb-appr").hidden = !appr;
+  document.title = `${c.total ? `(${c.total}${c.exact ? "" : "+"}) ` : ""}Attache · Fable prototype v6`;
+  const who = S.svc === "noreader" ? "<b>emil-pc</b>. No Machine is the Reader" : S.svc === "silent" ? "<b>emil-pc</b>. Work Mac is the Reader, silent 2 h" : `<b>${machine()}</b>, the Reader`;
+  document.getElementById("foot-who").innerHTML = who;
+  document.getElementById("foot-state").textContent = c.exact ? "Connected to the Attache service" : S.reqWhen === "after" ? `Count as of ${asof()}. Retrying.` : "The count is incomplete. Retrying.";
+  document.getElementById("foot-time").textContent = `Tue 17 Nov, ${clock()}`;
+  document.getElementById("today").innerHTML = searchHTML() + proHTML() + statusHTML() + inboxHTML();
+  document.getElementById("approvals").innerHTML = approvalsHTML();
+  document.querySelectorAll("[data-logo4]").forEach((el) => { el.innerHTML = logo(56, false); el.style.display = "inline-flex"; });
+  for (const k of ["moment", "day"]) document.querySelectorAll(`[data-set="${k}"]`).forEach((b) => b.classList.toggle("on", b.dataset.val === S[k]));
+  document.querySelectorAll("[data-sel]").forEach((el) => { el.value = S[el.dataset.sel]; });
+}
+const setS = (k, v) => { S[k] = v; if (k === "day") { S.filter = null; S.more.clear(); if (v === "heavy") S.svc = "down"; } if (k === "moment") { S.gone.clear(); S.proOpen = false; } render(); };
+document.querySelector('[data-sel="svc"]').innerHTML = SVC_NAMES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+const setCvd = (v) => { if (v) document.body.dataset.cvd = v; else delete document.body.dataset.cvd; document.getElementById("colours").innerHTML = coloursHTML(); fillColours(); };
+document.getElementById("colours").innerHTML = coloursHTML();
+fillColours();
+render();
+document.addEventListener("input", (e) => {
+  if (e.target.id === "bq") { const open = e.target.value.trim().length > 0; document.getElementById("bres").hidden = !open; e.target.setAttribute("aria-expanded", open); }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.classList.contains("chips-pick")) { S.filter = e.target.value || null; render(); }
+  if (e.target.classList.contains("ord")) { S.view = e.target.value; S.filter = null; render(); }
+  if (e.target.dataset.sel) setS(e.target.dataset.sel, e.target.value);
+});
+addEventListener("resize", () => { const q = document.getElementById("bq"); if (q) q.placeholder = searchHint(); });
+const focusSearch = () => { document.querySelector(".main").scrollTop = 0; document.getElementById("bq").focus(); };
+const onToday = () => document.getElementById("s-inbox").classList.contains("on");
+
+document.addEventListener("click", (e) => {
+  const g = e.target.closest("[data-go]");
+  if (g) { e.preventDefault(); go(g.dataset.go); if (g.dataset.secGo) showSection(document.querySelector(`[data-sec="${g.dataset.secGo}"]`)); if (g.dataset.dstate) draftAct("set:" + g.dataset.dstate); }
+  const rt = e.target.closest("[data-retry]");
+  if (rt) { e.preventDefault(); S.req = "none"; if (["unknown", "checking"].includes(S.svc)) S.svc = "ok"; render(); }
+  if (e.target.closest("[data-proopen]")) { S.proOpen = !S.proOpen; render(); document.querySelector("[data-proopen]").focus(); }
+  const cv = e.target.closest("[data-cvd]");
+  if (cv) setCvd(cv.dataset.cvd);
+  const jump = e.target.closest('.counts a[href^="#g-"]');
+  if (jump) { e.preventDefault(); document.getElementById(jump.getAttribute("href").slice(1)).scrollIntoView({ block: "start" }); }
+  if (e.target.closest("[data-open-palette]")) { if (onToday()) focusSearch(); else palette.classList.add("on"); }
+  if (e.target === palette) palette.classList.remove("on");
+  if (e.target.closest("[data-open-more]")) more.classList.add("on");
+  else if (e.target === more || g) more.classList.remove("on");
+  const sec = e.target.closest("[data-sec]");
+  if (sec) showSection(sec);
+  const dec = e.target.closest("[data-decide]");
+  if (dec) decide(dec);
+  const undo = e.target.closest("[data-undo]");
+  if (undo) { const row = undo.closest(".decided"); row.replaceWith(row._item); row._item.querySelector("summary").focus(); }
+  const da = e.target.closest("[data-draft]");
+  if (da) draftAct(da.dataset.draft);
+  const t = e.target.closest("[data-theme-set]");
+  if (t) { document.documentElement.dataset.theme = t.dataset.themeSet; document.querySelectorAll("[data-theme-set]").forEach((b) => b.classList.toggle("on", b === t)); }
+  const set = e.target.closest("[data-set]");
+  if (set) setS(set.dataset.set, set.dataset.val);
+  const fl = e.target.closest("[data-filter]");
+  if (fl) { S.filter = fl.dataset.filter || null; render(); }
+  const vw = e.target.closest("[data-view]");
+  if (vw) { S.view = vw.dataset.view; S.filter = null; render(); }
+  const mr = e.target.closest("[data-more]");
+  if (mr) { S.more.add(mr.dataset.more); render(); }
+  const gn = e.target.closest("[data-gone]");
+  if (gn) { S.gone.add(gn.dataset.gone); render(); }
+  const bk = e.target.closest("[data-back]");
+  if (bk) { S.gone.delete(bk.dataset.back); if (S.moment !== "morning") S.moment = "morning"; render(); }
+  const sw = e.target.closest(".switch:not([disabled])");
+  if (sw) sw.setAttribute("aria-checked", sw.getAttribute("aria-checked") !== "true");
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (onToday()) focusSearch(); else palette.classList.toggle("on"); }
+  if (e.key === "Escape") { palette.classList.remove("on"); more.classList.remove("on"); }
+});
+// Deep links for screenshots: #today, #approvals, #colours, #dark, #morning, #meeting, #later, #svc-<state>, #normal, #heavy, #inboxzero, #clear, #req-attention, #req-drafts, #req-proposals, #req-all, #after, #proopen, #cvd-protan, #cvd-deutan, #cvd-tritan, #cvd-grey, #find, #bytime, #filter-review, #more-deadline, #shot, #palette, #more, #sec-saving, #dstate-unknown, #open-p1, #measure (combine with commas).
+for (const part of location.hash.slice(1).split(",").filter(Boolean)) {
+  if (part === "dark") document.querySelector('[data-theme-set="dark"]').click();
+  else if (["morning", "meeting", "later"].includes(part)) setS("moment", part);
+  else if (part.startsWith("svc-")) setS("svc", part.slice(4));
+  else if (["normal", "heavy", "inboxzero", "clear"].includes(part)) setS("day", part);
+  else if (part.startsWith("req-")) setS("req", part.slice(4));
+  else if (part === "after") setS("reqWhen", "after");
+  else if (part === "proopen") { S.proOpen = true; render(); }
+  else if (part.startsWith("cvd-")) setCvd(part.slice(4));
+  else if (part === "today") go("inbox");
+  else if (part === "bytime") { S.view = "time"; render(); }
+  else if (part.startsWith("filter-")) { S.filter = part.slice(7); render(); }
+  else if (part.startsWith("more-")) { S.more.add(part.slice(5)); render(); }
+  else if (part === "shot") document.body.classList.add("shot");
+  else if (part === "find") { const q = document.getElementById("bq"); q.value = "orion cutover"; q.dispatchEvent(new Event("input", { bubbles: true })); q.focus(); }
+  else if (part.startsWith("dstate-")) draftAct("set:" + part.slice(7));
+  else if (part.startsWith("open-")) { const row = document.querySelector(`[data-id="${part.slice(5)}"]`); row.open = true; row.scrollIntoView({ block: "start" }); }
+  else if (part === "measure") {
+    // Rows of the visible queue whose summary is fully above the fold, for the density comparison. Recounted when the window changes size.
+    const label = document.body.appendChild(Object.assign(document.createElement("div"), { className: "fold" }));
+    const measure = () => {
+      const rows = [...document.querySelectorAll("#today .item > summary")].filter((x) => x.offsetParent);
+      const above = rows.filter((x) => x.getBoundingClientRect().bottom <= innerHeight - (matchMedia("(max-width: 760px)").matches ? 62 : 0)).length;
+      label.textContent = document.title = `fold ${innerWidth}x${innerHeight}: ${above} of ${rows.length} rows above the fold, first row at ${rows[0] ? Math.round(rows[0].getBoundingClientRect().top) : "-"} px`;
+    };
+    measure();
+    addEventListener("resize", measure);
+  }
+  else if (part === "more") more.classList.add("on");
+  else if (part.startsWith("sec-")) showSection(document.querySelector(`[data-sec="${part.slice(4)}"]`));
+  else if (part.startsWith("draft-")) part.slice(6).split("+").forEach(draftAct);
+  else if (part === "palette") palette.classList.add("on");
+  else if (document.getElementById("s-" + part)) go(part);
+}
+</script>
+</body>
+</html>
