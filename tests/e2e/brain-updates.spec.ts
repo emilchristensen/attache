@@ -51,6 +51,9 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section).toBeVisible();
   await expect(section).toContainText("Nothing was written without your review in the last 7 days.");
   await expect(section.getByRole("listitem")).toHaveCount(0);
+  // With no sources nothing needs attention, so the logo shows no dot.
+  await expect(page.getByText("Nothing needs your attention")).toBeVisible();
+  await expect(page.locator(".nav .brand .logo-dot")).toHaveCount(0);
 });
 
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {

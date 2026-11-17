@@ -236,6 +236,8 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await expect(page.getByRole("region", { name: "Review queue" })).toBeInViewport();
   await page.reload();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible();
+  // The logo's dot says something needs attention.
+  await expect(page.locator(".nav .brand .logo-dot")).toHaveCount(1);
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toHaveCount(0);
   await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toHaveCount(0);
   await page.getByRole("button", { name: "Show dismissed" }).click();

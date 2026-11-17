@@ -112,7 +112,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="brand">
-          <Logo /> Attache
+          <Logo attention={(counts.data?.items.length ?? 0) > 0} /> Attache
         </div>
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={`g then ${n.key}`}>

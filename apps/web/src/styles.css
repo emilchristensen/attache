@@ -985,26 +985,18 @@ button.count-chip {
 
 /* The logo keeps its own colours, so a change to the theme leaves it alone. */
 .logo {
-  --logo-case: #6cb8ff;
-  --logo-dot: #f0b429;
   flex-shrink: 0;
   display: block;
 }
-@media (prefers-color-scheme: light) {
-  .logo {
-    --logo-case: #1d6fd1;
-    --logo-dot: #e39b0b;
-  }
-}
 .logo-case {
-  fill: var(--logo-case);
-  stroke: var(--logo-case);
+  fill: #ba6249;
+  stroke: #ba6249;
 }
 .logo-case rect {
   stroke: none;
 }
 .logo-dot {
-  fill: var(--logo-dot);
+  fill: #c38942;
 }
 
 /* ---- evidence panel -------------------------------------------------------------- */
