@@ -1,37 +1,86 @@
 # Jarvis
 
+[![CI](https://github.com/emilchristensen/jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/emilchristensen/jarvis/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A local-first personal assistant for macOS, Linux and Windows that keeps your knowledge and brings forward what needs your attention.
-It runs in the browser, keeps your knowledge as Markdown in a folder you choose, answers with cited evidence, watches the sources you connect, and prepares drafts that are sent only after you approve the exact version.
-You can also read and edit the notes in Obsidian or any other Markdown editor.
 
-- **Install:** on macOS (Apple silicon), download `Jarvis-Installer-<version>-macos-arm64.command` from a release and double-click it.
-  On Linux (x86_64 with systemd), download `Jarvis-Installer-<version>-linux-x64.sh` and run it with `sh`.
-  On Windows 10 or 11 (x86_64), download `Jarvis-Installer-<version>-windows-x64.cmd` and double-click it.
-  No developer tools needed.
-  See the [user guide](docs/user-guide.md).
-- **Build from source:** see the [developer guide](docs/developer-guide.md).
-- **How it works:** [architecture](docs/architecture.md), [what was reused and why](docs/inspection.md).
-- **Status and evidence:** [build status](docs/build-status.md), [acceptance report](docs/acceptance-report.md).
+Jarvis keeps your knowledge as Markdown in a folder you choose and answers with cited evidence.
+It watches the sources you connect and prepares drafts that are sent only after you approve the exact version.
+You can read and edit the notes in Obsidian or any other Markdown editor.
 
-## What it does
+## Features
 
-- Search with exact citations: every hit names its file and lines, and search works without a model.
-  Jarvis has no chat box of its own; you ask the Brain from your Harness.
-- Meaning-based search on each Machine: a small multilingual model, downloaded once from Settings, runs locally and builds vectors for every passage; search then ranks by meaning and keywords, so a question in other words or in Danish finds an English note, and falls back to keywords until the vectors are ready.
-- The Brain in any Harness: a local MCP server (`jarvis mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts and events you confirm inside the Harness (or, for a Harness you switch auto-accept on for, without asking), with no token in their configuration.
-  Connecting a Harness in the Dashboard adds the server, and for Claude Code, Codex and Antigravity the session hooks, in one step.
-  A wrap-up prompt records the durable points of a conversation Jarvis cannot capture, such as Claude Desktop's Chat tab, as evidence.
-- Memory: import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
-  The Dashboard shows the Brain read-only and takes one-click decisions; notes are added and corrected from a Harness.
-- Attention and briefings: deadlines, review queues, meeting prep and pending replies from your sources, with dismiss/snooze that sticks until the evidence changes, and visible source coverage.
-- Drafts and approvals: PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval binding and verified receipts.
-- Replication (opt-in): every Machine you run Jarvis on keeps the same Brain through a private git repository, with history, offline saves that catch up later, hand edits included, and the same inbox with the same dismiss and snooze decisions on every Machine.
-- Background work: durable research, briefing and draft jobs that survive closing the tab and restarting the service.
+- **Search with citations.**
+  Every hit names its file and lines, and search works without a model.
+- **Meaning-based search.**
+  A small multilingual model runs locally and ranks passages by meaning and keywords, so a question worded differently, or in another language, still finds the note.
+- **The Brain in your Harness.**
+  A local MCP server (`jarvis mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts you confirm.
+  Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
+- **Memory with history.**
+  Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
+- **Attention and briefings.**
+  Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
+- **Drafts and approvals.**
+  PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts.
+- **Replication (opt-in).**
+  Every Machine you run Jarvis on keeps the same Brain through a private git repository, including offline saves and hand edits.
+- **Background work.**
+  Research, briefing and draft jobs survive closing the browser tab and restarting the service.
 
-Connections: local Markdown/Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic, OpenAI-compatible).
-Each is optional and starts read-only.
+Jarvis has no chat box of its own; you ask the Brain from your Harness.
 
-## Research and brief
+Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
+Each one is optional and starts read-only.
 
-[JARVIS_BUILD_SPEC.md](JARVIS_BUILD_SPEC.md) is the implementation brief.
-Research inputs are in [research/](research/README.md).
+## Install
+
+Download the installer for your platform from [Releases](https://github.com/emilchristensen/jarvis/releases).
+No developer tools are needed.
+
+| Platform | File | How to run it |
+| --- | --- | --- |
+| macOS (Apple silicon) | `Jarvis-Installer-<version>-macos-arm64.command` | Double-click it. |
+| Linux (x86_64 with systemd) | `Jarvis-Installer-<version>-linux-x64.sh` | `sh Jarvis-Installer-<version>-linux-x64.sh` |
+| Windows 10 or 11 (x86_64) | `Jarvis-Installer-<version>-windows-x64.cmd` | Double-click it. |
+
+The installer starts Jarvis as a background service and opens first-run setup in your browser.
+The releases are not code-signed, so macOS may ask you to right-click the file and choose **Open** the first time.
+
+The [user guide](docs/user-guide.md) covers setup, everyday use, Harness connections, Replication, backups and uninstalling.
+
+## Build from source
+
+You need Node 24.22.0 or newer, pnpm 11 and Google Chrome.
+
+```sh
+pnpm install
+pnpm build      # contracts, service bundle and Dashboard
+pnpm test       # unit, adapter contract and HTTP integration tests
+pnpm dev        # run the service and Dashboard locally
+pnpm release    # build the installers into release/<version>/
+```
+
+The [developer guide](docs/developer-guide.md) lists every check, the CI setup and the install test.
+
+## Documentation
+
+- [User guide](docs/user-guide.md)
+- [Developer guide](docs/developer-guide.md)
+- [Architecture](docs/architecture.md)
+- [Glossary](GLOSSARY.md)
+- [Architecture decision records](docs/adr/)
+
+## Contributing
+
+Jarvis is open source but not open to contributions.
+Pull requests will be closed without review.
+You are welcome to fork it and change it for your own use under the terms of the license.
+
+Bug reports are welcome as [GitHub issues](https://github.com/emilchristensen/jarvis/issues), with no promise of a fix or a reply.
+Please report security problems privately through [GitHub security advisories](https://github.com/emilchristensen/jarvis/security/advisories/new) instead of a public issue.
+
+## License
+
+[MIT](LICENSE) © Emil Rømer Christensen
