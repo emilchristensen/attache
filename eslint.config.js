@@ -15,7 +15,7 @@ const fileRenames = () => [
 ];
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**", "release/**", "test-results/**", ".cache/**", ".lavish/**", "research/**"] },
+  { ignores: ["**/dist/**", "**/node_modules/**", "release/**", "test-results/**", ".cache/**", "research/**"] },
   ...tseslint.configs.recommended,
   {
     rules: {

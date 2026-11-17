@@ -31,9 +31,9 @@ export const SourceRefInput = z.object({
 export const ArchiveInput = z.object({
   path: z.string().min(1),
   label: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/),
-  /** Path prefixes relative to the folder, e.g. "graphify-out/" or "brain/HOT.md". */
+  /** Path prefixes relative to the folder, e.g. ".obsidian/" or "templates/". */
   exclude: z.array(z.string().min(1).max(200)).max(50).default([]),
-  /** Where the files really come from when archiving a frozen copy, e.g. "~/OldNotes at commit 0c6becc". */
+  /** Where the files really come from when archiving a frozen copy, e.g. "~/Notes at commit 0c6becc". */
   origin: z.string().min(1).max(500).optional(),
 });
 

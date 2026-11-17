@@ -9,9 +9,7 @@
  *    repository's own Markdown: README.md, GLOSSARY.md, AGENTS.md,
  *    CODING_STANDARDS.md, docs/** and installer/**. Third-party skills
  *    (.claude/skills, .agents/skills), research/, node_modules and release/
- *    are never read. The dated records in docs (build-status.md,
- *    acceptance-report.md, inspection.md) are read too: the developer guide
- *    does not freeze them, and a line break never changes what they say.
+ *    are never read.
  *
  * 2. Avoided glossary terms (`check-docs/glossary.mjs`). The words GLOSSARY.md
  *    lists under `_Avoid_` must not appear in text the owner reads: the

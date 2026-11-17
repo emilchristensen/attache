@@ -61,14 +61,13 @@ function macos(loc, name) {
     /** Service definitions of this instance in the owner's LaunchAgents folder. */
     definitions: () => (existsSync(loc.serviceDefinitionDir) ? readdirSync(loc.serviceDefinitionDir).filter((f) => f.startsWith(`${name}.`)) : []),
     ownerFiles: { "Library/LaunchAgents/com.example.owner.plist": "<plist><dict><key>Label</key><string>com.example.owner</string></dict></plist>\n" },
-    /** The owner's own brains and schedules on this Mac must not change while the test runs. */
+    /** The owner's own Jarvis LaunchAgents on this Mac must not change while the test runs. */
     machineFingerprint: () => {
-      const git = (dir, args) => output("/usr/bin/git", ["-C", dir, ...args]) || "n/a";
-      const brain = (dir) => `${git(dir, ["rev-parse", "HEAD"])} ${createHash("sha256").update(git(dir, ["status", "--porcelain"])).digest("hex").slice(0, 12)}`;
-      const agents = output("/bin/launchctl", ["list"]).split("\n").filter((l) => /second-?brain/i.test(l)).map((l) => l.split("\t").pop()).sort().join(",");
       const plistDir = join(homedir(), "Library/LaunchAgents");
-      const plists = existsSync(plistDir) ? readdirSync(plistDir).filter((f) => /second-?brain|brain/i.test(f)).map((f) => `${f}:${createHash("sha256").update(readFileSync(join(plistDir, f))).digest("hex").slice(0, 12)}`).sort().join(",") : "";
-      return { newBrain: brain(join(homedir(), "old-notes")), oldBrain: brain(join(homedir(), "OldNotes")), agents, plists };
+      const own = (f) => /jarvis/i.test(f) && !f.startsWith(`${name}.`);
+      const agents = output("/bin/launchctl", ["list"]).split("\n").map((l) => l.split("\t").pop()).filter((label) => own(`${label}.`)).sort().join(",");
+      const plists = existsSync(plistDir) ? readdirSync(plistDir).filter(own).map((f) => `${f}:${createHash("sha256").update(readFileSync(join(plistDir, f))).digest("hex").slice(0, 12)}`).sort().join(",") : "";
+      return { agents, plists };
     },
   };
 }

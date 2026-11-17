@@ -565,7 +565,3 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
   (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)
 - Electron: not in this release.
   The API is versioned (`/api/v1`) and has no browser-only assumptions, so an Electron shell can load the same Dashboard.
-
-## What was reused and what inspired the design
-
-See `docs/inspection.md` for the evidence behind each item.

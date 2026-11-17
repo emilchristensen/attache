@@ -76,7 +76,7 @@ describe("session-start context", () => {
     const text = buildSessionContext({
       now: new Date("2026-10-02T10:00:00Z"),
       dataFolder: "/data",
-      identity: { name: "Alex", email: "e@x.dk" },
+      identity: { name: "Alex", email: "a@x.dk" },
       notes: [{ type: "project", title: "Kestrel" }, ...Array.from({ length: 40 }, (_, i) => ({ type: "project", title: `P${i}` }))],
       searchCommand: { line: "jarvis search", powershell: null },
     });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Installation, upgrade, backup/restore and uninstall checks (A02, A14) against
+ * Installation, upgrade, backup/restore and uninstall checks against
  * release artifacts built for this computer (macOS on Apple silicon, Linux or
  * Windows on x86_64), in a clean temporary profile (fresh home folder whose
  * name has a space and the letters æøå, a minimal PATH with no developer
@@ -167,23 +167,23 @@ async function main() {
   writeFileSync(CLAUDE_SETTINGS, CLAUDE_BEFORE);
   const ownerHome = homeFiles();
 
-  // --- A02: clean-profile install from the artifact, no developer tools on PATH ---
+  // --- clean-profile install from the artifact, no developer tools on PATH ---
   const out1 = sh(artifact(FROM));
   const h1 = await http("GET", "/health");
-  check("A02", "clean-profile install starts the service", h1.status === 200 && h1.body.version === FROM, `version ${h1.body?.version}`);
+  check("install", "clean-profile install starts the service", h1.status === 200 && h1.body.version === FROM, `version ${h1.body?.version}`);
   const pairUrl = /Open: (http:\/\/127\.0\.0\.1:\d+\/pair#code=\w+)/.exec(out1)?.[1];
-  check("A02", "installer prints a first-run pairing URL (opened automatically without JARVIS_NO_OPEN)", !!pairUrl, pairUrl ?? out1.slice(-300));
+  check("install", "installer prints a first-run pairing URL (opened automatically without JARVIS_NO_OPEN)", !!pairUrl, pairUrl ?? out1.slice(-300));
   // Open that URL in a real browser and confirm first-run setup appears.
   const { chromium } = await import("@playwright/test");
   const browser = await chromium.launch({ channel: "chrome", headless: true });
   const page = await browser.newPage();
   await page.goto(pairUrl);
   const setupVisible = await page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" }).waitFor({ timeout: 15_000 }).then(() => true, () => false);
-  check("A02", "the pairing URL opens first-run setup in the browser", setupVisible);
+  check("install", "the pairing URL opens first-run setup in the browser", setupVisible);
   await browser.close();
-  check("A02", `service runs under the user's ${P.serviceKind}`, P.loaded(), P.serviceName);
-  check("A02", "service starts at login", P.startsAtLogin(), P.definition ?? P.serviceName);
-  check("A02", "bundled runtime used (no system Node needed)", P.runsBundledRuntime(PREFIX));
+  check("install", `service runs under the user's ${P.serviceKind}`, P.loaded(), P.serviceName);
+  check("install", "service starts at login", P.startsAtLogin(), P.definition ?? P.serviceName);
+  check("install", "bundled runtime used (no system Node needed)", P.runsBundledRuntime(PREFIX));
 
   // Configure a notes-only workspace with some data, in a data folder that already holds the owner's notes.
   let token = await pairToken();
@@ -192,16 +192,16 @@ async function main() {
   await http("PATCH", "/config", { schedules: { refreshEveryMinutes: 55 } }, token);
   await http("POST", "/memory/save", { confirmed: true, origin: { agent: "claude-code", sessionId: "install-test" }, items: [{ action: "create", type: "decision", title: "Helios budget", facts: [{ subject: "Decision", value: "Cap Helios at 40k" }] }] }, token);
   await http("POST", "/setup/complete", {}, token);
-  check("A02", "installing Jarvis does not touch any Harness settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
+  check("install", "installing Jarvis does not touch any Harness settings", readFileSync(CLAUDE_SETTINGS, "utf8") === CLAUDE_BEFORE);
   const meaning = await http("GET", "/memory/meaning", undefined, token);
-  check("A02", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
+  check("install", "the release carries the meaning model's runtime, and the model waits for the owner to download it", existsSync(join(PREFIX, "current/service/ort-wasm-simd-threaded.wasm")) && meaning.body?.state === "missing", JSON.stringify(meaning.body));
   const claude = await http("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} }, token);
   const hookCmds = JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8")).hooks);
   const inCommand = (...parts) => hookCmds.includes(P.commandPath(join(PREFIX, ...parts)));
-  check("A02", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && inCommand("current", "runtime", "node") && inCommand("current", "service", "jarvis-agent-hook.mjs") && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
+  check("install", "connecting Claude Code adds hooks that run through the installer's stable `current` path", claude.body?.test?.ok && inCommand("current", "runtime", "node") && inCommand("current", "service", "jarvis-agent-hook.mjs") && !hookCmds.includes(`/app/${FROM}/`), claude.body?.test?.message ?? JSON.stringify(claude.body));
   const cfgBefore = (await http("GET", "/config", null, token)).body.config;
 
-  // --- A02: the service manager brings the service back after a crash ---
+  // --- the service manager brings the service back after a crash ---
   const crashedPid = (await http("GET", "/status", null, token)).body.pid;
   process.kill(crashedPid, "SIGKILL");
   let restartedPid = null;
@@ -210,18 +210,18 @@ async function main() {
     const s = await http("GET", "/status", null, token).catch(() => null);
     if (s?.status === 200 && s.body.pid !== crashedPid) restartedPid = s.body.pid;
   }
-  check("A02", "the service is restarted after a crash", !!restartedPid, `pid ${crashedPid} -> ${restartedPid}`);
+  check("install", "the service is restarted after a crash", !!restartedPid, `pid ${crashedPid} -> ${restartedPid}`);
 
-  // --- A02: reinstall is idempotent ---
+  // --- reinstall is idempotent ---
   sh(artifact(FROM));
   token = await pairToken();
   const cfgAfterReinstall = (await http("GET", "/config", null, token)).body.config;
   const appDirs = readdirSync(join(PREFIX, "app")).filter((d) => !d.startsWith("."));
-  check("A02", "reinstall is idempotent (same config, one app version, healthy)", JSON.stringify(cfgAfterReinstall) === JSON.stringify(cfgBefore) && appDirs.join() === FROM && (await http("GET", "/health")).body.version === FROM, `apps=${appDirs.join(",")}`);
+  check("install", "reinstall is idempotent (same config, one app version, healthy)", JSON.stringify(cfgAfterReinstall) === JSON.stringify(cfgBefore) && appDirs.join() === FROM && (await http("GET", "/health")).body.version === FROM, `apps=${appDirs.join(",")}`);
   const definitions = P.definitions();
-  check("A02", "reinstall leaves exactly one service definition", definitions.length === 1, definitions.join(","));
+  check("install", "reinstall leaves exactly one service definition", definitions.length === 1, definitions.join(","));
 
-  // --- A02/A14: upgrade preserves configuration and data ---
+  // --- upgrade preserves configuration and data ---
   // A speech model an earlier version downloaded for voice goes with the upgrade.
   const oldSpeechModel = join(STATE, "models", "ggml-base.en.bin");
   mkdirSync(dirname(oldSpeechModel), { recursive: true });
@@ -239,17 +239,17 @@ async function main() {
   const cfgAfterUpgrade = (await http("GET", "/config", null, token)).body.config;
   const hits = (await http("GET", "/memory/search?q=Helios budget", null, token)).body.hits;
   const preUpgrade = readdirSync(join(STATE, "backups")).filter((f) => f.startsWith(`pre-upgrade-${FROM}-to-${TO}`));
-  check("A02", "upgrade runs the new version", h2.body.version === TO, `version ${h2.body.version}`);
-  check("A02", "upgrade preserves configuration", JSON.stringify(cfgAfterUpgrade) === JSON.stringify(cfgBefore));
-  check("A02", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
-  check("A14", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
-  check("A02", "upgrade removes the speech model voice downloaded", !existsSync(oldSpeechModel));
+  check("install", "upgrade runs the new version", h2.body.version === TO, `version ${h2.body.version}`);
+  check("install", "upgrade preserves configuration", JSON.stringify(cfgAfterUpgrade) === JSON.stringify(cfgBefore));
+  check("install", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
+  check("data", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
+  check("install", "upgrade removes the speech model voice downloaded", !existsSync(oldSpeechModel));
   const skillsLeft = readdirSync(skillsDir).sort();
-  check("A02", "upgrade removes the save and audit skills Jarvis installed, and leaves other skills", JSON.stringify(skillsLeft) === JSON.stringify(["my-own-skill"]), skillsLeft.join(", "));
+  check("install", "upgrade removes the save and audit skills Jarvis installed, and leaves other skills", JSON.stringify(skillsLeft) === JSON.stringify(["my-own-skill"]), skillsLeft.join(", "));
 
-  // --- A02: the hooks keep working across the upgrade and save a real session ---
+  // --- the hooks keep working across the upgrade and save a real session ---
   const hookTest = await http("POST", "/connections/claude-code/test", {}, token);
-  check("A02", "Claude Code hooks are still current after the upgrade", hookTest.body?.test?.ok === true, hookTest.body?.test?.message);
+  check("install", "Claude Code hooks are still current after the upgrade", hookTest.body?.test?.ok === true, hookTest.body?.test?.message);
   const transcript = join(tmpdir(), `jarvis-install-session-${process.pid}.jsonl`);
   writeFileSync(transcript, [{ type: "user", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "user", content: "Where do sessions go?" } }, { type: "assistant", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: "We decided they go to the data folder." }] } }].map((r) => JSON.stringify(r)).join("\n"));
   runClaudeHook("SessionEnd", { session_id: "inst-1", transcript_path: transcript, cwd: HOME, reason: "exit" });
@@ -260,12 +260,12 @@ async function main() {
     sessionSaved = existsSync(saved) && readdirSync(saved).some((f) => f.includes("inst-1"));
   }
   rmSync(transcript, { force: true });
-  check("A02", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
+  check("install", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
 
   // --- the MCP server Jarvis registered runs the installed CLI, with no jarvis on PATH, and saves what the owner confirms ---
   const mcpEntry = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers?.jarvis;
   const viaCurrent = (p, expected) => p === expected && !/[\\/]app[\\/]/.test(p);
-  check("A02", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, NODE) && viaCurrent(mcpEntry.args[0], SERVICE) && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
+  check("install", "connecting Claude Code registers Jarvis's MCP server in ~/.claude.json through the stable `current` path", viaCurrent(mcpEntry?.command, NODE) && viaCurrent(mcpEntry.args[0], SERVICE) && mcpEntry.args.slice(1).join(" ") === `mcp --state-dir ${STATE}`, JSON.stringify(mcpEntry));
   const mcpItems = [{ action: "create", type: "decision", title: "The MCP server runs the installed CLI", facts: [{ subject: "Decision", value: "Harnesses start the bundled node and service, so the server needs nothing on PATH" }] }];
   let mcpOutcome = "";
   try {
@@ -274,7 +274,7 @@ async function main() {
     mcpOutcome = String(e.message);
   }
   const savedNote = join(DATA, "memory/decisions/the-mcp-server-runs-the-installed-cli.md");
-  check("A02", "a save through the registered MCP server, confirmed in the Harness, writes curated memory citing the session", mcpOutcome === "saved" && existsSync(savedNote) && readFileSync(savedNote, "utf8").includes("agent-session: evidence/sessions/transcripts/claude-code/"), mcpOutcome);
+  check("install", "a save through the registered MCP server, confirmed in the Harness, writes curated memory citing the session", mcpOutcome === "saved" && existsSync(savedNote) && readFileSync(savedNote, "utf8").includes("agent-session: evidence/sessions/transcripts/claude-code/"), mcpOutcome);
   const saveCmd = (() => {
     try {
       jarvisCli(["save"]);
@@ -283,18 +283,18 @@ async function main() {
       return String(e.stderr ?? e.message);
     }
   })();
-  check("A02", "the command line has no save command", saveCmd.includes("Unknown command save"), saveCmd.trim());
+  check("install", "the command line has no save command", saveCmd.includes("Unknown command save"), saveCmd.trim());
 
   // --- service control from the command line ---
   jarvisCli(["stop"]);
   const stopped = await http("GET", "/health").then(() => false, () => true);
   jarvisCli(["start"]);
   const started = await waitForHealth(60);
-  check("A02", "jarvis stop / jarvis start control the service", stopped && !!started && P.loaded());
+  check("install", "jarvis stop / jarvis start control the service", stopped && !!started && P.loaded());
 
-  // --- A14: backup, then restore into a fresh profile ---
+  // --- backup, then restore into a fresh profile ---
   const backup = JSON.parse(jarvisCli(["backup"]));
-  check("A14", "backup archive created", existsSync(backup.path) && backup.bytes > 0 && backup.manifest.credentialsIncluded === false, backup.path);
+  check("data", "backup archive created", existsSync(backup.path) && backup.bytes > 0 && backup.manifest.credentialsIncluded === false, backup.path);
   const freshState = mkdtempSync(join(tmpdir(), "jarvis-restored-state-"));
   const freshData = join(mkdtempSync(join(tmpdir(), "jarvis-restored-data-")), "Jarvis");
   const restored = JSON.parse(installed(["restore", backup.path, "--state-dir", freshState, "--data-folder", freshData], { ...cleanEnv, JARVIS_STATE_DIR: freshState, JARVIS_CREDENTIAL_STORE: "file" }));
@@ -311,7 +311,7 @@ async function main() {
     const get = async (p) => (await fetch(`http://127.0.0.1:${restorePort}/api/v1${p}`, { headers: { authorization: `Bearer ${tok}` } })).json();
     const rcfg = (await get("/config")).config;
     const rhits = (await get("/memory/search?q=Helios budget")).hits;
-    check("A14", "restore into a fresh profile brings back config and data", restoredOk && rcfg.setupCompleted && rcfg.schedules.refreshEveryMinutes === 55 && rcfg.dataFolder === freshData && rhits.some((h) => h.text.includes("Cap Helios at 40k")), `dataFolder=${restored.dataFolder}`);
+    check("data", "restore into a fresh profile brings back config and data", restoredOk && rcfg.setupCompleted && rcfg.schedules.refreshEveryMinutes === 55 && rcfg.dataFolder === freshData && rhits.some((h) => h.text.includes("Cap Helios at 40k")), `dataFolder=${restored.dataFolder}`);
     const again = (() => {
       try {
         installed(["restore", backup.path, "--state-dir", freshState]);
@@ -320,7 +320,7 @@ async function main() {
         return true;
       }
     })();
-    check("A14", "restore refuses to overwrite a live profile", again);
+    check("data", "restore refuses to overwrite a live profile", again);
   } finally {
     const exited = new Promise((r) => svc.once("exit", r));
     // Killed outright, as Windows always ends it (it has no SIGTERM) and as a crash would: the writer lock
@@ -331,31 +331,31 @@ async function main() {
     for (const dir of [freshState, dirname(freshData)]) rmSync(dir, { recursive: true, force: true });
   }
 
-  // --- A14: uninstall keeps data; reinstall picks it up; delete-data removes everything ---
+  // --- uninstall keeps data; reinstall picks it up; delete-data removes everything ---
   sh(P.command(P.binDir, "jarvis-uninstall"));
   const healthGone = await http("GET", "/health").then(() => false, () => true);
-  check("A14", "uninstall stops and removes the service", healthGone && !P.loaded() && !P.known() && !existsSync(join(PREFIX, "app")));
-  check("A14", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
-  check("A14", "uninstall removes exactly the hooks Jarvis added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
+  check("data", "uninstall stops and removes the service", healthGone && !P.loaded() && !P.known() && !existsSync(join(PREFIX, "app")));
+  check("data", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "jarvis.sqlite")));
+  check("data", "uninstall removes exactly the hooks Jarvis added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
   const mcpAfterUninstall = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers;
-  check("A14", "uninstall removes the MCP server Jarvis added to Claude Code", mcpAfterUninstall === undefined, JSON.stringify(mcpAfterUninstall));
+  check("data", "uninstall removes the MCP server Jarvis added to Claude Code", mcpAfterUninstall === undefined, JSON.stringify(mcpAfterUninstall));
   sh(artifact(TO));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
-  check("A14", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
+  check("data", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
   // The data-deleting uninstall removes the state folder and the service's logs with it.
   keepLogs(STATE, "state");
   sh(P.command(P.binDir, "jarvis-uninstall"), ["--delete-data", "--yes"]);
   const remaining = existsSync(DATA) ? readdirSync(DATA).sort() : [];
-  check("A14", "uninstall --delete-data removes service state and only what Jarvis created in the data folder", !existsSync(STATE) && !P.loaded() && JSON.stringify(remaining) === JSON.stringify(["Existing note.md", "README.md"]), `left: ${remaining.join(", ")}`);
+  check("data", "uninstall --delete-data removes service state and only what Jarvis created in the data folder", !existsSync(STATE) && !P.loaded() && JSON.stringify(remaining) === JSON.stringify(["Existing note.md", "README.md"]), `left: ${remaining.join(", ")}`);
   const homeAfter = homeFiles();
   const changed = [...ownerHome].filter(([path, hash]) => homeAfter.get(path) !== hash).map(([path]) => path);
   const leftBehind = [...homeAfter.keys()].filter((path) => !ownerHome.has(path));
-  check("A14", "uninstall leaves every file the owner had before Jarvis as it was", changed.length === 0, changed.join(", "));
-  check("A14", "uninstall --delete-data leaves no Jarvis file in the home folder", leftBehind.length === 0 && !existsSync(PREFIX), leftBehind.join(", "));
+  check("data", "uninstall leaves every file the owner had before Jarvis as it was", changed.length === 0, changed.join(", "));
+  check("data", "uninstall --delete-data leaves no Jarvis file in the home folder", leftBehind.length === 0 && !existsSync(PREFIX), leftBehind.join(", "));
 
   // --- The owner's own setup on this computer is untouched ---
-  check("A14", "the owner's existing brains and schedules on this computer are unchanged", JSON.stringify(machineBefore) === JSON.stringify(P.machineFingerprint()), JSON.stringify(P.machineFingerprint()));
+  check("data", "the owner's own Jarvis services on this computer are unchanged", JSON.stringify(machineBefore) === JSON.stringify(P.machineFingerprint()), JSON.stringify(P.machineFingerprint()));
 
   mkdirSync(join(ROOT, "test-results"), { recursive: true });
   writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, home: HOME, at: new Date().toISOString(), results }, null, 2));

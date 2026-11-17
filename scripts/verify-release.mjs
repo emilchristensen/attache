@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Release verification entry point. Runs every automated check, maps results to
- * the acceptance IDs A01–A15, and writes:
+ * Release verification entry point. Runs every automated check and writes:
  *   test-results/verification-report.json
  *   test-results/verification-summary.md
  * Live (read-only, real-account) results are reported separately and never
@@ -23,13 +22,13 @@ const version = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).ver
 const nextPatch = version.replace(/(\d+)$/, (m) => String(Number(m) + 1));
 const steps = [];
 
-function step(id, name, cmd, args, opts = {}) {
+function step(name, cmd, args, opts = {}) {
   const started = Date.now();
   process.stdout.write(`\n▶ ${name}\n  $ ${[cmd, ...args].join(" ")}\n`);
   const r = spawnSync(cmd, args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, ...(opts.env ?? {}) }, maxBuffer: 64 * 1024 * 1024, timeout: opts.timeoutMs ?? 30 * 60_000 });
   const output = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const status = r.status === 0 ? "pass" : opts.blockedIf?.(output) ? "blocked" : "fail";
-  const rec = { ids: id, name, command: [cmd, ...args].join(" "), status, seconds: Math.round((Date.now() - started) / 100) / 10, tail: output.split("\n").filter(Boolean).slice(-15).join("\n"), ...(opts.extract ? opts.extract(output) : {}) };
+  const rec = { name, command: [cmd, ...args].join(" "), status, seconds: Math.round((Date.now() - started) / 100) / 10, tail: output.split("\n").filter(Boolean).slice(-15).join("\n"), ...(opts.extract ? opts.extract(output) : {}) };
   steps.push(rec);
   process.stdout.write(`  ${status.toUpperCase()} in ${rec.seconds}s${rec.summary ? ` — ${rec.summary}` : ""}\n`);
   if (status === "fail") process.stdout.write(rec.tail + "\n");
@@ -37,14 +36,13 @@ function step(id, name, cmd, args, opts = {}) {
 }
 
 const npx = "npx";
-step(["A01"], "Excluded platform check", process.execPath, ["scripts/check-excluded.mjs"]);
-step(["A13"], "Docs check (one sentence per line, glossary terms)", process.execPath, ["scripts/check-docs.mjs"]);
-step(["A13"], "Lint (ESLint, zero warnings)", npx, ["eslint", ".", "--max-warnings", "0"]);
-for (const pkg of ["packages/contracts", "apps/service", "apps/web"]) step(["A13"], `Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
-step(["A13"], "Build service", process.execPath, ["apps/service/build.mjs"]);
+step("Docs check (one sentence per line, glossary terms)", process.execPath, ["scripts/check-docs.mjs"]);
+step("Lint (ESLint, zero warnings)", npx, ["eslint", ".", "--max-warnings", "0"]);
+for (const pkg of ["packages/contracts", "apps/service", "apps/web"]) step(`Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
+step("Build service", process.execPath, ["apps/service/build.mjs"]);
 // Through the package's own script: vite is a dependency of apps/web and is not hoisted to the root.
-step(["A13", "A12"], "Build Dashboard", "pnpm", ["--filter", "@jarvis/web", "run", "build"]);
-step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/vitest.json"], {
+step("Build Dashboard", "pnpm", ["--filter", "@jarvis/web", "run", "build"]);
+step("Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/vitest.json"], {
   extract: () => {
     try {
       const j = JSON.parse(readFileSync(join(OUT, "vitest.json"), "utf8"));
@@ -56,8 +54,8 @@ step(["A03", "A04", "A05", "A06", "A07", "A08", "A09", "A13"], "Unit, contract a
 });
 
 if (!QUICK) {
-  step(["A02", "A15"], `Release artifacts ${version}`, process.execPath, ["scripts/build-release.mjs", "--version", version]);
-  step(["A02"], `Release artifacts ${nextPatch} (upgrade target)`, process.execPath, ["scripts/build-release.mjs", "--version", nextPatch]);
+  step(`Release artifacts ${version}`, process.execPath, ["scripts/build-release.mjs", "--version", version]);
+  step(`Release artifacts ${nextPatch} (upgrade target)`, process.execPath, ["scripts/build-release.mjs", "--version", nextPatch]);
   const e2eExtract = (file) => () => {
     try {
       const j = JSON.parse(readFileSync(join(OUT, `e2e-${file}.json`), "utf8"));
@@ -74,15 +72,15 @@ if (!QUICK) {
       return {};
     }
   };
-  const e2e = (ids, name, file) => {
-    const rec = step(ids, name, npx, ["playwright", "test", `tests/e2e/${file}.spec.ts`, "--reporter=list,json"], { env: { JARVIS_E2E_REBUILD_WEB: "0", PLAYWRIGHT_JSON_OUTPUT_NAME: join(OUT, `e2e-${file}.json`) }, extract: e2eExtract(file) });
+  const e2e = (name, file) => {
+    const rec = step(name, npx, ["playwright", "test", `tests/e2e/${file}.spec.ts`, "--reporter=list,json"], { env: { JARVIS_E2E_REBUILD_WEB: "0", PLAYWRIGHT_JSON_OUTPUT_NAME: join(OUT, `e2e-${file}.json`) }, extract: e2eExtract(file) });
     // A suite that skipped because its host requirement is missing is blocked validation, not a pass.
     if (rec.status === "pass" && rec.skipped && !rec.passed) rec.status = "blocked";
     return rec;
   };
-  e2e(["A05", "A07", "A08", "A09", "A12"], "Browser journeys (real Chrome)", "journeys");
-  e2e(["A12"], "Visual captures (light, dark, narrow)", "visual");
-  step(["A02", "A14"], "Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
+  e2e("Browser journeys (real Chrome)", "journeys");
+  e2e("Visual captures (light, dark, narrow)", "visual");
+  step("Install, reinstall, upgrade, backup/restore, uninstall (clean profile)", process.execPath, ["scripts/test-install.mjs", "--from", version, "--to", nextPatch], {
     extract: (out) => ({ summary: /(\d+\/\d+) installation checks passed/.exec(out)?.[1] ?? "" }),
   });
 }
@@ -90,7 +88,7 @@ if (!QUICK) {
 // Live, read-only results are separate and informational.
 let live = null;
 if (!QUICK) {
-  step(["A06-live"], "Live read-only connection checks (real accounts, informational)", process.execPath, ["scripts/live-readonly.mjs"]);
+  step("Live read-only connection checks (real accounts, informational)", process.execPath, ["scripts/live-readonly.mjs"]);
   try {
     live = JSON.parse(readFileSync(join(OUT, "live-results.json"), "utf8"));
   } catch {
@@ -98,60 +96,29 @@ if (!QUICK) {
   }
 }
 
-const ACCEPTANCE = {
-  A01: "Inspection/architecture docs + excluded-platform check",
-  A02: "Clean install from artifact, idempotent reinstall, upgrade preserves config/data",
-  A03: "Notes-only onboarding, persistence across restart, dependency errors",
-  A04: "Disable/re-enable effects, disconnect and retention choices",
-  A05: "Source-linked recall, citation locates evidence, corrections change answers",
-  A06: "Adapter contract tests (auth, scope, pagination, retry, empty, partial, disconnect)",
-  A07: "Dismissed items stay dismissed, changes resurface, failed sources visible",
-  A08: "Durable jobs, reconnection replay, restart recovery, retry/cancel outcomes",
-  A09: "Draft/approval enforcement, replay protection, verified receipts",
-  A12: "Browser journeys incl. keyboard, narrow screen, reconnection, console errors",
-  A13: "Lint, typecheck, build, behavioural tests",
-  A14: "Backup/restore to fresh profile, upgrade, data-preserving uninstall, brains intact",
-  A15: "Docs, artifacts, acceptance report",
-};
-const rollup = Object.fromEntries(
-  Object.keys(ACCEPTANCE).map((id) => {
-    const related = steps.filter((s) => s.ids.includes(id));
-    const status = !related.length ? (id === "A15" ? "see docs" : "not run") : related.some((s) => s.status === "fail") ? "fail" : related.some((s) => s.status === "blocked") ? "blocked" : "pass";
-    return [id, { status, checks: related.map((s) => `${s.name}: ${s.status}${s.summary ? ` (${s.summary})` : ""}`) }];
-  }),
-);
-const docs = ["README.md", "docs/architecture.md", "docs/inspection.md", "docs/user-guide.md", "docs/developer-guide.md", "docs/build-status.md", "docs/acceptance-report.md"];
-const missingDocs = docs.filter((d) => !existsSync(join(ROOT, d)));
 const artifacts = [`release/${version}/Jarvis-Installer-${version}-macos-arm64.command`, `release/${version}/jarvis-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
-const missingArtifacts = artifacts.filter((a) => !existsSync(join(ROOT, a)));
-rollup.A15 = { status: missingDocs.length || missingArtifacts.length ? "fail" : "pass", checks: [`docs present: ${docs.length - missingDocs.length}/${docs.length}${missingDocs.length ? ` (missing ${missingDocs.join(", ")})` : ""}`, `artifacts present: ${artifacts.length - missingArtifacts.length}/${artifacts.length}${missingArtifacts.length ? ` (missing ${missingArtifacts.join(", ")})` : ""}`] };
-if (QUICK) for (const id of ["A02", "A12", "A14"]) if (rollup[id].status === "not run" || rollup[id].status === "pass") rollup[id] = { ...rollup[id], status: rollup[id].checks.length ? rollup[id].status : "not run" };
+const missingArtifacts = QUICK ? [] : artifacts.filter((a) => !existsSync(join(ROOT, a)));
 
-const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, acceptance: rollup, live };
+const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, missingArtifacts, live };
 writeFileSync(join(OUT, "verification-report.json"), JSON.stringify(report, null, 2));
 const md = [
   `# Verification summary — Jarvis ${version}`,
   "",
   `Run at ${report.at} on ${process.platform}/${process.arch}, ${process.version}.${QUICK ? " Quick mode: release, install and platform suites skipped." : ""}`,
   "",
-  "| ID | Status | Requirement | Checks |",
-  "| --- | --- | --- | --- |",
-  ...Object.entries(rollup).map(([id, r]) => `| ${id} | ${r.status} | ${ACCEPTANCE[id]} | ${r.checks.join("<br>")} |`),
-  "",
-  "## Steps",
-  "",
   "| Status | Seconds | Step | Command |",
   "| --- | --- | --- | --- |",
   ...steps.map((s) => `| ${s.status} | ${s.seconds} | ${s.name}${s.summary ? ` (${s.summary})` : ""} | \`${s.command}\` |`),
   "",
+  ...(missingArtifacts.length ? [`Missing release artifacts: ${missingArtifacts.join(", ")}`, ""] : []),
   "## Live read-only results (separate from automated evidence)",
   "",
   ...(live ? live.results.map((r) => `- ${r.kind}: ${r.ok === true ? "passed" : r.ok === false ? "failed" : r.status}${r.account ? ` as ${r.account}` : ""}${r.coverage ? `, coverage ${r.coverage}` : ""}${r.scopes ? ` (${r.scopes.map((s) => `${s.scope}: ${s.items}`).join("; ")})` : ""}${r.note ? ` — ${r.note}` : ""}`) : ["- not run"]),
   "",
 ].join("\n");
 writeFileSync(join(OUT, "verification-summary.md"), md);
-const failed = Object.entries(rollup).filter(([, r]) => r.status === "fail").map(([id]) => id);
-const blocked = Object.entries(rollup).filter(([, r]) => r.status === "blocked" || r.status === "not run").map(([id]) => id);
+const failed = steps.filter((s) => s.status === "fail").map((s) => s.name);
+const blocked = steps.filter((s) => s.status === "blocked").map((s) => s.name);
 console.log(`\n${md}`);
-console.log(`\nAcceptance: ${Object.values(rollup).filter((r) => r.status === "pass").length}/${Object.keys(rollup).length} pass${failed.length ? `, failing: ${failed.join(", ")}` : ""}${blocked.length ? `, blocked/not run: ${blocked.join(", ")}` : ""}`);
-process.exit(failed.length ? 1 : 0);
+console.log(`\nSteps: ${steps.filter((s) => s.status === "pass").length}/${steps.length} pass${failed.length ? `, failing: ${failed.join(", ")}` : ""}${blocked.length ? `, blocked: ${blocked.join(", ")}` : ""}${missingArtifacts.length ? `, missing artifacts: ${missingArtifacts.length}` : ""}`);
+process.exit(failed.length || missingArtifacts.length ? 1 : 0);

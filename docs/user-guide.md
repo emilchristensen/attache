@@ -182,7 +182,7 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   A decision or a person is linked to a project when either note names the other, by its title or with a link to its file.
   The whole block stays within about 8 KB; when there is more, Jarvis drops note titles first, then the oldest session entries, then the least recently updated decisions and people, and says what it left out.
   The project's own facts are always there, and a fact past its Review date is marked unverified.
-  A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): emilchristensen/jarvis, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
+  A project lists its repositories in a `Repositories` fact, for example `- **Repositories** (2026-11-11): acme/web, git@gitlab.com:team/api.git`; write `owner/name` for GitHub, `host/owner/name`, or a remote address, separated by commas, and ask your agent to save it like any other fact.
   The SSH and HTTPS addresses of a repository both match, in any folder or worktree of it; a session anywhere else gets the general block.
   Jarvis rewrites these blocks whenever your memory changes, and the agent's hook picks one by reading the folder's git remotes from disk, so session start stays instant and works offline.
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/jarvis-memory.md`.
