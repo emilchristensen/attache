@@ -85,7 +85,7 @@ Setup has five steps and each works without the ones after it.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
    Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
-   Each gets Attache's MCP server, so it can search your Brain and save to it with your confirmation; Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
+   Each gets Attache's MCP server, so it can search your Brain and save to it without asking (you can switch that off per Harness in Settings); Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
 4. **Model and schedules.**
    Pick a model: Claude Code on this computer (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Attache still searches and shows you the evidence it finds.
@@ -110,6 +110,11 @@ Attache has no chat box: you ask the Brain from your Harness (see Using the Brai
   An item list is never shown as "nothing to do" when a source failed.
 - Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
+- **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
+  Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
+  **Revert** works as in Recent saves below, and a reverted change stays listed, marked reverted.
+  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
 
@@ -130,7 +135,8 @@ Decide it on any of them: approving applies it once, where you clicked, and it l
 If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
 **Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
-Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, a Proposal you approved, or you) and when.
+Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, the session or meeting Consolidation read, a Proposal you approved, or you) and when.
+A change written without your review is marked auto-accepted, or consolidated when Consolidation wrote it.
 **Revert** undoes one change with one click:
 
 - A corrected fact gets its previous value back as a new correction, so the note's *History* shows both the change and its revert.
@@ -166,16 +172,18 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
 - **Session log:** each session gets an entry in `evidence/sessions/<date>-<machine>.md` with what was decided and learned, written by your model.
   Each Machine writes its own log file, named after the Machine (see *This Machine* below); logs from before Attache named Machines keep their `<date>.md` name and are still searched and shown.
-  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript, and says that no Proposals were made.
+  Most sessions have nothing durable, and the entry says so; without a model the entry only links the transcript, and says that the session was not consolidated.
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
-- **Consolidation:** when the session log entry holds something durable, Attache reads the session again, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*.
-  Each names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
-  A session never yields more than five, however often it is summarised, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
-  When a session states a different value for a fact a note already holds, the Proposal is a correction: it shows the current value struck through beside the new one, with the reason and the evidence.
-  Applying it moves the old value to the note's *History* with that reason.
-  A session that only mentions or repeats a fact proposes nothing for it.
+- **Consolidation:** when the session log entry holds something durable, Attache reads the session again, with the notes that search finds related to it, and writes what it finds to your Brain straight away.
+  Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
+  Each change is listed in *Recent saves* on the Memory page, marked as written without review, and one click reverts it.
+  There is no limit on how many changes a session yields, but nothing is written twice: a change that is already waiting for review, or a fact the note already holds, is left out, and your identity record is never changed.
+  When a session states a different value for a fact a note already holds, Attache writes the new value and moves the old one to the note's *History* with the reason.
+  A session that only mentions or repeats a fact changes nothing.
+  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, beside the Harness switches; on that Machine it then makes Proposals in *Memory changes to review* instead.
+  A Proposal that is a correction shows the current value struck through beside the new one, with the reason and the evidence, and applying it moves the old value to *History*.
   If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
-  Consolidation's Proposals always wait for your click, even when auto-accept is on for the Harness.
+  A Harness's auto-accept switch has no say over Consolidation.
   It runs on the Machine where the session ended, with that Machine's model; a session that reaches another Machine through Replication is not consolidated there again.
 - **Memory in new sessions:** every new session starts with a short block about you, the titles of the notes Attache keeps, and a command the agent can run to search Attache for more (`attache search "…"`).
   A session started inside one of a project's repositories also gets, first, that project's current state, the decisions and people linked to it, and the latest session-log entries from sessions in its repositories.
@@ -197,18 +205,19 @@ Uninstalling Attache removes them all.
 ## Meeting captures
 
 A meeting capture is a Markdown file in your data folder's `evidence/captures/` folder whose frontmatter `tags` include `meeting` or `meeting-transcript`, for example the notes and transcript of a meeting that an export routine writes there.
-When a new one arrives, Attache reads it, with the notes that search finds related to it, and makes up to five Proposals from it in *Memory changes to review*, the same way it does for a Harness session.
-This needs a model connection; without one, the capture is kept and no Proposals are made from it.
+When a new one arrives, Attache reads it, with the notes that search finds related to it, and writes what it finds to your Brain, the same way it does for a Harness session; with the Consolidation switch off, it makes Proposals in *Memory changes to review* instead.
+This needs a model connection; without one, the capture is kept and is not read.
 
-- Each Proposal names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
-- A capture yields at most five Proposals, and nothing is proposed twice: a change that is already waiting for review, or a fact the note already holds, is left out.
+- Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
+  It is listed in *Recent saves*, marked as written without review, and one click reverts it.
+- There is no limit on how many changes a capture yields, and nothing is written twice: a change that is already waiting for review, or a fact the note already holds, is left out.
 - A capture is read once.
   Editing it afterwards, or restarting Attache, does not read it again.
   A capture written while Attache was stopped is read when Attache starts.
 - The captures already in a data folder when you choose it, or when a Machine joins your Brain, are not read: only captures that arrive afterwards are.
 - With Replication on, a capture is read on the Machine where it arrived; the Machines that receive it do not read it again.
 - Snapshots that Source refresh writes from Slack, mail, Jira and your calendar (`evidence/connectors/`) are never read this way, and neither are captures without a meeting tag.
-- The Proposals always wait for your click.
+- With the Consolidation switch off, its Proposals wait for your click.
 
 ## The Brain in any Harness (MCP)
 
@@ -222,7 +231,7 @@ It is listed under the name `attache`.
 If the Harness already lists a server named `attache` that Attache did not add (for example one you added by hand with `claude mcp add`), connecting stops and says so; remove that entry, then connect again.
 
 Earlier versions installed two skills, `attache-save` and `attache-audit`, and a `attache save` command.
-The MCP tools and prompts replace both, because a save is now confirmed by you in the Harness, which a shell command cannot do.
+The MCP tools and prompts replace both, because a Harness with auto-accept off asks you to confirm a save through the MCP server, which a shell command cannot do.
 When Attache starts after the upgrade, it removes the skill folders it installed (the ones with its `.attache-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
@@ -233,17 +242,22 @@ When Attache starts after the upgrade, it removes the skill folders it installed
 - **save** writes facts and events: create a note with its facts, or update a note by its path with new values (each with a reason) and events.
   A fact can carry a Review date (see below).
   Every item is checked first, so one invalid item rejects the whole save with a message that says what to fix, and nothing is written.
-  Before anything is written, the Harness asks you to confirm, listing every item with its facts and events.
+  A save from a Harness with auto-accept on (the default, see below) is written without asking.
+  With auto-accept off, the Harness asks you to confirm before anything is written, listing every item with its facts and events.
   Accept, and the items are written as you, each fact citing the Harness and session it came from.
   Decline or close the request, and nothing is written; the agent is told so.
-  A Harness that cannot show the request gets each item stored as a Proposal instead, for you to apply or reject in the Dashboard; the agent is told it awaits your review.
+  When Attache cannot ask you, each item is stored as a Proposal instead, for you to apply or reject in the Dashboard, and the agent is told the save waits there.
+  That happens when the Harness cannot show the request, when it answers within a second (faster than a person could, as Claude Code does when it runs without a window), or when nobody answers within 2 minutes.
+  Each Proposal's reason says which of these happened.
+  After one request goes unanswered, that Harness session stores Proposals without asking again.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
-- **Auto-accept** skips the confirmation for a Harness you trust.
-  In Settings, under **Auto-accept saves**, each connected Harness has a switch, off by default.
-  With it on, a save from that Harness is written without asking; every other Harness still asks.
-  The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so another Machine asks until you switch it on there too.
-  Disconnecting a Harness switches its auto-accept off.
-  An auto-accepted save still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can review and revert it.
+- **Auto-accept** writes a save without review, so nothing waits for you (ADR 0004).
+  In Settings, under **Auto-accept**, each connected Harness has a switch, on by default; upgrading from an earlier version switched it on for every Harness, including one you had left off.
+  With it on, a save from that Harness is written without asking; switch it off and that Harness asks you to confirm every save.
+  A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
+  The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
+  Disconnecting a Harness forgets its setting, so connecting it again starts with auto-accept on.
+  A save written without review still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can see and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   A fact is flagged stale only when it is past its Review date; a fact without one is never stale, however old it is.

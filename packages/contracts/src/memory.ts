@@ -95,8 +95,8 @@ export const MemorySaveInput = z.object({
     .optional(),
   items: z.array(MemorySaveItem).min(1).max(20),
   /**
-   * Write without asking the owner, because they switched on auto-accept for
-   * the origin's Harness on this Machine. Refused when it is off.
+   * Write without asking the owner, because auto-accept is on for the
+   * origin's Harness on this Machine. Refused when it is off.
    */
   autoAccept: z.boolean().optional(),
   /**
@@ -126,7 +126,13 @@ export interface HarnessSettingView {
   /** Harness integration kind, e.g. `claude-code`. */
   id: string;
   label: string;
-  /** Off by default; kept in this Machine's local state, never in the Brain. */
+  /** On unless the owner switched it off (ADR 0004); kept in this Machine's local state, never in the Brain. */
+  autoAccept: boolean;
+}
+
+/** The Consolidation switch on this Machine: on, what Consolidation finds is written without review; off, it becomes Proposals. */
+export interface ConsolidationSettingView {
+  /** On by default; kept in this Machine's configuration, never in the Brain. */
   autoAccept: boolean;
 }
 
@@ -226,6 +232,8 @@ export interface RecentChangeView {
   /** For a fact: its Review date before and after the change, null when it had none. */
   oldReview: string | null;
   newReview: string | null;
+  /** Why a fact was corrected, as the change gave it; null when it gave none. */
+  reason: string | null;
   source: {
     /** Harness integration kind, e.g. `claude-code`. */
     harness: string | null;
@@ -233,8 +241,10 @@ export interface RecentChangeView {
     sessionId: string | null;
     /** What to show: the Harness and session, or who else made the change. */
     label: string;
-    /** Written without asking the owner, because auto-accept was on for the Harness. */
+    /** Written without review: an auto-accepted save or a Consolidation write. */
     autoAccepted: boolean;
+    /** Set when Consolidation wrote the change: what it read, a finished session or a meeting capture. */
+    consolidation: { from: "session" | "meeting"; capture: { relPath: string; title: string } | null } | null;
   };
   at: string;
   /** The change this one reverted, and the change that reverted this one. */
@@ -242,6 +252,9 @@ export interface RecentChangeView {
   revertedBy: string | null;
   revert: { allowed: true; reason: null } | { allowed: false; reason: string };
 }
+
+/** How long a change written without review stays on Home's Recently added (ADR 0004). */
+export const UNREVIEWED_DAYS = 7;
 
 export interface RecentChangesResult {
   changes: RecentChangeView[];

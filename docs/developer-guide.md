@@ -11,7 +11,7 @@ Developer setup is separate from end-user installation: users run the installer 
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, docs check |
-| `tests/e2e` | Playwright journeys (Chrome, visual captures) |
+| `tests/e2e` | Playwright journeys (Chrome, visual captures): `journeys.spec.ts`, `brain-updates.spec.ts` (ADR 0004: auto-accept, the Consolidation switch, Home's Recently added), `visual.spec.ts`; `browser.ts` and `stack.ts` are their shared kit |
 | `docs` | Architecture, guides, architecture decision records |
 
 Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `attache mcp`).
@@ -118,7 +118,7 @@ Before a release, also start a run by hand on `main`: a push to `main` runs only
 
 ## Fixtures versus live
 
-Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
+Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and a model (`fixture-model.ts`), served as an OpenAI-compatible endpoint, as the Anthropic API, and to `fake-claude.mjs` for Claude Code's plain model calls.
 The service talks to it only when `ATTACHE_TEST_ENDPOINTS=1` and `ATTACHE_FIXTURE_URL` are set; normal operation never reads those variables.
 The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` (on Windows `fake-claude.cmd`, an npm-style shim around it, as `npm install -g` installs Claude Code there) through `ATTACHE_CLAUDE_BIN` (plus `ATTACHE_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.

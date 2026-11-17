@@ -230,6 +230,16 @@ export const MIGRATIONS: readonly string[] = [
   update config set json = json_set(json_remove(json, '$.schedules.syncEveryMinutes'), '$.schedules.refreshEveryMinutes', json_extract(json, '$.schedules.syncEveryMinutes'))
   where json_extract(json, '$.schedules.syncEveryMinutes') is not null;
   `,
+  // Auto-accept is on by default (ADR 0004: changes reach the Brain without review). Upgrading switches every
+  // stored setting on, including those stored as off, once; a Harness the owner switches off afterwards stays off.
+  `
+  update harness_settings set auto_accept = 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where auto_accept = 0;
+  `,
+  // ADR 0004: Consolidation writes what it finds in a meeting capture straight to the Brain, so a change
+  // records the capture it came from (its path under evidence/captures/), as a save records its session.
+  `
+  alter table memory_changes add column capture text;
+  `,
 ];
 
 const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);

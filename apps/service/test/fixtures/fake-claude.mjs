@@ -22,9 +22,27 @@ if (args[0] === "auth" && args[1] === "status") {
   process.exit(a.loggedIn ? 0 : 1);
 }
 if (!args.includes("--permission-prompt-tool")) {
-  // Plain model use (not a connector session): answer like a ready model.
-  emit({ type: "result", subtype: "success", is_error: false, result: "ready" });
-  process.exit(0);
+  // Plain model use (not a connector session): the fixture model answers the prompt on stdin, and each message
+  // it writes streams as Claude Code streams it with --include-partial-messages: the API's events, then the message whole.
+  let user = "";
+  for await (const chunk of process.stdin) user += String(chunk);
+  const flag = args.indexOf("--system-prompt");
+  const system = flag < 0 ? "" : (args[flag + 1] ?? "");
+  const res = await fetch(`${BASE}/claude/model`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, user }) });
+  if (!res.ok) {
+    emit({ type: "result", subtype: "error_during_execution", is_error: true, result: `fixture model: HTTP ${res.status}` });
+    process.stdout.write("", () => process.exit(1));
+    await new Promise(() => {});
+  }
+  const { messages } = await res.json();
+  emit({ type: "system", subtype: "init", tools: [], mcp_servers: [] });
+  for (const m of messages) {
+    for (const event of m.events) emit({ type: "stream_event", event });
+    emit({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: m.text }] } });
+  }
+  emit({ type: "result", subtype: "success", is_error: false, result: messages.at(-1)?.text ?? "" });
+  process.stdout.write("", () => process.exit(0));
+  await new Promise(() => {});
 }
 
 const rl = createInterface({ input: process.stdin });

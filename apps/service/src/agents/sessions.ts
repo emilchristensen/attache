@@ -285,7 +285,7 @@ export class AgentSessions {
       const found: string[] = [];
       for (const [i, part] of parts.entries()) {
         ctx.progress(0.2 + (0.7 * i) / parts.length, parts.length > 1 ? `Summarising part ${i + 1} of ${parts.length}` : "Summarising");
-        const reply = await complete(model, {
+        const { text: reply } = await complete(model, {
           system: summarySystemPrompt(this.userName()),
           messages: [{ role: "user", content: summaryPrompt(renderTurns(part, { user: this.userName(), assistant: integration.label }, MAX_SUMMARY_INPUT_CHARS)) }],
           maxTokens: 700,

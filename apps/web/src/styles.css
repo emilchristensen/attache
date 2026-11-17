@@ -1181,6 +1181,15 @@ html:has(.setup) {
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
+.feature-row > input[type="checkbox"] {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-strong);
+}
+.section-title .collapse-toggle {
+  margin-left: auto;
+}
 .feature-row:last-child {
   border-bottom: none;
 }
@@ -1437,6 +1446,13 @@ label.field select {
 .recent-change-why {
   font-size: 12px;
   color: var(--warn);
+}
+
+/* ---- recently added (Home) ---------------------------------------------- */
+
+.recently-added .recent-changes.card {
+  margin: 0;
+  padding: 2px 16px;
 }
 
 /* ---- replication ------------------------------------------------------- */

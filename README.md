@@ -16,7 +16,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Meaning-based search.**
   A small multilingual model runs locally and ranks passages by meaning and keywords, so a question worded differently, or in another language, still finds the note.
 - **The Brain in your Harness.**
-  A local MCP server (`attache mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts you confirm.
+  A local MCP server (`attache mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts without asking, or, for a Harness you switch auto-accept off for, only the ones you confirm.
   Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
 - **Memory with history.**
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.

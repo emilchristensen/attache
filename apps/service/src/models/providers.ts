@@ -18,10 +18,22 @@ export interface StreamRequest {
   signal?: AbortSignal;
 }
 
+/** How a streamed reply ended: `cutOff` when the model stopped because it reached its token limit, not because it was done. */
+export interface StreamEnd {
+  cutOff: boolean;
+}
+
 export interface ModelProvider {
   id: "claude-cli" | "anthropic" | "openai-compatible";
   model: string;
-  stream(req: StreamRequest): AsyncGenerator<string>;
+  /** The reply's text as it arrives; the generator returns how the reply ended. */
+  stream(req: StreamRequest): AsyncGenerator<string, StreamEnd>;
+}
+
+/** A whole reply, and whether the model stopped at its token limit before it was done. */
+export interface Completion {
+  text: string;
+  cutOff: boolean;
 }
 
 export class ModelError extends Error {
@@ -31,6 +43,14 @@ export class ModelError extends Error {
     this.kind = kind;
   }
 }
+
+/**
+ * The stop reasons the Anthropic API, and Claude Code's stream, give a reply cut off at a token limit:
+ * the request's `max_tokens`, or the model's context window.
+ */
+const ANTHROPIC_TOKEN_LIMITS: ReadonlySet<string> = new Set(["max_tokens", "model_context_window_exceeded"]);
+/** The finish reason an OpenAI-compatible endpoint gives a reply that reached its token limit. */
+const OPENAI_TOKEN_LIMIT = "length";
 
 export const DEFAULT_MODELS = {
   "claude-cli": "claude-sonnet-5-5",
@@ -81,6 +101,9 @@ export function claudeCliProvider(model: string, bin = findClaudeCli()): ModelPr
       let buf = "";
       let gotText = false;
       let resultError: string | null = null;
+      // The stop reason of the last message the CLI streamed; the CLI may continue a reply that hit the limit, and the last one decides.
+      // The CLI gets no max_tokens, and may report reaching its own output limit as an error result instead of this stop reason.
+      let stopReason: string | null = null;
       try {
         for await (const chunk of child.stdout) {
           buf += String(chunk);
@@ -96,11 +119,12 @@ export function claudeCliProvider(model: string, bin = findClaudeCli()): ModelPr
               continue;
             }
             if (ev.type === "stream_event") {
-              const e = ev.event as { type?: string; delta?: { type?: string; text?: string } };
+              const e = ev.event as { type?: string; delta?: { type?: string; text?: string; stop_reason?: string | null } };
               if (e?.type === "content_block_delta" && e.delta?.type === "text_delta" && e.delta.text) {
                 gotText = true;
                 yield e.delta.text;
               }
+              if (e?.type === "message_delta" && e.delta?.stop_reason) stopReason = e.delta.stop_reason;
             } else if (ev.type === "result") {
               if (ev.is_error) resultError = String(ev.result ?? ev.subtype ?? "error");
               else if (!gotText && typeof ev.result === "string") {
@@ -114,6 +138,7 @@ export function claudeCliProvider(model: string, bin = findClaudeCli()): ModelPr
         if (req.signal?.aborted) throw new ModelError("cancelled", "Cancelled");
         if (resultError) throw new ModelError(/auth|login|credential|401/i.test(resultError) ? "unauthorized" : "failed", `Claude CLI: ${resultError}`);
         if (code !== 0 && !gotText) throw new ModelError(/not logged|login|auth/i.test(stderr) ? "unauthorized" : "failed", `Claude CLI exited ${code}: ${stderr.slice(0, 400)}`);
+        return { cutOff: stopReason !== null && ANTHROPIC_TOKEN_LIMITS.has(stopReason) };
       } finally {
         req.signal?.removeEventListener("abort", onAbort);
         if (child.exitCode === null) child.kill("SIGTERM");
@@ -169,12 +194,15 @@ export function anthropicProvider(apiKey: string, model: string, baseUrl = "http
         req.signal,
         "Anthropic API",
       );
+      let stopReason: string | null = null;
       for await (const data of sseLines(res)) {
         if (!data) continue;
-        const ev = JSON.parse(data) as { type: string; delta?: { type?: string; text?: string }; error?: { message?: string } };
+        const ev = JSON.parse(data) as { type: string; delta?: { type?: string; text?: string; stop_reason?: string | null }; error?: { message?: string } };
         if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta" && ev.delta.text) yield ev.delta.text;
+        if (ev.type === "message_delta" && ev.delta?.stop_reason) stopReason = ev.delta.stop_reason;
         if (ev.type === "error") throw new ModelError("failed", ev.error?.message ?? "stream error");
       }
+      return { cutOff: stopReason !== null && ANTHROPIC_TOKEN_LIMITS.has(stopReason) };
     },
   };
 }
@@ -192,18 +220,26 @@ export function openAiCompatibleProvider(apiKey: string | null, model: string, b
         req.signal,
         "Model endpoint",
       );
+      let finishReason: string | null = null;
       for await (const data of sseLines(res)) {
         if (!data || data === "[DONE]") continue;
-        const ev = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+        const ev = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }> };
         const t = ev.choices?.[0]?.delta?.content;
         if (t) yield t;
+        finishReason = ev.choices?.[0]?.finish_reason ?? finishReason;
       }
+      return { cutOff: finishReason === OPENAI_TOKEN_LIMIT };
     },
   };
 }
 
-export async function complete(p: ModelProvider, req: StreamRequest): Promise<string> {
-  let out = "";
-  for await (const t of p.stream(req)) out += t;
-  return out;
+/** The whole reply to `req`, and whether the model stopped at its token limit before it was done. */
+export async function complete(p: ModelProvider, req: StreamRequest): Promise<Completion> {
+  const stream = p.stream(req);
+  let text = "";
+  for (;;) {
+    const next = await stream.next();
+    if (next.done) return { text, cutOff: next.value.cutOff };
+    text += next.value;
+  }
 }

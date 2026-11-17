@@ -57,9 +57,10 @@ export function checkSave(app: App, input: Pick<MemorySaveInput, "items" | "orig
 }
 
 /**
- * A save is written without asking only when the owner switched on auto-accept
- * for its Harness on this Machine, and never when it touches the identity
- * record (which a save cannot change at all; kept here so the rule stands on its own).
+ * A save is written without asking only when auto-accept is on for its
+ * Harness on this Machine (on for a connected Harness unless the owner switched
+ * it off), and never when it touches the identity record (which a save cannot
+ * change at all; kept here so the rule stands on its own).
  */
 function mayAutoAccept(app: App, origin: MemorySaveInput["origin"], plan: readonly CheckedItem[]): boolean {
   if (!origin || !app.autoAccept.isOn(origin.agent)) return false;

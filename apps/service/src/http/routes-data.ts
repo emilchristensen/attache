@@ -14,7 +14,7 @@ import { json } from "../core/db.ts";
 import { checkSave, proposeSave, saveToMemory } from "../memory/save.ts";
 import { auditMemory } from "../memory/audit.ts";
 import { expandHome } from "../platform/locations.ts";
-import { recentChanges } from "../memory/recent-changes.ts";
+import { recentChanges, unreviewedChanges } from "../memory/recent-changes.ts";
 import { revertChange } from "../memory/revert.ts";
 
 const PROPOSAL_STATUSES = ["proposed", "applied", "rejected"];
@@ -124,7 +124,7 @@ export function registerDataRoutes(r: Router, app: App) {
     requireFeature(app, "capture");
     requireData(app);
     // The Dashboard shows and decides (ADR 0003): only a Harness, through the MCP server and the CLI token, saves.
-    if (c.client?.kind !== "cli") throw new HttpError(403, "dashboard_cannot_save", "The Dashboard does not write to the Brain. Save from a Harness, which asks you to confirm.");
+    if (c.client?.kind !== "cli") throw new HttpError(403, "dashboard_cannot_save", "The Dashboard does not write to the Brain. Save from a Harness instead.");
     const input = await c.body(MemorySaveInput);
     const out = saveToMemory(app, input, c.client?.id ?? null);
     app.bus.emit("event", { type: "memory.changed" });
@@ -152,6 +152,11 @@ export function registerDataRoutes(r: Router, app: App) {
   r.get("/memory/recent-changes", (c): RecentChangesResult => {
     requireFeature(app, "recall");
     requireData(app);
+    const unreviewed = c.query("unreviewed");
+    if (unreviewed !== null) {
+      if (unreviewed !== "1") throw new HttpError(400, "invalid_request", "unreviewed must be 1");
+      return { changes: unreviewedChanges(app.db, app.memory, app.clock.now()) };
+    }
     const limit = Number(c.query("limit") ?? 50);
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new HttpError(400, "invalid_request", "limit must be a whole number between 1 and 200");
     return { changes: recentChanges(app.db, app.memory, limit) };

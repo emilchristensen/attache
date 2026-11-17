@@ -1,24 +1,16 @@
-import { test, expect, type Page, type ConsoleMessage, type BrowserContext, type Locator } from "@playwright/test";
+import { test, expect, type Page, type BrowserContextOptions, type BrowserType, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
 
 let stack: Stack;
-let shared: BrowserContext;
-const consoleErrors: string[] = [];
-
-function watch(page: Page) {
-  page.on("console", (m: ConsoleMessage) => {
-    // Expected network failures while the service is deliberately stopped are not app errors.
-    if (m.type() === "error" && !/ERR_CONNECTION_REFUSED|Failed to load resource|net::ERR/.test(m.text())) consoleErrors.push(m.text());
-  });
-  page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
-}
+let journeys: JourneyBrowser;
 
 /** The service runs on this computer with this environment, so its Documents folder is this one. */
 const DOCUMENTS = join(process.platform === "win32" ? process.env.USERPROFILE || homedir() : process.env.HOME || homedir(), "Documents");
@@ -47,28 +39,35 @@ function createBareRemote(): string {
 test.beforeAll(async ({ browser }) => {
   buildAll();
   stack = await startStack();
-  // One paired browser profile for all journeys, like a real user's browser.
-  shared = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  journeys = await JourneyBrowser.start(browser, stack.url);
 });
 test.afterAll(async () => {
-  await shared?.close();
+  await journeys?.close();
   await stack?.stop();
 });
 
-async function open(path = "/"): Promise<Page> {
-  for (const p of shared.pages()) await p.close();
-  const page = await shared.newPage();
-  watch(page);
-  await page.goto(`${stack.url}${path}`);
-  await page.bringToFront();
-  return page;
+/**
+ * A page in headless Chrome that always draws classic scrollbars, which take room beside the content as on Linux and Windows.
+ * Headless Chrome hides scrollbars unless told otherwise. macOS draws zero-width overlay scrollbars when no mouse is attached,
+ * and only an `-AppleShowScrollBars Always` pair on Chrome's command line overrides that; Playwright refuses the bare `Always`,
+ * so a script in `dir` appends it. Elsewhere Chrome launches as is.
+ */
+async function pageWithClassicScrollbars(playwright: { chromium: BrowserType }, dir: string, options: BrowserContextOptions): Promise<{ page: Page; close: () => Promise<void> }> {
+  const chrome = await playwright.chromium.launch({ ...classicScrollbarChrome(dir), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  return { page: await (await chrome.newContext(options)).newPage(), close: () => chrome.close() };
 }
 
-test("setup keeps its place when a step grows taller than the window", async ({ playwright }) => {
-  // Headless Chrome hides scrollbars unless told otherwise; an owner's browser shows them.
-  const chrome = await playwright.chromium.launch({ channel: "chrome", headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+function classicScrollbarChrome(dir: string): { channel: "chrome" } | { executablePath: string } {
+  if (process.platform !== "darwin") return { channel: "chrome" };
+  mkdirSync(dir, { recursive: true });
+  const launcher = join(dir, "chrome-classic-scrollbars.sh");
+  writeFileSync(launcher, `#!/bin/sh\nexec "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "$@" -AppleShowScrollBars Always\n`, { mode: 0o755 });
+  return { executablePath: launcher };
+}
+
+test("setup keeps its place when a step grows taller than the window", async ({ playwright }, testInfo) => {
+  const { page, close } = await pageWithClassicScrollbars(playwright, testInfo.outputPath(), { viewport: { width: 1360, height: 900 } });
   try {
-    const page = await chrome.newPage({ viewport: { width: 1360, height: 900 } });
     await page.goto(stack.pairUrl());
     await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
     const column = async () => (await page.locator("main.setup").boundingBox())!.x;
@@ -83,13 +82,12 @@ test("setup keeps its place when a step grows taller than the window", async ({ 
     expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(true);
     expect(await column()).toBe(short);
   } finally {
-    await chrome.close();
+    await close();
   }
 });
 
 test("onboarding: pair, choose folder, preview import, features, connections, model, finish", async () => {
-  const page = await shared.newPage();
-  watch(page);
+  const page = await journeys.newPage();
   // The suggested folder arrives only once the owner has started typing their own, and must not mix into it.
   let suggest = () => {};
   const suggested = new Promise<void>((r) => (suggest = r));
@@ -193,7 +191,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
 });
 
 test("home: the inbox only, with no chat box or chat shortcut", async () => {
-  const page = await open("/");
+  const page = await journeys.open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Attache" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
@@ -206,7 +204,7 @@ test("home: the inbox only, with no chat box or chat shortcut", async () => {
 });
 
 test("search: a hit opens the exact evidence lines, keyboard", async () => {
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
   const search = page.getByRole("searchbox", { name: "Search memory" });
   await search.fill("When is the cutover plan due for the Orion migration?");
   const hit = page.locator(".list-item", { hasText: "Orion" }).first();
@@ -224,7 +222,7 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
 });
 
 test("attention: dismiss persists across reload and briefings; briefing reports coverage", async () => {
-  const page = await open("/");
+  const page = await journeys.open("/");
   const item = page.locator("article.item", { hasText: "Review rollback runbook" });
   await item.getByRole("button", { name: "Dismiss" }).click();
   await expect(item).toBeHidden();
@@ -248,7 +246,7 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
-  const page = await open("/");
+  const page = await journeys.open("/");
   const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
@@ -278,14 +276,13 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
 });
 
 test("jobs: work continues after the tab closes; cancellation reports what happened", async () => {
-  const page = await open("/jobs");
+  const page = await journeys.open("/jobs");
   await page.getByRole("textbox", { name: "Research question" }).fill("What is the state of the Orion migration?");
   await page.getByRole("button", { name: "Research" }).click();
   await expect(page.locator("[data-job-id]")).toBeVisible();
   const jobUrl = page.url();
   await page.close();
-  const page2 = await shared.newPage();
-  watch(page2);
+  const page2 = await journeys.newPage();
   await page2.goto(jobUrl);
   await expect(page2.locator("[data-job-id]")).toHaveAttribute("data-status", "succeeded", { timeout: 30_000 });
   await expect(page2.getByRole("button", { name: /Open deliverables\/research/ })).toBeVisible();
@@ -297,7 +294,7 @@ test("jobs: work continues after the tab closes; cancellation reports what happe
 });
 
 test("wording: counts read as words in the right number, never with (s)", async () => {
-  const page = await open("/connections");
+  const page = await journeys.open("/connections");
   await page.getByRole("textbox", { name: "Folder path" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Reads 2 Markdown files · changes 0 files")).toBeVisible();
@@ -335,7 +332,7 @@ test("wording: counts read as words in the right number, never with (s)", async 
 });
 
 test("feature switches: turning attention off changes the product and the backend", async () => {
-  const page = await open("/settings");
+  const page = await journeys.open("/settings");
   await page.getByRole("checkbox", { name: /^Attention and briefings/ }).click();
   await expect(page.getByRole("alert")).toContainText("Drafts and approvals needs Attention and briefings");
   await page.getByRole("button", { name: "Also turn off what depends on it" }).click();
@@ -352,7 +349,7 @@ test("feature switches: turning attention off changes the product and the backen
 });
 
 test("this Machine: named after its hostname, renamed in Settings, and the name is kept", async () => {
-  const page = await open("/settings");
+  const page = await journeys.open("/settings");
   const card = page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) });
   const name = card.getByRole("textbox", { name: "Name" });
   await expect(name).not.toHaveValue("");
@@ -366,7 +363,7 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
 });
 
 test("credentials: Settings says which secret store holds them and why", async () => {
-  const page = await open("/settings");
+  const page = await journeys.open("/settings");
   // The stack forces the private file, as an install without a system secret store would use.
   const store = page.locator("[data-credential-store]");
   await expect(store).toHaveAttribute("data-credential-store", "file");
@@ -375,7 +372,7 @@ test("credentials: Settings says which secret store holds them and why", async (
 });
 
 test("meaning-based search: search says it matches keywords only, and why, until the owner downloads the model in Settings", async () => {
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
   await expect(page.locator(".list-item").first()).toBeVisible();
@@ -397,7 +394,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
 });
 
 test("reconnection: service restart shows a banner, then recovers state", async () => {
-  const page = await open("/");
+  const page = await journeys.open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
   await stack.stopService();
   await expect(page.getByText(/Reconnecting to the Attache service|Disconnected from the Attache service/)).toBeVisible({ timeout: 20_000 });
@@ -410,7 +407,7 @@ test("reconnection: service restart shows a banner, then recovers state", async 
 });
 
 test("narrow screen: bottom navigation, no horizontal overflow, all views reachable", async () => {
-  const page = await open("/");
+  const page = await journeys.open("/");
   await page.setViewportSize({ width: 390, height: 844 });
   for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings"]) {
     await page.goto(`${stack.url}${path}`);
@@ -466,11 +463,9 @@ function measurePageScroll(): PageScroll {
   return { overlayScrollbars, scroller: el === root ? "html" : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`, scrollbarLeft, scrollbarRight, contentLeft: content.left, contentTop: content.top, contentRight: content.right, contentWidth: content.width };
 }
 
-test("scrollbars: every page scrolls at the window's right edge, with its content in its column", async ({ playwright }) => {
-  // Headless Chrome hides scrollbars unless told otherwise; Linux and Windows desktops show them beside the content.
-  const chrome = await playwright.chromium.launch({ channel: "chrome", headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+test("scrollbars: every page scrolls at the window's right edge, with its content in its column", async ({ playwright }, testInfo) => {
+  const { page, close } = await pageWithClassicScrollbars(playwright, testInfo.outputPath(), { storageState: await journeys.context.storageState() });
   try {
-    const page = await (await chrome.newContext({ storageState: await shared.storageState() })).newPage();
     for (const viewport of [{ width: 1280, height: 800 }, { width: 600, height: 800 }]) {
       await page.setViewportSize(viewport);
       let home: PageScroll | undefined;
@@ -494,7 +489,7 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
       }
     }
   } finally {
-    await chrome.close();
+    await close();
   }
 });
 
@@ -502,7 +497,7 @@ test("memory: notes, evidence and deliverables are read-only, with no capture bo
   // Notes reach the Brain from a Harness, never from the Dashboard.
   await harnessSave(stack, [{ action: "create", type: "decision", title: "Email vendor", facts: [{ subject: "Decision", value: "Keep Nimbus as email vendor for 2027" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
   await harnessSave(stack, [{ action: "update", path: VENDOR, facts: [{ subject: "Decision", value: "Switch to Postmark for 2027", reason: "Procurement chose Postmark" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
-  const page = await open("/memory?tab=decision");
+  const page = await journeys.open("/memory?tab=decision");
   await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
   await expect(page.getByRole("button", { name: /capture/i })).toHaveCount(0);
   await page.locator(".list-item", { hasText: "Email vendor" }).click();
@@ -549,7 +544,7 @@ test("memory: notes, evidence and deliverables are read-only, with no capture bo
 });
 
 test("memory: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
   // Proposals arrive from outside the Dashboard; post them with the browser's own session.
   const propose = (body: unknown) =>
     page.evaluate(async (b) => {
@@ -612,12 +607,12 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
   await save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
 
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
   const recent = page.getByRole("region", { name: "Recent saves" });
   const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
   await expect(recent).toBeVisible();
   // The newest few show first; the rest are one click away.
-  await expect(recent.getByRole("listitem")).toHaveCount(4);
+  await expect(recent.getByRole("listitem")).toHaveCount(5);
   await recent.getByRole("button", { name: /Show all \d+/ }).click();
   const launchId = await row("21 October").getAttribute("data-change");
   const launch = recent.locator(`[data-change="${launchId}"]`);
@@ -682,7 +677,7 @@ function lineStarts(el: Element): string[] {
 }
 
 test("narrow layout: the Connections page has one name in the sidebar, the bottom bar and its heading", async () => {
-  const page = await open("/connections");
+  const page = await journeys.open("/connections");
   const sidebar = page.locator("nav.nav");
   const bottom = page.locator(".bottom-nav");
   // One name for the page in the sidebar, the bottom bar and the heading.
@@ -705,7 +700,7 @@ test("narrow layout: the Connections page has one name in the sidebar, the botto
 });
 
 test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
   for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
     const at = `at ${viewport.width}px`;
     await page.setViewportSize(viewport);
@@ -744,7 +739,7 @@ test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phon
 });
 
 test("narrow layout: a picked note opens in view, Recent saves never start a line with a dot, and research gets a whole row", async () => {
-  const page = await open("/memory");
+  const page = await journeys.open("/memory");
 
   // On a phone the note opens below the list, and picking one brings it into view.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -788,7 +783,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   const file = join(stack.dataDir, rel);
   writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Budget** (2026-01-10, review 2026-02-01)"));
 
-  const page = await open(`/memory?path=${encodeURIComponent(rel)}&tab=project`);
+  const page = await journeys.open(`/memory?path=${encodeURIComponent(rel)}&tab=project`);
   const status = page.locator('[data-subject="Status"]');
   const budget = page.locator('[data-subject="Budget"]');
   await expect(status).toContainText(`review after ${inAMonth}`);
@@ -810,47 +805,12 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await expect(facts.getByText(/“Status” in Helix rollout/)).toHaveCount(0);
 });
 
-test("auto-accept: switched on for one Harness in Settings, kept across reload, and its saves are marked", async () => {
-  const page = await open("/settings");
-  const card = page.getByRole("region", { name: "Auto-accept saves" });
-  // Only connected Harnesses are listed: Claude Code was connected in onboarding, Codex was not found.
-  const claude = card.getByRole("checkbox", { name: /Claude Code/ });
-  await expect(claude).not.toBeChecked();
-  await expect(card.getByRole("checkbox", { name: /Codex/ })).toHaveCount(0);
-  await claude.click();
-  await expect(page.getByText("Claude Code saves without asking on this Machine")).toBeVisible();
-  await expect(claude).toBeChecked();
-  await expect(card.getByText("Saves without asking.")).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ })).toBeChecked();
-
-  // A save from Claude Code goes through without asking now. The Dashboard itself cannot save.
-  await harnessSave(stack, [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }], { agent: "claude-code", session: "sess-auto" });
-  const dashboardSave = await page.evaluate(async () => {
-    const body = { items: [{ action: "create", type: "note", title: "Typed in the Dashboard", facts: [{ subject: "Idea", value: "x" }] }] };
-    const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) });
-    return res.status;
-  });
-  expect(dashboardSave).toBe(403);
-  await page.goto(`${stack.url}/memory`);
-  const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
-  await expect(created).toContainText("Claude Code, session sess-auto");
-  await expect(created).toContainText("auto-accepted");
-
-  // Switched off again, the Harness asks before every save.
-  await page.goto(`${stack.url}/settings`);
-  const again = page.getByRole("region", { name: "Auto-accept saves" }).getByRole("checkbox", { name: /Claude Code/ });
-  await again.click();
-  await expect(page.getByText("Claude Code asks before every save")).toBeVisible();
-  await expect(again).not.toBeChecked();
-});
-
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {
   const setServer = (status: string) =>
     fetch(`${stack.fixtureUrl}/__control/claude-server`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "claude.ai Slack", status }) });
   // Connect, Test and Reconnect each start the fake Claude Code CLI, which is slow while other suites load the Machine.
   const cliRun = { timeout: 30_000 };
-  const page = await open("/connections");
+  const page = await journeys.open("/connections");
   const slack = page.locator('[data-connection="slack"]');
   // On the full Connections page an unconfigured card opens straight into its setup form.
   await expect(slack.getByText("not connected", { exact: true })).toBeVisible();
@@ -871,9 +831,10 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
 
   await setServer("connected");
   await callout.getByRole("button", { name: "Reconnect" }).click();
+  // The toast lasts a few seconds from the moment the test passes, which can be before the card has reloaded, so it is checked first.
+  await expect(page.getByText("Reconnected")).toBeVisible();
   await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
   await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
-  await expect(page.getByText("Reconnected")).toBeVisible();
 });
 
 /** Select Check now and wait until the check has finished: the button reads "Checking…" meanwhile. */
@@ -884,7 +845,7 @@ async function checkNow(card: Locator) {
 
 test("replication: set up in Settings, joined from another Machine's setup, watched, blocked with its cause, and switched off", async ({ browser }) => {
   const remote = createBareRemote();
-  const page = await open("/settings");
+  const page = await journeys.open("/settings");
   const card = page.getByRole("region", { name: "Replication" });
   await expect(card.getByText("off", { exact: true })).toBeVisible();
   await card.getByRole("textbox", { name: "Repository" }).fill(remote);
@@ -899,7 +860,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
   const otherCtx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   try {
     const second = await otherCtx.newPage();
-    watch(second);
+    journeys.watch(second);
     await second.goto(other.pairUrl());
     await second.getByRole("textbox", { name: /Data folder/ }).fill(other.dataDir);
     await second.getByText("Already use Attache on another Machine?").click();
@@ -974,7 +935,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
 });
 
 test("wording: no view says sync for reading sources; a source offers Refresh now", async () => {
-  const page = await open("/connections");
+  const page = await journeys.open("/connections");
   const gh = page.locator('[data-connection="github"]');
   await expect(gh.getByRole("button", { name: "Refresh now" })).toBeVisible();
   await gh.getByRole("button", { name: "Refresh now" }).click();
@@ -989,7 +950,7 @@ test("wording: no view says sync for reading sources; a source offers Refresh no
 });
 
 test("wording: connection help shows commands as code and addresses as links", async () => {
-  const page = await open("/connections");
+  const page = await journeys.open("/connections");
   const jira = page.locator('[data-connection="jira"]');
   await expect(jira.locator("label", { hasText: "Connector name in Claude Code" }).locator("code")).toHaveText("claude mcp list");
   await jira.getByRole("combobox", { name: "How to connect" }).selectOption("api-token");
@@ -1001,7 +962,7 @@ test("wording: connection help shows commands as code and addresses as links", a
 });
 
 test("wording: on Linux and Windows no view names macOS, and example folders are on this computer", async () => {
-  const page = await open("/settings");
+  const page = await journeys.open("/settings");
   await expect(page.getByRole("checkbox", { name: "Desktop notification for new urgent items" })).toBeVisible();
   await page.getByRole("tab", { name: "Join another Machine" }).click();
   await expect(page.getByRole("textbox", { name: /Empty folder for the Brain/ })).toHaveAttribute("placeholder", join(DOCUMENTS, "Brain"));
@@ -1012,5 +973,5 @@ test("wording: on Linux and Windows no view names macOS, and example folders are
 });
 
 test("no unresolved console errors across journeys", () => {
-  expect(consoleErrors).toEqual([]);
+  expect(journeys.consoleErrors).toEqual([]);
 });

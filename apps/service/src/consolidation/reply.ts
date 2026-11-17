@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { MemorySaveItem } from "@attache/contracts";
 import { NOTHING_DURABLE } from "../agents/summary.ts";
+import type { Completion } from "../models/providers.ts";
+import { entriesBeforeTheCut } from "./cut-off.ts";
 import { EVIDENCE_MAX_CHARS } from "./prompt.ts";
 
 /** One change the model suggests, in the shape a save takes, before it is checked against the Brain. */
@@ -16,25 +18,40 @@ const Entry = z.object({
   reason: z.string().trim().min(1).max(1000),
   evidence: z.string().trim().min(1).max(EVIDENCE_MAX_CHARS),
 });
-const Reply = z.object({ proposals: z.array(z.unknown()).max(50) });
+// No limit on the entries: the reply's token budget bounds it, and Consolidation keeps every change worth keeping (ADR 0004).
+const Reply = z.object({ proposals: z.array(z.unknown()) });
 
 /** Why an entry of the reply was dropped, for the job's log. */
 export interface Dropped {
   problem: string;
 }
 
+/** Why the change a reply was writing when the model reached its token limit was dropped. */
+const CUT_OFF = "the reply reached the model's token limit and was cut off, so the change it was writing is lost";
+
 /**
  * Read the model's reply as candidates. The reply is untrusted data: anything
  * that is not a well-formed entry is dropped, never repaired into a change.
+ * A reply cut off at the model's token limit keeps every entry written out in
+ * full before the cut, and drops the unfinished one; any other reply that is
+ * not the JSON object asked for is dropped whole.
  */
-export function parseConsolidationReply(reply: string): { candidates: Candidate[]; dropped: Dropped[] } {
-  const text = reply.trim();
+export function parseConsolidationReply(reply: Completion): { candidates: Candidate[]; dropped: Dropped[] } {
+  const text = reply.text.trim();
   if (!text || text.toUpperCase().startsWith(NOTHING_DURABLE)) return { candidates: [], dropped: [] };
   const parsed = Reply.safeParse(jsonObject(text));
-  if (!parsed.success) return { candidates: [], dropped: [{ problem: "the reply is not the JSON object Consolidation asks for" }] };
+  if (parsed.success) return readEntries(parsed.data.proposals);
+  if (!reply.cutOff) return { candidates: [], dropped: [{ problem: "the reply is not the JSON object Consolidation asks for" }] };
+  const { entries, unfinished } = entriesBeforeTheCut(text);
+  const read = readEntries(entries);
+  return unfinished ? { ...read, dropped: [...read.dropped, { problem: CUT_OFF }] } : read;
+}
+
+/** Each entry of the reply as a candidate, or dropped with why it is not one. */
+function readEntries(entries: readonly unknown[]): { candidates: Candidate[]; dropped: Dropped[] } {
   const candidates: Candidate[] = [];
   const dropped: Dropped[] = [];
-  for (const raw of parsed.data.proposals) {
+  for (const raw of entries) {
     const entry = Entry.safeParse(raw);
     if (!entry.success) {
       dropped.push({ problem: `an entry lacks an item, a reason or evidence (${firstIssue(entry.error)})` });

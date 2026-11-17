@@ -1,6 +1,6 @@
 import { redact } from "../core/log.ts";
 import { splitFrontmatter } from "../memory/markdown.ts";
-import { normalizeRel } from "../memory/policy.ts";
+import { brainRel } from "../memory/policy.ts";
 import { looseText as norm } from "../memory/same-text.ts";
 
 /** Where meeting captures live in the Brain. Connector snapshots live elsewhere, so they are never one. */
@@ -27,7 +27,7 @@ export interface MeetingCapture {
 
 /** Whether a path in the data folder is in the captures area, where meeting captures arrive. */
 export function inCapturesArea(relPath: string): boolean {
-  const rel = normalizeRel(relPath.replace(/^\.\//, ""));
+  const rel = brainRel(relPath);
   return rel.startsWith(`${CAPTURES_DIR}/`) && rel.endsWith(".md");
 }
 

@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { App, type AppOptions } from "../../src/app.ts";
+import type { Db } from "../../src/core/db.ts";
 import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
 import type { Clock } from "../../src/replication/clock.ts";
@@ -20,6 +21,11 @@ process.env.ATTACHE_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts"
  */
 export function testFolder(name: string): string {
   return mkdtempSync(join(tmpdir(), `attache-it-${name} æøå-`));
+}
+
+/** A file in a Machine's copy of the Brain, as it is on disk. */
+export function brainFile(service: { dataDir: string }, rel: string): string {
+  return readFileSync(join(service.dataDir, rel), "utf8");
 }
 
 export interface TestService {
@@ -113,4 +119,26 @@ export async function startTestService(opts: TestServiceOptions = {}): Promise<T
     await svc.post("/setup/complete");
   }
   return svc;
+}
+
+// ---- Crashes -------------------------------------------------------------------
+// A crash between a job's work and its finish is the one moment no request,
+// file or signal from outside can stop Attache at: SIGKILL lands at a random
+// point in the job. So these helpers write the job's row as a process that
+// died there leaves it, which is the only place a test reaches the jobs table.
+
+/** Leave a job as a process that died while running it does: running, under a lease nobody holds any more. */
+export function leftRunningByADeadProcess(db: Db, jobId: string): void {
+  db.prepare("update jobs set status = 'running', finished_at = null, lease_owner = 'a-process-that-died' where id = ?").run(jobId);
+}
+
+/**
+ * Stop Attache as a crash does right after a job's work was done, before the
+ * job was recorded as finished, and start it again: the job is left running
+ * under the process that died, so the new one runs it again.
+ */
+export async function diedBeforeTheJobFinished(service: TestService, jobId: string): Promise<TestService> {
+  leftRunningByADeadProcess(service.app.db, jobId);
+  await service.stop();
+  return startTestService({ stateDir: service.stateDir, dataDir: service.dataDir });
 }

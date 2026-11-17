@@ -235,8 +235,9 @@ Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes.
   A Harness submits saves through the MCP server or `attache save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
-- Model output never writes memory directly.
-  Suggested memory changes are stored as Proposals that the user applies or rejects.
+- Model output writes memory only through Consolidation (ADR 0004).
+  With its switch on, the default, Consolidation writes what it finds as actor `consolidation` after the same screening a save passes; that actor may write `memory/` only, never the identity record, and every change it makes is marked in the change log as written without review.
+  Other suggested memory changes, and Consolidation's with its switch off, are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
 - Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
   A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
@@ -428,17 +429,37 @@ Antigravity reports every turn, so its summary waits until the conversation has 
 
 When a summary finds something durable, `session-distill` queues a `session-consolidate` job for the same turns (`consolidation/consolidate.ts`, input `{ agent, sessionId, from, to, topics }`, where `topics` are the summary's bullets).
 It runs on the Machine whose hook spooled the session; a Machine that receives the transcript and session log through Replication never ingests them, so it never consolidates them.
-Without a model the summary does not run, so nothing is queued and the session log entry says no Proposals were made; a job that finds the model gone returns `{ skipped: "no model" }` with that message.
-The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`) and hands them to the shared pipeline (`consolidation/pipeline.ts` `consolidate`), which a meeting capture also goes through: it finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for at most five changes as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
+Without a model the summary does not run, so nothing is queued and the session log entry says the session was not consolidated; a job that finds the model gone returns `{ skipped: "no model" }` with that message.
+The job reads the redacted turns from the summariser's cache (`AgentSessions.sessionPart`) and hands them to the shared pipeline (`consolidation/pipeline.ts` `consolidate`), which a meeting capture also goes through: it finds related notes by searching the Brain's `memory/` notes for each topic and the session title (`consolidation/related.ts`), and asks the model, once per 100 000-character part, for every change worth keeping as JSON in the save item shape, each with a reason and a passage quoted from the session (`consolidation/prompt.ts`).
+There is no limit on how many changes one session or capture yields; the reply may take up to 8 000 tokens, so a long list fits.
+A reply that still reaches the model's token limit (`complete()` in `models/providers.ts` reports it from each provider's stop reason: `max_tokens` or `model_context_window_exceeded` from the Anthropic API and Claude Code's stream, `length` from an OpenAI-compatible endpoint) keeps every entry written out in full before the cut (`consolidation/cut-off.ts`), and the unfinished one is dropped with a problem that names the token limit; any other reply that is not the JSON object asked for is dropped whole.
 The reply is untrusted data (`consolidation/reply.ts`, `consolidation/screen.ts`): an entry that is not a valid save item, whose evidence is not quoted from the session, or that fails `checkItems` (the save's validation) is dropped and logged, never repaired.
+Screening runs in three steps.
+First `checkCandidates` checks each change by itself: a path in the Brain, evidence quoted from what was read, and `checkItemAlone` (`memory/save-items.ts`, every check `checkItems` makes except whether a new note already exists).
+For an update, `checkItemAlone` reads whether its note exists and the note's type, so a note the run makes could change a verdict; the run keeps the candidates that failed, with their problems, in the job's checkpoint before anything is written, and a retry reuses them.
+Then, in a writing run, one value is chosen per fact among the changes that passed (below), so a change that fails those checks never pushes out one that passes.
+Last, `screenCandidates` makes the checks that do: `checkItems` in full, then the repeat checks.
 Facts the note already holds with the same value, events already in the note, and parts of pending Proposals are removed; an item with nothing left is dropped.
 Values are compared as the owner reads them: case, spacing, emphasis, quotes around the value and a closing full stop do not count as a change, so a fact the session only mentions or repeats is never proposed.
 A fact the note holds with a different value is a correction: `app.proposals.proposeItems` records every such fact on the Proposal as `corrections[] { subject, was: { value, date, review }, value }` (`memory/proposal-corrections.ts`), for any Proposal, not only Consolidation's.
 The related notes are shown to the model with each fact's date, and the system prompt tells it that a mention is not a correction and that a correction's reason ends up in History beside the old value.
-Applying re-reads the note: when a corrected fact no longer holds the recorded old value, Apply is refused with 409 `fact_changed` and the Proposal stays pending.
-A session has room for five Proposals from Consolidation in total, counted across every run for it.
-What is left is recorded as Proposal files with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
-Consolidation never calls a save, so auto-accept never applies its Proposals; only the owner's Apply does.
+Applying such a Proposal re-reads the note: when a corrected fact no longer holds the recorded old value, Apply is refused with 409 `fact_changed` and the Proposal stays pending.
+What is left is written or proposed, as the Consolidation switch says: `Config.consolidation.autoAccept`, this Machine's configuration and never the Brain, on by default (`GET /consolidation`, `PUT /consolidation/auto-accept` in `http/routes-consolidation.ts`, audited as `auto_accept_changed` with id `consolidation`; the Dashboard shows it beside the Harness switches, `views/ConsolidationSwitch.tsx`).
+The system prompt tells the model which of the two happens.
+On, between `checkCandidates` and `screenCandidates`, `oneValuePerFact` (`consolidation/screen.ts`) keeps one value per fact of a note and one change per new note (type and title): the change from the latest part of the source wins, the first within a part, and each other is dropped with its problem.
+On, `consolidation/write.ts` writes each item as its own batch through `checkItems` and `writeItem`, as actor `consolidation` with provenance `consolidated`, so each change shows and reverts on its own in Recent saves.
+Its change-log rows have `auto_accepted = 1` (written without review), the source citation, and `harness` and `session_id` for a session or `capture` (the capture's path) for a meeting.
+An item that no longer passes `checkItems` when its turn comes, because an earlier one changed the Brain, is dropped.
+A correction is written as a save's is: the old value moves to History with the reason.
+The model reads a source once per run: its parsed answer, each candidate with the part it came from, and the entries it dropped are kept in the job's checkpoint before anything is written, and a retry works from them without asking the model again, so a model that answers differently the second time cannot write a second value over the first.
+The first screening step's verdicts are kept beside them, so a retry refuses what the first attempt refused.
+The checkpoint names each batch, with the candidate it writes, before it is written, and each Proposal, with the candidate it records, before it is made (`ProposalMeta.ids`).
+After a failed write or a crash mid-run, a retry leaves out the candidates its earlier batches wrote or its earlier Proposals record, neither making them twice nor reporting them as dropped, and counts only its own, not those another job made from the same session meanwhile.
+They still take part in choosing one value per fact, so a retry picks the same winners; one that loses that choice, as a Proposal made with the switch off can once it is on, is not reported as dropped either.
+Writing and proposing keep their results under separate effect keys (`<key>:write`, `<key>:propose`), so a retry after the switch changed reads its own mode's result.
+Off, each item is recorded as a Proposal file with `app.proposals.proposeItems`, `proposedBy: "Consolidation"`, the session as origin, the archived transcript as source (with the line holding the quote, when it fits on one), and the quote as the Proposal's `evidence`.
+The job result is `{ written, proposals, dropped }`: `written` counts every batch the run wrote and `proposals` every Proposal it made, in any attempt, whichever way the switch stood in each.
+A Harness's auto-accept switch has no say over Consolidation: with Consolidation's switch off, only the owner's Apply applies its Proposals.
 
 #### Meeting captures
 
@@ -451,8 +472,8 @@ Files Replication brings are recorded as `pulled` by the first `onPulled` listen
 The job belongs to the `capture` feature.
 It reads the capture with its frontmatter dropped, the quote markers stripped and secrets redacted, one entry per line of the file, and searches related notes for its title, headings and first points.
 It goes through the same pipeline as a session (`consolidate` with subject `"meeting"`): the prompts name a meeting instead (`consolidationSystemPrompt(..., "meeting")`), and the parsing, screening, corrections and `fact_changed` refusal are the same.
-The five-Proposal cap is counted per capture, from the Proposals `proposedBy: "Consolidation"` whose source is that capture (`Proposals.citing`).
-Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `lines` is the shortest run of the file's lines that holds the quoted evidence.
+A retry after a crash finds the run's writes and Proposals by the batches and Proposals its checkpoint names, as for a session.
+Each change's source is `{ kind: "capture", ref: <path>, lines }`, where `lines` is the shortest run of the file's lines that holds the quoted evidence.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
 The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `attache search` command for deeper recall from the agent's shell.
@@ -483,12 +504,12 @@ Every change across the hooks file, the MCP file and the rule file is worked out
 Disconnecting removes the hooks, the rule and the server, trying each even when another fails, and reports the failures together.
 
 When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.attache-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
-The MCP prompts replace those skills, and there is no `attache save` command any more, because a save must be confirmed by the owner inside a Harness, which a shell cannot do.
+The MCP prompts replace those skills, and there is no `attache save` command any more, because a Harness with auto-accept off has the owner confirm a save inside the Harness, which a shell cannot do.
 
 `attache audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
 Each pairs itself on first use as client kind `cli` (the same trust as `attache pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
-Only a save marked `confirmed: true` (the owner accepted it when the MCP server asked) or `autoAccept: true` (checked against the setting) writes as the owner; any other save is stored as Proposals, one per item, and the response lists them under `proposals`.
+Only a save marked `confirmed: true` (the owner accepted it when the MCP server asked) or `autoAccept: true` (checked against the setting, on by default for a connected Harness) writes as the owner; any other save is stored as Proposals, one per item, and the response lists them under `proposals`.
 Only a client paired as `cli`, which the MCP server uses, may call it: the Dashboard's browser session gets 403 `dashboard_cannot_save` (ADR 0003).
 Facts go through the store's correction path, so the old value moves to History; events are appended to History.
 Each item is written to its note in a single file write (`memory/save-items.ts`), so an item lands whole or not at all.
@@ -504,7 +525,7 @@ The write runs as the user, because saving is the user's explicit request; the n
 `GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale` (past its Review date, `isPastReview`; there is no age threshold), `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
 The document a fact cites as its source, archives under `evidence/archive/`, generated deliverables, and history or undated prose in other notes are never offered, because none of them can overturn the fact.
-It counts; the audit prompt has the agent judge contradictions and propose corrections through the MCP `save` tool, which the owner confirms.
+It counts; the audit prompt has the agent judge contradictions and propose corrections through the MCP `save` tool, which writes them like any save (the owner confirms only for a Harness with auto-accept off).
 
 ### Recent saves and revert
 
@@ -514,6 +535,12 @@ Every write to the Brain is recorded in the change log (`memory_changes`) with t
 A corrected fact is corrected back to its previous value and the Review date that value had (the change log keeps both, `before_review` and `after_review`), a fact that had no previous value is moved from Current State into History, a created note is deleted from the data folder and the index, and a deleted note is restored from the copy its delete change keeps.
 A change is revertible only while it is the last word: no later change touched the same fact (a later change and its own revert cancel out, so undo works like a stack), no later save touched a created note, and the file still matches what the change wrote (the fact's value and Review date, or the note's hash for a created note), so a hand edit or a change from elsewhere is never thrown away.
 Events are append-only History and are never reverted.
+
+`GET /api/v1/memory/recent-changes?unreviewed=1` feeds Home's Recently added (`views/RecentlyAdded.tsx`, ADR 0004): applied changes with `auto_accepted = 1` (an auto-accepted save or a Consolidation write) recorded in the last `UNREVIEWED_DAYS` (7) days, newest first, every one of them (the window bounds the list, so a busy week drops nothing); `limit` applies only without `unreviewed`.
+The window ends at this Machine's clock (`app.clock`), so tests age changes by moving it.
+A revert is the owner's own change (`auto_accepted = 0`), so only the change it undid shows, with `revertedBy` set; confirmed saves and applied Proposals never show.
+Each view carries the correction's `reason`, and `source.consolidation` (`from` session or meeting, and the meeting capture with its indexed title) for rows written by the `consolidation` actor, labelled "Consolidation of <Harness> session <id>" or "Consolidation of meeting “<title>”".
+Both lists render rows with `components/RecentChange.tsx`, so revert behaves the same in each.
 
 ## MCP server
 
@@ -532,15 +559,20 @@ The server starts even when the service is down, because a Harness launches its 
   Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
 - `save` takes `items` with the `MemorySaveItem` schema of `POST /memory/save`.
   It checks them with `POST /memory/save/check` (the save's own validation, no write), so an invalid item or the identity record is refused before the owner is asked.
-  The check also answers `autoAccept`: whether the owner switched on auto-accept for the origin's Harness on this Machine.
+  The check also answers `autoAccept`: whether auto-accept is on for the origin's Harness on this Machine.
   If so, the tool writes through `POST /memory/save` with `autoAccept: true` and no confirmation request; the service checks the setting again and refuses the save (409 `auto_accept_off`) when it is off.
-  Auto-accept is stored per Harness in the `harness_settings` table of the service database (`agents/auto-accept.ts`), local to the Machine and never in the Brain, so Replication never carries it.
-  `GET /harnesses` lists each connected Harness with its switch and `PUT /harnesses/:id/auto-accept` changes it; a Harness that is not connected is refused, and disconnecting one switches it off.
+  Auto-accept is on by default (ADR 0004): a connected Harness Attache knows is on unless the `harness_settings` table of the service database (`agents/auto-accept.ts`) stores it off; a Harness that is not connected, and an unknown MCP client (one that is not a Harness Attache knows), are always off, because the Dashboard has no switch for them.
+  The table is local to the Machine and never in the Brain, so Replication never carries it; the upgrade to ADR 0004 switched every stored setting on, once.
+  `GET /harnesses` lists each connected Harness with its switch and `PUT /harnesses/:id/auto-accept` changes it; a Harness that is not connected is refused, and disconnecting one deletes its row, so connecting it again starts on.
   Every change an auto-accepted save makes is marked in the change log (`memory_changes.auto_accepted`) beside its Harness and session, and Recent saves shows the mark.
   It never applies to the identity record, which no save can change.
-  It then sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 10-minute limit.
-  Accept writes through `POST /memory/save` with `confirmed: true`, as the owner (actor `user`, provenance `agent-saved`); decline or cancel writes nothing.
-  A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
+  Otherwise it sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 2-minute limit (`CONFIRMATION_TIMEOUT_MS`).
+  Accept writes through `POST /memory/save` with `confirmed: true`, as the owner (actor `user`, provenance `agent-saved`); decline or cancel after one second or more writes nothing.
+  When the owner cannot be asked, the tool calls `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
+  That covers three causes, which the reply names in `cannotAsk` and each Proposal's reason states: `unsupported` (the client does not declare the `elicitation` capability, or answers "method not found"), `instant` (a decline or cancel within one second, `FASTEST_PERSON_MS`, as Claude Code in print mode answers without showing anyone) and `unanswered` (no answer within the limit; Attache withdraws the request with `notifications/cancelled`).
+  After one `unanswered`, later saves on the same MCP connection store Proposals without asking (`ownerConfirmation` keeps that per server, and `createMcpServer` builds one server per connection).
+  Every reply (`saved`, `declined`, `proposed`) also carries its summary in `message`, because Claude Code shows the agent only the structured reply.
+  Time comes from a `Clock` passed to `createMcpServer` (the system clock in `attache mcp`), so tests move it by hand over the SDK's in-memory transport.
   The origin names the Harness and session (`mcp/harness.ts`): from the environment the Harness gives the server (`CLAUDECODE` with `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, `ANTIGRAVITY_CONVERSATION_ID`), otherwise from the client name it reported (`claude-ai` is Claude Desktop), without a session; the folder is the server's working directory.
 - The `wrap-up` prompt (text in `mcp/prompt-text.ts` too) asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.
   It exists for conversations Attache cannot capture, such as Claude Desktop's Chat tab.
@@ -560,7 +592,7 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
 ## Clients
 
 - Browser: React.
-  Home is the attention inbox; Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
+  Home is the attention inbox, followed by Recently added (what reached the Brain without review in the last 7 days); Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
 - Obsidian: no plugin.
   The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
   (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)

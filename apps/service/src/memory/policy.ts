@@ -7,7 +7,9 @@ import { dirname, isAbsolute, normalize, relative, resolve, sep } from "node:pat
  * model output or instructions found in documents.
  */
 
-export type WriteActor = "user" | "service" | "connector" | "model" | "import";
+/** The actor Consolidation writes as, so the change log tells its changes from the owner's (ADR 0004). */
+export const CONSOLIDATION_ACTOR = "consolidation";
+export type WriteActor = "user" | "service" | typeof CONSOLIDATION_ACTOR | "connector" | "model" | "import";
 
 export const AREAS = ["memory", "evidence", "deliverables"] as const;
 export type Area = (typeof AREAS)[number] | "import";
@@ -28,6 +30,15 @@ export function normalizeRel(rel: string): string {
   const n = normalize(rel).split(sep).join("/");
   if (n.startsWith("../") || n === ".." || n.startsWith("/")) throw new PolicyError(`Path escapes data folder: ${rel}`, "outside_root");
   return n;
+}
+
+/**
+ * A path in the Brain as a Harness or a model writes it, cleaned up: a leading
+ * "./" is dropped, then it is normalised like any relative path, and refused
+ * when it is no path in the Brain.
+ */
+export function brainRel(path: string): string {
+  return normalizeRel(path.replace(/^\.\//, ""));
 }
 
 /** Resolve a relative path inside root, refusing escapes including via symlinked parents. */
@@ -56,6 +67,7 @@ export function isProtected(rel: string): boolean {
  * Which actor may write where:
  * - user: memory, evidence, deliverables; protected records only with explicit confirmation.
  * - service: evidence and deliverables (archives, briefings, job outputs) and applying user-approved proposals.
+ * - consolidation: memory only, what Consolidation found in a session or a meeting and screened like a save (ADR 0004).
  * - connector / import: evidence only.
  * - model: nothing directly; model suggestions become proposals.
  */
@@ -73,6 +85,9 @@ export function assertWritable(rel: string, actor: WriteActor, opts: { confirmed
       return;
     case "service":
       if (area === "memory" && !opts.approvedProposal) throw new PolicyError("The service writes curated memory only for approved proposals", "actor_denied");
+      return;
+    case CONSOLIDATION_ACTOR:
+      if (area !== "memory") throw new PolicyError("Consolidation writes curated memory only", "actor_denied");
       return;
     case "connector":
     case "import":

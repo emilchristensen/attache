@@ -1,10 +1,11 @@
 /** Captures every view in light, dark and narrow layouts for visual review (test-results/screens). */
 import { test, expect, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { api } from "./browser.ts";
+import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -16,16 +17,6 @@ test.afterAll(() => stack?.stop());
 
 const runGit = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
-
-async function api(page: Page, method: string, path: string, body?: unknown) {
-  await page.evaluate(
-    async ([m, p, b]) => {
-      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
-      if (!res.ok) throw new Error(`${m} ${p} failed: ${res.status}`);
-    },
-    [method, path, body] as const,
-  );
-}
 
 /** The Replication card in every theme and width: off, up to date with two Machines, and blocked with its cause. */
 async function replicationScreens(page: Page) {
@@ -108,6 +99,13 @@ test("screens", async ({ browser }) => {
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Prepare briefing" }).click();
   await page.waitForTimeout(1500);
+  // Nothing written without review yet: Recently added says so in one line. A fresh load clears the toasts above.
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(stack.url);
+    await expect(page.getByRole("region", { name: "Recently added" })).toContainText("Nothing was written without your review");
+    await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added-empty.png` });
+  }
   // A pending Proposal, so the Memory screens show the review list.
   await page.evaluate(async () => {
     const item = { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }, { subject: "Team", value: "Vendor management" }], notes: "Met on the vendor call.\nPrefers email.", events: ["Introduced in the vendor call"], tags: ["vendor"] };
@@ -125,16 +123,24 @@ test("screens", async ({ browser }) => {
     const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ item, reason: "The Friday call clashed with the release meeting.", evidence: "Priya asked to go back to written updates on Mondays." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
-  // Claude Code connected with auto-accept on, and one auto-accepted save, so Settings and Recent saves show both.
+  // Claude Code connected, so auto-accept is on by default, and one save written without review, so Settings and Recent saves show both.
   await page.evaluate(async () => {
-    const call = async (method: string, path: string, body: unknown) => {
-      const res = await fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
-    };
-    await call("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
-    await call("PUT", "/harnesses/claude-code/auto-accept", { autoAccept: true });
+    const res = await fetch("/api/v1/connections/claude-code/configure", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ method: "hooks", fields: {} }) });
+    if (!res.ok) throw new Error(`POST /connections/claude-code/configure failed: ${res.status}`);
   });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", events: ["Agreed to own the ledger migration"] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  // Home's Recently added: a new fact a later save corrected, the correction with its reason, and a note that was reverted.
+  await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Office", value: "Copenhagen", reason: "joined the billing floor" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Office", value: "Aarhus, from the first of next month while the Copenhagen floor is rebuilt", reason: "moving with the billing team" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  await harnessSave(stack, [{ action: "create", type: "note", title: "Ledger rehearsal checklist", facts: [{ subject: "Owner", value: "Priya Shah" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
+  const { changes } = await api<{ changes: Array<{ id: string; kind: string; title: string }> }>(page, "GET", "/memory/recent-changes?unreviewed=1");
+  await api(page, "POST", `/memory/changes/${changes.find((c) => c.kind === "create" && c.title === "Ledger rehearsal checklist")!.id}/revert`);
+  // A note Consolidation wrote from a meeting, beside the auto-accepted saves, with the meeting as its source.
+  const said = "We agreed Priya runs the ledger cutover rehearsal on Thursdays";
+  arriveMeetingCapture(stack, "evidence/captures/2026-11-17-granola-ledger-sync.md", "Granola 2026-11-17: Ledger sync", [`[0:04] Priya: ${said}.`], {
+    proposals: [{ item: { action: "create", type: "project", title: "Ledger cutover rehearsal", facts: [{ subject: "When", value: "Thursdays, run by Priya Shah" }] }, reason: "The ledger sync agreed a weekly rehearsal.", evidence: said }],
+  });
+  await expect.poll(() => existsSync(join(stack.dataDir, "memory/projects/ledger-cutover-rehearsal.md"))).toBe(true);
   await replicationScreens(page);
   // An edit by hand: "Prefers" is past its Review date, so the note shows it unverified.
   const priya = join(stack.dataDir, "memory/people/priya-shah.md");
@@ -150,7 +156,7 @@ test("screens", async ({ browser }) => {
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
     await page.locator(".card", { has: page.getByRole("heading", { name: "Service health" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-health.png` });
     await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
-    await page.getByRole("region", { name: "Auto-accept saves" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
+    await page.getByRole("region", { name: "Auto-accept" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
     // A note opened read-only, below the review lists.
     await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
@@ -158,6 +164,9 @@ test("screens", async ({ browser }) => {
     await page.screenshot({ path: `test-results/screens/${scheme}-memory-note.png` });
     await page.goto(`${stack.url}/memory`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
+    await page.goto(stack.url);
+    await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
+    await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added.png` });
   }
   // Search before and after the meaning model is downloaded.
   await page.goto(`${stack.url}/memory`);
@@ -187,4 +196,8 @@ test("screens", async ({ browser }) => {
   await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(500);
   await page.screenshot({ path: "test-results/screens/narrow-memory-note.png" });
+  await page.goto(stack.url);
+  const recentlyAdded = page.getByRole("region", { name: "Recently added" });
+  await expect(recentlyAdded.getByRole("listitem").first()).toBeVisible();
+  await recentlyAdded.screenshot({ path: "test-results/screens/narrow-home-recently-added.png" });
 });

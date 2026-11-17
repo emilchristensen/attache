@@ -119,7 +119,7 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
-    this.autoAccept = new AutoAcceptStore(this.db);
+    this.autoAccept = new AutoAcceptStore(this.db, (kind) => this.connections.record(kind)?.status === "connected");
     this.clock = opts.clock ?? systemClock;
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
     this.replication = new Replication({
@@ -211,8 +211,8 @@ export class App {
     this.connections.onDisconnect = (id, kind) => {
       const agent = integrationFor(kind);
       if (agent) {
-        // Connecting the Harness again starts with auto-accept off, as a new Harness does.
-        this.autoAccept.set(agent.kind, false);
+        // Connecting the Harness again starts with auto-accept on, as a new Harness does (ADR 0004).
+        this.autoAccept.forget(agent.kind);
         try {
           this.sessions.hooks.uninstall(agent);
         } catch (e) {

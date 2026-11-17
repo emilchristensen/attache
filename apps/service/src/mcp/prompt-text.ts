@@ -76,8 +76,8 @@ Its arguments look like this:
 
 ${SAVE_EXAMPLE}
 
-Attache asks the owner to confirm the items before it writes them, and records which Harness and session they came from.
-If the owner switched on auto-accept for this Harness, Attache writes them without asking; the reply says so.
+Attache writes the items without asking, because auto-accept is on for a connected Harness, and records which Harness and session they came from; the reply says so.
+If the owner switched auto-accept off for this Harness, Attache asks them to confirm the items before it writes them.
 If the owner declines, nothing is saved: say so, and do not call the tool again unless they ask.
 If the reply says the items await review, tell the owner they can approve them in the Attache Dashboard.
 If the tool returns an error, read its message, fix the items and call it again.
@@ -140,7 +140,7 @@ Every fact needs a \`reason\` that cites the evidence; Attache moves the old val
 ${CORRECTION_EXAMPLE}
 
 Make the corrections through the \`save\` tool only after the owner says yes, and only the ones they accept.
-Attache then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
+If the owner switched auto-accept off for this Harness, Attache then asks them to confirm the save once more before it writes.
 For an unsupported fact, ask the owner for the current value rather than guessing.
 A stale fact the owner confirms is still true is saved again with the same value and a later Review date; a correction without one clears it.
 ${HANDS_OFF}

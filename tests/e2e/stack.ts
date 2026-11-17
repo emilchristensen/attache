@@ -6,11 +6,13 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { fixtureModelDescription } from "../../apps/service/test/fixtures/fixture-meaning-model.ts";
+import { consolidationLine } from "../../apps/service/test/fixtures/fixture-model.ts";
+import { meetingCapture } from "../../apps/service/test/fixtures/meeting-capture.ts";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 const BUNDLE = join(ROOT, "apps/service/dist/attache-service.mjs");
@@ -143,6 +145,17 @@ export async function harnessSave(stack: Stack, items: unknown[], origin: { agen
   } finally {
     await client.close();
   }
+}
+
+/**
+ * A meeting capture arriving in the Brain, as the owner's meeting export writes
+ * one, with Consolidation's model reply scripted inside it: the e2e fixture
+ * model answers Consolidation with `reply` (each entry's evidence quoted from `lines`).
+ */
+export function arriveMeetingCapture(stack: Stack, relPath: string, title: string, lines: readonly string[], reply: unknown) {
+  const file = join(stack.dataDir, relPath);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, meetingCapture(title, [...lines, consolidationLine(reply)]));
 }
 
 export function readRuntime(stateDir: string) {
