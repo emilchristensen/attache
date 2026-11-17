@@ -1,7 +1,13 @@
-# Attache
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="" width="112" height="112">
+</p>
 
-[![CI](https://github.com/emilchristensen/attache/actions/workflows/ci.yml/badge.svg)](https://github.com/emilchristensen/attache/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h1 align="center">Attache</h1>
+
+<p align="center">
+  <a href="https://github.com/emilchristensen/attache/actions/workflows/ci.yml"><img src="https://github.com/emilchristensen/attache/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
 
 A local-first personal assistant for macOS, Linux and Windows that keeps your knowledge and brings forward what needs your attention.
 
