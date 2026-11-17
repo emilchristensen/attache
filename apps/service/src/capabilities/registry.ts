@@ -37,11 +37,11 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "capture",
     label: "Saving to memory",
-    description: "Import a Markdown folder, save notes and decisions from a Harness, propose what the Brain should change because of a meeting capture (with a model), and review Proposals and recent saves.",
+    description: "Import a Markdown folder, save notes and decisions from a Harness, write what a meeting capture changes in the Brain (with a model; Proposals for you to review when the Consolidation switch is off), and review Proposals and recent saves.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["recall"],
-    // A model is only needed to propose changes from meeting captures; saving works without one, so it is not listed here.
+    // A model is only needed to consolidate meeting captures; saving works without one, so it is not listed here.
     connections: [],
     schedules: [],
     jobKinds: ["import", "capture-consolidate"],
@@ -85,13 +85,13 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Attache memory.",
+    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, write what they change in the Brain (Proposals for you to review when the Consolidation switch is off), and give each new session your Attache memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
       { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
-      { kinds: ["model"], label: "A model to summarise sessions and propose changes", required: false, missingEffect: "Sessions are saved without a summary, and no Proposals are made from them." },
+      { kinds: ["model"], label: "A model to summarise and consolidate sessions", required: false, missingEffect: "Sessions are saved without a summary and are not consolidated." },
     ],
     schedules: [],
     jobKinds: ["session-distill", "session-consolidate"],

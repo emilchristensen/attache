@@ -29,4 +29,5 @@ Vocabulary follows `GLOSSARY.md`, and decisions follow `docs/adr/`.
   An empty or comment-only `catch` needs the reason it is safe, in the code.
 - **User-facing text tells the owner what to do next**, in the glossary's words, and never shows a secret.
 - **Model output is untrusted data.**
-  It passes the same validation as a save, and becomes a Proposal, never a direct write.
+  It passes the same validation as a save before anything comes of it.
+  Only Consolidation writes what a model found straight to the Brain, as its own actor and marked as written without review, so the owner can revert it (ADR 0004); any other model output becomes a Proposal, never a direct write.

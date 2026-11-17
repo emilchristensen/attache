@@ -68,6 +68,11 @@ export function splitFrontmatter(text: string): { frontmatter: Record<string, un
   return { frontmatter, body: raw.slice(consumed.length), bodyStartLine, ...(error ? { error } : {}) };
 }
 
+/** The title of a file with none of its own: its file name without `.md`. */
+export function fileTitle(relPath: string): string {
+  return relPath.split("/").at(-1)!.replace(/\.md$/, "");
+}
+
 /** A line that opens or closes a fenced code block. */
 export const CODE_FENCE = /^\s*(```|~~~)/;
 

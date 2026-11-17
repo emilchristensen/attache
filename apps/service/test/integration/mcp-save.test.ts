@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { ElicitRequest, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
@@ -7,9 +8,11 @@ import { startTestService, type TestService } from "./harness.ts";
 import { callTool, mcpClients, type HarnessClientOptions } from "./mcp-client.ts";
 
 type Saved = { action: "created" | "updated"; path: string; title: string; facts: number; events: number };
-type SaveReply = { outcome: "saved" | "declined" | "proposed"; saved?: Saved[]; proposals?: Array<{ id: string; target: string }> };
+type SaveReply = { outcome: "saved" | "declined" | "proposed"; message?: string; saved?: Saved[]; proposals?: Array<{ id: string; target: string }> };
 
 const CLAUDE_CODE_SESSION = { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "5f0c2a1e-session-orion" };
+/** Longer than the fastest answer a person gives (one second), so a decline counts as the owner's. */
+const PERSON_READS_MS = 1_200;
 
 let svc: TestService;
 const mcp = mcpClients();
@@ -21,6 +24,17 @@ function owner(action: ElicitResult["action"]) {
   return { shown, confirm: (params: ElicitRequest["params"]) => (shown.push(params), { action }) };
 }
 
+/**
+ * An owner who reads the confirmation for a while before answering, as a person does. This waits on the real clock:
+ * Attache's MCP server here is the child process a Harness starts, whose clock a test cannot move. The timing rules
+ * themselves are tested on a fake clock in `mcp-confirmation-timing.test.ts`; only the one decline test below
+ * waits, to show a slow decline reaches the owner's outcome through the real process.
+ */
+function slowOwner(action: ElicitResult["action"]) {
+  const shown: Array<ElicitRequest["params"]> = [];
+  return { shown, confirm: async (params: ElicitRequest["params"]) => (shown.push(params), await sleep(PERSON_READS_MS), { action }) };
+}
+
 function brainFile(rel: string): string | null {
   const abs = join(svc.dataDir, rel);
   return existsSync(abs) ? readFileSync(abs, "utf8") : null;
@@ -29,6 +43,10 @@ function brainFile(rel: string): string | null {
 beforeAll(async () => {
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
+  // These saves go through the owner's confirmation, so Claude Code's auto-accept is off.
+  mkdirSync(join(process.env.ATTACHE_AGENT_HOME!, ".claude"), { recursive: true });
+  await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
+  await svc.put("/harnesses/claude-code/auto-accept", { autoAccept: false });
   await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for November" }] }] });
 });
 afterAll(async () => {
@@ -81,24 +99,29 @@ describe("MCP save, confirmed in the Harness", () => {
     for (const c of mine) expect(c.source).toMatchObject({ harness: "claude-code", harnessLabel: "Claude Code", sessionId: "5f0c2a1e-session-orion" });
   });
 
-  it("writes nothing when the owner declines or closes the confirmation, and says so", async () => {
-    for (const action of ["decline", "cancel"] as const) {
-      const before = brainFile("memory/projects/orion-migration.md");
-      const answer = owner(action);
-      const client = await connect({ env: CLAUDE_CODE_SESSION, confirm: answer.confirm });
-      const r = await callTool<SaveReply>(client, "save", {
-        items: [
-          { action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cancelled", reason: "Budget cut" }] },
-          { action: "create", type: "note", title: `Declined plan ${action}`, facts: [{ subject: "Idea", value: "Never written" }] },
-        ],
-      });
-      expect(answer.shown).toHaveLength(1);
-      expect(r.isError).toBe(false);
-      expect(r.data.outcome).toBe("declined");
-      expect(r.text).toContain("nothing was written");
-      expect(brainFile("memory/projects/orion-migration.md")).toBe(before);
-      expect(brainFile(`memory/notes/declined-plan-${action}.md`)).toBeNull();
-    }
+  it("writes nothing when the owner takes a moment and then declines or closes the confirmation, and says so", async () => {
+    const before = brainFile("memory/projects/orion-migration.md");
+    const proposalsBefore = (await svc.get("/memory/proposals?status=proposed")).proposals.length;
+    // Both answers wait the same real second and more, so they run side by side.
+    await Promise.all(
+      (["decline", "cancel"] as const).map(async (action) => {
+        const answer = slowOwner(action);
+        const client = await connect({ env: CLAUDE_CODE_SESSION, confirm: answer.confirm });
+        const r = await callTool<SaveReply>(client, "save", {
+          items: [
+            { action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cancelled", reason: "Budget cut" }] },
+            { action: "create", type: "note", title: `Declined plan ${action}`, facts: [{ subject: "Idea", value: "Never written" }] },
+          ],
+        });
+        expect(answer.shown).toHaveLength(1);
+        expect(r.isError).toBe(false);
+        expect(r.data.outcome).toBe("declined");
+        expect(r.text).toContain("nothing was written");
+        expect(brainFile(`memory/notes/declined-plan-${action}.md`)).toBeNull();
+      }),
+    );
+    expect(brainFile("memory/projects/orion-migration.md")).toBe(before);
+    expect((await svc.get("/memory/proposals?status=proposed")).proposals.length).toBe(proposalsBefore);
   });
 
   it("rejects the whole save when one item is invalid, before asking the owner, with a message the agent can act on", async () => {
@@ -189,6 +212,26 @@ describe("MCP save from a Harness that cannot ask the owner", () => {
     expect(brainFile("memory/notes/unanswered-idea.md")).toBeNull();
     const { proposals } = await svc.get("/memory/proposals?status=proposed");
     expect(proposals.find((p: { id: string }) => p.id === r.data.proposals![0]!.id).proposedBy).toBe("half-done-harness");
+  });
+
+  it("stores Proposals when the Harness declines faster than a person could, as Claude Code does in print mode", async () => {
+    const answer = owner("decline");
+    const client = await connect({ env: CLAUDE_CODE_SESSION, confirm: answer.confirm });
+    const r = await callTool<SaveReply>(client, "save", { items: [{ action: "create", type: "note", title: "Headless idea", facts: [{ subject: "Idea", value: "Kept for review" }] }] });
+    expect(answer.shown).toHaveLength(1);
+    expect(r.isError).toBe(false);
+    expect(r.data.outcome).toBe("proposed");
+    expect(r.text).toContain("answered the confirmation faster than a person could");
+    expect(r.text).toContain("Attache Dashboard");
+    expect(r.text).not.toMatch(/declined/i);
+    // Claude Code shows the agent the structured reply only, so it says the same.
+    expect(r.data.message).toContain("answered the confirmation faster than a person could");
+    expect(r.data.message).toContain("waits in the Attache Dashboard");
+    expect(brainFile("memory/notes/headless-idea.md")).toBeNull();
+    const { proposals } = await svc.get("/memory/proposals?status=proposed");
+    const mine = proposals.find((p: { id: string }) => p.id === r.data.proposals![0]!.id);
+    expect(mine.item).toMatchObject({ action: "create", title: "Headless idea" });
+    expect(mine.reason).toContain("answered the confirmation faster than a person could");
   });
 
   it("stores no Proposal when one item is invalid", async () => {

@@ -20,6 +20,15 @@ export const ModelSettings = z.object({
   baseUrl: z.string().default(""),
 });
 
+/**
+ * Consolidation on this Machine. `autoAccept` on (the default) writes what it
+ * finds in finished sessions and meeting captures to the Brain without review;
+ * off, it makes Proposals instead (ADR 0004). Local to the Machine, never in the Brain.
+ */
+export const ConsolidationSettings = z.object({
+  autoAccept: z.boolean().default(true),
+});
+
 export const Config = z.object({
   schemaVersion: z.literal(1).default(1),
   setupCompleted: z.boolean().default(false),
@@ -29,6 +38,7 @@ export const Config = z.object({
   schedules: Schedules.default({ refreshEveryMinutes: 30, briefingAt: "08:00", briefingEnabled: true }),
   notifications: Notifications.default({ desktop: false, quietHours: null }),
   identity: z.object({ name: z.string(), email: z.string() }).nullable().default(null),
+  consolidation: ConsolidationSettings.default({ autoAccept: true }),
 });
 export type Config = z.infer<typeof Config>;
 

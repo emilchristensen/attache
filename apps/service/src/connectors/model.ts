@@ -70,7 +70,7 @@ export const modelAdapter: ConnectorAdapter = {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 90_000);
     try {
-      const out = await complete(p, { system: "Reply with exactly the word: ready", messages: [{ role: "user", content: "Status check." }], maxTokens: 16, signal: ctrl.signal });
+      const { text: out } = await complete(p, { system: "Reply with exactly the word: ready", messages: [{ role: "user", content: "Status check." }], maxTokens: 16, signal: ctrl.signal });
       return { ok: /ready/i.test(out), state: /ready/i.test(out) ? "complete" : "error", account: `${p.id} · ${p.model}`, message: /ready/i.test(out) ? `${p.model} responded` : `Unexpected reply: ${out.slice(0, 80)}` };
     } catch (e) {
       const err = e as ModelError;

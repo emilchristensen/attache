@@ -201,7 +201,7 @@ export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => 
     <div className="card" role="group" aria-label="Features">
       {caps.features.map((f) => (
         <div key={f.id} className="feature-row" data-feature={f.id}>
-          <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} style={{ marginTop: 4, width: 16, height: 16, accentColor: "var(--accent-strong)" }} />
+          <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} />
           <div style={{ flex: 1 }}>
             <label htmlFor={`f-${f.id}`} className="row" style={{ cursor: f.core ? "default" : "pointer" }}>
               <strong>{f.label}</strong>
@@ -265,7 +265,7 @@ function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () =>
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && SOURCE_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <h2>Harnesses</h2>
-      <p className="muted">Connect the Harnesses you use. Each gets Attache's MCP server, so it can search, read and save to your Brain, and asks you to confirm every save. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Attache's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
+      <p className="muted">Connect the Harnesses you use. Each gets Attache's MCP server, so it can search, read and save to your Brain without asking; you can switch that off per Harness in Settings. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Attache's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
       {caps.data && HARNESS_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <Nav onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </section>

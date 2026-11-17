@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { startTestService, type TestService } from "./harness.ts";
+import { brainFile, startTestService, type TestService } from "./harness.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
@@ -13,7 +13,6 @@ const TODAY = dayFromToday(0);
 const IN_A_MONTH = dayFromToday(30);
 const IN_TWO_MONTHS = dayFromToday(60);
 
-const brainFile = (rel: string) => readFileSync(join(svc.dataDir, rel), "utf8");
 const lineOf = (text: string, needle: string) => text.split("\n").find((l) => l.includes(needle));
 const docState = async (rel: string) => (await svc.get(`/memory/document?path=${encodeURIComponent(rel)}`)).state as Array<{ subject: string; date: string; value: string; review?: string; unverified: boolean }>;
 
@@ -29,7 +28,7 @@ describe("a fact with a Review date", () => {
     await svc.post("/memory/save", { confirmed: true,
       items: [{ action: "create", type: "project", title: "Vega launch", facts: [{ subject: "Status", value: "Beta opens to customers", review: IN_A_MONTH }, { subject: "Owner", value: "Ada" }] }],
     });
-    const note = brainFile("memory/projects/vega-launch.md");
+    const note = brainFile(svc, "memory/projects/vega-launch.md");
     expect(lineOf(note, "Beta opens")).toMatch(new RegExp(`^- \\*\\*Status\\*\\* \\(${TODAY}, review ${IN_A_MONTH}\\): Beta opens to customers`));
     // A fact without one keeps the plain form.
     expect(lineOf(note, "Ada")).toMatch(new RegExp(`^- \\*\\*Owner\\*\\* \\(${TODAY}\\): Ada`));
@@ -50,20 +49,20 @@ describe("a fact with a Review date", () => {
       const r = await svc.call("POST", "/memory/save", { confirmed: true, items: [{ action: "update", path: "memory/projects/vega-launch.md", facts: [{ subject: "Owner", value: "Grace", reason: "handover", review }] }] });
       expect(r.status).toBe(400);
     }
-    expect(lineOf(brainFile("memory/projects/vega-launch.md"), "**Owner**")).toContain("Ada");
+    expect(lineOf(brainFile(svc, "memory/projects/vega-launch.md"), "**Owner**")).toContain("Ada");
   });
 
   it("is cleared by a correction that gives none, and replaced by one that gives a new one", async () => {
     const rel = "memory/projects/vega-launch.md";
     await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "Beta extended by two weeks", reason: "feedback backlog" }] }] });
-    let note = brainFile(rel);
+    let note = brainFile(svc, rel);
     expect(lineOf(note, "Beta extended")).toMatch(new RegExp(`^- \\*\\*Status\\*\\* \\(${TODAY}\\): Beta extended`));
     // History keeps the old value with the Review date it had.
     expect(lineOf(note, 'was "Beta opens to customers"')).toContain(`(dated ${TODAY}, review ${IN_A_MONTH})`);
     expect((await docState(rel)).find((s) => s.subject === "Status")?.review).toBeUndefined();
 
     await svc.post("/memory/save", { confirmed: true, items: [{ action: "update", path: rel, facts: [{ subject: "Status", value: "General availability planned", reason: "beta closed", review: IN_TWO_MONTHS }] }] });
-    note = brainFile(rel);
+    note = brainFile(svc, rel);
     expect(lineOf(note, "General availability")).toContain(`(${TODAY}, review ${IN_TWO_MONTHS}): General availability planned`);
   });
 });
@@ -145,7 +144,7 @@ describe("reverting a change to a fact with a Review date", () => {
     const change = await statusChange("Vendor delivered");
     expect(change).toMatchObject({ oldValue: "Waiting for the vendor", oldReview: IN_A_MONTH, newReview: null });
     await svc.post(`/memory/changes/${change.id}/revert`);
-    expect(lineOf(brainFile(rel), "**Status**")).toContain(`, review ${IN_A_MONTH}): Waiting for the vendor`);
+    expect(lineOf(brainFile(svc, rel), "**Status**")).toContain(`, review ${IN_A_MONTH}): Waiting for the vendor`);
   });
 
   it("puts back the Review date the value had before, and refuses once the Review date was edited by hand", async () => {
@@ -154,14 +153,14 @@ describe("reverting a change to a fact with a Review date", () => {
     expect(scheduled).toMatchObject({ newReview: IN_TWO_MONTHS, revert: { allowed: true } });
 
     const file = join(svc.dataDir, rel);
-    writeFileSync(file, brainFile(rel).replace(`review ${IN_TWO_MONTHS}`, `review ${IN_A_MONTH}`));
+    writeFileSync(file, brainFile(svc, rel).replace(`review ${IN_TWO_MONTHS}`, `review ${IN_A_MONTH}`));
     svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, rel);
     expect((await statusChange("Upgrade scheduled")).revert).toMatchObject({ allowed: false, reason: expect.stringContaining("edited outside Attache") });
 
-    writeFileSync(file, brainFile(rel).replace(`review ${IN_A_MONTH}`, `review ${IN_TWO_MONTHS}`));
+    writeFileSync(file, brainFile(svc, rel).replace(`review ${IN_A_MONTH}`, `review ${IN_TWO_MONTHS}`));
     await svc.post(`/memory/changes/${scheduled.id}/revert`);
     // Back to the value before, with the Review date that value had.
-    expect(lineOf(brainFile(rel), "**Status**")).toContain(`, review ${IN_A_MONTH}): Waiting for the vendor`);
+    expect(lineOf(brainFile(svc, rel), "**Status**")).toContain(`, review ${IN_A_MONTH}): Waiting for the vendor`);
   });
 });
 
@@ -176,7 +175,7 @@ describe("a Proposal with a Review date", () => {
     expect(listed.item.facts[0].review).toBe(IN_A_MONTH);
 
     const applied = await svc.post(`/memory/proposals/${proposal.id}/apply`);
-    const note = brainFile(applied.target);
+    const note = brainFile(svc, applied.target);
     expect(lineOf(note, "Pilot starts")).toContain(`(${TODAY}, review ${IN_A_MONTH}): Pilot starts in January`);
     expect(lineOf(note, "**Owner**")).toContain(`(${TODAY}): Bao`);
   });

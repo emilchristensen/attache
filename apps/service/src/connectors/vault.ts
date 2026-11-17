@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { ConnectorAdapter, Observation } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import { planDataFolderScan, planScan, type ScanPlan } from "../memory/indexer.ts";
-import { splitFrontmatter } from "../memory/markdown.ts";
+import { fileTitle, splitFrontmatter } from "../memory/markdown.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";
@@ -24,7 +24,7 @@ export function extractDeadlines(rootId: string, relPath: string, raw: string, n
   const { frontmatter, body, bodyStartLine } = splitFrontmatter(raw);
   const today = now.toISOString().slice(0, 10);
   const horizon = new Date(now.getTime() + HORIZON_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const title = typeof frontmatter.title === "string" ? frontmatter.title : relPath.replace(/\.md$/, "").split("/").pop()!;
+  const title = typeof frontmatter.title === "string" ? frontmatter.title : fileTitle(relPath);
   const push = (text: string, due: string, line: number, done: boolean) => {
     if (done || due > horizon) return;
     const normalized = text.replace(DUE_RE, "").replace(/\s+/g, " ").trim();

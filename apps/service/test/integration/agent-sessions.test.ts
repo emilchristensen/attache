@@ -137,12 +137,14 @@ describe("Harness sessions", () => {
     expect(hits[0]!.file.startsWith(svc.dataDir)).toBe(true);
   });
 
-  it("a save through the registered MCP server, confirmed in the Harness, writes curated memory that cites the session", async () => {
+  it("a save through the registered MCP server of a connected Harness writes curated memory without asking and cites the session", async () => {
     const entry = readJson(join(HOME, ".claude.json")).mcpServers[registeredName()];
-    const client = await mcp.connectRegistered(entry, { name: "claude-code", cwd: work, env: { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "s1" }, confirm: () => ({ action: "accept", content: {} }) });
+    const asked: unknown[] = [];
+    const client = await mcp.connectRegistered(entry, { name: "claude-code", cwd: work, env: { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "s1" }, confirm: (params) => (asked.push(params), { action: "accept", content: {} }) });
     const items = [{ action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }] }];
-    const r = await callTool<{ outcome: string }>(client, "save", { items });
-    expect(r.data.outcome).toBe("saved");
+    const r = await callTool<{ outcome: string; autoAccepted: boolean }>(client, "save", { items });
+    expect(r.data).toMatchObject({ outcome: "saved", autoAccepted: true });
+    expect(asked).toEqual([]);
     const note = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
     // s1 was archived above, so the fact cites its transcript.
     expect(note).toMatch(/Cutover moved to November — source: Claude Code session in attache-it-agentwork-\w+ \(agent-session: evidence\/sessions\/transcripts\/claude-code\/\d{4}-\d{2}-\d{2}-s1\.md/);

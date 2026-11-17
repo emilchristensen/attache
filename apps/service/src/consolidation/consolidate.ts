@@ -6,7 +6,7 @@ import type { ProposalOrigin } from "../memory/proposals.ts";
 import { originSource } from "../memory/save.ts";
 import type { SourceRef } from "../memory/store.ts";
 import { quotedLines } from "./capture-text.ts";
-import { CONSOLIDATED_BY, MAX_INPUT_CHARS, consolidate, type PipelineResult } from "./pipeline.ts";
+import { MAX_INPUT_CHARS, consolidate, skipped, type PipelineResult } from "./pipeline.ts";
 
 export const CONSOLIDATION_JOB = "session-consolidate";
 
@@ -31,11 +31,11 @@ export function queueConsolidation(app: App, input: ConsolidationInput, session:
   });
 }
 
-/** Read a finished part of a Harness session and record at most five Proposals from it. */
+/** Read a finished part of a Harness session and write, or propose, what it finds. */
 export async function runConsolidation(app: App, ctx: JobContext): Promise<PipelineResult> {
   const input = ConsolidationInput.parse(ctx.input);
   const session = app.sessions.sessionPart(input.agent, input.sessionId, input.from, input.to);
-  if (!session) return { proposals: 0, skipped: "session not found" };
+  if (!session) return skipped("session not found");
   const origin: ProposalOrigin = { agent: input.agent, sessionId: input.sessionId, ...(session.cwd ? { cwd: session.cwd } : {}) };
   const names = { user: session.userName, assistant: session.agentLabel };
   return consolidate(app, ctx, {
@@ -43,7 +43,7 @@ export async function runConsolidation(app: App, ctx: JobContext): Promise<Pipel
     userName: session.userName,
     queries: [...input.topics, session.title],
     parts: () => chunkTurns(session.turns, MAX_INPUT_CHARS).map((part) => renderTurns(part, names, MAX_INPUT_CHARS)),
-    made: () => app.proposals.from(CONSOLIDATED_BY, origin),
+    from: { harness: input.agent, sessionId: input.sessionId },
     cite: (evidence) => citation(app, origin, evidence),
     origin,
     effectKey: `consolidation:${input.agent}:${input.sessionId}:${input.to}`,

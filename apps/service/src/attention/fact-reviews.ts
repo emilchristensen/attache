@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Observation } from "../connectors/types.ts";
-import { parseMarkdown, parseStateEntries, type StateEntry } from "../memory/markdown.ts";
+import { fileTitle, parseMarkdown, parseStateEntries, type StateEntry } from "../memory/markdown.ts";
 import { isPastReview } from "../memory/review-date.ts";
 
 /** The attention kind of an inbox item for a fact past its Review date. */
@@ -19,7 +19,7 @@ const PRIORITY = 40;
  * is no longer observed, and its item is resolved on the next full refresh.
  */
 export function factReviewObservations(relPath: string, raw: string, now: Date): Observation[] {
-  const title = parseMarkdown(raw, relPath.replace(/\.md$/, "").split("/").pop()!).title;
+  const title = parseMarkdown(raw, fileTitle(relPath)).title;
   const seen = new Set<string>();
   const out: Observation[] = [];
   for (const fact of parseStateEntries(raw)) {

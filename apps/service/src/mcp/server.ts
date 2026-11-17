@@ -12,6 +12,7 @@ import { registerSaveTool } from "./save-tool.ts";
 import type { ServerContext } from "./harness.ts";
 import { registerWrapUpTool } from "./wrap-up-tool.ts";
 import { unverifiedLabel } from "../memory/review-date.ts";
+import type { Clock } from "../replication/clock.ts";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -60,7 +61,8 @@ function renderNote(n: NoteText): string {
 }
 
 /** The MCP server a Harness talks to, over any transport. */
-export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext }): McpServer {
+/** `clock` times the owner's confirmation of a save; the system clock when left out. */
+export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext; clock?: Clock }): McpServer {
   const server = new McpServer({ name: "attache", title: "Attache", version: info.version }, { instructions: info.instructions });
   server.registerTool(
     "search",
@@ -104,7 +106,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
   );
   registerAuditTool(server, brain);
   registerPrompts(server);
-  registerSaveTool(server, brain, info.context);
+  registerSaveTool(server, brain, info.context, info.clock);
   registerWrapUpTool(server, brain, info.context);
   return server;
 }

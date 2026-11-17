@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { startTestService, type TestService } from "./harness.ts";
+import { leftRunningByADeadProcess, startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { JobQueue } from "../../src/jobs/queue.ts";
 import { openDb } from "../../src/core/db.ts";
@@ -90,7 +90,8 @@ describe("review fixes", () => {
     const db = openDb(":memory:");
     const q1 = new JobQueue(db, createLogger(null, { quiet: true }));
     const job = q1.create({ kind: "demo-long", title: "x", input: {} }).job;
-    db.prepare("update jobs set status = 'running', lease_owner = 'dead-process', cancel_requested_at = ? where id = ?").run(new Date().toISOString(), job.id);
+    leftRunningByADeadProcess(db, job.id);
+    db.prepare("update jobs set cancel_requested_at = ? where id = ?").run(new Date().toISOString(), job.id);
     let ran = 0;
     const q2 = new JobQueue(db, createLogger(null, { quiet: true }));
     q2.register("demo-long", async () => ++ran);

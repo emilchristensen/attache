@@ -11,7 +11,7 @@ const MAX_BULLET_CHARS = 400;
 
 export function summarySystemPrompt(userName: string): string {
   return [
-    `You summarise a finished Harness session for ${userName}'s second brain.`,
+    `You summarise a finished Harness session for ${userName}'s Brain.`,
     "Decide what is durably worth remembering weeks from now: decisions and their reasons, lessons learned, corrected assumptions, and stable facts about systems, people or projects.",
     "Ignore chatter, restatements of the task, file paths, command output and anything that will be false next week.",
     "Facts the session only read back from memory or notes are already remembered and do not count; decisions, reasons and lessons stated during the session do count, however briefly they were stated.",
@@ -76,7 +76,7 @@ export function sessionLogSection(input: {
 }): string {
   const head = [localTime(input.at), input.agentLabel, projectLabel(input.cwd)].filter(Boolean).join(" · ");
   const lines =
-    input.bullets === null ? ["- No model is connected, so this session was saved without a summary, and Attache made no Proposals from it."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
+    input.bullets === null ? ["- No model is connected, so this session was saved without a summary and was not consolidated. Connect a model in Connections to summarise and consolidate the next one."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
   const repository = repositoryLine(input.repositories);
   return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...(repository ? [repository, ""] : []), ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
 }

@@ -83,6 +83,11 @@ const bundleHash = () => createHash("sha256").update(readFileSync(BUNDLE)).diges
 let service = null;
 let runningHash = null;
 async function restartService() {
+  // A failed rebuild leaves no bundle: keep the running service until the next build succeeds.
+  if (!existsSync(BUNDLE)) {
+    console.error("dev: the rebuild failed (see the error above), so the service keeps running the last good build.");
+    return;
+  }
   // The watcher's first build writes the same bundle again; only a changed one restarts the service.
   const hash = bundleHash();
   if (hash === runningHash) return;

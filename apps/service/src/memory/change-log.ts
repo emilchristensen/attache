@@ -33,8 +33,10 @@ export interface MemoryChange {
   reverts: string | null;
   /** SHA-256 of the note right after this change, to tell whether anything touched it since. */
   docHash: string | null;
-  /** Written without asking the owner, because auto-accept was on for the Harness. */
+  /** Written without review: a save auto-accept let through, or a Consolidation write. */
   autoAccepted: boolean;
+  /** The meeting capture (its path under `evidence/captures/`) a Consolidation write came from. */
+  capture: string | null;
 }
 
 /** Where a change came from, recorded with it in the change log. */
@@ -43,7 +45,9 @@ export interface ChangeMeta {
   sessionId?: string | null;
   batchId?: string | null;
   reverts?: string | null;
+  /** Written without review: a save auto-accept let through, or a Consolidation write. */
   autoAccepted?: boolean;
+  capture?: string | null;
 }
 
 /** A change as the store records it; the log adds its id, order and times. */
@@ -53,12 +57,24 @@ export type NewChange = Omit<MemoryChange, "id" | "seq" | "createdAt" | "decided
   afterReview?: string | null;
 };
 
+/**
+ * Where Consolidation's changes came from, recorded with each in the change
+ * log: the Harness and session for a session, the capture's path under
+ * `evidence/captures/` for a meeting.
+ */
+export type ConsolidationFrom = { harness: string; sessionId: string } | { capture: string };
+
 export interface ListChangesOptions {
   relPath?: string;
   status?: string;
   /** Only changes recorded after the change with this `seq`. */
   after?: number;
-  limit?: number;
+  /** Only changes written without review (true), or only reviewed ones (false). */
+  autoAccepted?: boolean;
+  /** Only changes recorded at or after this ISO time. */
+  since?: string;
+  /** The most changes to read, at most 500; `"all"` reads every match, for a list bounded by its other filters. */
+  limit?: number | "all";
 }
 
 type Row = Record<string, string | number | null>;
@@ -74,10 +90,10 @@ export class ChangeLog {
     const id = randomUUID();
     this.db
       .prepare(
-        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, before_review, after_review, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash, auto_accepted)
-         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, before_review, after_review, reason, source, actor, status, created_at, decided_at, harness, session_id, batch_id, reverts, doc_hash, auto_accepted, capture)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.beforeReview ?? null, c.afterReview ?? null, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash, meta.autoAccepted ? 1 : 0);
+      .run(id, c.docRelPath, c.change, c.subject, c.beforeValue, c.afterValue, c.beforeReview ?? null, c.afterReview ?? null, c.reason, c.source, c.actor, c.status, nowIso(), c.decidedAt ?? (c.status === "applied" ? nowIso() : null), meta.harness ?? null, meta.sessionId ?? null, meta.batchId ?? null, meta.reverts ?? null, docHash, meta.autoAccepted ? 1 : 0, meta.capture ?? null);
     return this.get(id)!;
   }
 
@@ -120,8 +136,16 @@ export class ChangeLog {
       where.push("status = ?");
       args.push(opts.status);
     }
+    if (opts.autoAccepted !== undefined) {
+      where.push("auto_accepted = ?");
+      args.push(opts.autoAccepted ? 1 : 0);
+    }
+    if (opts.since) {
+      where.push("created_at >= ?");
+      args.push(opts.since);
+    }
     const rows = this.db
-      .prepare(`select rowid as seq, * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by rowid desc limit ${Math.min(opts.limit ?? 100, 500)}`)
+      .prepare(`select rowid as seq, * from memory_changes ${where.length ? "where " + where.join(" and ") : ""} order by rowid desc ${opts.limit === "all" ? "" : `limit ${Math.min(opts.limit ?? 100, 500)}`}`)
       .all(...args) as Row[];
     return rows.map(rowToChange);
   }
@@ -151,5 +175,6 @@ function rowToChange(raw: Record<string, string | number | null>): MemoryChange 
     reverts: r.reverts ?? null,
     docHash: r.doc_hash ?? null,
     autoAccepted: Number(raw.auto_accepted) === 1,
+    capture: r.capture ?? null,
   };
 }

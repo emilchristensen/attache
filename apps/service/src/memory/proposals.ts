@@ -7,7 +7,7 @@ import { HttpError } from "../http/router.ts";
 import type { Clock } from "../replication/clock.ts";
 import { latestDecision, type ReviewMachine } from "../review-state/decisions.ts";
 import { isReviewPath, listReviewFiles, readReviewFile, removeReviewFile, writeReviewFile } from "../review-state/files.ts";
-import { normalizeRel } from "./policy.ts";
+import { brainRel } from "./policy.ts";
 import { assertStillCurrent, correctionsOf } from "./proposal-corrections.ts";
 import { ProposalIndex } from "./proposal-index.ts";
 import { withoutPassedReviewDates } from "./proposal-review-dates.ts";
@@ -28,6 +28,11 @@ export interface ProposalMeta {
   /** The words in the evidence the change rests on, quoted from it. */
   evidence?: string | null;
   proposedBy: string;
+  /**
+   * The ids the Proposals take, one per item, for a caller that records them
+   * before they are made, so it can tell its own Proposals after a crash. New ones when absent.
+   */
+  ids?: readonly string[];
 }
 
 export interface ProposalsDeps {
@@ -65,10 +70,11 @@ export class Proposals {
   proposeItems(items: readonly MemorySaveItem[], meta: ProposalMeta): ProposalView[] {
     const root = this.requireBrain();
     const steps = checkItems(this.deps.memory, items);
+    if (meta.ids && (meta.ids.length !== items.length || meta.ids.some((id) => this.has(id)))) throw new Error("Each Proposal needs one new id.");
     const createdAt = this.deps.clock.now().toISOString();
     const records = items.map((item, i): ProposalRecord => ({
       version: 1,
-      id: randomUUID(),
+      id: meta.ids?.[i] ?? randomUUID(),
       createdAt,
       machine: this.machineRef(),
       proposedBy: meta.proposedBy,
@@ -102,20 +108,9 @@ export class Proposals {
     return this.index.list(opts).map(toProposalView);
   }
 
-  /** The Proposals, whatever their status, that `proposedBy` made from one Harness session, newest first. */
-  from(proposedBy: string, origin: Pick<ProposalOrigin, "agent" | "sessionId">): ProposalView[] {
-    return this.index
-      .list({ limit: 500 })
-      .filter((r) => r.proposedBy === proposedBy && r.origin?.agent === origin.agent && (r.origin.sessionId ?? "") === (origin.sessionId ?? ""))
-      .map(toProposalView);
-  }
-
-  /** The Proposals, whatever their status, that `proposedBy` made from one file of the Brain, such as a meeting capture, newest first. */
-  citing(proposedBy: string, kind: SourceRef["kind"], ref: string): ProposalView[] {
-    return this.index
-      .list({ limit: 500 })
-      .filter((r) => r.proposedBy === proposedBy && !r.origin && r.source?.kind === kind && r.source.ref === ref)
-      .map(toProposalView);
+  /** Whether a Proposal with this id exists, whatever its status. */
+  has(id: string): boolean {
+    return this.current(id) !== null;
   }
 
   /**
@@ -252,7 +247,7 @@ export class Proposals {
 
 /** Where a Proposal lands: the note it changes, or a placeholder naming the note it would create. */
 function targetOf(item: MemorySaveItem): string {
-  return item.action === "create" ? `(new ${item.type}: ${item.title})` : normalizeRel(item.path.replace(/^\.\//, ""));
+  return item.action === "create" ? `(new ${item.type}: ${item.title})` : brainRel(item.path);
 }
 
 /** A short line naming what the item changes, for lists that show one line per Proposal. */

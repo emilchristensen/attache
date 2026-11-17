@@ -12,8 +12,10 @@ We accept that a prompt-injected or hallucinating agent can write to the Brain u
 ## Consequences
 
 - Auto-accept is on by default for every Harness, and the upgrade switches it on everywhere; the owner can still switch it off per Harness.
+  The exception is a Harness that is not connected and an unknown MCP client: they still ask first, because the Dashboard has no switch to turn them off.
 - Consolidation has one switch of its own, on by default, and no longer caps how many changes a session yields; its quality rules (no repeated unchanged facts, no Slack or mail snapshots) stay.
 - The Dashboard's Home shows every change written without review in the last 7 days, with its source and a revert, and Corrections as old value to new value.
+  An event written without review cannot be reverted, because History only grows; the owner corrects it with a new event.
 - The identity record still cannot be changed by a save.
 - Proposals remain for a Harness with auto-accept off that cannot ask the owner, and for Consolidation with its switch off.
 - User stories 19, 21, 89 and 92 in #5 are superseded where they require review before writing.

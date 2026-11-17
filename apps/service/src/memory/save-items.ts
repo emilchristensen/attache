@@ -1,7 +1,7 @@
 import type { MemorySaveItem } from "@attache/contracts";
 import { HttpError } from "../http/router.ts";
 import { slugify } from "./markdown.ts";
-import { isProtected, normalizeRel } from "./policy.ts";
+import { brainRel, type CONSOLIDATION_ACTOR, isProtected } from "./policy.ts";
 import { isRepositorySubject, parseRepositoryList } from "./repositories.ts";
 import type { ChangeMeta, MemoryStore, SourceRef } from "./store.ts";
 
@@ -11,8 +11,8 @@ type UpdateItem = Extract<MemorySaveItem, { action: "update" }>;
 /** A save item that passed validation, with the note it targets resolved. */
 export type CheckedItem = { action: "create"; item: CreateItem } | { action: "update"; item: UpdateItem; relPath: string; title: string };
 
-/** Who writes a checked item: the owner directly, or the service applying a Proposal the owner approved. */
-export type ItemWriter = { actor: "user"; provenance: "agent-saved" } | { actor: "service"; provenance: "user-approved" };
+/** Who writes a checked item: the owner directly, the service applying a Proposal the owner approved, or Consolidation writing what it found. */
+export type ItemWriter = { actor: "user"; provenance: "agent-saved" } | { actor: "service"; provenance: "user-approved" } | { actor: typeof CONSOLIDATION_ACTOR; provenance: "consolidated" };
 
 export interface WrittenItem {
   action: "created" | "updated";
@@ -24,11 +24,15 @@ export interface WrittenItem {
 
 /**
  * Check every item against the Brain before anything is written, so a bad path,
- * a duplicate note or the identity record rejects the whole set. Saves and
- * Proposals both pass through here, so they follow the same rules.
+ * a duplicate note or the identity record rejects the whole set. Saves,
+ * Proposals and Consolidation's writes all pass through here, so they follow the same rules.
  */
 export function checkItems(memory: MemoryStore, items: readonly MemorySaveItem[]): CheckedItem[] {
-  const plan = items.map((item) => (item.action === "create" ? checkCreate(memory, item) : checkUpdate(memory, item)));
+  const plan = items.map((item) => {
+    const step = checkItemAlone(memory, item);
+    if (step.action === "create") noTwin(memory, step.item);
+    return step;
+  });
   const creating = new Set<string>();
   for (const step of plan) {
     if (step.action !== "create") continue;
@@ -81,19 +85,31 @@ function reviewDatesAfterToday(today: string, facts: ReadonlyArray<{ subject: st
   }
 }
 
-/** A new note must not duplicate one Attache already has: the same type and title is an update, not a second note. */
+/**
+ * Every check `checkItems` makes on one item except whether its new note already
+ * exists. A caller that sorts out several changes before writing any, such as
+ * Consolidation, checks that last: a change it writes first can make the note.
+ */
+export function checkItemAlone(memory: MemoryStore, item: MemorySaveItem): CheckedItem {
+  return item.action === "create" ? checkCreate(memory, item) : checkUpdate(memory, item);
+}
+
 function checkCreate(memory: MemoryStore, item: CreateItem): CheckedItem {
   uniqueSubjects(item.facts, `"${item.title}"`);
   reviewDatesAfterToday(memory.today(), item.facts, `"${item.title}"`);
   if (item.type === "project") checkRepositories(item.facts, `"${item.title}"`);
-  const slug = slugify(item.title);
-  const twin = memory.listDocuments({ area: "memory", root: "data", docType: item.type, limit: 2000 }).find((d) => slugify(d.title) === slug);
-  if (twin) throw new HttpError(409, "already_exists", `A ${item.type} note "${twin.title}" already exists at ${twin.relPath}. Update it instead of creating another.`, { relPath: twin.relPath });
   return { action: "create", item };
 }
 
+/** A new note must not duplicate one Attache already has: the same type and title is an update, not a second note. */
+function noTwin(memory: MemoryStore, item: CreateItem) {
+  const slug = slugify(item.title);
+  const twin = memory.listDocuments({ area: "memory", root: "data", docType: item.type, limit: 2000 }).find((d) => slugify(d.title) === slug);
+  if (twin) throw new HttpError(409, "already_exists", `A ${item.type} note "${twin.title}" already exists at ${twin.relPath}. Update it instead of creating another.`, { relPath: twin.relPath });
+}
+
 function checkUpdate(memory: MemoryStore, item: UpdateItem): CheckedItem {
-  const relPath = normalizeRel(item.path.replace(/^\.\//, ""));
+  const relPath = brainRel(item.path);
   if (!relPath.startsWith("memory/") || !relPath.endsWith(".md")) throw new HttpError(400, "not_memory", `${item.path} is not a memory note. Only notes under memory/ can be updated.`);
   if (isProtected(relPath)) throw new HttpError(403, "protected", `${relPath} is your identity record; change it in Attache Settings.`);
   if (!memory.exists(relPath)) throw new HttpError(404, "not_found", `${relPath} does not exist. Search for the note, or create a new one.`);

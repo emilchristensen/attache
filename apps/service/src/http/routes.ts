@@ -1,5 +1,6 @@
 import type { Router } from "./router.ts";
 import type { App } from "../app.ts";
+import { registerConsolidationRoutes } from "./routes-consolidation.ts";
 import { registerCoreRoutes } from "./routes-core.ts";
 import { registerDataRoutes } from "./routes-data.ts";
 import { registerHarnessRoutes } from "./routes-harnesses.ts";
@@ -18,4 +19,5 @@ export function registerRoutes(router: Router, app: App, port: () => number) {
   registerWorkRoutes(router, app, port);
   registerWrapUpRoutes(router, app);
   registerHarnessRoutes(router, app);
+  registerConsolidationRoutes(router, app);
 }
