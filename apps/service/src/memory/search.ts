@@ -1,5 +1,7 @@
 import type { Db } from "../core/db.ts";
 import { parseStateLine } from "./markdown.ts";
+import { markdownToPlainText } from "./plain-text.ts";
+import { collapseSpaces } from "./same-text.ts";
 import { isPastReview } from "./review-date.ts";
 
 export interface SearchHit {
@@ -115,7 +117,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
     )
     .all(...ids) as Array<Omit<SearchHit, "score" | "snippet" | "meta" | "review" | "unverified"> & { meta: string }>;
 
-  let hits: Array<Omit<SearchHit, "review" | "unverified">> = rows
+  let hits: Array<Omit<SearchHit, "snippet" | "review" | "unverified">> = rows
     .filter((r) => (!opts.areas || opts.areas.includes(r.area)) && (!opts.docTypes || opts.docTypes.includes(r.docType ?? "")) && (!opts.roots || opts.roots.includes(r.root)) && !(opts.excludePrefixes ?? []).some((p) => r.root === "data" && r.relPath.startsWith(p)))
     .map((r) => {
       const meta = safeJson(r.meta);
@@ -123,7 +125,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
       const status = typeof meta.status === "string" ? meta.status : "";
       const statusWeight = status === "superseded" || status === "archived" ? 0.6 : 1;
       const score = (fused.get(r.chunkId) ?? 0) * 1000 * (AREA_WEIGHT[r.area] ?? 0.8) * (SECTION_WEIGHT[r.section] ?? 1) * statusWeight * (0.5 + coverage);
-      return { ...r, meta, score, snippet: makeSnippet(r.text, terms) };
+      return { ...r, meta, score };
     })
     .sort((a, b) => b.score - a.score || a.relPath.localeCompare(b.relPath) || a.startLine - b.startLine);
 
@@ -131,7 +133,8 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
   const cutoff = opts.relativeCutoff ?? 0.35;
   hits = hits.filter((h) => h.score >= top * cutoff);
   const now = new Date();
-  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2))).map((h) => withReview(h, now));
+  // Snippets are made only for the hits returned: each one parses its chunk's Markdown.
+  return diversify(hits, limit, opts.maxPerDocument ?? Math.max(2, Math.ceil(limit / 2))).map((h) => withReview({ ...h, snippet: makeSnippet(h.text, terms) }, now));
 }
 
 /** Mark a current fact with its Review date, and as unverified once that day has passed. */
@@ -160,10 +163,13 @@ function diversify<T extends { docId: string }>(sorted: T[], limit: number, perD
   return sorted.filter((h) => chosen.has(h));
 }
 
+/** A term without its last letters, so a different word ending still matches. */
+const termStem = (term: string) => term.slice(0, Math.max(3, term.length - 2));
+
 /** The share of `terms` found in `text`, forgiving a different word ending. */
 export function termCoverage(text: string, terms: string[]): number {
   const lower = text.toLowerCase();
-  const found = terms.filter((t) => lower.includes(t.slice(0, Math.max(3, t.length - 2)))).length;
+  const found = terms.filter((t) => lower.includes(termStem(t))).length;
   return found / terms.length;
 }
 
@@ -175,14 +181,45 @@ function safeJson(v: string): Record<string, unknown> {
   }
 }
 
-export function makeSnippet(text: string, terms: string[], width = 220): string {
-  const lower = text.toLowerCase();
-  let pos = -1;
-  for (const t of terms) {
-    const p = lower.indexOf(t.slice(0, Math.max(3, t.length - 2)));
-    if (p >= 0 && (pos < 0 || p < pos)) pos = p;
-  }
-  const start = Math.max(0, pos < 0 ? 0 : pos - 60);
-  const s = text.slice(start, start + width).replace(/\s+/g, " ").trim();
-  return (start > 0 ? "…" : "") + s + (start + width < text.length ? "…" : "");
+/** About how many characters a snippet shows. */
+const SNIPPET_WIDTH = 220;
+/** How far before the first match a snippet starts. */
+const SNIPPET_LEAD = 60;
+/** How far a cut may move to fall between words; past that it splits the word. */
+const WORD_SNAP = 20;
+
+/**
+ * About `SNIPPET_WIDTH` characters of the plain words of `text` (no Markdown syntax),
+ * starting a little before the first matched term and cut between words, with
+ * `…` where it was cut.
+ */
+export function makeSnippet(text: string, terms: string[]): string {
+  const plain = collapseSpaces(markdownToPlainText(text));
+  const match = firstMatch(plain.toLowerCase(), terms) ?? { start: 0, end: 0 };
+  const start = cutBefore(plain, Math.max(0, match.start - SNIPPET_LEAD), match.start);
+  const end = cutAfter(plain, Math.min(plain.length, start + SNIPPET_WIDTH), Math.max(match.end, start));
+  return (start > 0 ? "…" : "") + plain.slice(start, end).trim() + (end < plain.length ? "…" : "");
+}
+
+/** Where the earliest term (by its stem) sits in `lower`, or null when none does. */
+function firstMatch(lower: string, terms: string[]): { start: number; end: number } | null {
+  return terms
+    .map(termStem)
+    .map((stem) => ({ start: lower.indexOf(stem), end: lower.indexOf(stem) + stem.length }))
+    .filter((m) => m.start >= 0)
+    .reduce<{ start: number; end: number } | null>((best, m) => (!best || m.start < best.start ? m : best), null);
+}
+
+/** A cut at `at` moved forward to the start of the next word, unless that passes `limit` or is too far. */
+function cutBefore(plain: string, at: number, limit: number): number {
+  if (at === 0) return 0;
+  const space = plain.indexOf(" ", at - 1);
+  return space >= 0 && space < limit && space - at < WORD_SNAP ? space + 1 : at;
+}
+
+/** A cut at `at` moved back to the end of the previous word, unless that reaches `floor` or is too far. */
+function cutAfter(plain: string, at: number, floor: number): number {
+  if (at >= plain.length) return plain.length;
+  const space = plain.lastIndexOf(" ", at);
+  return space > floor && at - space < WORD_SNAP ? space : at;
 }

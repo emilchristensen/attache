@@ -68,6 +68,9 @@ export function splitFrontmatter(text: string): { frontmatter: Record<string, un
   return { frontmatter, body: raw.slice(consumed.length), bodyStartLine, ...(error ? { error } : {}) };
 }
 
+/** A line that opens or closes a fenced code block. */
+export const CODE_FENCE = /^\s*(```|~~~)/;
+
 export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdown {
   const { frontmatter, body, bodyStartLine } = splitFrontmatter(raw);
   const lines = body.split("\n");
@@ -87,7 +90,7 @@ export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdow
   };
   lines.forEach((line, i) => {
     const lineNo = bodyStartLine + i;
-    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    if (CODE_FENCE.test(line)) inFence = !inFence;
     const hm = !inFence ? /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line) : null;
     if (hm) {
       flush(lineNo - 1);

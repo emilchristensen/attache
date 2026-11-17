@@ -1,4 +1,4 @@
-import { formatStateEntry, parseStateLine, type Section } from "./markdown.ts";
+import { CODE_FENCE, formatStateEntry, parseStateLine, type Section } from "./markdown.ts";
 
 /**
  * Cutting a Markdown section into the pieces recall retrieves and cites.
@@ -27,7 +27,6 @@ const SOFT_CHARS = 1200;
 const HARD_CHARS = 2400;
 
 const LIST_ITEM = /^(?:[-*+]|\d+[.)])\s/;
-const FENCE = /^\s*(```|~~~)/;
 const COMMENT = /<!--[\s\S]*?-->/g;
 
 export function sectionKind(heading: string | null): SectionKind {
@@ -112,7 +111,7 @@ export function splitLong(text: string, firstLine: number): Chunk[] {
     if (buf.length && (pause || size + line.length + 1 > HARD_CHARS)) cut(lineNo);
     buf.push(line);
     size += line.length + 1;
-    if (FENCE.test(line)) inFence = !inFence;
+    if (CODE_FENCE.test(line)) inFence = !inFence;
     if (!inFence && size >= SOFT_CHARS && line.trim() === "") cut(lineNo + 1);
   });
   cut(firstLine + lines.length);
