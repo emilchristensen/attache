@@ -15,6 +15,8 @@ export interface IndexRoot {
 }
 
 const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".attache", ".DS_Store"]);
+/** Hidden and tool folders: never indexed, and so never watched where folders are watched one by one. */
+export const skipsFolder = (name: string): boolean => SKIP_DIRS.has(name) || name.startsWith(".");
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 /**
  * Attache's own top-level folders in the data folder, never recall and never
@@ -59,7 +61,7 @@ export function planScan(rootPath: string, limit = 50_000, ownTop: ReadonlySet<s
       }
       if (st.isDirectory()) {
         if (dir === rootPath && ownTop.has(name)) continue;
-        if (SKIP_DIRS.has(name) || name.startsWith(".")) {
+        if (skipsFolder(name)) {
           plan.skipped.push({ path: rel + "/", reason: "hidden or tool folder" });
           continue;
         }
@@ -195,7 +197,7 @@ export class Indexer {
   syncPath(root: IndexRoot, rel: string): "changed" | "unchanged" | "ignored" | "rescan" {
     const parts = rel.split(sep).join("/").split("/").filter((p) => p && p !== ".");
     if (!parts.length || parts.includes("..")) return "rescan";
-    if (parts.slice(0, -1).some((p) => SKIP_DIRS.has(p) || p.startsWith("."))) return "ignored";
+    if (parts.slice(0, -1).some(skipsFolder)) return "ignored";
     if (root.id === "data" && DATA_OWN_TOP.has(parts[0]!)) return "ignored";
     const n = parts.join("/");
     const isMarkdown = n.toLowerCase().endsWith(".md");
@@ -206,7 +208,9 @@ export class Indexer {
     } catch {
       return isMarkdown ? this.forget(root.id, n) : "rescan";
     }
-    if (st.isDirectory()) return parts.at(-1)!.startsWith(".") || SKIP_DIRS.has(parts.at(-1)!) ? "ignored" : "rescan";
+    if (st.isDirectory()) return skipsFolder(parts.at(-1)!) ? "ignored" : "rescan";
+    // A file that took a folder's place: the notes indexed inside that folder are gone.
+    if (this.indexesInside(root.id, n)) return "rescan";
     if (!isMarkdown || parts.at(-1)!.startsWith(".")) return "ignored";
     if (st.isSymbolicLink() || !st.isFile() || st.size > MAX_FILE_BYTES) return this.forget(root.id, n);
     let real: string;
@@ -218,6 +222,12 @@ export class Indexer {
     // A symlinked parent folder would make this path point elsewhere; `scan` never follows those.
     if (real !== join(realpathSync(root.path), n)) return this.forget(root.id, n);
     return this.indexFile(root, n) === "indexed" ? "changed" : "unchanged";
+  }
+
+  /** Whether any indexed document lies inside the folder `rel`. */
+  private indexesInside(rootId: string, rel: string): boolean {
+    const prefix = `${rel}/`;
+    return this.db.prepare("select 1 from documents where root = ? and substr(rel_path, 1, ?) = ? limit 1").get(rootId, prefix.length, prefix) !== undefined;
   }
 
   private forget(rootId: string, rel: string): "changed" | "unchanged" {

@@ -1,6 +1,7 @@
-import { existsSync, watch, type FSWatcher } from "node:fs";
+import { existsSync } from "node:fs";
 import type { Logger } from "../core/log.ts";
-import type { Indexer, IndexRoot } from "./indexer.ts";
+import { watchFolderTree, type FolderTreeWatch } from "../platform/folder-watch.ts";
+import { skipsFolder, type Indexer, type IndexRoot } from "./indexer.ts";
 
 export interface WatcherOptions {
   /** Quiet period after the last file event before the index is updated. */
@@ -17,8 +18,9 @@ export interface WatcherOptions {
 
 /**
  * Keeps one folder's index current with edits made outside the service (Obsidian, an editor, an
- * agent): a recursive OS watcher, debounced, plus a periodic rescan. Each changed path is
- * re-indexed alone; folder events and failures fall back to an incremental `scan`.
+ * agent): an OS watcher over the whole tree (`platform/folder-watch.ts`), debounced, plus a
+ * periodic rescan. Each changed path is re-indexed alone; folder events and failures fall back
+ * to an incremental `scan`.
  */
 export class FolderWatcher {
   private readonly indexer: Indexer;
@@ -29,7 +31,7 @@ export class FolderWatcher {
   private readonly rescanMs: number;
   private readonly retryMs: number;
   private readonly onChange: () => void;
-  private fsWatcher: FSWatcher | null = null;
+  private fsWatcher: FolderTreeWatch | null = null;
   private pending = new Set<string>();
   private needsScan = false;
   private firstEventAt = 0;
@@ -110,14 +112,13 @@ export class FolderWatcher {
   }
 
   private arm(): void {
-    // Node before 24.22 on Linux watches a missing folder without an error, so check first.
+    // A missing folder fails the same way on every OS, with the same message, before a watch is tried.
     if (!existsSync(this.root.path)) {
       this.fail(new Error("data folder is missing"));
       return;
     }
     try {
-      this.fsWatcher = watch(this.root.path, { recursive: true, persistent: false }, (_event, filename) => this.queue(filename ? String(filename) : null));
-      this.fsWatcher.on("error", (e) => this.fail(e));
+      this.fsWatcher = watchFolderTree(this.root.path, { onChange: (rel) => this.queue(rel), onError: (e) => this.fail(e), skipFolder: skipsFolder });
     } catch (e) {
       this.fail(e as Error);
     }
