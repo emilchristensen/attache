@@ -338,14 +338,14 @@ test("wording: counts read as words in the right number, never with (s)", async 
   const disconnect = page.getByRole("alertdialog", { name: "Disconnect" });
   await expect(disconnect).toContainText("Attache deletes the stored credentials and stops all requests.");
   await expect(disconnect).toContainText(/\d+ queued jobs? will be cancelled and approvals for \d+ drafts? revoked\./);
-  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?\./);
+  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
   // A notes folder has no credentials to delete, and its indexed files are counted too.
   const notes = page.locator(".card", { has: page.getByRole("heading", { name: basename(stack.vaultDir), exact: true }) });
   await notes.getByRole("button", { name: "Disconnect…" }).click();
   await expect(disconnect).toContainText("Attache stops reading from it.");
   await expect(disconnect).not.toContainText("credentials");
-  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?, 2 indexed files\./);
+  await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?, 2 indexed files\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
 
   await page.goto(`${stack.url}/drafts`);

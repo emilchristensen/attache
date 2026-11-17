@@ -8,8 +8,9 @@
  *    matter and link reference definitions are left as they are. Read in the
  *    repository's own Markdown: README.md, GLOSSARY.md, AGENTS.md,
  *    CODING_STANDARDS.md, docs/** and installer/**. Third-party skills
- *    (.claude/skills, .agents/skills), research/, node_modules and release/
- *    are never read.
+ *    (.claude/skills, .agents/skills), research/, design records under
+ *    docs/design/ (which keep the words and reviews of their time),
+ *    node_modules and release/ are never read.
  *
  * 2. Avoided glossary terms (`check-docs/glossary.mjs`). The words GLOSSARY.md
  *    lists under `_Avoid_` must not appear in text the owner reads: the
@@ -51,6 +52,8 @@ import { plural } from "../packages/contracts/src/wording.ts";
 const GLOSSARY = "GLOSSARY.md";
 const ROOT_MARKDOWN = ["README.md", GLOSSARY, "AGENTS.md", "CODING_STANDARDS.md"];
 const NEVER_READ = new Set(["node_modules", "release", "research", "dist", ".claude", ".agents", ".git"]);
+/** Folders skipped by their path from the repository root, not by name. */
+const NEVER_READ_PATHS = new Set(["docs/design"]);
 const INSTALLER_SCRIPTS = new Set([".sh", ".ps1", ".cmd", ".bat"]);
 const SOURCE = /\.tsx?$/;
 const NOT_TEXT = /(\.d\.ts|\.test\.tsx?)$/;
@@ -107,7 +110,7 @@ function filesUnder(root, folder) {
   if (!existsSync(start)) return [];
   const walk = (dir) =>
     readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => !NEVER_READ.has(entry.name))
+      .filter((entry) => !NEVER_READ.has(entry.name) && !NEVER_READ_PATHS.has(relative(root, join(dir, entry.name)).split(sep).join("/")))
       .sort((a, b) => a.name.localeCompare(b.name))
       .flatMap((entry) => (entry.isDirectory() ? walk(join(dir, entry.name)) : entry.isFile() ? [relative(root, join(dir, entry.name)).split(sep).join("/")] : []));
   return walk(start);

@@ -1,0 +1,426 @@
+{
+  "id": "heavy-day-v1",
+  "count": 38,
+  "rows": [
+    {
+      "id": "a1",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a2",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a3",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a4",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a5",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a6",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a7",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 7",
+      "source": "Gmail",
+      "path": "evidence/captures/orion-regional-migration-7.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a8",
+      "group": "Deadlines",
+      "title": "Finish recovery rehearsal and document rollback ownership: Orion customer migration, region 8",
+      "source": "Google Calendar",
+      "path": "evidence/captures/orion-regional-migration-8.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a9",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": "d1"
+    },
+    {
+      "id": "a10",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a11",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a12",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a13",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a14",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a15",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 7",
+      "source": "Gmail",
+      "path": "evidence/captures/orion-regional-migration-7.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a16",
+      "group": "Review queue",
+      "title": "Review checkout retries and duplicate payment prevention: Orion customer migration, region 8",
+      "source": "Google Calendar",
+      "path": "evidence/captures/orion-regional-migration-8.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a17",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a18",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a19",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a20",
+      "group": "Meetings",
+      "title": "Prepare cross-team launch readiness and accessibility review: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a21",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": "d2"
+    },
+    {
+      "id": "a22",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a23",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a24",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a25",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a26",
+      "group": "Pending replies",
+      "title": "Reply to Mira about the revised migration window and staffing: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a27",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a28",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a29",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "a30",
+      "group": "Facts to check",
+      "title": "Verify launch date and escalation owner before the next rehearsal: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p1",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [
+        "Region 1 recovery owner: team 1",
+        "Region 2 recovery owner: team 2",
+        "Region 3 recovery owner: team 3",
+        "Region 4 recovery owner: team 4",
+        "Region 5 recovery owner: team 5",
+        "Region 6 recovery owner: team 6",
+        "Region 7 recovery owner: team 7",
+        "Region 8 recovery owner: team 8",
+        "Region 9 recovery owner: team 9",
+        "Region 10 recovery owner: team 10",
+        "Region 11 recovery owner: team 11",
+        "Region 12 recovery owner: team 12",
+        "Region 13 recovery owner: team 13",
+        "Region 14 recovery owner: team 14",
+        "Region 15 recovery owner: team 15"
+      ],
+      "actionId": null
+    },
+    {
+      "id": "p2",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p3",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 3",
+      "source": "GitHub",
+      "path": "evidence/captures/orion-regional-migration-3.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p4",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 4",
+      "source": "Jira",
+      "path": "evidence/captures/orion-regional-migration-4.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p5",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 5",
+      "source": "Confluence",
+      "path": "evidence/captures/orion-regional-migration-5.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "p6",
+      "group": "Proposals",
+      "title": "Update recovery plan with regional rollout responsibilities: Orion customer migration, region 6",
+      "source": "Slack",
+      "path": "evidence/captures/orion-regional-migration-6.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "d3",
+      "group": "Drafts",
+      "title": "Review reply about the migration rehearsal: Orion customer migration, region 1",
+      "source": "Notes",
+      "path": "evidence/captures/orion-regional-migration-1.md:28-35",
+      "facts": [],
+      "actionId": null
+    },
+    {
+      "id": "d4",
+      "group": "Drafts",
+      "title": "Review reply about the migration rehearsal: Orion customer migration, region 2",
+      "source": "Imported notes",
+      "path": "evidence/captures/orion-regional-migration-2.md:28-35",
+      "facts": [],
+      "actionId": null
+    }
+  ],
+  "drafts": [
+    {
+      "id": "d1",
+      "status": "draft",
+      "attentionId": "a9"
+    },
+    {
+      "id": "d2",
+      "status": "approved",
+      "attentionId": "a21"
+    },
+    {
+      "id": "d3",
+      "status": "revoked"
+    },
+    {
+      "id": "d4",
+      "status": "draft"
+    }
+  ],
+  "sources": [
+    {
+      "name": "Notes",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Imported notes",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "GitHub",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Jira",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Confluence",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Slack",
+      "state": "failed",
+      "lastSuccess": "2026-11-16T17:12:00"
+    },
+    {
+      "name": "Gmail",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    },
+    {
+      "name": "Google Calendar",
+      "state": "complete",
+      "lastSuccess": "2026-11-17T09:26:00"
+    }
+  ]
+}

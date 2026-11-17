@@ -35,7 +35,7 @@ _Avoid_: Primary Reader, main machine
 ### Using Attache
 
 **Dashboard**:
-Attache's own screen, which shows the Brain and the inbox and takes the owner's decisions.
+Attache's own screen, which shows the Brain and the Inbox and takes the owner's decisions.
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
@@ -72,3 +72,18 @@ _Avoid_: Overwrite, fix, edit
 The day after which a fact should be checked again.
 A fact past its Review date stays in the Brain and is shown as unverified.
 _Avoid_: Expiry, expiration, stale date, TTL
+
+### What needs the owner
+
+**Inbox item**:
+Something from a connected source that may need the owner, such as a review request, a pending reply or a deadline.
+_Avoid_: Attention item, alert
+
+**Draft**:
+A message Attache prepared for the owner to send through a Connection.
+Nothing is sent until the owner approves that exact version.
+_Avoid_: Outgoing message
+
+**Heads-up**:
+Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
+_Avoid_: Occupant, nudge
