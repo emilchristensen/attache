@@ -4,7 +4,6 @@
 
 - Code map, module boundaries and data flow: `docs/architecture.md`.
 - Setup, every check command and CI: `docs/developer-guide.md`.
-- The self-hosted Linux and Windows CI runners (throwaway VMs on the owner's computer): `docs/self-hosted-runners.md`.
 - Review rules: `CODING_STANDARDS.md`.
 - Building a spec with several agents (`/implement-spec`): `docs/agents/implementing-specs.md`.
 

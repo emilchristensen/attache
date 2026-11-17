@@ -3,10 +3,7 @@
 # on Linux also on the current Node release, and the install test on Linux and Windows.
 # `checks (<os>)`, the jobs on the minimum Node, are the required status checks on `main`.
 #
-# The Linux and Windows jobs run on the owner's own computer (`jarvis-linux` and `jarvis-windows`): a throwaway
-# Ubuntu 24.04 or Windows Server 2025 machine per job, which is what `ubuntu-latest` and `windows-latest` run
-# (scripts/ci-runners.mjs, docs/self-hosted-runners.md). The job names keep the GitHub image names, which
-# branch protection requires. macOS runs on GitHub, which bills its minutes at 10 times Linux's, so the jobs split by event:
+# The jobs split by event, so a branch with a pull request runs each job once:
 # - every push runs the Linux jobs;
 # - a pull request that is not a draft runs the macOS and Windows jobs, on the commit it would merge;
 # - a run started by hand runs every job.
@@ -38,7 +35,7 @@ jobs:
         exclude:
           - { os: macos-latest, node: current }
           - { os: windows-latest, node: current }
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'jarvis-linux' || matrix.os == 'windows-latest' && 'jarvis-windows' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -130,7 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || github.event_name == 'pull_request' && '["windows-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'jarvis-linux' || matrix.os == 'windows-latest' && 'jarvis-windows' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

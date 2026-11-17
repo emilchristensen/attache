@@ -10,9 +10,9 @@ Developer setup is separate from end-user installation: users run the installer 
 | `apps/service` | The local service: memory writer, index, attention, jobs, scheduler, approvals, connectors, HTTP API, MCP server |
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
-| `scripts` | Release build, verification, install tests, live read-only checks, exclusion check, docs check |
+| `scripts` | Release build, verification, install tests, live read-only checks, docs check |
 | `tests/e2e` | Playwright journeys (Chrome, visual captures) |
-| `docs` | Architecture, inspection, guides, build status, acceptance report |
+| `docs` | Architecture, guides, architecture decision records |
 
 Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
 
@@ -71,10 +71,8 @@ The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on macOS, Linux and Windows.
-The Linux and Windows jobs run on the owner's computer, in a throwaway Ubuntu 24.04 or Windows Server 2025 machine per job (`runs-on: jarvis-linux` and `jarvis-windows`), so they cost no Actions minutes; `docs/self-hosted-runners.md` explains them.
-Their job names keep GitHub's image names (`ubuntu-latest`, `windows-latest`), because those are the images they match and branch protection requires those names.
-macOS runs on GitHub (`macos-latest`), which bills a macOS minute as 10 Linux minutes, so which jobs run depends on what started the run:
+`.github/workflows/ci.yml` runs on GitHub's macOS, Linux and Windows machines (`macos-latest`, `ubuntu-latest`, `windows-latest`).
+Which jobs run depends on what started the run, so a branch with a pull request runs each job once:
 
 | Started by | Jobs |
 | --- | --- |
@@ -82,7 +80,7 @@ macOS runs on GitHub (`macos-latest`), which bills a macOS minute as 10 Linux mi
 | A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks (macos-latest)`, `checks (windows-latest)`, `install (windows-latest)` |
 | A run started by hand (`gh workflow run CI --ref <branch>`) | All of them |
 
-A pull request's macOS and Windows jobs check the commit GitHub would merge, so a draft pull request, or a branch without one, never uses macOS minutes.
+A pull request's macOS and Windows jobs check the commit GitHub would merge; a draft pull request, or a branch without one, runs only the Linux jobs.
 `checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)` run on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`).
 `checks (ubuntu-latest, current Node)` runs the same checks on the newest Node release.
 Each job has these steps:
@@ -184,7 +182,7 @@ It checks that the service starts at login and comes back after a crash, that ho
 What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
 The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
 On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.
-The GitHub runner's account is an administrator, so the test cannot show that registering the logon task needs no administrator rights; that is checked by hand on the owner's Windows machine.
+The GitHub runner's account is an administrator, so the test cannot show that registering the logon task needs no administrator rights; that is checked by hand on a Windows machine.
 A CI job has no login session, so the job turns on lingering for the runner user to get a systemd user manager.
 
 To run it on Linux from a Mac, use an x86_64 container with systemd as its init, an ordinary user with lingering on (`touch /var/lib/systemd/linger/<user>`), and Google Chrome.
@@ -199,7 +197,7 @@ node scripts/verify-release.mjs           # everything: checks, builds, e2e, ins
 node scripts/verify-release.mjs --quick   # lint, typecheck, builds, Vitest only
 ```
 
-Results: `test-results/verification-summary.md` (acceptance table) and `test-results/verification-report.json`.
+Results: `test-results/verification-summary.md` (one row per step) and `test-results/verification-report.json`.
 Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e2e/journeys.spec.ts`.
 
 ## Rules for changes
