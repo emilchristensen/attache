@@ -3,6 +3,7 @@ import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { addBusinessHours } from "../../src/actions/expiry.ts";
+import { APPROVAL_TTL_MS } from "../../src/actions/service.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
@@ -138,6 +139,7 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     await clock.advance(30_000);
     svc.app.bus.off("event", listen);
     expect(events).toContain("attention.changed");
+    expect(events).toContain("actions.changed");
     expect((await svc.get(`/actions/${r3.id}`)).status).toBe("expired");
     // Payload changed behind the approval's back
     const r4 = mk();
@@ -170,6 +172,48 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(posted.length).toBe(before);
     expect((svc.app.db.prepare("select status from side_effects where effect_key = ?").get(`action:${d.id}:v1`) as { status: string }).status).toBe("pending");
     fx.route("GET", "/gh/repos/acme/web/issues/7/comments", () => ({ json: posted }));
+  });
+
+  it("an approval that ends puts the draft back to draft, at the moment it ends, so it can be approved again", async () => {
+    const d = svc.app.actions.createDraft({ kind: "github.comment", connectionId: "github", title: "t", target: { repo: "acme/web", number: 7 }, payload: { body: "approve me twice" }, context: {}, createdBy: "test" });
+    const first = await svc.post(`/actions/${d.id}/approve`, { version: 1, payloadHash: d.payloadHash });
+    expect(first.executable.ok).toBe(true);
+    const events: Array<{ type: string; id?: string }> = [];
+    const listen = (e: { type: string; id?: string }) => events.push(e);
+    svc.app.bus.on("event", listen);
+    // Housekeeping wakes when the approval ends, not up to half a minute later, so an open Dashboard hears of it at once.
+    await clock.advance(APPROVAL_TTL_MS);
+    svc.app.bus.off("event", listen);
+    expect(events).toContainEqual({ type: "actions.changed", id: d.id });
+    const ended = await svc.get(`/actions/${d.id}`);
+    expect(ended.status).toBe("draft");
+    expect(ended.approval).toBeNull();
+    expect(ended.executable).toEqual({ ok: false, reason: "Needs approval" });
+    expect(ended.events.at(-1)).toMatchObject({ event: "approval_expired", actor: "service", data: { version: 1 } });
+    // The ended approval still cannot send, and says why.
+    expect((await svc.call("POST", `/actions/${d.id}/execute`, { nonce: first.approval.nonce, version: 1, payloadHash: d.payloadHash })).body.error.code).toBe("approval_expired");
+    // Approving again is all it takes.
+    const again = await svc.post(`/actions/${d.id}/approve`, { version: 1, payloadHash: d.payloadHash });
+    expect(again.status).toBe("approved");
+    expect(again.executable.ok).toBe(true);
+    expect(again.approval.nonce).not.toBe(first.approval.nonce);
+    const exec = await svc.post(`/actions/${d.id}/execute`, { nonce: again.approval.nonce, version: 1, payloadHash: d.payloadHash });
+    await svc.waitJob(exec.job.id);
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("succeeded");
+  });
+
+  it("a read never shows an approval past its end, even before housekeeping runs", async () => {
+    const d = svc.app.actions.createDraft({ kind: "github.comment", connectionId: "github", title: "t", target: { repo: "acme/web", number: 7 }, payload: { body: "read me late" }, context: {}, createdBy: "test" });
+    await svc.post(`/actions/${d.id}/approve`, { version: 1, payloadHash: d.payloadHash });
+    // Time passes without any timer running, as when the computer was asleep.
+    clock.skip(APPROVAL_TTL_MS + 1_000);
+    const listed = (await svc.get("/actions?status=draft,approved")).find((a: { id: string }) => a.id === d.id);
+    expect(listed).toMatchObject({ status: "draft", approval: null });
+    const one = await svc.get(`/actions/${d.id}`);
+    expect(one.status).toBe("draft");
+    expect(one.events.filter((e: { event: string }) => e.event === "approval_expired")).toHaveLength(1);
+    expect((await svc.post(`/actions/${d.id}/approve`, { version: 1, payloadHash: d.payloadHash })).status).toBe("approved");
+    await clock.advance(0);
   });
 
   it("unknown read scopes and write actions are refused and named, one or several", async () => {

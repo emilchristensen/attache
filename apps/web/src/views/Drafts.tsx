@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
+import { approvalEndedAt, FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -24,6 +24,7 @@ function DraftDetail({ id }: { id: string }) {
   if (a.loading && !d) return <Loading lines={6} />;
   if (a.error) return <ErrorState error={a.error} retry={a.reload} />;
   if (!d) return null;
+  const endedAt = approvalEndedAt(d);
   const editable = ["draft", "approved", "revoked", "rejected"].includes(d.status) && d.expiresAt > new Date().toISOString();
   const ctx = d.context as { item?: { title: string; summary: string; url: string | null }; source?: Record<string, unknown>; fetched?: { changedFiles?: Array<{ file: string; additions: number; deletions: number }> }; related?: Citation[]; preparedBy?: string | null; preparedAt?: string };
   const save = () =>
@@ -119,6 +120,12 @@ function DraftDetail({ id }: { id: string }) {
         </div>
       )}
 
+      {endedAt && !dirty && (
+        <p className="small muted" role="status">
+          The approval of v{d.version} ended at {new Date(endedAt).toLocaleTimeString()}. Nothing was sent.
+        </p>
+      )}
+
       <div className="row">
         {dirty && (
           <button className="primary" disabled={busy !== null} onClick={save}>
@@ -128,6 +135,7 @@ function DraftDetail({ id }: { id: string }) {
         {!dirty && (d.status === "draft" || d.status === "revoked") && (
           <button className="primary" disabled={busy !== null || !body.trim()} onClick={() => run("approve", () => post(`/actions/${d.id}/approve`, { version: d.version, payloadHash: d.payloadHash }).then(a.reload), `Approved version ${d.version}`)}>
             Approve v{d.version}
+            {endedAt ? " again" : ""}
           </button>
         )}
         {!dirty && d.status === "approved" && d.approval && (

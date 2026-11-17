@@ -345,7 +345,7 @@ The attention engine follows these rules:
 - A dismissal records the fingerprint it applied to.
   Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
-  Every 30 seconds on the service's clock, housekeeping works the state of each snoozed item whose time has passed out again from its record (`Inbox.wake`, `endSnoozes` in `attention/engine.ts`), so a snooze that ended reopens the item without a new write.
+  At least every 30 seconds on the service's clock, housekeeping works the state of each snoozed item whose time has passed out again from its record (`Inbox.wake`, `endSnoozes` in `attention/engine.ts`), so a snooze that ended reopens the item without a new write.
   The item keeps its report time (`updatedAt`): a snooze ending is not news from the source, and a bumped time would let this Machine's stale copy beat another Machine's newer report in the merge.
 - The inbox replicates (`attention/inbox.ts`, `App.inbox`).
   Every item is also a file in the Brain, `review/inbox/<key slug>-<key hash>.json`, holding what its source said (with `resolvedAt` once the source stopped reporting it and the Machine that ran Source refresh) and the owner's latest decision (with its time and Machine).
@@ -388,6 +388,10 @@ The attention engine follows these rules:
 - A draft is an action record: kind, connection, target, payload, `payload_hash` (SHA-256 of canonical JSON), `version`, context/evidence, `expires_at`.
 - Editing a draft increments `version` and changes the hash, invalidating any approval.
 - Approval creates `{actionId, version, payloadHash, nonce, expiresAt, approvedBy}`.
+  It lasts 15 minutes (`APPROVAL_TTL_MS`), never past the draft's own expiry.
+- When an approval ends unused, the draft goes back to `draft` with the approval cleared, an `approval_expired` event is recorded and `actions.changed` is emitted, so the owner can approve it again.
+  Housekeeping wakes when the next approval ends (and at least every 30 seconds), and every route that reads, approves or executes drafts settles ended approvals and expired drafts first (`App.settleActions`), so no answer shows an approval past its end.
+  Executing with the ended approval's nonce is refused as `approval_expired`.
 - Execution requires the approval; the server rechecks, immediately before calling the adapter: action status, version, hash, nonce unused (atomically consumed), approval and action expiry, feature enabled, connection connected and the write action authorized for that connection.
 - Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows).
   Otherwise `failed` with the error, or `unknown` if the call timed out after sending.

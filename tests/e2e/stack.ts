@@ -7,6 +7,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -156,6 +157,24 @@ export function arriveMeetingCapture(stack: Stack, relPath: string, title: strin
   const file = join(stack.dataDir, relPath);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, meetingCapture(title, [...lines, consolidationLine(reply)]));
+}
+
+/**
+ * Let a draft's approval run out, as if the owner had walked away for its 15
+ * minutes: the stored approval now ended a second ago. The service's clock is
+ * the real one in journeys, so the stored time moves instead.
+ */
+export function endApproval(stack: Stack, actionId: string) {
+  const db = new DatabaseSync(join(stack.stateDir, "attache.sqlite"), { timeout: 5_000 });
+  try {
+    const row = db.prepare("select approval from actions where id = ?").get(actionId) as { approval: string | null } | undefined;
+    if (!row?.approval) throw new Error(`Draft ${actionId} has no approval to end`);
+    const approval = JSON.parse(row.approval) as Record<string, unknown>;
+    const ended = Date.now() - 1_000;
+    db.prepare("update actions set approval = ? where id = ?").run(JSON.stringify({ ...approval, approvedAt: new Date(ended - 15 * 60_000).toISOString(), expiresAt: new Date(ended).toISOString() }), actionId);
+  } finally {
+    db.close();
+  }
 }
 
 export function readRuntime(stateDir: string) {

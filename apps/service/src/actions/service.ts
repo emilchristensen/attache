@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import type { ActionStatus, ActionView } from "@attache/contracts";
+import { approvalEndedAt, type ActionStatus, type ActionView } from "@attache/contracts";
 import { type Db, json, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
@@ -179,16 +179,43 @@ export class ActionService {
     return affected.map((a) => a.id);
   }
 
-  expireStale(): string[] {
+  /**
+   * Settle every time limit that has passed: a draft past its expiry becomes
+   * `expired`, and an approval past its end goes back to `draft` with the
+   * approval cleared, so the owner can approve it again. Draft expiry runs
+   * first, because an approval never outlives its draft.
+   */
+  expireStale(): { expired: string[]; approvalsEnded: string[] } {
     const now = this.now().toISOString();
-    const rows = this.db.prepare("select id from actions where status in ('draft','approved','revoked') and expires_at <= ?").all(now) as Array<{ id: string }>;
-    for (const r of rows) {
+    const expired = (this.db.prepare("select id from actions where status in ('draft','approved','revoked') and expires_at <= ?").all(now) as Array<{ id: string }>).map((r) => r.id);
+    for (const id of expired) {
       tx(this.db, () => {
-        this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), r.id);
-        this.event(r.id, "expired", "service");
+        this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(now, id);
+        this.event(id, "expired", "service");
       });
     }
-    return rows.map((r) => r.id);
+    const ended = this.approvedRows().filter((r) => r.approval.expiresAt <= now);
+    for (const r of ended) {
+      tx(this.db, () => {
+        this.db.prepare("update actions set status = 'draft', approval = null, updated_at = ? where id = ?").run(now, r.id);
+        this.event(r.id, "approval_expired", "service", { version: r.approval.version, approvalExpiresAt: r.approval.expiresAt });
+      });
+    }
+    return { expired, approvalsEnded: ended.map((r) => r.id) };
+  }
+
+  /** When the next approval ends, so housekeeping can wake exactly then; null when nothing is approved. */
+  nextApprovalEnd(): Date | null {
+    const ends = this.approvedRows().map((r) => Date.parse(r.approval.expiresAt));
+    return ends.length ? new Date(Math.min(...ends)) : null;
+  }
+
+  private approvedRows(): Array<{ id: string; approval: NonNullable<ActionView["approval"]> }> {
+    const rows = this.db.prepare("select id, approval from actions where status = 'approved' and approval is not null").all() as Array<{ id: string; approval: string }>;
+    return rows.flatMap((r) => {
+      const approval = json<ActionView["approval"]>(r.approval, null);
+      return approval ? [{ id: r.id, approval }] : [];
+    });
   }
 
   executability(a: ActionView): { ok: boolean; reason: string | null } {
@@ -222,6 +249,7 @@ export class ActionService {
       const a = this.require(id);
       const used = this.db.prepare("select action_id from approval_nonces where nonce = ?").get(req.nonce);
       if (used) fail("replayed", "This approval was already used.");
+      if (approvalEndedAt(a)) fail("approval_expired", "The approval expired; approve again.");
       if (a.status !== "approved" || !a.approval) fail("not_approved", `Action is ${a.status}, not approved.`);
       if (a.approval!.nonce !== req.nonce) fail("approval_mismatch", "The approval does not match this action.");
       if (req.version !== a.version || req.payloadHash !== a.payloadHash || a.approval!.version !== a.version || a.approval!.payloadHash !== a.payloadHash) fail("payload_changed", "The action changed after approval.");
