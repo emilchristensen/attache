@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import type { IncomingMessage } from "node:http";
 import { type Db, nowIso } from "../core/db.ts";
 
-export const SESSION_COOKIE = "jarvis_session";
+export const SESSION_COOKIE = "attache_session";
 const PAIRING_TTL_MS = 10 * 60_000;
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -16,7 +16,7 @@ export interface ClientIdentity {
 
 export function allowedOrigins(port: number): Set<string> {
   const set = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
-  for (const o of (process.env.JARVIS_DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) set.add(o);
+  for (const o of (process.env.ATTACHE_DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) set.add(o);
   return set;
 }
 

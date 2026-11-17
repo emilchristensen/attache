@@ -10,10 +10,10 @@ let fx: FixtureServer;
 let atl: AtlassianFixture;
 beforeAll(async () => {
   fx = await startFixtureServer();
-  process.env.JARVIS_TEST_ENDPOINTS = "1";
+  process.env.ATTACHE_TEST_ENDPOINTS = "1";
 });
 afterAll(async () => {
-  delete process.env.JARVIS_TEST_ENDPOINTS;
+  delete process.env.ATTACHE_TEST_ENDPOINTS;
   await fx.close();
 });
 
@@ -126,7 +126,7 @@ describe("Confluence adapter contract (Atlassian Rovo MCP server)", () => {
   });
 
   it("helpers: storage escaping and marker, flattened hits, cursor extraction", () => {
-    expect(toStorage("a <b>\nc\n\nd", "k")).toBe("<p>a &lt;b&gt;<br/>c</p><p>d</p><!-- jarvis:effect=k -->");
+    expect(toStorage("a <b>\nc\n\nd", "k")).toBe("<p>a &lt;b&gt;<br/>c</p><p>d</p><!-- attache:effect=k -->");
     expect(normalizeHit({ id: "12", title: "Flat", type: "page", spaceKey: "OPS" })).toMatchObject({ id: "12", title: "Flat", space: "OPS" });
     expect(normalizeHit({ content: { id: "abc" } })).toBeNull();
     expect(confluencePage({ results: [], _links: { next: "/wiki/rest/api/search?cursor=zz%3D&limit=50" } }, 50).next).toBe("zz=");

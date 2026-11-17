@@ -23,7 +23,7 @@
  *    - in installer scripts only quoted strings with whitespace inside, outside
  *      comments, are read;
  *    - avoided words that are also the ordinary name of something else in
- *      Jarvis ("server", "client", "draft") are listed with their reason in
+ *      Attache ("server", "client", "draft") are listed with their reason in
  *      `ORDINARY_WORDS` and not checked.
  *
  * 3. Counts written with "(s)" (`check-docs/plurals.mjs`). Text the owner reads

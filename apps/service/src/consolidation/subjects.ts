@@ -27,7 +27,7 @@ export const SUBJECTS: Readonly<Record<ConsolidationSubject, SubjectWording>> = 
     intro: "The session transcript follows between the markers.",
     source: "session",
     reading: "Reading the session",
-    noModel: "No model is connected, so Jarvis made no Proposals from this session.",
+    noModel: "No model is connected, so Attache made no Proposals from this session.",
   },
   meeting: {
     noun: "meeting",
@@ -36,6 +36,6 @@ export const SUBJECTS: Readonly<Record<ConsolidationSubject, SubjectWording>> = 
     intro: "The meeting capture follows between the markers.",
     source: "capture",
     reading: "Reading the meeting",
-    noModel: "No model is connected, so Jarvis made no Proposals from this meeting capture.",
+    noModel: "No model is connected, so Attache made no Proposals from this meeting capture.",
   },
 };

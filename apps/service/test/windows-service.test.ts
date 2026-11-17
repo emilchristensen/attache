@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join } from "node:path";
 import { runPowerShell } from "../src/platform/powershell.ts";
 import { tempDir } from "./helpers.ts";
-import { childEnv, FAKE_PLATFORM, jarvisCli, MAIN } from "./fixtures/jarvis-child.ts";
+import { childEnv, FAKE_PLATFORM, attacheCli, MAIN } from "./fixtures/attache-child.ts";
 
 // These tests start the service from source, which is slow while the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 120_000 });
@@ -52,24 +52,24 @@ afterEach(() => {
 
 describe("the background service on Windows", () => {
   const HOME = "C:\\Users\\Søren & Ærø";
-  const PREFIX = `${HOME}\\AppData\\Local\\Jarvis`;
+  const PREFIX = `${HOME}\\AppData\\Local\\Attache`;
   const FAKE = join(import.meta.dirname, "fixtures", "fake-task-powershell.mjs");
 
   function windows() {
-    const dir = tempDir("jarvis-fake-task-scheduler-");
-    const env = { JARVIS_TEST_FAKE_PLATFORM: "win32", USERPROFILE: HOME, LOCALAPPDATA: `${HOME}\\AppData\\Local`, APPDATA: `${HOME}\\AppData\\Roaming`, JARVIS_INSTANCE: "svctest", JARVIS_POWERSHELL_BIN: FAKE, FAKE_TASK_SCHEDULER_DIR: dir, JARVIS_STATE_DIR: undefined };
+    const dir = tempDir("attache-fake-task-scheduler-");
+    const env = { ATTACHE_TEST_FAKE_PLATFORM: "win32", USERPROFILE: HOME, LOCALAPPDATA: `${HOME}\\AppData\\Local`, APPDATA: `${HOME}\\AppData\\Roaming`, ATTACHE_INSTANCE: "svctest", ATTACHE_POWERSHELL_BIN: FAKE, FAKE_TASK_SCHEDULER_DIR: dir, ATTACHE_STATE_DIR: undefined };
     return {
-      jarvis: (args: string[]) => jarvisCli(args, env),
+      attache: (args: string[]) => attacheCli(args, env),
       tasks: (): Record<string, { xml: string; state: string }> => (existsSync(join(dir, "tasks.json")) ? JSON.parse(readFileSync(join(dir, "tasks.json"), "utf8")) : {}),
     };
   }
 
   it("is a task of the owner's that starts at logon, with no window, running the bundled runtime through the stable `current` link", () => {
     const w = windows();
-    const r = w.jarvis(["service", "install", "--prefix", PREFIX, "--state-dir", `${PREFIX}\\state`, "--port", "7998"]);
+    const r = w.attache(["service", "install", "--prefix", PREFIX, "--state-dir", `${PREFIX}\\state`, "--port", "7998"]);
     expect(r.stderr).toBe("");
-    expect(r.stdout).toBe("Jarvis background service Jarvis-svctest set up.\n");
-    const { xml, state } = w.tasks()["Jarvis-svctest"]!;
+    expect(r.stdout).toBe("Attache background service Attache-svctest set up.\n");
+    const { xml, state } = w.tasks()["Attache-svctest"]!;
     expect(state).toBe("Ready");
     // Only the owner's own logon starts it, and it runs as the owner, without raised rights.
     expect(xml).toMatch(/<LogonTrigger>\s*<Enabled>true<\/Enabled>\s*<UserId>S-1-5-21-1000<\/UserId>\s*<\/LogonTrigger>/);
@@ -79,26 +79,26 @@ describe("the background service on Windows", () => {
     // A console program started by a task opens a window; a headless console host gives it none.
     expect(xml).toContain("<Command>%SystemRoot%\\System32\\conhost.exe</Command>");
     const home = "C:\\Users\\Søren &amp; Ærø";
-    const prefix = `${home}\\AppData\\Local\\Jarvis`;
+    const prefix = `${home}\\AppData\\Local\\Attache`;
     expect(xml).toContain(
-      `<Arguments>--headless "${prefix}\\current\\runtime\\node.exe" "${prefix}\\current\\service\\jarvis-service.mjs" service run --port 7998 --state-dir "${prefix}\\state" --instance svctest --home "${home}" --local-app-data "${home}\\AppData\\Local" --app-data "${home}\\AppData\\Roaming"</Arguments>`,
+      `<Arguments>--headless "${prefix}\\current\\runtime\\node.exe" "${prefix}\\current\\service\\attache-service.mjs" service run --port 7998 --state-dir "${prefix}\\state" --instance svctest --home "${home}" --local-app-data "${home}\\AppData\\Local" --app-data "${home}\\AppData\\Roaming"</Arguments>`,
     );
   });
 
   it("starts, stops and is removed again; stopping a service that was never set up succeeds", () => {
     const w = windows();
-    expect(w.jarvis(["stop"]).stderr).toBe("");
-    expect(w.jarvis(["start"]).stderr).toBe("jarvis: Jarvis is not set up as a background service here: the logon task Jarvis-svctest is missing. Run the Jarvis installer again.\n");
-    w.jarvis(["service", "install", "--prefix", PREFIX, "--port", "7998"]);
-    expect(JSON.parse(w.jarvis(["service", "status"]).stdout)).toEqual({ name: "Jarvis-svctest", definition: null, loaded: false });
-    expect(w.jarvis(["start"]).stderr).toBe("");
-    expect(JSON.parse(w.jarvis(["service", "status"]).stdout)).toMatchObject({ loaded: true });
-    expect(w.jarvis(["stop"]).stderr).toBe("");
-    expect(JSON.parse(w.jarvis(["service", "status"]).stdout)).toMatchObject({ loaded: false });
-    w.jarvis(["start"]);
-    const removed = w.jarvis(["service", "uninstall"]);
+    expect(w.attache(["stop"]).stderr).toBe("");
+    expect(w.attache(["start"]).stderr).toBe("attache: Attache is not set up as a background service here: the logon task Attache-svctest is missing. Run the Attache installer again.\n");
+    w.attache(["service", "install", "--prefix", PREFIX, "--port", "7998"]);
+    expect(JSON.parse(w.attache(["service", "status"]).stdout)).toEqual({ name: "Attache-svctest", definition: null, loaded: false });
+    expect(w.attache(["start"]).stderr).toBe("");
+    expect(JSON.parse(w.attache(["service", "status"]).stdout)).toMatchObject({ loaded: true });
+    expect(w.attache(["stop"]).stderr).toBe("");
+    expect(JSON.parse(w.attache(["service", "status"]).stdout)).toMatchObject({ loaded: false });
+    w.attache(["start"]);
+    const removed = w.attache(["service", "uninstall"]);
     expect(removed.stderr).toBe("");
-    expect(removed.stdout).toBe("Jarvis background service Jarvis-svctest removed.\n");
+    expect(removed.stdout).toBe("Attache background service Attache-svctest removed.\n");
     expect(w.tasks()).toEqual({});
   });
 });
@@ -120,49 +120,49 @@ function Invoke-Request($req) {
   };
 
   it("starts the bundled runtime from a folder named with æøå without a window, stops with everything it started, and is removed again", async () => {
-    const home = tempDir("jarvis-task-home æøå-");
-    const prefix = join(home, "AppData", "Local", "Jarvis");
+    const home = tempDir("attache-task-home æøå-");
+    const prefix = join(home, "AppData", "Local", "Attache");
     const current = join(prefix, "current");
     mkdirSync(join(current, "runtime"), { recursive: true });
     mkdirSync(join(current, "service"), { recursive: true });
     copyFileSync(process.execPath, join(current, "runtime", "node.exe"));
     // A stand-in release that records how the task started it, and keeps running like the service.
     const report = join(home, "started.json");
-    writeFileSync(join(current, "service", "jarvis-service.mjs"), `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(report)}, JSON.stringify({ pid: process.pid, args: process.argv.slice(2) }));\nsetInterval(() => {}, 1000);\n`);
+    writeFileSync(join(current, "service", "attache-service.mjs"), `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(report)}, JSON.stringify({ pid: process.pid, args: process.argv.slice(2) }));\nsetInterval(() => {}, 1000);\n`);
     const instance = `tasktest${process.pid}`;
-    const task = `Jarvis-${instance}`;
-    const env = { JARVIS_INSTANCE: instance, USERPROFILE: home, LOCALAPPDATA: join(home, "AppData", "Local"), APPDATA: join(home, "AppData", "Roaming"), JARVIS_STATE_DIR: undefined };
-    const jarvis = (args: string[]) => jarvisCli(args, env);
+    const task = `Attache-${instance}`;
+    const env = { ATTACHE_INSTANCE: instance, USERPROFILE: home, LOCALAPPDATA: join(home, "AppData", "Local"), APPDATA: join(home, "AppData", "Roaming"), ATTACHE_STATE_DIR: undefined };
+    const attache = (args: string[]) => attacheCli(args, env);
     try {
-      expect(jarvis(["service", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7997"]).stderr).toBe("");
+      expect(attache(["service", "install", "--prefix", prefix, "--state-dir", join(prefix, "state"), "--port", "7997"]).stderr).toBe("");
       // Only the owner's own logon starts it, and it runs as the owner, without raised rights.
       const definition = await inspect(task);
       expect(definition).toMatchObject({ present: true, trigger: "MSFT_TaskLogonTrigger", logonType: "Interactive", runLevel: "Limited" });
       expect(definition.me!.map((m) => m.toLowerCase())).toContain(definition.triggerUser!.toLowerCase());
 
-      expect(jarvis(["start"]).stderr).toBe("");
+      expect(attache(["start"]).stderr).toBe("");
       const started = await eventually("the task to start the release", () => (existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : null));
       expect(started.args).toEqual(["service", "run", "--port", "7997", "--state-dir", join(prefix, "state"), "--instance", instance, "--home", home, "--local-app-data", join(home, "AppData", "Local"), "--app-data", join(home, "AppData", "Roaming")]);
-      expect(JSON.parse(jarvis(["service", "status"]).stdout)).toEqual({ name: task, definition: null, loaded: true });
+      expect(JSON.parse(attache(["service", "status"]).stdout)).toEqual({ name: task, definition: null, loaded: true });
 
-      expect(jarvis(["stop"]).stderr).toBe("");
-      expect(JSON.parse(jarvis(["service", "status"]).stdout)).toMatchObject({ loaded: false });
+      expect(attache(["stop"]).stderr).toBe("");
+      expect(JSON.parse(attache(["service", "status"]).stdout)).toMatchObject({ loaded: false });
       await eventually("the release the task started to stop", () => (alive(started.pid) ? null : true), 15_000);
 
-      expect(jarvis(["service", "uninstall"]).stderr).toBe("");
+      expect(attache(["service", "uninstall"]).stderr).toBe("");
       expect(await inspect(task)).toEqual({ ok: true, present: false });
     } finally {
-      jarvis(["service", "uninstall"]);
+      attache(["service", "uninstall"]);
     }
   });
 });
 
 describe("the entry point of the Windows logon task", () => {
   it("keeps the service running in the owner's home, restarts it after a crash, and stops it when it stops itself", async () => {
-    const stateDir = join(tempDir("jarvis-supervised æøå-"), "state");
-    const home = tempDir("jarvis-supervised-home-");
+    const stateDir = join(tempDir("attache-supervised æøå-"), "state");
+    const home = tempDir("attache-supervised-home-");
     const supervisor = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", home], {
-      env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_STATE_DIR: undefined, JARVIS_INSTANCE: undefined }),
+      env: childEnv({ ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ATTACHE_STATE_DIR: undefined, ATTACHE_INSTANCE: undefined }),
       stdio: "ignore",
     });
     supervisors.push(supervisor);
@@ -172,8 +172,8 @@ describe("the entry point of the Windows logon task", () => {
     const second = await healthyService(stateDir, first.pid);
     expect(second.pid).not.toBe(first.pid);
     const log = readFileSync(join(stateDir, "logs", "service.err.log"), "utf8");
-    expect(log).toMatch(/jarvis service run: the service stopped \(.+\); starting it again in 2 s/);
-    expect(readFileSync(join(stateDir, "logs", "service.out.log"), "utf8")).toContain("jarvis service listening");
+    expect(log).toMatch(/attache service run: the service stopped \(.+\); starting it again in 2 s/);
+    expect(readFileSync(join(stateDir, "logs", "service.out.log"), "utf8")).toContain("attache service listening");
 
     const exited = new Promise((r) => supervisor.once("exit", r));
     supervisor.kill("SIGTERM");
@@ -183,9 +183,9 @@ describe("the entry point of the Windows logon task", () => {
   });
 
   it("stops the service cleanly when the supervisor itself is killed outright", async () => {
-    const stateDir = join(tempDir("jarvis-supervised-"), "state");
-    const supervisor = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("jarvis-supervised-home-")], {
-      env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1" }),
+    const stateDir = join(tempDir("attache-supervised-"), "state");
+    const supervisor = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("attache-supervised-home-")], {
+      env: childEnv({ ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1" }),
       stdio: "ignore",
     });
     supervisors.push(supervisor);
@@ -196,13 +196,13 @@ describe("the entry point of the Windows logon task", () => {
   });
 
   it("stops, with the service, when the console host the task started it in is gone, as ending the task leaves it", async () => {
-    const stateDir = join(tempDir("jarvis-supervised-"), "state");
-    const args = ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("jarvis-supervised-home-")];
+    const stateDir = join(tempDir("attache-supervised-"), "state");
+    const args = ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("attache-supervised-home-")];
     // A stand-in for the console host: it starts the supervisor, says which process that is, and is then
     // ended without a word to it. Ending the console host leaves the supervisor running, so the stand-in
     // starts it detached: Node on Windows would otherwise end it along with the stand-in.
     const host = spawn(process.execPath, ["-e", `process.stdout.write(String(require("node:child_process").spawn(process.execPath, ${JSON.stringify(args)}, { stdio: "ignore", detached: true }).pid)); setInterval(() => {}, 1000);`], {
-      env: childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1" }),
+      env: childEnv({ ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1" }),
       stdio: ["ignore", "pipe", "ignore"],
     });
     supervisors.push(host);

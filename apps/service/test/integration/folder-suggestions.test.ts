@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import type { ConnectionDefinition, SetupDefaults } from "@jarvis/contracts";
+import type { ConnectionDefinition, SetupDefaults } from "@attache/contracts";
 import { platformLocations } from "../../src/platform/locations.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
@@ -18,7 +18,7 @@ describe("folder suggestions and examples the Dashboard shows", () => {
     const defaults = await svc.get<SetupDefaults>("/setup/defaults");
     expect(defaults).toEqual({
       home: platformLocations().home,
-      suggestion: join(documents, "Jarvis"),
+      suggestion: join(documents, "Attache"),
       examples: { notes: join(documents, "Notes"), brain: join(documents, "Brain") },
     });
 

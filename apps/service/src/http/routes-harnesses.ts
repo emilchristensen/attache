@@ -1,4 +1,4 @@
-import { HarnessAutoAcceptInput } from "@jarvis/contracts";
+import { HarnessAutoAcceptInput } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";

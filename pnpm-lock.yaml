@@ -41,12 +41,12 @@ importers:
 
   apps/service:
     dependencies:
+      '@attache/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@huggingface/tokenizers':
         specifier: 0.2.0
         version: 0.2.0
-      '@jarvis/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
         version: 1.32.2(zod@4.6.7)
@@ -72,7 +72,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@jarvis/contracts':
+      '@attache/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       markdown-it:

@@ -43,7 +43,7 @@ export function pruneVectors(db: Db, modelId: string): number {
   return Number(r.changes);
 }
 
-/** Little-endian float32, the layout of a `Float32Array` on every platform Jarvis runs on. */
+/** Little-endian float32, the layout of a `Float32Array` on every platform Attache runs on. */
 export function encodeVector(v: Float32Array): Uint8Array {
   return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
 }

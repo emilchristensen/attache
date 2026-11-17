@@ -15,8 +15,8 @@ vi.setConfig({ testTimeout: 120_000 });
  * repositories through a save, and the session-start hook, run in a folder
  * with a git remote, prints that project's context without the service.
  */
-const HOME = process.env.JARVIS_AGENT_HOME!;
-const work = mkdtempSync(join(tmpdir(), "jarvis-it-projectctx-"));
+const HOME = process.env.ATTACHE_AGENT_HOME!;
+const work = mkdtempSync(join(tmpdir(), "attache-it-projectctx-"));
 const ORION = "memory/projects/orion-migration.md";
 
 let svc: TestService;
@@ -33,10 +33,10 @@ function repo(name: string, remotes: Record<string, string>): string {
   return dir;
 }
 
-/** Run the SessionStart command Jarvis registered, from `cwd`, the way Claude Code does. */
+/** Run the SessionStart command Attache registered, from `cwd`, the way Claude Code does. */
 function sessionStart(cwd: string, env: Record<string, string> = {}): string {
   const s = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
-  const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
+  const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("attache-agent-hook"))!.command;
   const out = runInShell(hookShell("claude-code"), command, { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, ...homeEnv(HOME), ...env } });
   return out.trim() ? (JSON.parse(out).hookSpecificOutput.additionalContext as string) : "";
 }
@@ -100,7 +100,7 @@ describe("session context chosen by project", { timeout: 20_000 }, () => {
   });
 
   it("a session elsewhere gets the global context", async () => {
-    for (const dir of [repo("other", { origin: "git@github.com:acme/other.git" }), repo("no-remote", {}), mkdtempSync(join(tmpdir(), "jarvis-it-plain-"))]) {
+    for (const dir of [repo("other", { origin: "git@github.com:acme/other.git" }), repo("no-remote", {}), mkdtempSync(join(tmpdir(), "attache-it-plain-"))]) {
       const ctx = sessionStart(dir);
       expect(ctx).not.toContain("This session's project");
       expect(ctx).toContain("Orion migration");

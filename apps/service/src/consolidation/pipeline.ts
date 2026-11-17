@@ -1,4 +1,4 @@
-import type { ProposalView } from "@jarvis/contracts";
+import type { ProposalView } from "@attache/contracts";
 import type { App } from "../app.ts";
 import type { JobContext } from "../jobs/queue.ts";
 import { complete } from "../models/providers.ts";

@@ -4,7 +4,7 @@
  * because Windows has no command-line tool that reads a stored secret back.
  *
  * Each secret is a generic credential, persisted for this computer only (not
- * roamed), whose target is `dev.jarvis.<instance>/<key>`. Credential Manager
+ * roamed), whose target is `dev.attache.<instance>/<key>`. Credential Manager
  * holds at most 2,560 bytes per credential, so a longer value continues in
  * `<target>#2`, `<target>#3` and so on. Values travel as base64 of their
  * UTF-8 bytes.
@@ -19,7 +19,7 @@ using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-public static class JarvisCredentials {
+public static class AttacheCredentials {
   [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
   private struct Credential {
     public uint Flags;
@@ -83,7 +83,7 @@ public static class JarvisCredentials {
       c.Type = Generic;
       c.TargetName = target;
       c.UserName = user;
-      c.Comment = "Jarvis";
+      c.Comment = "Attache";
       c.CredentialBlobSize = (uint)length;
       c.CredentialBlob = blob;
       c.Persist = PersistLocalMachine;
@@ -135,24 +135,24 @@ function Invoke-Request($req) {
   $target = [string]$req.target
   switch ([string]$req.op) {
     'read' {
-      $secret = [JarvisCredentials]::Read($target)
+      $secret = [AttacheCredentials]::Read($target)
       if ($null -eq $secret) { return @{ ok = $true; found = $false } }
       return @{ ok = $true; found = $true; secret = $secret }
     }
     'write' {
-      [JarvisCredentials]::Write($target, [string]$req.user, [string]$req.secret)
+      [AttacheCredentials]::Write($target, [string]$req.user, [string]$req.secret)
       return @{ ok = $true }
     }
     'delete' {
-      return @{ ok = $true; found = [JarvisCredentials]::Delete($target) }
+      return @{ ok = $true; found = [AttacheCredentials]::Delete($target) }
     }
     'probe' {
       $value = [Convert]::ToBase64String([Guid]::NewGuid().ToByteArray())
       try {
-        [JarvisCredentials]::Write($target, [string]$req.user, $value)
-        $back = [JarvisCredentials]::Read($target)
+        [AttacheCredentials]::Write($target, [string]$req.user, $value)
+        $back = [AttacheCredentials]::Read($target)
       } finally {
-        $null = [JarvisCredentials]::Delete($target)
+        $null = [AttacheCredentials]::Delete($target)
       }
       if ($back -ne $value) { return @{ ok = $false; error = 'Credential Manager returned a different value than was stored' } }
       return @{ ok = $true }

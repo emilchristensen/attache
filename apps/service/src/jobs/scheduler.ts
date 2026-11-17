@@ -1,4 +1,4 @@
-import type { Config } from "@jarvis/contracts";
+import type { Config } from "@attache/contracts";
 import { type Db, nowIso } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { FEATURES, isEnabled } from "../capabilities/registry.ts";

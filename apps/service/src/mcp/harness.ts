@@ -1,11 +1,11 @@
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
-import type { MemorySaveInput } from "@jarvis/contracts";
+import type { MemorySaveInput } from "@attache/contracts";
 import { agentFromEnv } from "./agent-env.ts";
 import { slugify } from "../memory/markdown.ts";
 
-/** The Harness on the other end of an MCP connection, in Jarvis's words. */
+/** The Harness on the other end of an MCP connection, in Attache's words. */
 export interface HarnessIdentity {
-  /** Stable id, the Harness kind Jarvis knows it by when it knows it, e.g. `claude-code`. */
+  /** Stable id, the Harness kind Attache knows it by when it knows it, e.g. `claude-code`. */
   id: string;
   /** What the owner calls it, e.g. "Claude Desktop". */
   label: string;
@@ -30,10 +30,10 @@ const CLAUDE_DESKTOP: HarnessIdentity = { id: "claude-desktop", label: "Claude D
 const CODEX: HarnessIdentity = { id: "codex", label: "Codex" };
 const ANTIGRAVITY: HarnessIdentity = { id: "antigravity", label: "Antigravity" };
 
-/** The Harnesses Jarvis knows, by id. */
+/** The Harnesses Attache knows, by id. */
 const KNOWN_IDS: Record<string, HarnessIdentity> = Object.fromEntries([CLAUDE_CODE, CLAUDE_DESKTOP, CODEX, ANTIGRAVITY].map((h) => [h.id, h]));
 
-/** The names Harnesses give themselves when they connect, mapped to the Harnesses Jarvis knows. */
+/** The names Harnesses give themselves when they connect, mapped to the Harnesses Attache knows. */
 const KNOWN_CLIENTS: Record<string, HarnessIdentity> = {
   "claude-code": CLAUDE_CODE,
   "claude-ai": CLAUDE_DESKTOP,
@@ -50,7 +50,7 @@ const CWD_MAX = 2000;
 
 /**
  * Who connected, from the client information the Harness sent when it
- * connected. A Harness Jarvis does not know keeps the name it gave itself.
+ * connected. A Harness Attache does not know keeps the name it gave itself.
  */
 export function harnessOf(client: Implementation | undefined): HarnessIdentity {
   if (!client?.name.trim()) return UNKNOWN;

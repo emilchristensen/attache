@@ -25,7 +25,7 @@ fx.route("POST", "/__control/claude-server", (req) => {
   return { json: { ok: true } };
 });
 installFixtureModel(fx, "/model");
-// The meaning model a journey downloads from the Dashboard, described to the service by JARVIS_MEANING_MODEL.
+// The meaning model a journey downloads from the Dashboard, described to the service by ATTACHE_MEANING_MODEL.
 installFixtureMeaningModel(fx, "/meaning-model");
 process.stdout.write(`FIXTURE_READY ${fx.url}\n`);
 

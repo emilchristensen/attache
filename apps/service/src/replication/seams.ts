@@ -18,7 +18,7 @@ import { PrivateRemoteGuard } from "./private-remote.ts";
 
 /** A Machine as Replication names it: from local state for this one, from commit authors for others. */
 export interface MachineRef {
-  /** Null when a commit does not say (made outside Jarvis). */
+  /** Null when a commit does not say (made outside Attache). */
   id: string | null;
   name: string;
 }

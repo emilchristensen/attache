@@ -1,11 +1,11 @@
 import { Git, GitError, READER_LEASE_REFS } from "./git.ts";
-import { JARVIS_REFS_FETCH, REMOTE } from "./brain-repo.ts";
+import { ATTACHE_REFS_FETCH, REMOTE } from "./brain-repo.ts";
 import type { GitCredentials } from "./seams.ts";
 import { LeaseRecord } from "../reader/lease.ts";
 
 /**
  * Where the Reader lease lives: refs of its own in the Brain's repository,
- * `refs/jarvis/reader-lease/<generation>`, never a branch. Each renewal is a
+ * `refs/attache/reader-lease/<generation>`, never a branch. Each renewal is a
  * small commit with an empty tree whose message holds the lease, made on top
  * of the last one, so a generation's ref only ever moves forward: a push is
  * the compare-and-swap, and a rejected push means another Machine wrote the
@@ -21,17 +21,17 @@ import { LeaseRecord } from "../reader/lease.ts";
  * two generations exist, so the lease's history stays bounded.
  */
 export const LEASE_GENERATION_COMMITS = 144;
-/** This Machine's copies of the remote's lease generations, refreshed by every fetch (`JARVIS_REFS_FETCH`). */
+/** This Machine's copies of the remote's lease generations, refreshed by every fetch (`ATTACHE_REFS_FETCH`). */
 const TRACKING = `refs/remotes/${REMOTE}/${READER_LEASE_REFS.slice("refs/".length)}`;
 
-const SUBJECT = "Jarvis Reader lease";
+const SUBJECT = "Attache Reader lease";
 
 export interface StoredLease {
   /** The newest generation, the one that holds the lease. */
   generation: number;
   /** The commit holding it, which the next renewal builds on. */
   tip: string;
-  /** Null when the commit does not hold a lease Jarvis can read; the next renewal replaces it. */
+  /** Null when the commit does not hold a lease Attache can read; the next renewal replaces it. */
   record: LeaseRecord | null;
 }
 
@@ -78,7 +78,7 @@ export class LeaseRef {
 
   /** Fetch the remote's lease alone, after another Machine wrote it first. */
   async fetch(remote: string): Promise<void> {
-    await this.remoteGit(remote).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", "--prune", REMOTE, JARVIS_REFS_FETCH]);
+    await this.remoteGit(remote).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", "--prune", REMOTE, ATTACHE_REFS_FETCH]);
   }
 
   /**

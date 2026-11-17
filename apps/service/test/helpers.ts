@@ -3,7 +3,7 @@ import { mkdtempSync, statSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 
-export function tempDir(prefix = "jarvis-test-"): string {
+export function tempDir(prefix = "attache-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 

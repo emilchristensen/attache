@@ -5,7 +5,7 @@ import { mergeInboxRecords, parseInboxRecord } from "./inbox-record.ts";
 /**
  * Settles an inbox item both Machines changed: the source's newer report of
  * the item, and the owner's later decision. An item one side deleted stays
- * deleted (the owner deleted a disconnected source's data). A side Jarvis
+ * deleted (the owner deleted a disconnected source's data). A side Attache
  * cannot read gives way to the one it can.
  */
 export const inboxMergeRule: MergeRule = {

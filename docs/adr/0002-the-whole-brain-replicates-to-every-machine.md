@@ -6,7 +6,7 @@ status: accepted
 
 The Brain can hold confidential work material next to personal notes, such as notes about named people, client facts and meeting transcripts.
 We replicate all of it, in plaintext, to a private repository on the owner's personal GitHub account and to every Machine the owner adds, including personally owned hardware, because the owner works from those Machines as much as from the work laptop and wants one Brain rather than two.
-Jarvis refuses to push when the repository is public.
+Attache refuses to push when the repository is public.
 
 ## Considered options
 

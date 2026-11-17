@@ -1,4 +1,4 @@
-# Jarvis developer guide
+# Attache developer guide
 
 Developer setup is separate from end-user installation: users run the installer artifact and never need these tools.
 
@@ -14,18 +14,18 @@ Developer setup is separate from end-user installation: users run the installer 
 | `tests/e2e` | Playwright journeys (Chrome, visual captures) |
 | `docs` | Architecture, guides, architecture decision records |
 
-Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `jarvis mcp`).
+Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `attache mcp`).
 
 ## Requirements
 
 - macOS, Linux or Windows for lint, typecheck, Vitest and the browser journeys.
   The install test needs macOS on Apple silicon, or Linux on x86_64 with a systemd user manager.
 - On Windows, Git for Windows: the tests run Claude Code's hook commands through Git Bash, as Claude Code does, and Codex's through cmd.exe.
-  `JARVIS_TEST_GIT_BASH` points the tests at a Git Bash outside `C:\Program Files\Git`.
+  `ATTACHE_TEST_GIT_BASH` points the tests at a Git Bash outside `C:\Program Files\Git`.
 - `apps/service/test/linux-desktop.test.ts` runs the Linux secret store and notifications anywhere, against stand-ins for `secret-tool` and `notify-send`.
-  `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `JARVIS_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
+  `apps/service/test/linux-desktop-real.test.ts` checks the same against GNOME Keyring and dunst; it runs only on Linux with `ATTACHE_TEST_REAL_DESKTOP=1` inside `scripts/linux-desktop-session.sh`, as CI's Linux job does (needs `dbus`, `gnome-keyring`, `libsecret-tools`, `libnotify-bin`, `dunst`, `xvfb`, `xauth`).
 - `apps/service/test/windows-desktop.test.ts` runs the Windows secret store and notifications anywhere, against a stand-in for Windows PowerShell (`fake-powershell.mjs`) and for `icacls` and `whoami`.
-  `apps/service/test/windows-desktop-real.test.ts` checks the same against Credential Manager and Windows notifications; it runs only on Windows with `JARVIS_TEST_REAL_DESKTOP=1`, as CI's Windows job does, because it shows notifications and writes to your Credential Manager (it removes what it wrote).
+  `apps/service/test/windows-desktop-real.test.ts` checks the same against Credential Manager and Windows notifications; it runs only on Windows with `ATTACHE_TEST_REAL_DESKTOP=1`, as CI's Windows job does, because it shows notifications and writes to your Credential Manager (it removes what it wrote).
 - Node 24.22.0 or newer, whichever compatible version you have installed: `engines.node` in `package.json` names the minimum, and `pnpm install` refuses an older Node (`engineStrict` in `pnpm-workspace.yaml`).
   Node 22 lacks FTS5 in `node:sqlite`.
   Before 24.22.0, Node on Linux stops reporting changes to a file after it is replaced by a rename, so hand edits to the Brain go unnoticed (`apps/service/test/memory-watcher.test.ts` fails on 24.21).
@@ -49,25 +49,25 @@ Run the service against a scratch profile while developing:
 pnpm dev                 # [--port 7500] [--state-dir <folder>]
 ```
 
-`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/jarvis-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the Dashboard with hot reload on `http://localhost:5173`.
+`pnpm dev` (`scripts/dev.mjs`) builds everything once, runs the service from its bundle against a scratch state folder (`<temp>/attache-dev` unless you name one), rebuilds and restarts it when the source changes, and serves the Dashboard with hot reload on `http://localhost:5173`.
 It prints a pairing link for that client.
-The scratch profile keeps its secrets in a file, and its writer locks and Harness home (`JARVIS_AGENT_HOME`) inside the state folder, so connecting a Harness there never touches your own.
+The scratch profile keeps its secrets in a file, and its writer locks and Harness home (`ATTACHE_AGENT_HOME`) inside the state folder, so connecting a Harness there never touches your own.
 The same steps by hand:
 
 ```sh
 node apps/service/build.mjs --watch &            # rebuild on change
-JARVIS_CREDENTIAL_STORE=file node apps/service/dist/jarvis-service.mjs serve --state-dir /tmp/jarvis-dev --port 7500
-node apps/service/dist/jarvis-service.mjs pair --state-dir /tmp/jarvis-dev --open
-JARVIS_DEV_SERVICE=http://127.0.0.1:7500 JARVIS_DEV_ORIGINS=http://localhost:5173 pnpm --filter @jarvis/web dev   # optional hot-reload client
+ATTACHE_CREDENTIAL_STORE=file node apps/service/dist/attache-service.mjs serve --state-dir /tmp/attache-dev --port 7500
+node apps/service/dist/attache-service.mjs pair --state-dir /tmp/attache-dev --open
+ATTACHE_DEV_SERVICE=http://127.0.0.1:7500 ATTACHE_DEV_ORIGINS=http://localhost:5173 pnpm --filter @attache/web dev   # optional hot-reload client
 ```
 
-Environment variables: `JARVIS_STATE_DIR`, `JARVIS_PORT`, `JARVIS_INSTANCE` (names the Keychain service and the background service), `JARVIS_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `JARVIS_WEB_DIR`, `JARVIS_DEV_ORIGINS`, `JARVIS_NO_NOTIFY=1`, `JARVIS_CLAUDE_BIN`, `JARVIS_AGENT_HOME` (home folder whose Harness hooks and MCP configuration are edited), `JARVIS_AGENT_HOOK_SCRIPT`, `JARVIS_CLI_SCRIPT` (the CLI script a Harness runs as Jarvis's MCP server; tests point it at `apps/service/src/main.ts`), `JARVIS_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `JARVIS_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model), `JARVIS_SECRET_TOOL_BIN` and `JARVIS_NOTIFY_SEND_BIN` (the `secret-tool` and `notify-send` Jarvis runs on Linux), `JARVIS_POWERSHELL_BIN`, `JARVIS_ICACLS_BIN` and `JARVIS_WHOAMI_BIN` (the Windows PowerShell, `icacls` and `whoami` Jarvis runs on Windows); tests point them at the recording stand-ins in `apps/service/test/fixtures/`.
+Environment variables: `ATTACHE_STATE_DIR`, `ATTACHE_PORT`, `ATTACHE_INSTANCE` (names the Keychain service and the background service), `ATTACHE_CREDENTIAL_STORE=file` (use the owner-only file instead of the system secret store), `ATTACHE_WEB_DIR`, `ATTACHE_DEV_ORIGINS`, `ATTACHE_NO_NOTIFY=1`, `ATTACHE_CLAUDE_BIN`, `ATTACHE_AGENT_HOME` (home folder whose Harness hooks and MCP configuration are edited), `ATTACHE_AGENT_HOOK_SCRIPT`, `ATTACHE_CLI_SCRIPT` (the CLI script a Harness runs as Attache's MCP server; tests point it at `apps/service/src/main.ts`), `ATTACHE_LOCK_DIR` (where writer locks live; every service that should refuse to share a data folder must see the same value), `ATTACHE_MEANING_MODEL` (a JSON model description to download instead of multilingual-e5-small; the e2e stack points it at the fixture model), `ATTACHE_SECRET_TOOL_BIN` and `ATTACHE_NOTIFY_SEND_BIN` (the `secret-tool` and `notify-send` Attache runs on Linux), `ATTACHE_POWERSHELL_BIN`, `ATTACHE_ICACLS_BIN` and `ATTACHE_WHOAMI_BIN` (the Windows PowerShell, `icacls` and `whoami` Attache runs on Windows); tests point them at the recording stand-ins in `apps/service/test/fixtures/`.
 
 Connecting a Harness edits real files in your home folder (`~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`, Claude Desktop's settings folder).
-Every Vitest and browser-journey run gets one temporary folder, `jarvis-run-<process id>-*`, and points `TMPDIR`, `TMP` and `TEMP` at it (`scripts/test-run-folder.mjs`), so the folders tests make with `os.tmpdir()` are removed when the run ends; a killed run's folder is removed by the next run.
-Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `JARVIS_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
-The test harness and the e2e stack always set `JARVIS_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting a Harness will add hooks and an MCP server for the scratch instance to your own Harnesses.
-`jarvis agent-hooks status` lists this install's hooks and MCP server entries, and `jarvis agent-hooks uninstall [--agent <kind>]` removes them.
+Every Vitest and browser-journey run gets one temporary folder, `attache-run-<process id>-*`, and points `TMPDIR`, `TMP` and `TEMP` at it (`scripts/test-run-folder.mjs`), so the folders tests make with `os.tmpdir()` are removed when the run ends; a killed run's folder is removed by the next run.
+Vitest (`apps/service/test/setup-env.ts`) and the e2e stack set `ATTACHE_LOCK_DIR` to a temporary folder, so test services never leave locks in your home folder.
+The test harness and the e2e stack always set `ATTACHE_AGENT_HOME` to a temporary folder; do the same for a scratch service, or connecting a Harness will add hooks and an MCP server for the scratch instance to your own Harnesses.
+`attache agent-hooks status` lists this install's hooks and MCP server entries, and `attache agent-hooks uninstall [--agent <kind>]` removes them.
 
 ## Continuous integration
 
@@ -91,8 +91,8 @@ Each job has these steps:
 | Lint | `pnpm lint --max-warnings 0` |
 | Typecheck | `pnpm typecheck` |
 | Unit and integration tests | `pnpm test` |
-| Linux desktop session tests (Linux only) | `JARVIS_TEST_REAL_DESKTOP=1 sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts` |
-| Windows desktop tests (Windows only) | `JARVIS_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
+| Linux desktop session tests (Linux only) | `ATTACHE_TEST_REAL_DESKTOP=1 sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts` |
+| Windows desktop tests (Windows only) | `ATTACHE_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
 | Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
 
 Separate jobs, `install (ubuntu-latest)` and `install (windows-latest)`, run the install test (see "Install test" below) on the minimum supported Node and upload `test-results/install-results.json`.
@@ -100,7 +100,7 @@ When a check fails, the install test copies the installed service's logs (`servi
 
 Every check runs even when an earlier one fails, so a run lists all failures at once.
 Each Vitest and browser-journey run copies its test services' logs to `test-results/service-logs/` on CI before it removes its temporary folder.
-On failure a job also runs `node scripts/collect-service-logs.mjs`, which copies the `logs` folders that test services left in Jarvis's temporary folders (a killed run, a crashed install test) to the same place, and uploads `test-results/` (Playwright traces and screenshots, service logs) as an artifact.
+On failure a job also runs `node scripts/collect-service-logs.mjs`, which copies the `logs` folders that test services left in Attache's temporary folders (a killed run, a crashed install test) to the same place, and uploads `test-results/` (Playwright traces and screenshots, service logs) as an artifact.
 pnpm comes from `packageManager` in `package.json`, so CI and a local checkout use the same pnpm.
 `.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
 Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
@@ -119,15 +119,15 @@ Before a release, also start a run by hand on `main`: a push to `main` runs only
 ## Fixtures versus live
 
 Contract and journey tests use a local fixture server (`apps/service/test/fixtures`) that emulates GitHub REST, the Atlassian Rovo MCP server with its OAuth 2.1 authorization server (`atlassian-mcp.ts`), the claude.ai connectors (`claude-connectors.ts`) and an OpenAI-compatible model.
-The service talks to it only when `JARVIS_TEST_ENDPOINTS=1` and `JARVIS_FIXTURE_URL` are set; normal operation never reads those variables.
-The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` (on Windows `fake-claude.cmd`, an npm-style shim around it, as `npm install -g` installs Claude Code there) through `JARVIS_CLAUDE_BIN` (plus `JARVIS_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
+The service talks to it only when `ATTACHE_TEST_ENDPOINTS=1` and `ATTACHE_FIXTURE_URL` are set; normal operation never reads those variables.
+The claude.ai connectors are reached through the Claude Code CLI, which tests replace with `fake-claude.mjs` (on Windows `fake-claude.cmd`, an npm-style shim around it, as `npm install -g` installs Claude Code there) through `ATTACHE_CLAUDE_BIN` (plus `ATTACHE_FAKE_CLAUDE_URL` and an empty `CLAUDE_CONFIG_DIR`).
 It speaks the same stream-json and permission-control protocol as the real CLI and can misbehave on request (unplanned calls, altered arguments, skipped calls, signed out, pending connectors), so the approval gate is tested for real.
 Fixture results are never reported as live results.
 
 Tests never download the real meaning model.
 `apps/service/test/fixtures/fixture-meaning-model.ts` builds a tiny ONNX model (one `Gather` node, written by `onnx-writer.ts`) and a word-level tokenizer with the same files as the real one, and serves them from the fixture server; the integration tests and browser journeys download it through the normal path and run the real ONNX runtime on it.
-To check the real model on a platform, download its files from the pinned revision in `apps/service/src/meaning/model.ts` and run `JARVIS_TEST_REAL_MODEL_DIR=<folder> pnpm test apps/service/test/integration/meaning-real-model.test.ts`; without the variable that test is skipped.
-`scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `JARVIS_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
+To check the real model on a platform, download its files from the pinned revision in `apps/service/src/meaning/model.ts` and run `ATTACHE_TEST_REAL_MODEL_DIR=<folder> pnpm test apps/service/test/integration/meaning-real-model.test.ts`; without the variable that test is skipped.
+`scripts/live-readonly.mjs` performs real, read-only checks in a throwaway profile and reports them separately: GitHub with the GitHub CLI login, Slack, Gmail and Calendar through the signed-in Claude Code CLI, and Jira and Confluence only when `ATTACHE_LIVE_ATLASSIAN_SITE`, `_EMAIL` and `_TOKEN` supply an MCP-scoped token.
 
 ## Several Machines in one test
 
@@ -136,7 +136,7 @@ To check the real model on a platform, download its files from the pinned revisi
 Nothing replicates until a test moves a Machine's clock: `await mac.clock.advance(30_000)` runs the commit due after a save, `advance(60_000)` the one-minute check, and `advance` waits for the check it started.
 `world.remote.goOffline()` and `goOnline()` make the remote unreachable and back; `world.remote.git(...)` inspects what was pushed.
 The bare repository refuses any push that is not a fast-forward, so a test fails if Replication ever rewrote history.
-`JARVIS_GIT_BIN` points Replication at another git executable.
+`ATTACHE_GIT_BIN` points Replication at another git executable.
 For GitHub itself, `apps/service/test/fixtures/github-git-server.ts` serves git's smart HTTP protocol (through the Machine's `git http-backend`) behind token authentication, plus `GET /repos/{owner}/{name}` with a visibility the test sets.
 `replication-private-repo.test.ts` sends `https://github.com/` there with git's `url.<base>.insteadOf`, set through `GIT_CONFIG_COUNT` in the environment, and points the GitHub connection's API URL at it, so no test-only code is needed in the service.
 
@@ -147,7 +147,7 @@ A change to search ships only when it improves recall evaluation.
 `apps/service/test/integration/recall-evaluation.test.ts` scores it on every `pnpm test` twice and fails if either drops below its recorded baseline: keyword search only (`BASELINE`: first result 16 of 22, first three 18 of 22), and with meaning-based search on the fixture meaning model (`MEANING_BASELINE`: first result 19 of 22, first three 20 of 22).
 The fixture model knows only the concept words listed in `fixture-meaning-model.ts`; add one there when a synthetic question needs it.
 When a change improves the score, raise the baseline in the same commit.
-The owner's real set lives in their Brain; run `jarvis evaluate-recall` against the running service before and after a search change and compare, with meaning-based search ready both times (the report's first lines say how search ranked).
+The owner's real set lives in their Brain; run `attache evaluate-recall` against the running service before and after a search change and compare, with meaning-based search ready both times (the report's first lines say how search ranked).
 
 ## Release
 
@@ -159,11 +159,11 @@ node scripts/build-release.mjs --version 0.1.0 --target windows-x64   # macos-ar
 macOS and Linux build every target; Windows builds only its own, because a Windows file system cannot mark the macOS and Linux programs executable.
 Produces in `release/0.1.0/`:
 
-- `Jarvis-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer for macOS (double-click or `sh`).
-- `Jarvis-Installer-0.1.0-linux-x64.sh` — self-extracting one-step installer for Linux (`sh`).
-- `Jarvis-Installer-0.1.0-windows-x64.cmd` — self-extracting one-step installer for Windows (double-click).
+- `Attache-Installer-0.1.0-macos-arm64.command` — self-extracting one-step installer for macOS (double-click or `sh`).
+- `Attache-Installer-0.1.0-linux-x64.sh` — self-extracting one-step installer for Linux (`sh`).
+- `Attache-Installer-0.1.0-windows-x64.cmd` — self-extracting one-step installer for Windows (double-click).
   Its plain-ASCII batch header hands a PowerShell script (as `-EncodedCommand`) the zip's byte offset; the script copies the zip out, unpacks it with .NET and runs `install.ps1`.
-- `jarvis-0.1.0-<target>.tar.gz` (macOS, Linux) or `jarvis-0.1.0-windows-x64.zip` — the same release as a folder with `install.sh`, or `install.cmd` and `install.ps1`.
+- `attache-0.1.0-<target>.tar.gz` (macOS, Linux) or `attache-0.1.0-windows-x64.zip` — the same release as a folder with `install.sh`, or `install.cmd` and `install.ps1`.
   `scripts/zip.mjs` writes the zip, so no host needs a zip tool.
 - `SHA256SUMS`, covering every artifact built into the folder.
 
@@ -178,7 +178,7 @@ Artifacts are unsigned; notarisation is an external step (see the acceptance rep
 
 `node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source.
 It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
-It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Jarvis as it was.
+It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Attache as it was.
 What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
 The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
 On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.
@@ -211,6 +211,6 @@ Individual suites: `node scripts/test-install.mjs`, `npx playwright test tests/e
 - Database migrations are append-only in `core/db.ts`.
 - Code runs under Node type stripping: no enums, no parameter properties (`erasableSyntaxOnly`).
 - In Markdown, each sentence sits on its own line, and text the owner reads uses the glossary's terms.
-- A count in text the owner reads gives its noun in the right number ("1 file", "2 files"), never `file(s)`; code builds it with `plural` from `@jarvis/contracts`.
+- A count in text the owner reads gives its noun in the right number ("1 file", "2 files"), never `file(s)`; code builds it with `plural` from `@attache/contracts`.
   `pnpm lint` checks all three with `scripts/check-docs.mjs`, which reads the words to avoid from `GLOSSARY.md`, so a word added there is checked from then on.
   Its header says which files and which strings it reads; an avoided word that is also the ordinary name of something else goes in its `ORDINARY_WORDS` list, with the reason.

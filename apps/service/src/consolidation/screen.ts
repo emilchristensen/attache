@@ -1,4 +1,4 @@
-import type { MemorySaveItem } from "@jarvis/contracts";
+import type { MemorySaveItem } from "@attache/contracts";
 import { HttpError } from "../http/router.ts";
 import { slugify } from "../memory/markdown.ts";
 import { normalizeRel } from "../memory/policy.ts";

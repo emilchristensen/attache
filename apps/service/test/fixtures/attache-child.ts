@@ -1,5 +1,5 @@
 /**
- * TEST-ONLY: the `jarvis` executable started from source as a child process,
+ * TEST-ONLY: the `attache` executable started from source as a child process,
  * optionally as if on another operating system, with a paired API client,
  * and a GitHub stand-in that asks for reviews.
  */
@@ -23,8 +23,8 @@ export function childEnv(changes: EnvChanges): NodeJS.ProcessEnv {
   return out;
 }
 
-/** Run a `jarvis` command to completion. `JARVIS_TEST_FAKE_PLATFORM` in `env` picks the operating system it sees. */
-export function jarvisCli(args: string[], env: EnvChanges) {
+/** Run a `attache` command to completion. `ATTACHE_TEST_FAKE_PLATFORM` in `env` picks the operating system it sees. */
+export function attacheCli(args: string[], env: EnvChanges) {
   return spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env: childEnv(env), encoding: "utf8", timeout: 60_000 });
 }
 
@@ -38,7 +38,7 @@ export interface ChildService {
 
 /** A fresh state folder, with room beside it for a data folder. */
 export function newStateDir(): string {
-  const dir = join(tempDir("jarvis-child-"), "state");
+  const dir = join(tempDir("attache-child-"), "state");
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -46,7 +46,7 @@ export function newStateDir(): string {
 /** Every child started here; kill them after each test. */
 export const runningChildren: ChildProcess[] = [];
 
-/** Start `jarvis serve`, pair a client and finish setup on first start. */
+/** Start `attache serve`, pair a client and finish setup on first start. */
 export async function serveChild(stateDir: string, env: EnvChanges): Promise<ChildService> {
   const child = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "serve", "--state-dir", stateDir, "--port", "0"], { env: childEnv(env), stdio: "ignore" });
   runningChildren.push(child);
@@ -60,9 +60,9 @@ export async function serveChild(stateDir: string, env: EnvChanges): Promise<Chi
     }
   }
   if (!url) throw new Error("service did not start");
-  const { code } = JSON.parse(jarvisCli(["pair", "--state-dir", stateDir, "--json"], env).stdout);
-  const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "child-test" }) })).json();
-  const headers = { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-jarvis-client": "1" };
+  const { code } = JSON.parse(attacheCli(["pair", "--state-dir", stateDir, "--json"], env).stdout);
+  const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "child-test" }) })).json();
+  const headers = { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-attache-client": "1" };
   const api = async (method: string, path: string, body?: unknown) => {
     const res = await fetch(`${url}/api/v1${path}`, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
     const parsed = await res.json();
@@ -94,8 +94,8 @@ export interface ReviewRequest {
 }
 
 /**
- * How long ago the stand-in's review requests were made: ten and a half days, so Jarvis says "10 days ago".
- * Half a day away from a whole number of days, because Jarvis reads its clock after the stand-in did, and a
+ * How long ago the stand-in's review requests were made: ten and a half days, so Attache says "10 days ago".
+ * Half a day away from a whole number of days, because Attache reads its clock after the stand-in did, and a
  * request exactly ten days old reads as 9 days whenever the system clock is set back a little in between
  * (Windows Time corrects a virtual machine's clock that way).
  */

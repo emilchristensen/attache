@@ -1,4 +1,4 @@
-import { MemorySaveInput, MemorySaveItem, SourceRefInput, type ProposalView } from "@jarvis/contracts";
+import { MemorySaveInput, MemorySaveItem, SourceRefInput, type ProposalView } from "@attache/contracts";
 import { z } from "zod";
 import { latestDecision, ReviewMachine } from "../review-state/decisions.ts";
 import { reviewPath } from "../review-state/files.ts";

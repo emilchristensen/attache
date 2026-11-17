@@ -1,4 +1,4 @@
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 import type { MemoryChange } from "../memory/store.ts";
 import type { MachineRef } from "./seams.ts";
 
@@ -10,7 +10,7 @@ export interface StagedEntry {
 const SUBJECT_MAX = 120;
 
 /** The trailer that names the Machine a commit came from, read back when merging. */
-export const MACHINE_TRAILER = "Jarvis-Machine";
+export const MACHINE_TRAILER = "Attache-Machine";
 
 type FactOutcome = "added" | "corrected" | "removed";
 

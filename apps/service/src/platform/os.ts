@@ -1,4 +1,4 @@
-/** The operating systems Jarvis runs on. Everything that differs between them lives under `platform/`. */
+/** The operating systems Attache runs on. Everything that differs between them lives under `platform/`. */
 export type Os = "macos" | "linux" | "windows";
 
 const BY_NODE_PLATFORM: Readonly<Record<string, Os>> = { darwin: "macos", linux: "linux", win32: "windows" };
@@ -7,7 +7,7 @@ const BY_NODE_PLATFORM: Readonly<Record<string, Os>> = { darwin: "macos", linux:
 export class UnsupportedPlatformError extends Error {
   readonly platform: string;
   constructor(platform: string) {
-    super(`Jarvis runs on macOS, Linux and Windows. This computer runs ${platform}, which Jarvis does not support.`);
+    super(`Attache runs on macOS, Linux and Windows. This computer runs ${platform}, which Attache does not support.`);
     this.name = "UnsupportedPlatformError";
     this.platform = platform;
   }

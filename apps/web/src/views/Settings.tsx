@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@jarvis/contracts";
+import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@attache/contracts";
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
@@ -181,7 +181,7 @@ function Backups() {
   return (
     <div className="card stack">
       <h3>Backup and export</h3>
-      <p className="small muted">A backup contains your data folder and Jarvis's database (settings, jobs, drafts, receipts). Credentials stay in the secret store and are not exported; reconnect them after a restore.</p>
+      <p className="small muted">A backup contains your data folder and Attache's database (settings, jobs, drafts, receipts). Credentials stay in the secret store and are not exported; reconnect them after a restore.</p>
       <div>
         <button disabled={busy !== null} onClick={() => run("bk", () => post("/backups").then(list.reload), "Backup created")}>
           {busy ? "Creating…" : "Create backup now"}
@@ -199,7 +199,7 @@ function Backups() {
         <p className="small muted">No backups yet.</p>
       )}
       <p className="small muted">
-        Restore into a fresh profile with <code>jarvis restore &lt;file&gt; --data-folder &lt;empty folder&gt;</code>. Uninstall with <code>jarvis-uninstall</code>; it keeps your data unless you pass <code>--delete-data</code>.
+        Restore into a fresh profile with <code>attache restore &lt;file&gt; --data-folder &lt;empty folder&gt;</code>. Uninstall with <code>attache-uninstall</code>; it keeps your data unless you pass <code>--delete-data</code>.
       </p>
     </div>
   );
@@ -266,7 +266,7 @@ export function SettingsView() {
               </dd>
             </dl>
           )}
-          <p className="small muted">If Jarvis stops responding, run <code>jarvis status</code>. Reinstalling repairs the service without touching your data.</p>
+          <p className="small muted">If Attache stops responding, run <code>attache status</code>. Reinstalling repairs the service without touching your data.</p>
         </div>
       </div>
     </div>

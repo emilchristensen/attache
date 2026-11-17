@@ -1,4 +1,4 @@
-import type { ProposalView } from "@jarvis/contracts";
+import type { ProposalView } from "@attache/contracts";
 import { json, type Db } from "../core/db.ts";
 import { latestDecision } from "../review-state/decisions.ts";
 import { parseProposalRecord, proposalStatus, type ProposalRecord } from "./proposal-record.ts";

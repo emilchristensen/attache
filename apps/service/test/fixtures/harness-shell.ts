@@ -14,11 +14,11 @@ const WINDOWS = process.platform === "win32";
 
 export type ShellKind = "posix" | "git-bash" | "cmd";
 
-/** Git Bash, as Git for Windows installs it. `JARVIS_TEST_GIT_BASH` overrides it. */
+/** Git Bash, as Git for Windows installs it. `ATTACHE_TEST_GIT_BASH` overrides it. */
 export function gitBash(): string {
-  const candidates = [process.env.JARVIS_TEST_GIT_BASH, join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe")].filter(Boolean) as string[];
+  const candidates = [process.env.ATTACHE_TEST_GIT_BASH, join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe")].filter(Boolean) as string[];
   const found = candidates.find((c) => existsSync(c));
-  if (!found) throw new Error(`Git Bash was not found at ${candidates.join(" or ")}; install Git for Windows or set JARVIS_TEST_GIT_BASH.`);
+  if (!found) throw new Error(`Git Bash was not found at ${candidates.join(" or ")}; install Git for Windows or set ATTACHE_TEST_GIT_BASH.`);
   return found;
 }
 

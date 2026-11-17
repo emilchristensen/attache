@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { Coverage } from "@jarvis/contracts";
+import type { Coverage } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { unresolvedItems, type ApplyResult, type CandidateWithSource } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
@@ -29,7 +29,7 @@ function candidate(notice: MergeNotice, at: string): CandidateWithSource {
     kind: noticeItemKind(notice.kind),
     title: notice.title ?? `Replication merged ${notice.path}`,
     summary: notice.message,
-    why: "Two Machines changed the Brain at the same time, and Jarvis settled it without asking.",
+    why: "Two Machines changed the Brain at the same time, and Attache settled it without asking.",
     priority: PRIORITY,
     sourceKind: MERGE_NOTICE_SOURCE,
     connectionId: null,

@@ -8,7 +8,7 @@ let svc: TestService;
 let old: string;
 beforeAll(async () => {
   svc = await startTestService();
-  old = mkdtempSync(join(tmpdir(), "jarvis-oldvault-"));
+  old = mkdtempSync(join(tmpdir(), "attache-oldvault-"));
   mkdirSync(join(old, "notes/knowledge"), { recursive: true });
   mkdirSync(join(old, "notes/daily"), { recursive: true });
   mkdirSync(join(old, "generated/wiki"), { recursive: true });
@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterAll(() => svc.stop());
 
-describe("migrating another notes system into Jarvis", () => {
+describe("migrating another notes system into Attache", () => {
   it("archives a folder verbatim under evidence/archive, honouring excludes, and re-runs idempotently", async () => {
     const out = await svc.post("/memory/archive", { path: old, label: "old-notes", exclude: ["generated/", "notes/CACHE.md"], origin: "~/OldNotes at commit abc1234" });
     expect(out).toMatchObject({ relPath: "evidence/archive/old-notes/ARCHIVE.md", written: 2, unchanged: 0, excluded: 2, files: 2 });

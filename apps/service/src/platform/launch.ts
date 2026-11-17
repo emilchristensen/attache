@@ -42,10 +42,10 @@ export function launchTool(path: string, args: string[], os: Os = currentOs()): 
   try {
     text = readFileSync(path, "utf8");
   } catch (e) {
-    throw new UnlaunchableToolError(`Jarvis could not read ${path}: ${(e as Error).message}`);
+    throw new UnlaunchableToolError(`Attache could not read ${path}: ${(e as Error).message}`);
   }
   const target = NPM_SHIM_TARGET.exec(text)?.[1];
-  if (!target) throw new UnlaunchableToolError(`${path} is a batch file that was not written by npm, so Jarvis cannot start it safely. Install the tool's native Windows version instead.`);
+  if (!target) throw new UnlaunchableToolError(`${path} is a batch file that was not written by npm, so Attache cannot start it safely. Install the tool's native Windows version instead.`);
   const resolved = join(dirname(path), target);
   return SCRIPT.test(resolved) ? { command: process.execPath, args: [resolved, ...args] } : { command: resolved, args };
 }

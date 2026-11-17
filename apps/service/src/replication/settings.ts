@@ -1,4 +1,4 @@
-import type { ReplicationStatus } from "@jarvis/contracts";
+import type { ReplicationStatus } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 
 /** Replication as this Machine has it set up. Local state: never part of the Brain. */

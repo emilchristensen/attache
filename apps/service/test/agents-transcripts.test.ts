@@ -10,7 +10,7 @@ const talk: Array<[string, string]> = [
 
 describe("agent transcripts", () => {
   it("Claude Code: keeps the conversation, drops tools, thinking, reminders and subagents", () => {
-    const p = parseClaudeCode(claudeTranscript("s1", "/work/jarvis", talk));
+    const p = parseClaudeCode(claudeTranscript("s1", "/work/attache", talk));
     expect(p.turns.map((t) => [t.role, t.text])).toEqual([
       ["user", talk[0]![0]],
       ["assistant", talk[0]![1]],
@@ -18,16 +18,16 @@ describe("agent transcripts", () => {
       ["assistant", talk[1]![1]],
     ]);
     expect(p.title).toBe("Fixture session");
-    expect(p.cwd).toBe("/work/jarvis");
+    expect(p.cwd).toBe("/work/attache");
     expect(JSON.stringify(p)).not.toMatch(/injected context|secret-looking|private reasoning|subagent chatter/);
   });
 
-  it("Codex: skips developer messages (where Jarvis's own memory lands) and environment context", () => {
+  it("Codex: skips developer messages (where Attache's own memory lands) and environment context", () => {
     const p = parseCodex(codexRollout("019a", "/work/api", talk));
     expect(p.turns).toHaveLength(4);
     expect(p.turns[0]).toMatchObject({ role: "user", text: talk[0]![0] });
     expect(p.cwd).toBe("/work/api");
-    expect(JSON.stringify(p)).not.toMatch(/Jarvis memory|environment_context/);
+    expect(JSON.stringify(p)).not.toMatch(/Attache memory|environment_context/);
   });
 
   it("Antigravity: user and model steps only", () => {
@@ -57,7 +57,7 @@ describe("session log entries", () => {
   });
 
   it("names worktree checkouts after their repository", () => {
-    expect(projectLabel("/Users/x/.t3/worktrees/jarvis/t3code-10bf2bc4")).toBe("jarvis");
+    expect(projectLabel("/Users/x/.t3/worktrees/attache/t3code-10bf2bc4")).toBe("attache");
     expect(projectLabel("/Users/x/Projects/api/")).toBe("api");
     expect(projectLabel(null)).toBeNull();
   });
@@ -78,12 +78,12 @@ describe("session-start context", () => {
       dataFolder: "/data",
       identity: { name: "Alex", email: "a@x.dk" },
       notes: [{ type: "project", title: "Kestrel" }, ...Array.from({ length: 40 }, (_, i) => ({ type: "project", title: `P${i}` }))],
-      searchCommand: { line: "jarvis search", powershell: null },
+      searchCommand: { line: "attache search", powershell: null },
     });
     expect(text).toContain("- Name: Alex");
     expect(text).toContain("- Projects (41): Kestrel; P0; P1;");
     expect(text).toContain("; P28; and 11 more");
-    expect(text).toMatch(/ {4}jarvis search "your query"$/m);
+    expect(text).toMatch(/ {4}attache search "your query"$/m);
     expect(text).not.toContain("PowerShell");
   });
 
@@ -91,15 +91,15 @@ describe("session-start context", () => {
     const { searchCommand } = await import("../src/agents/search-command.ts");
     const { buildSessionContext } = await import("../src/agents/context.ts");
     // macOS and Linux: one POSIX command.
-    expect(searchCommand({ os: "macos", execPath: "/opt/jarvis/node", entry: "/opt/jarvis/jarvis-service.mjs", stateDir: "/s/it's" })).toEqual({
-      line: `'/opt/jarvis/node' '/opt/jarvis/jarvis-service.mjs' search --state-dir '/s/it'\\''s'`,
+    expect(searchCommand({ os: "macos", execPath: "/opt/attache/node", entry: "/opt/attache/attache-service.mjs", stateDir: "/s/it's" })).toEqual({
+      line: `'/opt/attache/node' '/opt/attache/attache-service.mjs' search --state-dir '/s/it'\\''s'`,
       powershell: null,
     });
     // Windows: Git Bash (Claude Code) and cmd.exe run the quoted line; PowerShell (Codex) needs the call operator first.
-    const windows = searchCommand({ os: "windows", execPath: "C:\\Jarvis\\node.exe", entry: "C:\\Jarvis\\jarvis-service.mjs", stateDir: "C:\\Jarvis\\state" });
+    const windows = searchCommand({ os: "windows", execPath: "C:\\Attache\\node.exe", entry: "C:\\Attache\\attache-service.mjs", stateDir: "C:\\Attache\\state" });
     expect(windows).toEqual({
-      line: `"C:/Jarvis/node.exe" "C:/Jarvis/jarvis-service.mjs" search --state-dir "C:/Jarvis/state"`,
-      powershell: `& "C:/Jarvis/node.exe" "C:/Jarvis/jarvis-service.mjs" search --state-dir "C:/Jarvis/state"`,
+      line: `"C:/Attache/node.exe" "C:/Attache/attache-service.mjs" search --state-dir "C:/Attache/state"`,
+      powershell: `& "C:/Attache/node.exe" "C:/Attache/attache-service.mjs" search --state-dir "C:/Attache/state"`,
     });
     const text = buildSessionContext({ now: new Date("2026-10-02T10:00:00Z"), dataFolder: "C:/data", identity: null, notes: [], searchCommand: windows });
     expect(text).toContain(`    ${windows.line} "your query"`);

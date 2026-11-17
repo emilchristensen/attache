@@ -1,12 +1,12 @@
 /**
- * The two ways Jarvis reaches Jira and Confluence, behind one interface so
+ * The two ways Attache reaches Jira and Confluence, behind one interface so
  * the adapters keep a single set of Source refresh, attention, coverage and recovery
  * rules:
  *
  * - "claude-ai" (default): the user's claude.ai Atlassian Rovo connector
  *   (Rovo MCP v1 tools) through the gated Claude Code session, like Slack,
  *   Gmail and Calendar. Works wherever the organization allows claude.ai.
- * - "oauth" / "api-token": Jarvis's own MCP client against the Rovo MCP v2
+ * - "oauth" / "api-token": Attache's own MCP client against the Rovo MCP v2
  *   endpoint (atlassian.ts), for organizations that allow other clients.
  *
  * Results are returned raw; the adapters normalise them.
@@ -104,7 +104,7 @@ function finishNotes(stuck: boolean, uncounted: boolean): string[] {
   return [...(stuck ? ["More results exist but the next page had no usable cursor"] : []), ...(uncounted ? ["Showing a full first page; the connector does not say whether more exist"] : [])];
 }
 
-// ---- direct: Jarvis's MCP client, Rovo MCP v2 -------------------------------------------------
+// ---- direct: Attache's MCP client, Rovo MCP v2 -------------------------------------------------
 
 function directBackend(ctx: AdapterContext): AtlassianBackend {
   const listing = async (q: Query, page: (cursor: string | null) => Promise<{ items: unknown[]; next: string | null; stuck: boolean; uncounted?: boolean }>, maxPages: number): Promise<Listing> => {

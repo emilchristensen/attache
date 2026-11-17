@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { RecallQuestionSet, type RecallEvaluationReport } from "@jarvis/contracts";
+import { RecallQuestionSet, type RecallEvaluationReport } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import type { CliIo } from "./memory-commands.ts";
 import { ServiceClient } from "./client.ts";
@@ -8,14 +8,14 @@ import { describeIssues } from "../memory/recall-evaluation.ts";
 
 const MAX_SET_BYTES = 2_000_000;
 
-export const EVALUATE_RECALL_USAGE = `Usage: jarvis evaluate-recall [--set questions.json] [--json]
+export const EVALUATE_RECALL_USAGE = `Usage: attache evaluate-recall [--set questions.json] [--json]
 
 Scores search against a question set: how often the expected fact is the first result, and how often it is in the first three.
 Without --set, uses the set kept in the Brain at evaluation/recall-questions.json.
 A set is JSON: { "questions": [{ "question": "…", "note": "memory/projects/x.md", "fact": "Status" }] },
 where "note" is the note's path inside the Brain and "fact" the subject of the current fact that answers the question.`;
 
-/** `jarvis evaluate-recall`: score the running service's search against a question set. */
+/** `attache evaluate-recall`: score the running service's search against a question set. */
 export async function evaluateRecallCommand(argv: string[], paths: ServicePaths, io: CliIo) {
   if (argv.includes("--help")) return io.out(EVALUATE_RECALL_USAGE);
   const setFile = flag(argv, "set");

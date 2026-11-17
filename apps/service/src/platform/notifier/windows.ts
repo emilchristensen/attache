@@ -7,19 +7,19 @@ const MAX = 240;
 /** Starting Windows PowerShell and the Windows Runtime takes a few seconds on a slow computer. */
 const TIMEOUT_MS = 30_000;
 
-/** Why Windows does not show Jarvis's notifications, by its `NotificationSetting`. */
+/** Why Windows does not show Attache's notifications, by its `NotificationSetting`. */
 const SETTINGS: Readonly<Record<string, string>> = {
-  DisabledForApplication: "notifications from Jarvis are turned off in Windows Settings (System > Notifications)",
+  DisabledForApplication: "notifications from Attache are turned off in Windows Settings (System > Notifications)",
   DisabledForUser: "notifications are turned off for this Windows user",
   DisabledByGroupPolicy: "notifications are turned off by group policy",
-  DisabledByManifest: "Windows does not let Jarvis show notifications",
+  DisabledByManifest: "Windows does not let Attache show notifications",
 };
 
 const notificationSettingReason = (setting: string): string => SETTINGS[setting] ?? `Windows reports notifications as ${setting}`;
 
-/** The app id Windows knows Jarvis by, and the name it shows on each notification. */
+/** The app id Windows knows Attache by, and the name it shows on each notification. */
 export function toastSender(instance: string): { app: string; name: string } {
-  return { app: `dev.jarvis.${instance}`, name: instance === "default" ? "Jarvis" : `Jarvis (${instance})` };
+  return { app: `dev.attache.${instance}`, name: instance === "default" ? "Attache" : `Attache (${instance})` };
 }
 
 async function ask(request: PowerShellRequest, env: Env): Promise<NotifierState> {
@@ -30,7 +30,7 @@ async function ask(request: PowerShellRequest, env: Env): Promise<NotifierState>
 }
 
 /**
- * Windows notifications (toasts) from Jarvis, through Windows PowerShell and
+ * Windows notifications (toasts) from Attache, through Windows PowerShell and
  * the Windows Runtime. The text travels on stdin, never in process arguments.
  */
 export function windowsNotifier(instance: string, env: Env = process.env): Notifier {
@@ -40,7 +40,7 @@ export function windowsNotifier(instance: string, env: Env = process.env): Notif
     notify: (title, body) => ask({ op: "show", ...sender, title: title.slice(0, MAX), body: body.slice(0, MAX) }, env),
     async forget() {
       const r = await runPowerShell(TOAST_SCRIPT, { op: "forget", ...sender }, { env, timeoutMs: TIMEOUT_MS });
-      if (!r.ok) throw new Error(`Jarvis could not remove its notification sender from Windows: ${r.why}`);
+      if (!r.ok) throw new Error(`Attache could not remove its notification sender from Windows: ${r.why}`);
     },
   };
 }

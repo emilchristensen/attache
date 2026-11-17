@@ -47,7 +47,7 @@ const gitEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: 
 
 /**
  * A bare repository that refuses anything but fast-forward pushes, so a test
- * fails loudly if Jarvis ever tried to rewrite what another Machine pushed.
+ * fails loudly if Attache ever tried to rewrite what another Machine pushed.
  */
 export function createRemote(): TestRemote {
   const dir = testFolder("remote");
@@ -56,7 +56,7 @@ export function createRemote(): TestRemote {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env: gitEnv, encoding: "utf8", stdio: "pipe" }).trim();
   git("init", "--bare", "--quiet", "-b", "main", url);
   git("-C", url, "config", "receive.denyNonFastForwards", "true");
-  // Deleting the Brain's branch is refused; Jarvis deletes nothing but a retired Reader lease generation.
+  // Deleting the Brain's branch is refused; Attache deletes nothing but a retired Reader lease generation.
   git("-C", url, "config", "receive.denyDeleteCurrent", "refuse");
   return {
     url,
@@ -71,14 +71,14 @@ export function createRemote(): TestRemote {
 const HOLD_LIMIT_S = 15;
 
 function holdLeaseWrites(repo: string, count: number): { arrived(): number; stop(): void } {
-  const gate = mkdtempSync(join(tmpdir(), "jarvis-it-gate-"));
+  const gate = mkdtempSync(join(tmpdir(), "attache-it-gate-"));
   const hook = join(repo, "hooks", "pre-receive");
   const polls = HOLD_LIMIT_S * 20;
   const script = [
     "#!/bin/sh",
     `gate='${gate}'`,
     "lease=no",
-    'while read old new ref; do case "$ref" in refs/jarvis/*) lease=yes ;; esac; done',
+    'while read old new ref; do case "$ref" in refs/attache/*) lease=yes ;; esac; done',
     '[ "$lease" = yes ] || exit 0',
     ': > "$gate/$$"',
     "polls=0",

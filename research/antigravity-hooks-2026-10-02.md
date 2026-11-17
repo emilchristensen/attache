@@ -66,10 +66,10 @@ Top level is a map of named hook groups, each with optional `enabled` (default `
 
 ```json
 {
-  "jarvis": {
+  "attache": {
     "enabled": true,
-    "PreInvocation": [{ "type": "command", "command": "jarvis hook antigravity pre-invocation", "timeout": 30 }],
-    "Stop": [{ "type": "command", "command": "jarvis hook antigravity stop", "timeout": 30 }],
+    "PreInvocation": [{ "type": "command", "command": "attache hook antigravity pre-invocation", "timeout": 30 }],
+    "Stop": [{ "type": "command", "command": "attache hook antigravity stop", "timeout": 30 }],
     "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "...", "timeout": 10 }] }]
   }
 }
@@ -78,7 +78,7 @@ Top level is a map of named hook groups, each with optional `enabled` (default `
 Tool events wrap handlers in `{ "matcher", "hooks": [...] }`.
 Invocation and Stop events take handlers directly, matching the shape claude-mem installs (https://docs.claude-mem.ai/antigravity-cli/setup).
 Handler `type` is only `"command"`, `timeout` is in seconds, default 30 (https://antigravity.google/docs/hooks/).
-The named top-level key lets an installer own one entry (for example `"jarvis"`) without touching other tools' hooks.
+The named top-level key lets an installer own one entry (for example `"attache"`) without touching other tools' hooks.
 
 ### stdin input (camelCase)
 
@@ -128,7 +128,7 @@ Since v2.14.0 a blocking Stop hook no longer hangs the agent forever (same sourc
 No compaction event is documented, and the CLI has no `/compact` command; feature request #999 is open as of 2026-09-11 (https://github.com/google-antigravity/antigravity-cli/issues/999).
 The binary contains an internal `hooks.NewContextSummaryHook`, which suggests built-in summarization, but nothing a third party can hook (local `strings` check, **unverified** behaviour).
 
-## 2. Extension points for Jarvis
+## 2. Extension points for Attache
 
 ### (a) Memory context at session start
 
@@ -141,15 +141,15 @@ Ranked by fit:
    Files in `rules/` must have YAML front matter with `trigger: always_on|model_decision|glob|manual`, and a missing or invalid one silently excludes the rule (same source).
    Limits: 24,000 bytes per file and a 20,000-token aggregate budget for global and always-on rules; oversized rules demote to on-demand references (same source; budget added in 2.0 v2.17.0).
    `@path/to/file` inlining works in `AGENTS.md` and rule files since 2.0 v2.11.0 (https://antigravity.google/docs/changelog).
-   A Jarvis-owned `~/.gemini/config/rules/jarvis-memory.md` with `trigger: always_on`, rewritten by Jarvis on a schedule, is static but needs no hook.
+   An Attache-owned `~/.gemini/config/rules/attache-memory.md` with `trigger: always_on`, rewritten by Attache on a schedule, is static but needs no hook.
    Note `~/.gemini/GEMINI.md` is also Gemini CLI's global context file and already exists here (2.3 KB), so prefer the `config/rules/` file to avoid editing a shared file.
-3. MCP server so the agent can call Jarvis recall tools: `~/.gemini/config/mcp_config.json` (global) or `.agents/mcp_config.json` (workspace), same for all three products (https://antigravity.google/docs/mcp/).
-   Shape: `{ "mcpServers": { "jarvis": { "command": "...", "args": [], "env": {}, "cwd": "..." } } }`; remote servers use `serverUrl` (https://antigravity.google/docs/cli/gcli-migration/).
+3. MCP server so the agent can call Attache recall tools: `~/.gemini/config/mcp_config.json` (global) or `.agents/mcp_config.json` (workspace), same for all three products (https://antigravity.google/docs/mcp/).
+   Shape: `{ "mcpServers": { "attache": { "command": "...", "args": [], "env": {}, "cwd": "..." } } }`; remote servers use `serverUrl` (https://antigravity.google/docs/cli/gcli-migration/).
    The local `~/.gemini/config/mcp_config.json` is currently 0 bytes, so an installer must handle an empty file.
 
 ### (b) Transcript capture
 
-- `Stop` hook with `fullyIdle: true` gives `conversationId` and `transcriptPath`; Jarvis reads the transcript from there (https://antigravity.google/docs/hooks/).
+- `Stop` hook with `fullyIdle: true` gives `conversationId` and `transcriptPath`; Attache reads the transcript from there (https://antigravity.google/docs/hooks/).
   `Stop` fires per execution (turn), not once per session, so capture must be idempotent and incremental per `conversationId`.
   There is no session-end or pre-compaction event, so there is no exact equivalent of Claude Code's SessionEnd/PreCompact capture.
 - `PostInvocation` can capture each model response as it lands (claude-mem reads the `PLANNER_RESPONSE` node this way, **community**, https://docs.claude-mem.ai/antigravity-cli/setup).
@@ -208,7 +208,7 @@ Gemini CLI is not installed here (`gemini` not on PATH; `~/.gemini/settings.json
 - `SessionStart.source`: `startup|resume|clear`; `SessionEnd.reason`: `exit|clear|logout|prompt_input_exit|other`; `PreCompress.trigger`: `auto|manual` (reference).
 - Injection: `SessionStart` returns `hookSpecificOutput.additionalContext`, "Injected as the first turn in history" interactively and "Prepended to the user's prompt" non-interactively; `systemMessage` is shown to the user (reference).
 - `SessionEnd` and `PreCompress` are advisory: async, not awaited, only `systemMessage` honoured, cannot block or alter compression (reference).
-  A capture hook must therefore copy `transcript_path` quickly or hand the path to a detached Jarvis process.
+  A capture hook must therefore copy `transcript_path` quickly or hand the path to a detached Attache process.
 - Exit codes: 0 parses stdout JSON, 2 blocks with stderr as reason, others warn and continue (reference).
 - Env: `GEMINI_PROJECT_DIR`, `GEMINI_SESSION_ID`, `GEMINI_CWD` (https://geminicli.com/docs/hooks/).
 - Trust: project hooks are fingerprinted; a changed name or command marks them untrusted and prompts before running (https://geminicli.com/docs/hooks/).

@@ -13,7 +13,7 @@ import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { fixtureModelDescription } from "../../apps/service/test/fixtures/fixture-meaning-model.ts";
 
 export const ROOT = resolve(import.meta.dirname, "../..");
-const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
+const BUNDLE = join(ROOT, "apps/service/dist/attache-service.mjs");
 const NODE = process.execPath;
 /** Vite's own entry, run with this Node: `npx` is a batch file on Windows, which Node does not start without a shell. */
 const VITE = join(ROOT, "apps/web/node_modules/vite/bin/vite.js");
@@ -51,7 +51,7 @@ function waitForLine(child: ChildProcess, re: RegExp, timeoutMs = 15_000): Promi
 
 export function buildAll() {
   execFileSync(NODE, [join(ROOT, "apps/service/build.mjs")], { stdio: "ignore" });
-  if (!existsSync(join(ROOT, "apps/web/dist/index.html")) || process.env.JARVIS_E2E_REBUILD_WEB !== "0") execFileSync(NODE, [VITE, "build"], { cwd: join(ROOT, "apps/web"), stdio: "ignore" });
+  if (!existsSync(join(ROOT, "apps/web/dist/index.html")) || process.env.ATTACHE_E2E_REBUILD_WEB !== "0") execFileSync(NODE, [VITE, "build"], { cwd: join(ROOT, "apps/web"), stdio: "ignore" });
 }
 
 export function makeVault(dir: string) {
@@ -64,9 +64,9 @@ export function makeVault(dir: string) {
 
 export async function startStack(): Promise<Stack> {
   // A space and non-ASCII letters in every path, as in many owners' home folders.
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-e2e-state æøå-"));
-  const base = mkdtempSync(join(tmpdir(), "jarvis-e2e æøå-"));
-  const dataDir = join(base, "Jarvis");
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-e2e-state æøå-"));
+  const base = mkdtempSync(join(tmpdir(), "attache-e2e æøå-"));
+  const dataDir = join(base, "Attache");
   const vaultDir = join(base, "vault");
   makeVault(vaultDir);
   const agentHome = join(base, "home");
@@ -75,17 +75,17 @@ export async function startStack(): Promise<Stack> {
   const fixture = spawn(NODE, [join(ROOT, "apps/service/test/fixtures/run-fixture-server.ts"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
   const fixtureUrl = await waitForLine(fixture, /FIXTURE_READY (\S+)/);
   // claude.ai connectors go through the fixture CLI with an empty Claude config: journeys never reach a real account.
-  const claude = { JARVIS_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures", process.platform === "win32" ? "fake-claude.cmd" : "fake-claude.mjs"), JARVIS_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-e2e-claude-")) };
+  const claude = { ATTACHE_CLAUDE_BIN: join(ROOT, "apps/service/test/fixtures", process.platform === "win32" ? "fake-claude.cmd" : "fake-claude.mjs"), ATTACHE_FAKE_CLAUDE_URL: fixtureUrl, CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "attache-e2e-claude-")) };
   // The meaning model comes from the fixture server, never from Hugging Face.
   const meaningModel = join(base, "meaning-model.json");
   writeFileSync(meaningModel, JSON.stringify(fixtureModelDescription(`${fixtureUrl}/meaning-model`)));
-  const env = { ...process.env, JARVIS_MEANING_MODEL: meaningModel, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_TEST_ENDPOINTS: "1", JARVIS_FIXTURE_URL: fixtureUrl, JARVIS_INSTANCE: "e2e", JARVIS_AGENT_HOME: agentHome, JARVIS_LOCK_DIR: join(base, "locks"), ...claude };
+  const env = { ...process.env, ATTACHE_MEANING_MODEL: meaningModel, ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ATTACHE_TEST_ENDPOINTS: "1", ATTACHE_FIXTURE_URL: fixtureUrl, ATTACHE_INSTANCE: "e2e", ATTACHE_AGENT_HOME: agentHome, ATTACHE_LOCK_DIR: join(base, "locks"), ...claude };
   let service: ChildProcess | null = null;
   // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
   let port = 0;
   const startService = async () => {
     service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
-    await waitForLine(service, /jarvis service listening/);
+    await waitForLine(service, /attache service listening/);
     port = boundPort(stateDir);
   };
   const stopService = async () => {
@@ -125,14 +125,14 @@ const HARNESS_SESSION_ENV: Record<string, (session: string) => Record<string, st
 };
 
 /**
- * Save items the way a Harness does: it starts Jarvis's MCP server, calls the
+ * Save items the way a Harness does: it starts Attache's MCP server, calls the
  * save tool from one of its sessions, and the owner accepts the confirmation.
  */
 export async function harnessSave(stack: Stack, items: unknown[], origin: { agent: string; session: string }) {
   const sessionEnv = HARNESS_SESSION_ENV[origin.agent];
   if (!sessionEnv) throw new Error(`No session environment for Harness ${origin.agent}`);
   const base = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && !/^(CLAUDECODE|CLAUDE_CODE_|CODEX_|ANTIGRAVITY_)/.test(e[0])));
-  const transport = new StdioClientTransport({ command: NODE, args: [BUNDLE, "mcp", "--state-dir", stack.stateDir], env: { ...base, JARVIS_CREDENTIAL_STORE: "file", ...sessionEnv(origin.session) }, stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: NODE, args: [BUNDLE, "mcp", "--state-dir", stack.stateDir], env: { ...base, ATTACHE_CREDENTIAL_STORE: "file", ...sessionEnv(origin.session) }, stderr: "pipe" });
   const client = new Client({ name: origin.agent, version: "1.0.0" }, { capabilities: { elicitation: { form: {} } } });
   client.setRequestHandler(ElicitRequestSchema, async () => ({ action: "accept", content: {} }));
   await client.connect(transport);

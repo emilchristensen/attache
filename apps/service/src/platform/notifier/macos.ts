@@ -15,7 +15,7 @@ export const macosNotifier: Notifier = {
   async notify(title, body) {
     const state = await check();
     if (!state.available) return state;
-    const r = await run(OSASCRIPT, ["-"], { input: `display notification "${esc(body)}" with title "Jarvis" subtitle "${esc(title)}"`, timeoutMs: 5000 });
+    const r = await run(OSASCRIPT, ["-"], { input: `display notification "${esc(body)}" with title "Attache" subtitle "${esc(title)}"`, timeoutMs: 5000 });
     return r.code === 0 ? { available: true } : { available: false, reason: r.stderr.trim() || `osascript exited with ${r.code}` };
   },
 };

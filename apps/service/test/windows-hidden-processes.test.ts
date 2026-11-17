@@ -28,9 +28,9 @@ function processStarts(text: string): string[] {
 /**
  * The service runs in the background without a console. On Windows, a console
  * program it starts without `windowsHide` flashes a window on the owner's
- * screen, so every process Jarvis starts hides it.
+ * screen, so every process Attache starts hides it.
  */
-describe("processes Jarvis starts", () => {
+describe("processes Attache starts", () => {
   it("hide their console window on Windows", () => {
     const shown: string[] = [];
     for (const file of sources(SRC)) {

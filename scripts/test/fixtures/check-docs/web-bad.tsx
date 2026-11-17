@@ -2,7 +2,7 @@
 const LABELS = { label: "Sync", hint: "Nothing to see" }; // avoided
 
 export function Bad({ notify }: { notify: (message: string) => void }) {
-  const message = `Jarvis will sync ${LABELS.label} now`; // avoided
+  const message = `Attache will sync ${LABELS.label} now`; // avoided
   return (
     <section>
       <h3>Sync settings</h3> {/* avoided */}

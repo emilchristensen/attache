@@ -97,7 +97,7 @@ describe("Reader failover", () => {
     // Both wake past the Mac's silence at the same moment, check together and both find the lease lapsed.
     const lapse = await lapseOf(pc);
     for (const m of [pc, laptop]) m.clock.skip(lapse + CHECK - m.clock.now().getTime());
-    const leaseCommits = () => Number(world!.remote.git("rev-list", "--count", "--glob=refs/jarvis/*"));
+    const leaseCommits = () => Number(world!.remote.git("rev-list", "--count", "--glob=refs/attache/*"));
     const before = leaseCommits();
     const held = world.remote.holdLeaseWrites(2);
     await Promise.all([pc.clock.advance(CHECK), laptop.clock.advance(CHECK)]);

@@ -1,4 +1,4 @@
-import type { HarnessSettingView } from "@jarvis/contracts";
+import type { HarnessSettingView } from "@attache/contracts";
 import { put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Link, Loading, useAction } from "../components/ui.tsx";

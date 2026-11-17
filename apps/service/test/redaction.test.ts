@@ -27,7 +27,7 @@ describe("The credential scan and redaction agree on what a secret is", () => {
     const held = "plain-looking-connection-secret-42";
     registerSecret(held);
     expect(redact(`token ${held}`)).toBe("token [REDACTED]");
-    expect(findSecrets(`first\n${held}`)).toEqual([{ line: 2, kind: "a secret Jarvis holds" }]);
+    expect(findSecrets(`first\n${held}`)).toEqual([{ line: 2, kind: "a secret Attache holds" }]);
   });
 
   it("ordinary text is neither redacted nor found", () => {

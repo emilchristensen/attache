@@ -2,11 +2,11 @@
 /**
  * Build locally installable, unsigned release artifacts for one target
  * (`scripts/release-targets.mjs`), by default this computer's:
- *   release/<version>/jarvis-<version>-<target>.tar.gz   extracted release, macOS and Linux (install.sh inside)
- *   release/<version>/jarvis-<version>-windows-x64.zip   extracted release, Windows (install.cmd inside)
- *   release/<version>/Jarvis-Installer-<version>-macos-arm64.command   one-step installer (macOS)
- *   release/<version>/Jarvis-Installer-<version>-linux-x64.sh          one-step installer (Linux)
- *   release/<version>/Jarvis-Installer-<version>-windows-x64.cmd       one-step installer (Windows)
+ *   release/<version>/attache-<version>-<target>.tar.gz   extracted release, macOS and Linux (install.sh inside)
+ *   release/<version>/attache-<version>-windows-x64.zip   extracted release, Windows (install.cmd inside)
+ *   release/<version>/Attache-Installer-<version>-macos-arm64.command   one-step installer (macOS)
+ *   release/<version>/Attache-Installer-<version>-linux-x64.sh          one-step installer (Linux)
+ *   release/<version>/Attache-Installer-<version>-windows-x64.cmd       one-step installer (Windows)
  *   release/<version>/SHA256SUMS                         every artifact in the folder
  *
  * The Node.js runtime is bundled (BUNDLED_NODE_VERSION in release-targets.mjs; Node 24 LTS has SQLite FTS5 built in),
@@ -26,13 +26,13 @@ import { zipFolder } from "./zip.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const arg = (name) => (process.argv.includes(`--${name}`) ? process.argv[process.argv.indexOf(`--${name}`) + 1] : undefined);
-const VERSION = arg("version") ?? process.env.JARVIS_VERSION ?? JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
+const VERSION = arg("version") ?? process.env.ATTACHE_VERSION ?? JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 const TARGET = chooseTarget(arg("target"));
 const T = RELEASE_TARGETS[TARGET];
 const WINDOWS = T.os === "windows";
 const NODE_VERSION = BUNDLED_NODE_VERSION;
 const OUT = join(ROOT, "release", VERSION);
-const STAGE = join(OUT, `.stage-${TARGET}`, `jarvis-${VERSION}`);
+const STAGE = join(OUT, `.stage-${TARGET}`, `attache-${VERSION}`);
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit", ...opts });
 const sha256 = (file) =>
   new Promise((res, rej) => {
@@ -91,26 +91,26 @@ function stageInstallers(installerName) {
     }
   }
   const eol = WINDOWS ? "\r\n" : "\n";
-  const readme = [`Jarvis ${VERSION} for ${T.label}`, "", `Install: ${T.howToInstall(installerName)}.`, `The installer bundles its own Node.js runtime (v${NODE_VERSION}); no developer tools are needed.`, `Uninstall: ${T.uninstall} (keeps your data unless --delete-data).`, ""];
+  const readme = [`Attache ${VERSION} for ${T.label}`, "", `Install: ${T.howToInstall(installerName)}.`, `The installer bundles its own Node.js runtime (v${NODE_VERSION}); no developer tools are needed.`, `Uninstall: ${T.uninstall} (keeps your data unless --delete-data).`, ""];
   writeFileSync(join(STAGE, "README.txt"), readme.join(eol));
 }
 
 /** Pack the staged release: a tarball for macOS and Linux, a zip for Windows. */
 function packArchive(archivePath) {
-  if (WINDOWS) return zipFolder(STAGE, `jarvis-${VERSION}`, archivePath);
+  if (WINDOWS) return zipFolder(STAGE, `attache-${VERSION}`, archivePath);
   // No macOS extended attributes (GNU tar warns about each one) and no builder's user id in the archive.
   const portable = process.platform === "darwin" ? ["--no-xattrs", "--no-mac-metadata", "--uid", "0", "--gid", "0", "--uname", "root", "--gname", "root"] : ["--owner=0", "--group=0", "--numeric-owner"];
-  run("tar", [...portable, "-czf", archivePath, "-C", join(STAGE, ".."), `jarvis-${VERSION}`], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+  run("tar", [...portable, "-czf", archivePath, "-C", join(STAGE, ".."), `attache-${VERSION}`], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
 }
 
 async function main() {
-  console.log(`Building Jarvis ${VERSION} for ${T.label} (Node ${NODE_VERSION})`);
+  console.log(`Building Attache ${VERSION} for ${T.label} (Node ${NODE_VERSION})`);
   const archiveName = releaseArchive(VERSION, TARGET);
   const installerName = T.installer(VERSION);
   mkdirSync(OUT, { recursive: true });
   for (const f of [archiveName, installerName, ".stage-" + TARGET]) rmSync(join(OUT, f), { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
-  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, JARVIS_VERSION: VERSION } });
+  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, ATTACHE_VERSION: VERSION } });
   buildWeb();
 
   const node = await nodeRuntime();
@@ -124,8 +124,8 @@ async function main() {
   copyFileSync(node, runtime);
   chmodSync(runtime, 0o755);
   mkdirSync(join(STAGE, "service"), { recursive: true });
-  copyFileSync(join(ROOT, "apps/service/dist/jarvis-service.mjs"), join(STAGE, "service/jarvis-service.mjs"));
-  copyFileSync(join(ROOT, "apps/service/dist/jarvis-agent-hook.mjs"), join(STAGE, "service/jarvis-agent-hook.mjs"));
+  copyFileSync(join(ROOT, "apps/service/dist/attache-service.mjs"), join(STAGE, "service/attache-service.mjs"));
+  copyFileSync(join(ROOT, "apps/service/dist/attache-agent-hook.mjs"), join(STAGE, "service/attache-agent-hook.mjs"));
   // ONNX Runtime's WebAssembly files, loaded from the bundle's folder to run the meaning model; the same on every platform.
   for (const f of ["ort-wasm-simd-threaded.wasm", "ort-wasm-simd-threaded.mjs"]) copyFileSync(join(ROOT, "apps/service/dist", f), join(STAGE, "service", f));
   cpSync(join(ROOT, "apps/web/dist"), join(STAGE, "web"), { recursive: true, filter: (s) => !s.endsWith(".map") });

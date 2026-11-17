@@ -20,7 +20,7 @@ const OWNER = "{{owner}}";
 
 /** One argument of a Windows command line, quoted the way programs split it (CommandLineToArgvW). */
 function windowsArgument(s: string): string {
-  if (/[\r\n]/.test(s)) throw new Error(`A Jarvis path cannot contain a line break: ${JSON.stringify(s)}`);
+  if (/[\r\n]/.test(s)) throw new Error(`An Attache path cannot contain a line break: ${JSON.stringify(s)}`);
   if (s && !/[\s"]/.test(s)) return s;
   // Backslashes are literal except before a quote, so those (and the ones before the closing quote) are doubled.
   return `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
@@ -29,7 +29,7 @@ function windowsArgument(s: string): string {
 /**
  * The logon task: started by the owner's own logon, as the owner, without
  * raised rights, through a headless console host so no window opens. It runs
- * `jarvis service run`, which keeps the service running (Task Scheduler does
+ * `attache service run`, which keeps the service running (Task Scheduler does
  * not restart a program that exits) and gives it the environment launchd and
  * systemd set on macOS and Linux, which a task cannot set.
  */
@@ -39,13 +39,13 @@ export function logonTaskXml(loc: PlatformLocations, spec: ServiceSpec, env: Env
   const args = [
     "--headless",
     join(current, "runtime", "node.exe"),
-    join(current, "service", "jarvis-service.mjs"),
+    join(current, "service", "attache-service.mjs"),
     ...["service", "run", "--port", String(spec.port), "--state-dir", spec.stateDir, "--instance", spec.instance],
     ...["--home", loc.home, "--local-app-data", localAppData, "--app-data", appData],
   ];
   return `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>${xml(`Jarvis (${spec.instance}): starts at logon and keeps the Jarvis service running.`)}</Description>
+    <Description>${xml(`Attache (${spec.instance}): starts at logon and keeps the Attache service running.`)}</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
@@ -169,7 +169,7 @@ export class TaskSchedulerServiceManager implements ServiceManager {
 
   async start(): Promise<void> {
     const state = await this.state();
-    if (state === "Missing") throw new Error(`Jarvis is not set up as a background service here: the logon task ${this.name} is missing. Run the Jarvis installer again.`);
+    if (state === "Missing") throw new Error(`Attache is not set up as a background service here: the logon task ${this.name} is missing. Run the Attache installer again.`);
     if (RUNNING.has(state)) await this.stop();
     await this.task("start");
     await this.waitFor(true, `Task Scheduler did not start the logon task ${this.name}`);

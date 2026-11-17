@@ -11,9 +11,9 @@ import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
  * in a folder with a git remote, prints the project's context, at about 8 KB;
  * anywhere else it prints the global index.
  */
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const BUDGET = 8 * 1024;
-const work = mkdtempSync(join(tmpdir(), "jarvis-it-ctxcontent-"));
+const work = mkdtempSync(join(tmpdir(), "attache-it-ctxcontent-"));
 const running: TestService[] = [];
 
 afterEach(async () => {
@@ -34,10 +34,10 @@ function repo(remote: string): string {
   return dir;
 }
 
-/** Run the SessionStart command Jarvis registered, from `cwd`, the way Claude Code does. */
+/** Run the SessionStart command Attache registered, from `cwd`, the way Claude Code does. */
 function sessionStart(cwd: string): string {
   const s = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
-  const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
+  const command = (s.hooks.SessionStart as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("attache-agent-hook"))!.command;
   const out = runInShell(hookShell("claude-code"), command, { cwd, input: JSON.stringify({ session_id: "s1", cwd, source: "startup" }), env: { ...process.env, ...homeEnv(HOME) } });
   return out.trim() ? (JSON.parse(out).hookSpecificOutput.additionalContext as string) : "";
 }
@@ -125,7 +125,7 @@ function writeSessionLog(dataDir: string, date: string, machine: string, entries
 }
 
 function newBrain(): string {
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-ctxbrain-")), "data");
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-ctxbrain-")), "data");
   mkdirSync(dataDir, { recursive: true });
   return dataDir;
 }
@@ -227,7 +227,7 @@ describe("session context content", { timeout: 30_000 }, () => {
     await serve(dataDir);
     const ctx = await orionContext(repo(ORION_REPO));
 
-    const index = section(ctx, "### What Jarvis remembers");
+    const index = section(ctx, "### What Attache remembers");
     for (const title of ["Atlas", "Linus", "Adopt Rust", "Coffee preferences"]) expect(index).toContain(title);
     // Titles only: the facts are one search away.
     for (const value of ["Discovery", "Kernel maintainer", "Flat white"]) expect(index).not.toContain(value);
@@ -243,10 +243,10 @@ describe("session context content", { timeout: 30_000 }, () => {
     await serve(dataDir);
     await orionContext(repo(ORION_REPO));
 
-    for (const dir of [repo("git@github.com:acme/elsewhere.git"), mkdtempSync(join(tmpdir(), "jarvis-it-plain-"))]) {
+    for (const dir of [repo("git@github.com:acme/elsewhere.git"), mkdtempSync(join(tmpdir(), "attache-it-plain-"))]) {
       const ctx = sessionStart(dir);
       expect(ctx).toContain("Name: Alex");
-      for (const title of ["Orion migration", "Ada Lovelace", "Use Postgres"]) expect(section(ctx, "### What Jarvis remembers")).toContain(title);
+      for (const title of ["Orion migration", "Ada Lovelace", "Use Postgres"]) expect(section(ctx, "### What Attache remembers")).toContain(title);
       expect(ctx).toMatch(/search --state-dir .* "your query"/);
       expect(ctx).not.toContain("This session's project");
       for (const detail of ["Cutover planned for November", "Engineering lead", "Postgres 17", "A rollback plan was agreed.", "#### Decisions", "#### People", "Recent sessions"]) expect(ctx).not.toContain(detail);
@@ -273,7 +273,7 @@ describe("session context content", { timeout: 30_000 }, () => {
     // The project's full current state is never cut.
     for (const line of projectFacts) expect(ctx).toContain(`- ${line}`);
     // The index went first: counts stay, titles go.
-    const index = section(ctx, "### What Jarvis remembers");
+    const index = section(ctx, "### What Attache remembers");
     expect(index).toContain("- Notes (200)");
     expect(index).not.toContain("Reference note number");
     // Then the oldest sessions; every linked decision keeps its facts.

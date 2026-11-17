@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and specs for this repo live as GitHub issues in `emilchristensen/jarvis`.
+Issues and specs for this repo live as GitHub issues in `emilchristensen/attache`.
 Use the `gh` CLI for all operations.
 
 ## Conventions

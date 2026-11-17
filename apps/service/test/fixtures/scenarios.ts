@@ -1,5 +1,5 @@
 /**
- * TEST-ONLY happy-path scenarios for every remote service Jarvis talks to.
+ * TEST-ONLY happy-path scenarios for every remote service Attache talks to.
  * GitHub is emulated as REST under /github; Jira and Confluence through the
  * Atlassian MCP fixture (atlassian-mcp.ts); Slack, Gmail and Google Calendar
  * as claude.ai connector tools answered for fake-claude.mjs

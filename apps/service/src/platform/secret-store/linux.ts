@@ -18,7 +18,7 @@ export interface LinuxSecretStoreOptions {
 type Reachability = { reachable: true; tool: string } | { reachable: false; why: string };
 
 /** The account of the throwaway item written to check the Secret Service. */
-const PROBE_ACCOUNT = "jarvis-reachability-check";
+const PROBE_ACCOUNT = "attache-reachability-check";
 /** Writing may ask the owner to unlock the keyring, so it gets longer than reading. */
 const STORE_TIMEOUT_MS = 30_000;
 const READ_TIMEOUT_MS = 10_000;
@@ -40,11 +40,11 @@ function secretTool(tool: string, args: string[], opts: { input?: string; timeou
  * once as the service starts.
  */
 function reach(opts: LinuxSecretStoreOptions): Reachability {
-  const tool = locateTool("linux", "secret-tool", "JARVIS_SECRET_TOOL_BIN", opts.env);
+  const tool = locateTool("linux", "secret-tool", "ATTACHE_SECRET_TOOL_BIN", opts.env);
   if (!tool) return { reachable: false, why: "secret-tool is not installed; it comes with libsecret" };
   const attributes = ["service", opts.service, "account", PROBE_ACCOUNT];
   const value = randomBytes(12).toString("hex");
-  const stored = secretTool(tool, ["store", "--label=Jarvis: reachability check", ...attributes], { input: value, timeoutMs: STORE_TIMEOUT_MS });
+  const stored = secretTool(tool, ["store", "--label=Attache: reachability check", ...attributes], { input: value, timeoutMs: STORE_TIMEOUT_MS });
   if (!stored.ok) return { reachable: false, why: stored.why };
   const read = secretTool(tool, ["lookup", ...attributes], { timeoutMs: READ_TIMEOUT_MS });
   // Removing is a write too, and a probe left behind would stay in the owner's keyring, so it gets the longer timeout and a second try.

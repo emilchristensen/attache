@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { HARNESS_FILES } from "../platform/harness-locations.ts";
 
 /** The file earlier versions put in every skill folder they installed. */
-const MARKER = ".jarvis-skill.json";
+const MARKER = ".attache-skill.json";
 
-/** Whether a skill folder carries the marker of the Jarvis install at `stateDir`. */
+/** Whether a skill folder carries the marker of the Attache install at `stateDir`. */
 function markedForInstall(folder: string, stateDir: string): boolean {
   try {
     const marker = JSON.parse(readFileSync(join(folder, MARKER), "utf8")) as { managedBy?: unknown; stateDir?: unknown };
-    return marker.managedBy === "jarvis" && marker.stateDir === stateDir;
+    return marker.managedBy === "attache" && marker.stateDir === stateDir;
   } catch {
     return false;
   }

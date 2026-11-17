@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The lowest Node version Jarvis supports for development, from `engines.node` in package.json
+ * The lowest Node version Attache supports for development, from `engines.node` in package.json
  * (the one place it is written). CI tests on it; `pnpm install` refuses anything older (engineStrict).
  * Run directly, it prints the version and, on GitHub Actions, sets the step output `version`.
  * It runs before setup-node, on whatever Node the runner has, so it uses nothing newer than Node 18.

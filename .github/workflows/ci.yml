@@ -78,7 +78,7 @@ jobs:
         # A mirror outage must fail this step, not hang the job until its own timeout.
         timeout-minutes: 10
         env:
-          JARVIS_TEST_REAL_DESKTOP: "1"
+          ATTACHE_TEST_REAL_DESKTOP: "1"
         # apt-get runs under its own time limit: the step's limit stops the shell but not a sudo apt-get,
         # which then holds the package lock and fails the Google Chrome step after it.
         run: |
@@ -91,7 +91,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
         timeout-minutes: 10
         env:
-          JARVIS_TEST_REAL_DESKTOP: "1"
+          ATTACHE_TEST_REAL_DESKTOP: "1"
         run: pnpm vitest run apps/service/test/windows-desktop-real.test.ts
 
       # The journeys use the installed Google Chrome channel (playwright.config.ts).

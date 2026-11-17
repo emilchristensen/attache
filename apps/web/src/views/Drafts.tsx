@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { plural, type ActionView, type Citation } from "@jarvis/contracts";
+import { plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -147,7 +147,7 @@ function DraftDetail({ id }: { id: string }) {
         )}
       </div>
 
-      {d.status === "executing" && <p className="small muted">Sending… Jarvis marks this sent only after the service confirms the result.</p>}
+      {d.status === "executing" && <p className="small muted">Sending… Attache marks this sent only after the service confirms the result.</p>}
       {d.receipt && (
         <div className={`card small stack-sm`} data-receipt>
           <h3>Receipt</h3>

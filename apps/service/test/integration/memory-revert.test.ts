@@ -6,7 +6,7 @@ import { startTestService, type TestService } from "./harness.ts";
 let svc: TestService;
 
 const ORION = "memory/projects/orion-migration.md";
-const origin = { agent: "claude-code", sessionId: "sess-revert-1", cwd: "/Users/alex/code/jarvis" };
+const origin = { agent: "claude-code", sessionId: "sess-revert-1", cwd: "/Users/alex/code/attache" };
 
 async function recent(): Promise<any[]> {
   return (await svc.get("/memory/recent-changes")).changes;
@@ -97,14 +97,14 @@ describe("recent saves", () => {
     expect(readFileSync(join(svc.dataDir, path), "utf8")).toMatch(/\*\*Owner\*\* \(\d{4}-\d{2}-\d{2}\): Ada/);
   });
 
-  it("refuses a revert after an edit made outside Jarvis, and for events", async () => {
+  it("refuses a revert after an edit made outside Attache, and for events", async () => {
     const { saved } = await svc.post("/memory/save", { confirmed: true, origin, items: [{ action: "create", type: "person", title: "Ada Byron", facts: [{ subject: "Role", value: "Analyst" }] }, { action: "update", path: ORION, facts: [{ subject: "Budget", value: "40k", reason: "new estimate" }], events: ["Budget agreed"] }] });
     const ada = saved[0].relPath;
     writeFileSync(join(svc.dataDir, ada), readFileSync(join(svc.dataDir, ada), "utf8").replace("Analyst", "Lead analyst"));
     writeFileSync(join(svc.dataDir, ORION), readFileSync(join(svc.dataDir, ORION), "utf8").replace("): 40k", "): 45k"));
     const list = await recent();
-    expect(list.find((c) => c.relPath === ada && c.kind === "create").revert).toEqual({ allowed: false, reason: "The note was edited outside Jarvis after it was created." });
-    expect(list.find((c) => c.subject === "Budget").revert).toEqual({ allowed: false, reason: "“Budget” was edited outside Jarvis after this change." });
+    expect(list.find((c) => c.relPath === ada && c.kind === "create").revert).toEqual({ allowed: false, reason: "The note was edited outside Attache after it was created." });
+    expect(list.find((c) => c.subject === "Budget").revert).toEqual({ allowed: false, reason: "“Budget” was edited outside Attache after this change." });
     expect(list.find((c) => c.kind === "append" && c.newValue.startsWith("Budget agreed")).revert.allowed).toBe(false);
   });
 

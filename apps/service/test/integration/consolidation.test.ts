@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { JobView, ProposalView } from "@jarvis/contracts";
+import type { JobView, ProposalView } from "@attache/contracts";
 import { startTestService, type TestService } from "./harness.ts";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
@@ -10,9 +10,9 @@ import { installFixtureModel, type FixtureModel, type ModelCall } from "../fixtu
 import { claudeTranscript } from "../fixtures/agents/transcripts.ts";
 import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const ORION = "memory/projects/orion-migration.md";
-const work = mkdtempSync(join(tmpdir(), "jarvis-it-consolidation-"));
+const work = mkdtempSync(join(tmpdir(), "attache-it-consolidation-"));
 
 let svc: TestService;
 let fx: FixtureServer;
@@ -31,13 +31,13 @@ async function until<T>(fn: () => T | undefined | null | false, ms = 20_000): Pr
   }
 }
 
-/** Run the SessionEnd command Jarvis registered in Claude Code's settings, the way Claude Code does. */
+/** Run the SessionEnd command Attache registered in Claude Code's settings, the way Claude Code does. */
 function runSessionEnd(service: TestService, sessionId: string, transcript: string) {
   const settings = JSON.parse(readFileSync(join(HOME, ".claude/settings.json"), "utf8"));
   const command = (settings.hooks.SessionEnd as Array<{ hooks: Array<{ command: string }> }>)
     .flatMap((g) => g.hooks)
     // On Windows the command names the state folder with forward slashes.
-    .find((h) => h.command.includes("jarvis-agent-hook") && h.command.replace(/\\/g, "/").includes(service.stateDir.replace(/\\/g, "/")))!.command;
+    .find((h) => h.command.includes("attache-agent-hook") && h.command.replace(/\\/g, "/").includes(service.stateDir.replace(/\\/g, "/")))!.command;
   runInShell(hookShell("claude-code"), command, { input: JSON.stringify({ session_id: sessionId, transcript_path: transcript, cwd: work, reason: "exit" }), env: { ...process.env, ...homeEnv(HOME) } });
 }
 
@@ -47,7 +47,7 @@ const jobsOf = (service: TestService, kind: string, sessionId: string): JobView[
 const finished = (j: JobView) => ["succeeded", "failed", "blocked", "cancelled"].includes(j.status);
 
 /**
- * End a Claude Code session with these exchanges and wait until Jarvis has
+ * End a Claude Code session with these exchanges and wait until Attache has
  * summarised it and, when it found something durable, consolidated it.
  */
 async function endSession(sessionId: string, exchanges: Array<[string, string]>, service: TestService = svc, opts: { awaitConsolidation?: boolean } = {}) {
@@ -387,7 +387,7 @@ describe("Consolidation without a model", () => {
     expect(await proposalsFrom("s-no-model", bare)).toEqual([]);
     expect(note(ORION, bare)).toBe(before);
     const logs = readdirSync(join(bare.dataDir, "evidence/sessions")).filter((f) => f.endsWith(".md"));
-    expect(note(`evidence/sessions/${logs[0]}`, bare)).toContain("No model is connected, so this session was saved without a summary, and Jarvis made no Proposals from it.");
+    expect(note(`evidence/sessions/${logs[0]}`, bare)).toContain("No model is connected, so this session was saved without a summary, and Attache made no Proposals from it.");
   });
 
   it("a Consolidation that finds the model gone makes no Proposal and says why", async () => {
@@ -407,7 +407,7 @@ describe("Consolidation without a model", () => {
     const { job } = create(queued!);
     const { job: done } = await bare.waitJob(job.id, ["succeeded", "failed"]);
     expect(done.status).toBe("succeeded");
-    expect(done.result).toMatchObject({ proposals: 0, skipped: "no model", message: "No model is connected, so Jarvis made no Proposals from this session." });
+    expect(done.result).toMatchObject({ proposals: 0, skipped: "no model", message: "No model is connected, so Attache made no Proposals from this session." });
     expect(await proposalsFrom("s-model-gone", bare)).toEqual([]);
   });
 });

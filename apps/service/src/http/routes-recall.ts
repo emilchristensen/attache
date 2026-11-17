@@ -1,4 +1,4 @@
-import { RecallEvaluationInput } from "@jarvis/contracts";
+import { RecallEvaluationInput } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
-import { MACHINE_NAME_MAX, type MachineRename, type MachineView } from "@jarvis/contracts";
+import { MACHINE_NAME_MAX, type MachineRename, type MachineView } from "@attache/contracts";
 import { type Db, nowIso } from "./db.ts";
 
 export type MachineIdentity = Readonly<MachineView>;

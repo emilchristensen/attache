@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { ReplicationStatus, ReplicationView } from "@jarvis/contracts";
+import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
@@ -96,7 +96,7 @@ export function JoinForm({ onDone, folder: fixedFolder, intro, primary = true }:
           Empty folder for the Brain
           <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={examples.brain} spellCheck={false} aria-describedby="join-folder-help" />
           <span className="help" id="join-folder-help">
-            Jarvis clones the Brain here and uses this folder from then on. It must be empty or new, so two Brains are never mixed; the current data folder is left as it is.
+            Attache clones the Brain here and uses this folder from then on. It must be empty or new, so two Brains are never mixed; the current data folder is left as it is.
           </span>
         </label>
       )}

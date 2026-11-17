@@ -1,4 +1,4 @@
-import type { ReaderView } from "@jarvis/contracts";
+import type { ReaderView } from "@attache/contracts";
 import type { MachineIdentity } from "../core/machine.ts";
 import type { Clock } from "../replication/clock.ts";
 import { hasLapsed, later, type LeaseRecord } from "./lease.ts";

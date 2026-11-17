@@ -7,7 +7,7 @@ import { callTool, mcpClients } from "./mcp-client.ts";
 
 type SaveReply = { outcome: "saved" | "declined" | "proposed"; autoAccepted?: boolean; saved?: Array<{ action: string; path: string }>; proposals?: Array<{ id: string }> };
 
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const CLAUDE_CODE_SESSION = { CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "auto-session-7" };
 const CODEX_THREAD = { CODEX_THREAD_ID: "codex-thread-9" };
 

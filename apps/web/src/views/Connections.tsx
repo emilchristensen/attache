@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
@@ -20,7 +20,7 @@ function ImportFolder({ onDone }: { onDone: () => void }) {
   return (
     <div className="card stack-sm">
       <h3>Import a Markdown folder or Obsidian vault</h3>
-      <p className="small muted">Read-only. Jarvis indexes and cites the files where they are and never changes them.</p>
+      <p className="small muted">Read-only. Attache indexes and cites the files where they are and never changes them.</p>
       <div className="row" style={{ flexWrap: "nowrap" }}>
         <input value={path} onChange={(e) => { setPath(e.target.value); setPreview(null); }} placeholder={examples.notes} aria-label="Folder path" spellCheck={false} />
         <button disabled={!path.trim() || busy !== null} onClick={() => run("pv", async () => setPreview(await post("/import/preview", { path })))}>

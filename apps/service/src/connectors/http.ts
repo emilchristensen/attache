@@ -1,4 +1,4 @@
-import type { CoverageState } from "@jarvis/contracts";
+import type { CoverageState } from "@attache/contracts";
 import { redact } from "../core/log.ts";
 
 /** A failed remote call, classified so coverage never confuses failure with emptiness. */
@@ -82,7 +82,7 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
         const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 20_000);
         let res: Response;
         try {
-          const headers: Record<string, string> = { "user-agent": opts.userAgent ?? "Jarvis/0.1 (local)", accept: "application/json", ...(req.headers ?? {}) };
+          const headers: Record<string, string> = { "user-agent": opts.userAgent ?? "Attache/0.1 (local)", accept: "application/json", ...(req.headers ?? {}) };
           let body: string | undefined;
           if (req.form) {
             headers["content-type"] = "application/x-www-form-urlencoded";

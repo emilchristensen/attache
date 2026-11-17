@@ -1,4 +1,4 @@
-import type { Citation } from "@jarvis/contracts";
+import type { Citation } from "@attache/contracts";
 import type { SearchHit } from "./search.ts";
 
 /** The citation `[S<n>]` for the n-th search hit (from 0) that research findings or a draft were written from. */

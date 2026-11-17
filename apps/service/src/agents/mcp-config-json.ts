@@ -10,22 +10,22 @@ function parse(text: string, path: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(text);
   } catch (e) {
-    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); Jarvis will not change it.`);
+    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); Attache will not change it.`);
   }
-  if (!isPlainObject(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; Jarvis will not change it.`);
+  if (!isPlainObject(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; Attache will not change it.`);
   return parsed;
 }
 
 function serversOf(settings: Record<string, unknown>, path: string): Record<string, unknown> {
   const servers = settings[KEY];
   if (servers === undefined) return {};
-  if (!isPlainObject(servers)) throw new HooksFileError(`${path} has an \`${KEY}\` value that is not an object; Jarvis will not change it.`);
+  if (!isPlainObject(servers)) throw new HooksFileError(`${path} has an \`${KEY}\` value that is not an object; Attache will not change it.`);
   return servers;
 }
 
 const render = (settings: Record<string, unknown>) => JSON.stringify(settings, null, 2) + "\n";
 
-/** The settings without this install's entries; the list itself goes when Jarvis's entry was its last. */
+/** The settings without this install's entries; the list itself goes when Attache's entry was its last. */
 function without(settings: Record<string, unknown>, path: string, isOurs: IsOurServer): Record<string, unknown> {
   const servers = serversOf(settings, path);
   const drop = new Set(ourNames(servers, isOurs));

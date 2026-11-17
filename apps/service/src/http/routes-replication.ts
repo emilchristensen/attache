@@ -1,4 +1,4 @@
-import { PreferredReaderInput, ReplicationJoinInput, ReplicationSetupInput, ReplicationStandbyInput } from "@jarvis/contracts";
+import { PreferredReaderInput, ReplicationJoinInput, ReplicationSetupInput, ReplicationStandbyInput } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -29,7 +29,7 @@ export function registerReplicationRoutes(r: Router, app: App) {
     const path = body.path ?? app.config.get().dataFolder;
     if (!path) throw new HttpError(400, "invalid_path", "Name the empty folder to keep the Brain in.");
     const preview = dataFolderPreview(path);
-    if (!preview.writable) throw new HttpError(400, "not_writable", `Jarvis cannot write to ${preview.path}`);
+    if (!preview.writable) throw new HttpError(400, "not_writable", `Attache cannot write to ${preview.path}`);
     return asHttp(() => app.replication.join(body.remote, preview.path, (p) => app.useDataFolder(p)));
   });
 

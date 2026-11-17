@@ -173,7 +173,7 @@ export class AgentSessions {
   /**
    * Commands that never start a conversation (`claude mcp list`) still end a
    * session, with a transcript that was never written. A finished turn, or a
-   * part of the session Jarvis already saved, shows there was a conversation,
+   * part of the session Attache already saved, shows there was a conversation,
    * so its missing transcript is a failure.
    */
   private hadNoConversation(r: SpoolRecord): boolean {
@@ -362,9 +362,9 @@ export class AgentSessions {
     for (const a of this.connectedHarnesses()) {
       try {
         const r = this.hooks.refreshMcp(a);
-        if (r.changed) this.app.log.info("registered Jarvis's MCP server", { agent: a.kind, path: r.path });
+        if (r.changed) this.app.log.info("registered Attache's MCP server", { agent: a.kind, path: r.path });
       } catch (e) {
-        this.app.log.warn("could not register Jarvis's MCP server", { agent: a.kind, error: (e as Error).message });
+        this.app.log.warn("could not register Attache's MCP server", { agent: a.kind, error: (e as Error).message });
       }
     }
   }
@@ -372,7 +372,7 @@ export class AgentSessions {
   /** The current context text, for installing an agent before the first refresh. */
   contextText(): string {
     const file = contextFile(this.stateDir);
-    return existsSync(file) ? readFileSync(file, "utf8") : "## Jarvis memory\n\nNothing is remembered yet.\n";
+    return existsSync(file) ? readFileSync(file, "utf8") : "## Attache memory\n\nNothing is remembered yet.\n";
   }
 
   /** How a Harness reaches deeper recall from its shell: this service's own CLI, pinned to this state folder. */

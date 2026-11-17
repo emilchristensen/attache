@@ -148,7 +148,7 @@ export const MIGRATIONS: readonly string[] = [
   create index memory_changes_doc on memory_changes(doc_rel_path);
   create index memory_changes_reverts on memory_changes(reverts);
   `,
-  // Jarvis holds no conversation of its own (ADR 0003). Chat archives already written stay in the Brain as evidence.
+  // Attache holds no conversation of its own (ADR 0003). Chat archives already written stay in the Brain as evidence.
   `
   drop index if exists messages_conv;
   drop table if exists messages;

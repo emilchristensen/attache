@@ -1,6 +1,6 @@
 /**
  * Confluence through the Atlassian Rovo MCP server, reached either through the
- * user's claude.ai connector or Jarvis's own MCP client (atlassian-backend.ts).
+ * user's claude.ai connector or Attache's own MCP client (atlassian-backend.ts).
  * Reads are CQL searches; the one write is a footer comment, read back from
  * the page's footer comments.
  */
@@ -22,7 +22,7 @@ import {
 } from "./atlassian.ts";
 import { adfText, authorId, normalizeText, pick, str } from "./atlassian-shapes.ts";
 import { atlassianBackend, usesClaude } from "./atlassian-backend.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 export interface ConfluenceHit {
   id: string;
@@ -40,7 +40,7 @@ export interface ConfluenceHit {
 const MAX_PAGES = 4;
 const CONTEXT = "/wiki";
 const SPACE_KEY = /^[A-Za-z0-9_~-]+$/;
-const MARKER = (key: string) => `<!-- jarvis:effect=${key} -->`;
+const MARKER = (key: string) => `<!-- attache:effect=${key} -->`;
 
 interface Scope {
   id: string;
@@ -171,7 +171,7 @@ export const confluenceAdapter: ConnectorAdapter = {
       { id: "space_updates", label: "Updates in watched spaces", default: false },
     ],
     writeActions: [{ id: "confluence.comment", label: "Add a footer comment to a page" }],
-    setupHelp: "Jarvis connects to Confluence through the Atlassian Rovo MCP server with your own permissions, read-only unless you authorise commenting. Comments are only posted after you approve each draft.",
+    setupHelp: "Attache connects to Confluence through the Atlassian Rovo MCP server with your own permissions, read-only unless you authorise commenting. Comments are only posted after you approve each draft.",
     unavoidableSteps: atlassianSetupSteps(),
   },
 

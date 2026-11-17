@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MemorySaveItem } from "@jarvis/contracts";
+import { MemorySaveItem } from "@attache/contracts";
 import { NOTHING_DURABLE } from "../agents/summary.ts";
 import { EVIDENCE_MAX_CHARS } from "./prompt.ts";
 

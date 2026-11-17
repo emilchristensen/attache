@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { AttentionItemView, ConnectionStatus, JobView } from "@jarvis/contracts";
+import type { AttentionItemView, ConnectionStatus, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";

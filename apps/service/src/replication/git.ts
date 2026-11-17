@@ -6,12 +6,12 @@ import { launchTool, type Launch } from "../platform/launch.ts";
 import { gitCandidates } from "../platform/git-install.ts";
 
 /**
- * The git to run: `JARVIS_GIT_BIN`, else the first one in the usual install
+ * The git to run: `ATTACHE_GIT_BIN`, else the first one in the usual install
  * folders (a service started at login often lacks the owner's PATH), else
  * whatever `git` the PATH finds.
  */
 export function gitBinary(): string {
-  if (process.env.JARVIS_GIT_BIN) return process.env.JARVIS_GIT_BIN;
+  if (process.env.ATTACHE_GIT_BIN) return process.env.ATTACHE_GIT_BIN;
   return gitCandidates().find((p) => existsSync(p)) ?? "git";
 }
 
@@ -58,12 +58,12 @@ const MAX_OUTPUT = 256 * 1024 * 1024;
  * A note an editor saved with CRLF is committed as LF (the Brain's
  * `.gitattributes`); `core.safecrlf` would refuse that commit, so it is off.
  */
-const SAFE_CONFIG = ["core.hooksPath=.git/jarvis-no-hooks", "commit.gpgsign=false", "tag.gpgsign=false", "core.autocrlf=false", "core.safecrlf=false", "core.quotePath=false", "protocol.ext.allow=never", "advice.detachedHead=false"];
+const SAFE_CONFIG = ["core.hooksPath=.git/attache-no-hooks", "commit.gpgsign=false", "tag.gpgsign=false", "core.autocrlf=false", "core.safecrlf=false", "core.quotePath=false", "protocol.ext.allow=never", "advice.detachedHead=false"];
 
 const SAFE_ENV = { GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", LC_ALL: "C", LANGUAGE: "C" };
 
 /** The refs the Reader lease lives on, one per generation (`replication/lease-ref.ts`); never a branch. */
-export const READER_LEASE_REFS = "refs/jarvis/reader-lease";
+export const READER_LEASE_REFS = "refs/attache/reader-lease";
 /** The one deletion Replication pushes: a lease generation nobody writes any more, which keeps the lease's history bounded. */
 const RETIRED_LEASE = new RegExp(`^:${READER_LEASE_REFS}/[1-9][0-9]*$`);
 
@@ -131,7 +131,7 @@ export class Git {
 
   /**
    * Run a local command and wait for it. Local commands are quick, and while
-   * one runs the service writes nothing, so git and Jarvis never change the
+   * one runs the service writes nothing, so git and Attache never change the
    * data folder at the same moment.
    */
   runSync(args: readonly string[], input?: string): GitResult {

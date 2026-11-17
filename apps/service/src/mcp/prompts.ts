@@ -14,7 +14,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "save",
     {
-      title: "Save to Jarvis",
+      title: "Save to Attache",
       description: "Distill what matters from the last turn into the owner's Brain, through the save tool.",
       argsSchema: { focus: z.string().max(REQUEST_MAX).optional().describe("What to focus on, if not everything that matters.") },
     },
@@ -23,7 +23,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "audit",
     {
-      title: "Audit Jarvis memory",
+      title: "Audit Attache memory",
       description: "Find facts in the owner's Brain that have quietly stopped being true, and fix the ones the owner agrees to.",
       argsSchema: { topic: z.string().max(REQUEST_MAX).optional().describe("A topic to limit the audit to.") },
     },
@@ -33,7 +33,7 @@ export function registerPrompts(server: McpServer): void {
     "wrap-up",
     {
       title: "Wrap up this conversation",
-      description: "Record the durable points of this conversation in the Brain as evidence, for conversations Jarvis cannot capture itself.",
+      description: "Record the durable points of this conversation in the Brain as evidence, for conversations Attache cannot capture itself.",
     },
     () => asUserMessage(wrapUpPrompt()),
   );

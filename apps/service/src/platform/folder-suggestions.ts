@@ -1,4 +1,4 @@
-import type { SetupDefaults } from "@jarvis/contracts";
+import type { SetupDefaults } from "@attache/contracts";
 import { pathFor, platformLocations, type PlatformLocations } from "./locations.ts";
 
 /** The suggested data folder and example folders, in the owner's Documents folder and with this operating system's separators. */
@@ -6,7 +6,7 @@ export function folderSuggestions(loc: PlatformLocations = platformLocations()):
   const { join } = pathFor(loc.os);
   return {
     home: loc.home,
-    suggestion: join(loc.documentsDir, "Jarvis"),
+    suggestion: join(loc.documentsDir, "Attache"),
     examples: { notes: join(loc.documentsDir, "Notes"), brain: join(loc.documentsDir, "Brain") },
   };
 }

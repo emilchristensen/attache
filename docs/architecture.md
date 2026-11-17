@@ -1,15 +1,15 @@
-# Jarvis architecture
+# Attache architecture
 
-Jarvis is one local service with a thin browser client and a command line.
+Attache is one local service with a thin browser client and a command line.
 The service owns memory writes, credentials, tool authority, durable jobs, scheduling and action execution.
 The browser client and the CLI render state and submit requests; neither writes memory or schedules work.
 
 ```mermaid
 flowchart LR
   Browser[Browser client] -- HTTPS-less loopback + pairing token --> API
-  CLI[jarvis CLI] -- same versioned API --> API
+  CLI[attache CLI] -- same versioned API --> API
   Electron[Future Electron client] -.-> API
-  subgraph Service[jarvis service - Node 24, one process]
+  subgraph Service[attache service - Node 24, one process]
     API[/api/v1 router + SSE/]
     Registry[Capability registry]
     Memory[Memory writer + policy]
@@ -40,8 +40,8 @@ flowchart LR
 | Knowledge | Markdown files in the user's chosen data folder | Human-readable, Obsidian-compatible; the FTS index is rebuildable from the files. |
 | Dashboard | React + Vite, `markdown-it` with raw HTML disabled | Small, well-known; imported Markdown cannot inject HTML or `javascript:` links. |
 | Secrets | The operating system's secret store behind one interface: the macOS Keychain via `/usr/bin/security -i`, the Linux Secret Service via libsecret's `secret-tool`, Windows Credential Manager via Windows PowerShell (values on stdin and stdout, never argv); a private file (0600, or an owner-only access-control list on Windows) where none works | Outside the vault and outside frontend storage. |
-| Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Jarvis needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Jarvis's code. |
-| Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `jarvis` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
+| Remote sources | GitHub REST; Jira and Confluence through the Atlassian Rovo MCP server; Slack, Gmail and Calendar through the user's claude.ai connectors | Atlassian's MCP server and the organization's claude.ai connectors are the supported, admin-governed access paths, so no per-user Slack app or Google Cloud OAuth client is needed. The MCP client is about 200 lines because Attache needs only initialize, tools/call and its own OAuth flow on the existing loopback callback; the Claude Code control protocol is driven directly so the argument-level approval gate stays in Attache's code. |
+| Install | Self-extracting installer bundling Node, the service bundle and web assets; the bundled `attache` sets up the background service and command-line wrappers | One command/double-click; no developer tools required. |
 
 ## Data layout
 
@@ -70,9 +70,9 @@ Imported folders stay where they are.
 The import preview lists what will be read, what is skipped and that zero files in the source folder change.
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
-Service state (`~/Library/Application Support/Jarvis/state` on macOS, `~/.local/state/jarvis` on Linux): `jarvis.sqlite`, logs, runtime metadata, backups.
-Writer locks (`~/Library/Application Support/Jarvis/locks`, `~/.local/state/jarvis/locks` on Linux, `%LOCALAPPDATA%\Jarvis\locks` on Windows, `JARVIS_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
-Credentials: Keychain service `dev.jarvis.<instance>` on macOS; Secret Service items with attributes `service=dev.jarvis.<instance>` and `account=<key>` on Linux; generic credentials with the target `dev.jarvis.<instance>/<key>` (persisted for this computer, not roamed; values over 2,560 bytes continue in `<target>#2`, `#3` and so on) on Windows.
+Service state (`~/Library/Application Support/Attache/state` on macOS, `~/.local/state/attache` on Linux): `attache.sqlite`, logs, runtime metadata, backups.
+Writer locks (`~/Library/Application Support/Attache/locks`, `~/.local/state/attache/locks` on Linux, `%LOCALAPPDATA%\Attache\locks` on Windows, `ATTACHE_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
+Credentials: Keychain service `dev.attache.<instance>` on macOS; Secret Service items with attributes `service=dev.attache.<instance>` and `account=<key>` on Linux; generic credentials with the target `dev.attache.<instance>/<key>` (persisted for this computer, not roamed; values over 2,560 bytes continue in `<target>#2`, `#3` and so on) on Windows.
 The system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
 
 ## Platform modules
@@ -81,37 +81,37 @@ Everything that differs between macOS, Linux and Windows lives in `apps/service/
 
 | Module | Interface | macOS | Linux | Windows |
 | --- | --- | --- | --- | --- |
-| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.jarvis.<instance>` | systemd user service `jarvis-<instance>.service` (`jarvis.service` by default) | Task Scheduler logon task `Jarvis-<instance>` (`Jarvis` by default) |
+| `service-manager/` | `ServiceManager`: install, start, stop, uninstall, loaded | launchd agent `dev.attache.<instance>` | systemd user service `attache-<instance>.service` (`attache.service` by default) | Task Scheduler logon task `Attache-<instance>` (`Attache` by default) |
 | `secret-store/` | `SecretStore`: get, set, delete, keys, and a note saying why the file is in use | Keychain | Secret Service via `secret-tool` when one answers at start, else the owner-only file; secrets left in the file move into the Secret Service on a later start | Credential Manager via Windows PowerShell when a throwaway credential can be written, read back and removed at start, else the owner-only file; secrets left in the file move in on a later start |
-| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `JARVIS_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | Windows notifications via Windows PowerShell, from the sender `dev.jarvis.<instance>` registered under `HKCU\Software\Classes\AppUserModelId`; `forget` removes it |
-| `locations.ts` | install prefix, state folder, command folder, service definition folder, Documents folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Jarvis` | XDG base directories | `%LOCALAPPDATA%\Jarvis` |
+| `notifier/` | `Notifier`: check, notify; `DesktopNotifications` applies `ATTACHE_NO_NOTIFY` and quiet hours and logs when notifications turn off and on | Notification Center via `osascript` | `org.freedesktop.Notifications` via `notify-send` | Windows notifications via Windows PowerShell, from the sender `dev.attache.<instance>` registered under `HKCU\Software\Classes\AppUserModelId`; `forget` removes it |
+| `locations.ts` | install prefix, state folder, command folder, service definition folder, Documents folder, `tar`, managed Claude Code settings, tool folders | `~/Library/Application Support/Attache` | XDG base directories | `%LOCALAPPDATA%\Attache` |
 | `folder-suggestions.ts` | the data folder setup suggests and the example folders the Dashboard shows in empty folder fields (`GET /setup/defaults`, the imported folder's path field), in the Documents folder with the platform's separators | `~/Documents/Notes` | `~/Documents/Notes` | `%USERPROFILE%\Documents\Notes` |
 | `harness-locations.ts` | each Harness's hooks file, rules folder, MCP configuration file, earlier skills folder, executables and install markers | | | |
-| `wrapper.ts` | the release launcher and the `jarvis` and `jarvis-uninstall` wrappers | POSIX shell | POSIX shell | plain-ASCII `.cmd` in the install's `bin` folder, finding the install from its own folder (`%~dp0`), because cmd.exe reads batch files in the console's code page |
+| `wrapper.ts` | the release launcher and the `attache` and `attache-uninstall` wrappers | POSIX shell | POSIX shell | plain-ASCII `.cmd` in the install's `bin` folder, finding the install from its own folder (`%~dp0`), because cmd.exe reads batch files in the console's code page |
 | `shell-command.ts` | `shellPath`: a path quoted for the command lines a Harness runs (hooks, the search command in the session context) | single quotes | single quotes | double quotes and forward slashes, which Git Bash (Claude Code) and cmd.exe (Codex) read alike |
-| `launch.ts` | `launchTool`: how to start a tool found on disk without a shell; a Node script runs with Jarvis's Node | as is | as is | an npm `.cmd` shim runs the script it wraps with Jarvis's Node, because cmd.exe cannot pass arguments with line breaks |
+| `launch.ts` | `launchTool`: how to start a tool found on disk without a shell; a Node script runs with Attache's Node | as is | as is | an npm `.cmd` shim runs the script it wraps with Attache's Node, because cmd.exe cannot pass arguments with line breaks |
 | `powershell.ts` | `runPowerShell`: a script with one JSON request on stdin and one JSON answer on stdout, the script passed as `-EncodedCommand`, so no script file or execution policy is involved | | | Windows PowerShell 5.1 (also drives the logon task) |
 | `private-file.ts` | `writePrivateFile`: write a file only its owner can read, made private while still empty | mode 0600 | mode 0600 | an access-control list of its own, inheritance removed, with only the current user (`icacls`, the user from `whoami /user`) |
 | `replace-file.ts` | `replaceWith`: move a written temporary file over its target in one step; `writeFileWhole`: write a file another process may be reading (`runtime.json`) that way | rename | rename | rename, retried for up to five seconds while another program holds the target open |
 
 `os.ts` maps Node's platform to one of the three; any other operating system gets one clear message from every command instead of a failure halfway through.
-The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `jarvis` (`jarvis service`, `jarvis wrappers`, `jarvis credentials clear`, `jarvis notifications forget`, `jarvis locks clear-stale`, `jarvis paths`, `jarvis data-folder`), so their platform-specific work is the same code the service uses.
-`jarvis paths` prints every resolved location for the computer it runs on.
-`jarvis data-folder` names the data folder and the entries Jarvis created in it, which is all a data-deleting uninstall removes; when the service database cannot be read it fails, and the uninstaller keeps the data folder and says so.
-`jarvis locks clear-stale` removes the writer locks of services that are gone, as a service killed outright leaves them, so a data-deleting uninstall can remove the shared locks folder; a lock a live process holds, or one it cannot read, stays.
+The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, Windows PowerShell on Windows) that call the bundled `attache` (`attache service`, `attache wrappers`, `attache credentials clear`, `attache notifications forget`, `attache locks clear-stale`, `attache paths`, `attache data-folder`), so their platform-specific work is the same code the service uses.
+`attache paths` prints every resolved location for the computer it runs on.
+`attache data-folder` names the data folder and the entries Attache created in it, which is all a data-deleting uninstall removes; when the service database cannot be read it fails, and the uninstaller keeps the data folder and says so.
+`attache locks clear-stale` removes the writer locks of services that are gone, as a service killed outright leaves them, so a data-deleting uninstall can remove the shared locks folder; a lock a live process holds, or one it cannot read, stays.
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
 `Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
-Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Jarvis wrote it to (an `XDG_CONFIG_HOME` the login does not share).
-`systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Jarvis tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
+Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Attache wrote it to (an `XDG_CONFIG_HOME` the login does not share).
+`systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Attache tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
 The service's output goes to `service.out.log` and `service.err.log` in the state folder's `logs`, as launchd's does on macOS.
 
 The Windows service is a Task Scheduler task with a logon trigger for the owner's own account, running as the owner with limited rights (`InteractiveToken`, so it can reach the owner's Credential Manager and desktop), and needs no administrator rights to register.
-A task cannot set environment variables, and Task Scheduler does not restart a program that exits, so the task runs `jarvis service run` (`platform/service-manager/supervisor.ts`).
-It starts `jarvis serve` with the environment launchd and systemd units set (home folder, application data folders, state folder, instance, web folder), appends its output to `service.out.log` and `service.err.log`, and starts it again after a crash, 2 seconds later at first and backing off to a minute while it keeps failing.
+A task cannot set environment variables, and Task Scheduler does not restart a program that exits, so the task runs `attache service run` (`platform/service-manager/supervisor.ts`).
+It starts `attache serve` with the environment launchd and systemd units set (home folder, application data folders, state folder, instance, web folder), appends its output to `service.out.log` and `service.err.log`, and starts it again after a crash, 2 seconds later at first and backing off to a minute while it keeps failing.
 The service is started detached, with an IPC channel to its supervisor, and shuts down cleanly when the channel closes, so it never outlives the task and is never killed mid-write with it.
 The task starts the bundled runtime through `conhost.exe --headless`, because a console program started by a task would otherwise open a window on the owner's desktop.
-Ending the task ends that console host but not the supervisor it started, so the supervisor stops itself once its parent is gone, and `jarvis stop` waits for it (ending it outright after 15 seconds).
+Ending the task ends that console host but not the supervisor it started, so the supervisor stops itself once its parent is gone, and `attache stop` waits for it (ending it outright after 15 seconds).
 The service manager drives the task through Windows PowerShell's ScheduledTasks cmdlets, whose task states are the same in every display language.
 
 ### Machine identity and per-Machine evidence
@@ -126,22 +126,22 @@ Files written before this change keep their `<date>.md` name; search and the aud
 ## Replication
 
 Replication keeps every Machine's copy of the Brain the same through a git repository (ADR 0001); the whole Brain replicates (ADR 0002).
-The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication`, `POST /replication/check` and `POST /replication/off` expose it (`jarvis replication` calls them).
+The code is in `apps/service/src/replication/`; `App.replication` owns it, and `POST /replication/setup`, `POST /replication/join`, `GET /replication`, `POST /replication/check` and `POST /replication/off` expose it (`attache replication` calls them).
 The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.tsx`) and the join option on the first setup screen use the same endpoints and refresh on the `replication.changed` event.
 
 - **Local state.** The `replication` table holds the data folder, the remote, the last change-log `seq` already described in a commit, the last status, and when a check last left the Machine up to date (`upToDateAt`).
   No row means off.
   Switching off deletes the row and nothing else: the data folder, its `.git` and the remote stay as they are.
-  Setup on a Jarvis-managed repository whose history the remote shares (fetched into a scratch ref, `refs/jarvis/candidate`) resumes instead of refusing, and the next check merges both sides.
+  Setup on an Attache-managed repository whose history the remote shares (fetched into a scratch ref, `refs/attache/candidate`) resumes instead of refusing, and the next check merges both sides.
   A data folder other than the one Replication was set up for reads as blocked.
-- **The repository.** Setup runs `git init -b main` in the data folder, marks it with `jarvis.managed=true` (a repository Jarvis did not make is refused), writes `.gitignore` (`.jarvis/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`, put first in a file the owner already had, so their own lines still apply), commits and pushes.
+- **The repository.** Setup runs `git init -b main` in the data folder, marks it with `attache.managed=true` (a repository Attache did not make is refused), writes `.gitignore` (`.attache/`, `.*.tmp`, `.DS_Store`, `Thumbs.db`, `.obsidian/workspace*.json`) and `.gitattributes` (`* text=auto eol=lf`, put first in a file the owner already had, so their own lines still apply), commits and pushes.
   Setup and join first check that git runs (`gitVersion`), else refuse with `git_missing` and the way to install git on this operating system (`platform/git-install.ts`); on Windows git is also looked for where Git for Windows installs it, for a service whose PATH predates the install.
 - **Line endings.** The Brain is LF on every Machine.
-  Git stores and checks out LF through `.gitattributes`, and Jarvis runs git with `core.autocrlf=false` and `core.safecrlf=false`, so neither Git for Windows' default `autocrlf` nor an owner's `safecrlf` can change a note or refuse the commit of one an editor saved with CRLF.
-  Jarvis reads CRLF notes like LF ones (`toLf` in `memory/markdown.ts`, used by the parser and `MemoryStore.read`), and `MemoryStore` writes LF only, whatever line breaks a save's text came with.
+  Git stores and checks out LF through `.gitattributes`, and Attache runs git with `core.autocrlf=false` and `core.safecrlf=false`, so neither Git for Windows' default `autocrlf` nor an owner's `safecrlf` can change a note or refuse the commit of one an editor saved with CRLF.
+  Attache reads CRLF notes like LF ones (`toLf` in `memory/markdown.ts`, used by the parser and `MemoryStore.read`), and `MemoryStore` writes LF only, whatever line breaks a save's text came with.
   It refuses a remote whose `main` already has commits.
   Join clones `main` into an empty folder, then opens it like `/setup/data-folder`, which indexes it.
-  A folder that is not empty is refused with `not_empty`, after `createBackup` archives it with the database to `backups/jarvis-backup-<time>-before-join.tar.gz`; the error's `details.backup` names the archive.
+  A folder that is not empty is refused with `not_empty`, after `createBackup` archives it with the database to `backups/attache-backup-<time>-before-join.tar.gz`; the error's `details.backup` names the archive.
 - **The loop** (`replication.ts`): triggered 30 seconds after the last write (`MemoryStore` `onWrite`), on an outside edit the file watcher sees, at start, on wake (`Scheduler.onResume`) and by a one-minute check.
   One check at a time: commit everything (`git add -A`, so hand edits are included), fetch, commit what was saved meanwhile, merge, push; when the push is rejected because another Machine pushed first, fetch, merge and push again, up to five times, then retry with backoff.
   Failures set the status (offline, unauthorized, blocked) and never reach a save.
@@ -170,28 +170,28 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   The `prose_versions` item resolves once the note no longer holds two version headings of the same level in a row (`holdsTwoVersions`), or is gone.
   Both sides are put in an order that does not depend on which Machine merges (`sides.ts`) and nothing depends on the time of the merge, so two Machines merging the same versions write the same note.
   Two notes with the same type and title share a path, so they arrive with no common version and merge as one note.
-- **Commits** are authored by the Machine (name, and `<machine id>@machine.jarvis.invalid`), with the clock's time.
-  The message names each changed file and what the change log says happened to it (`created "Orion migration"`, `corrected Status`, `added an event`), or `added`/`edited`/`deleted` for files the change log does not know (hand edits, evidence), and ends with a `Jarvis-Machine: <name> (<id>)` trailer.
+- **Commits** are authored by the Machine (name, and `<machine id>@machine.attache.invalid`), with the clock's time.
+  The message names each changed file and what the change log says happened to it (`created "Orion migration"`, `corrected Status`, `added an event`), or `added`/`edited`/`deleted` for files the change log does not know (hand edits, evidence), and ends with a `Attache-Machine: <name> (<id>)` trailer.
 - **Seams** (`replication/seams.ts`, listed in `defaultSeams()`): `mergeRules`, `commitGuards` (run on the staged files before every commit, merge commits included; a refusal stops the commit and the push), `remoteGuards` (run at setup, join and before every push), and `credentials` (`-c` settings and environment for commands that reach the remote, so a token never sits in the remote's address).
   `Replication.onPulled` and `onMergeNotice` let other parts of the service react to merged files and to what the rules want the owner to see.
 - **Private repository** (`replication/private-remote.ts`, a `RemoteGuard`): a folder remote passes; a GitHub remote (`replication/github.ts` `githubRepoOf`) passes only when `GET /repos/{owner}/{name}` says private or internal, asked with the GitHub connection's token and API address; any other host is refused, because its privacy cannot be checked.
   A private answer is trusted for five minutes (`VISIBILITY_CHECK_EVERY_MS`, on the Replication clock); a refusal is never cached.
   Public reads as blocked, a rejected token (401, or 404 with a token) as unauthorized, and no answer as offline (`RemoteVerdict`); at setup and join these are 409 `remote_refused`, 502 `remote_unauthorized` and 502 `remote_unreachable`.
-- **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<jarvis> git-credential --state-dir <state> --connection <id>`.
-  The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `JARVIS_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
+- **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<attache> git-credential --state-dir <state> --connection <id>`.
+  The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `ATTACHE_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
   Other remotes use the Machine's own git setup (ssh keys, or nothing for a folder).
 - **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
   They are JSON, so search never indexes them, and they replicate like any file.
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
-  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.jarvis.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
+  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.attache.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
   The Reader lease reads this Machine's standby flag and the Preferred Reader straight from these records (`MachineRecords`).
 - **The Reader** (`reader/`, `replication/reader-lease.ts`, `replication/lease-ref.ts`): exactly one Machine runs scheduled Source refresh, briefings and with them the Review-date inbox items.
   With Replication off, the Machine is its own Reader and nothing changes.
-  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the refs `refs/jarvis/reader-lease/<generation>` in the Brain's repository, never on a branch; the newest generation holds the lease.
+  With Replication on, the Reader is the holder of the Reader lease, a record (`holder`, `name`, `since`, `renewedAt`, `lastRefreshAt`) kept on the refs `refs/attache/reader-lease/<generation>` in the Brain's repository, never on a branch; the newest generation holds the lease.
   Each write is a commit with an empty tree whose message holds the record, made on top of the previous one, so a generation's ref only moves forward: the push is a compare-and-swap, and a rejected push means another Machine wrote first, so the Machine fetches and decides again.
   A ref that only moves forward keeps every commit, so after 144 commits (about a day of heartbeats) the next write moves the lease to a new generation in one `--atomic` push: a last commit on the current generation saying so (a forward move, so a concurrent write still loses the race), the first commit of the next generation (a commit with no parent), and the deletion of the generation before the current one.
   At most two generations exist, so the lease's history stays bounded; no push is ever forced, and the only deletion Replication pushes is a retired lease generation (`assertNoRewrite`).
-  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/jarvis/*` to `refs/remotes/origin/jarvis/*` and drops the generations the remote no longer has (`--prune`).
+  The heartbeat adds no commit to the Brain's history, never touches the data folder and is not cloned with the Brain; every fetch brings the remote's `refs/attache/*` to `refs/remotes/origin/attache/*` and drops the generations the remote no longer has (`--prune`).
   After each check that leaves the Machine up to date, and at setup, `leaseToWrite` (`reader/lease.ts`) decides: the holder renews every 10 minutes and at once when its name or last Source refresh changed; the Preferred Reader takes the lease whenever it does not hold it, so it takes the role back when it returns; a standby Machine takes a lease that lapsed, or that nobody holds yet, if it has a source connected besides the data folder (the standby flag from its record in the Brain, the sources from `App`, `ReplicationDeps.sourcesConnected`); a lease nobody holds is also taken by the Machine that set up Replication (the author of the Brain's first commit, `BrainRepo.foundedBy`) unless the owner chose another Preferred Reader, which is how the first Machine takes it at setup; otherwise the lease is left alone, so a Machine that is not marked standby, or has no source connected, never takes it.
   A lease not renewed for 30 minutes has lapsed: its holder stops reading on a schedule (`Scheduler.enqueue` returns `LATER`, which keeps the schedule due) until it renews, then catches up once.
   A Machine that lost the lease hears so at its next check, so around a handover two Machines may both refresh for up to a minute: inbox items are files keyed by item (`review/inbox/`), so both Machines' writes meet as one file and the inbox merge rule keeps one, and deliverables such as briefings carry the Machine in their file name (`deliverableName`), so two briefings never collide.
@@ -214,7 +214,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
   The inbox's own rule is `attention/inbox-merge.ts` (see the attention engine below).
 - **Time** comes from a `Clock` (`replication/clock.ts`): the system clock in the service, a hand-moved clock in tests.
   `MemoryStore` dates facts, History lines and files by the same clock (`MemoryStoreOptions.now`, `MemoryStore.today()`).
-- **Git** is the Machine's own: `JARVIS_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
+- **Git** is the Machine's own: `ATTACHE_GIT_BIN`, else the first `git` in the platform's usual tool folders (`platform/locations.ts` `toolCandidates`), else the PATH.
   It runs with hooks, signing and the `ext` transport switched off, `LC_ALL=C` and no terminal prompts, whatever the owner's own git config says.
 
 ## Memory model
@@ -232,14 +232,14 @@ This is the state-versus-event rule from the old vault's 2026-08-13 repair, enfo
 
 Write policy (deterministic, in `memory/policy.ts`):
 - Only the service writes.
-  A Harness submits saves through the MCP server or `jarvis save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
+  A Harness submits saves through the MCP server or `attache save`; the Dashboard only decides on Proposals and reverts recent saves (ADR 0003), so the service has no capture, note creation, correction or note-body endpoint.
 - `memory/self.md` (identity) and authorization records (connection write permissions, stored in the database) change only through explicit user-authenticated settings endpoints; model output, imports and connector data can never write them.
 - Model output never writes memory directly.
   Suggested memory changes are stored as Proposals that the user applies or rejects.
   A Proposal holds one whole save item (see below), so one click applies a new note with several facts, or several facts and events on one note.
 - Writes are atomic (temp file + rename) under a per-path in-process lock; one service process owns the folder.
   A writer lock with the owner's pid and instance, kept in the per-user locks folder outside the data folder, refuses a second service of another instance while the owner is alive; a lock left by a process that is gone is taken over.
-  A `.jarvis/writer.lock` left inside the data folder by an earlier version is honoured the same way and then removed.
+  A `.attache/writer.lock` left inside the data folder by an earlier version is honoured the same way and then removed.
 - Paths are resolved and confined to the data folder; symlinks out of it are refused.
 
 ## Retrieval
@@ -265,7 +265,7 @@ Meaning-based search (`meaning/`) runs a small multilingual sentence-embedding m
 It runs on ONNX Runtime's WebAssembly build (`onnxruntime-web`) with the pure-JavaScript Hugging Face tokenizer (`@huggingface/tokenizers`), so one set of files works on macOS, Linux and Windows with no native module to build or ship per platform; the release carries `ort-wasm-simd-threaded.wasm` and `.mjs` next to the service bundle.
 The model is not in the release: the owner starts its download from the Dashboard (`POST /memory/meaning/download`), each file is checked against its size and SHA-256, and the folder `<state>/models/<model id>/` appears only once every file has passed.
 After that it runs offline.
-`JARVIS_MEANING_MODEL` names a JSON model description to use instead (a mirror, or the fixture model in tests).
+`ATTACHE_MEANING_MODEL` names a JSON model description to use instead (a mirror, or the fixture model in tests).
 Each chunk stores the text its vector is made from (title, heading and the same text keyword search matches) and that text's SHA-256.
 Vectors live in `chunk_vectors`, keyed by model id and text hash, in the Machine's own SQLite index: they never enter the Brain and do not replicate, and re-chunking a file keeps the vectors of text that did not change.
 A background builder (`meaning/builder.ts`) embeds chunks without a vector in batches of eight whenever the indexer reports a change, then drops vectors no chunk uses.
@@ -277,17 +277,17 @@ In any other state it returns no list, so search answers on keywords alone; a mo
 The fused score is weighted as before (area, section, status and the share of query terms present), so exact keyword matches keep their place.
 A hit's snippet is the plain words of its chunk (`memory/plain-text.ts`, which parses the chunk with markdown-it set up as the Dashboard renders notes, plus the wiki links and footnotes an imported vault writes, `memory/vault-syntax.ts`): no backticks or code fences, quote, list, emphasis or link syntax, with code and escaped characters kept as written, cut between words around the first matched term and marked `…` where it was cut.
 The hit's `text` keeps the Markdown as written.
-`searchByMeaning` is what the HTTP search route (and through it the MCP `search` tool and the Dashboard), `jarvis search` and recall evaluation call; `jarvis search` loads the model itself when the vectors are ready, and never downloads it or builds vectors.
+`searchByMeaning` is what the HTTP search route (and through it the MCP `search` tool and the Dashboard), `attache search` and recall evaluation call; `attache search` loads the model itself when the vectors are ready, and never downloads it or builds vectors.
 Other internal searches (briefings, audits, Consolidation, research jobs) stay on keywords.
-The MCP `search` tool, `jarvis search` (first line, or stderr with `--json`) and the Dashboard's search say results match keywords only, and why, for as long as `ranking` is `keywords` (`meaning/note.ts`).
+The MCP `search` tool, `attache search` (first line, or stderr with `--json`) and the Dashboard's search say results match keywords only, and why, for as long as `ranking` is `keywords` (`meaning/note.ts`).
 
-Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `jarvis evaluate-recall`).
+Search quality is measured by recall evaluation (`memory/recall-evaluation.ts`, `POST /memory/recall-evaluation`, `attache evaluate-recall`).
 A question set names, per question, the note and the subject of the current fact expected to answer it.
 Each question runs through the same search a Harness gets (8 results, raw archives excluded), and a result counts only when it is that fact's own chunk.
 The report gives how often the expected fact is first and how often it is in the first three, how search ranked (`ranking`), every question not answered first with the first three results, and, unscored, every question whose note or fact is not in the Brain.
 The owner's set lives in the Brain at `evaluation/recall-questions.json`, as JSON so the indexer never reads it; a synthetic Brain with its own set lives in `apps/service/test/fixtures/recall-brain/` and runs with the test suite.
 
-Jarvis holds no conversation of its own (ADR 0003): a Harness asks the Brain through search and read.
+Attache holds no conversation of its own (ADR 0003): a Harness asks the Brain through search and read.
 Research findings and drafts still use the model: the service retrieves first, numbers the evidence `[S1]..[Sn]`, sends it to the model as quoted data with an instruction that documents are untrusted, and maps cited markers back to exact file and line ranges.
 Without a model, research lists the retrieved evidence instead of written findings: each hit's title and snippet, with the snippet escaped so it renders as the same plain text, URLs still links where that is safe.
 Installs from before ADR 0003 drop their stored conversations and messages on upgrade; the chat archives already written to `evidence/conversations/` stay in the Brain, out of recall.
@@ -302,25 +302,25 @@ Remote sources use one of three transports.
   By default they go through the user's claude.ai Atlassian Rovo connector (Rovo MCP v1 tools) on the same gated Claude Code path as Slack, Gmail and Calendar, described below.
   It is the default because some Atlassian organizations refuse other OAuth clients and API tokens while allowing claude.ai.
   The v1 views differ: Jira pages with `pageInfo.endCursor` passed back as `nextPageToken`; Confluence search returns no total and no next page, so a full page is reported `partial`; Confluence dates come back relative ("about 2 hours ago") and are kept out of timestamps and fingerprints.
-  Alternatively, where the organization allows other clients, Jarvis connects directly to `https://mcp.atlassian.com/v2/mcp` through a small Streamable HTTP MCP client (`mcp-http.ts`, `atlassian.ts`).
-  Jarvis calls the MCP tools directly, with no model in the loop: `searchJiraIssuesUsingJql`, `addOrEditJiraIssueComment`, `searchConfluence`, and `listJiraIssueComments`, `listConfluenceComments` and `createConfluenceComment` through `executeRead`/`executeWrite`.
+  Alternatively, where the organization allows other clients, Attache connects directly to `https://mcp.atlassian.com/v2/mcp` through a small Streamable HTTP MCP client (`mcp-http.ts`, `atlassian.ts`).
+  Attache calls the MCP tools directly, with no model in the loop: `searchJiraIssuesUsingJql`, `addOrEditJiraIssueComment`, `searchConfluence`, and `listJiraIssueComments`, `listConfluenceComments` and `createConfluenceComment` through `executeRead`/`executeWrite`.
   Sign-in is OAuth 2.1: protected-resource metadata (RFC 9728), then authorization-server metadata (RFC 8414), dynamic client registration for the loopback redirect (RFC 7591), PKCE S256 and a resource indicator (RFC 8707), with refresh tokens stored in the Keychain.
   An Atlassian API token created for the MCP server (app `mcp-v2`) is the alternative when the organization allows API tokens; a classic unscoped token is rejected with an explanation.
   The configured site is resolved to its cloud id on test, so a credential for the wrong site reports `denied` instead of reading nothing.
 - **Slack, Gmail and Google Calendar** use the claude.ai connectors the user already has in their claude.ai workspace (for an organization account, the organization's connectors).
   Those connectors are only reachable through a claude.ai-authenticated Claude Code session, so `claude/session.ts` runs the user's own `claude` CLI headless with no built-in tools, hooks off, CLAUDE.md files off and a small model (`claude-haiku-4-5`).
   The model only relays calls.
-  Every permission check is routed to Jarvis over the stream-json control protocol (`--permission-prompt-tool stdio`); Jarvis allows a call only when the tool and its arguments equal a planned call, once, and only for a server whose source is `claudeai`.
+  Every permission check is routed to Attache over the stream-json control protocol (`--permission-prompt-tool stdio`); Attache allows a call only when the tool and its arguments equal a planned call, once, and only for a server whose source is `claudeai`.
   Anything else is denied before it runs; in a write session any deviation fails the action.
   Results are read from the raw `tool_result` blocks in the event stream, never from the model's summary, and parsed by strict readers (`slack-format.ts`, `parseThreadPage`, `parseEventPage`) that count unreadable rows as partial coverage.
   A session refuses to start if the user's or the organization's managed Claude Code settings auto-approve that connector's tools, because such a rule would bypass the argument check.
-  If a tool result still arrives for a call Jarvis was never asked about (a managed hook, for example), the session is stopped, its results are discarded and the connection reports `denied`.
-  A long result that Claude Code spills to a file (a 50-issue Jira page is about 80 KB) is read back only from Claude Code's exact `<persisted-output>` wrapper, only from a file inside the project directory of Jarvis's own connector session, and the file is deleted once read, so a path planted in a message is never followed and connector data does not accumulate under `~/.claude`.
+  If a tool result still arrives for a call Attache was never asked about (a managed hook, for example), the session is stopped, its results are discarded and the connection reports `denied`.
+  A long result that Claude Code spills to a file (a 50-issue Jira page is about 80 KB) is read back only from Claude Code's exact `<persisted-output>` wrapper, only from a file inside the project directory of Attache's own connector session, and the file is deleted once read, so a path planted in a message is never followed and connector data does not accumulate under `~/.claude`.
   A read session that stalls is started once more; a write session never is.
   The session waits for MCP connections (`MCP_CONNECTION_NONBLOCKING=false`); one that still meets a `pending` connector stops at init, before any call, and is started again.
   Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack Source refresh is a few sessions rather than one per call.
 
-Authorization for the claude.ai connectors lives in claude.ai, so Jarvis stores no credential for them; disconnecting stops Jarvis's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
+Authorization for the claude.ai connectors lives in claude.ai, so Attache stores no credential for them; disconnecting stops Attache's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
 Write actions keep the approval rules below.
 The claude.ai connector tools and the Jira MCP comment tool cannot attach hidden metadata, so recovery after an interrupted write recognises an earlier attempt by content: it must be the user's own (the account id is required, never guessed), created after the pending attempt started (the outbox records that time and passes it as `since`, with two minutes of clock-skew allowance), with the same text once formatting is ignored (Markdown, ADF, Slack mrkdwn and storage HTML render links and emphasis differently).
 Gmail drafts must also be in the same thread; Confluence comments still carry a hidden effect marker in storage format.
@@ -328,7 +328,7 @@ If that lookup itself fails, the outbox raises `EffectCheckError`: the action be
 Atlassian token refreshes are single-flight per connection because Atlassian rotates refresh tokens; a refresh rejected by Atlassian means "sign in again", while a network failure stays `offline`.
 A sign-in that is started but not finished never replaces the stored OAuth client: a newly registered client is saved only when the callback succeeds.
 Connections created before these transports lose their old credentials once at startup and show `needs auth` with an explanation, keeping their scopes, channels, site and write authority.
-A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Jarvis first.
+A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Attache first.
 A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
@@ -400,25 +400,25 @@ The attention engine follows these rules:
 - Clients pair: the installer or Settings issues a short-lived single-use pairing code; exchanging it yields a random token (stored hashed).
   The browser gets an `HttpOnly; SameSite=Strict` cookie; the CLI keeps its token in a private file (0600, or an owner-only access-control list on Windows) in the service state directory.
 - `Origin`, when present, must be the service origin.
-  State-changing requests also require `X-Jarvis-Client: 1`, which cross-site forms cannot send.
+  State-changing requests also require `X-Attache-Client: 1`, which cross-site forms cannot send.
 - Logs, evidence and API responses pass through redaction of known secret values and token patterns.
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions.
-  The model Jarvis calls has no tools, so injected text cannot trigger actions.
+  The model Attache calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
 ## Harness sessions
 
 Claude Code, Codex, Antigravity and Claude Desktop are connections (`connectors/agent.ts`, `agents/integrations.ts`).
-Connecting one with hooks adds them to that Harness's settings file, through an editor that only adds, replaces or removes entries whose command names `jarvis-agent-hook` and this install's `--state-dir`, so other tools' hooks and other Jarvis instances are never touched (`agents/hooks-config.ts`, `agents/install.ts`).
-The file is backed up before every write, and a file Jarvis cannot parse is refused rather than overwritten.
+Connecting one with hooks adds them to that Harness's settings file, through an editor that only adds, replaces or removes entries whose command names `attache-agent-hook` and this install's `--state-dir`, so other tools' hooks and other Attache instances are never touched (`agents/hooks-config.ts`, `agents/install.ts`).
+The file is backed up before every write, and a file Attache cannot parse is refused rather than overwritten.
 Hook commands go through the installer's `current` symlink, so upgrades do not break them.
 
-The hook (`agents/jarvis-agent-hook.ts`, bundled as `jarvis-agent-hook.mjs`) does no network calls and never waits for the service: SessionEnd budgets are 1.5 s (Claude Code) and 3 s (Codex).
+The hook (`agents/attache-agent-hook.ts`, bundled as `attache-agent-hook.mjs`) does no network calls and never waits for the service: SessionEnd budgets are 1.5 s (Claude Code) and 3 s (Codex).
 On session end, compaction, or (Antigravity) a fully idle turn, it clones the transcript into `state/agents/spool/` and writes a small record last.
-The service ingests the spool on change, every minute and at start, so a session ends up in the data folder even if Jarvis was stopped when it ended.
+The service ingests the spool on change, every minute and at start, so a session ends up in the data folder even if Attache was stopped when it ended.
 A Harness writes its transcript once a conversation starts, so a session end or compaction whose named transcript does not exist had no conversation, like the session `claude mcp list` ends, and is dropped with a debug line (`AgentSessions.hadNoConversation`).
-A missing transcript is still logged as a warning after a finished turn, or when Jarvis saved part of that session earlier, because then the transcript was lost.
-Ingest parses each agent's transcript format down to user and assistant text, dropping tool calls, tool output, thinking, injected reminders and developer-role context (where Jarvis's own memory block lands in Codex), archives it, and queues a `session-distill` job.
+A missing transcript is still logged as a warning after a finished turn, or when Attache saved part of that session earlier, because then the transcript was lost.
+Ingest parses each agent's transcript format down to user and assistant text, dropping tool calls, tool output, thinking, injected reminders and developer-role context (where Attache's own memory block lands in Codex), archives it, and queues a `session-distill` job.
 That job asks the model for durable decisions and lessons, appends one entry per session (or per continuation) to the day's session log, and records how many turns are summarised so a compaction followed by the end adds only new turns.
 An entry for a session that ran in a git repository carries a `Repository: <host/owner/name>` line, read from the folder's git config when the job runs, which ties it to the project that lists that repository.
 Antigravity reports every turn, so its summary waits until the conversation has been quiet for 15 minutes.
@@ -454,7 +454,7 @@ The five-Proposal cap is counted per capture, from the Proposals `proposedBy: "C
 Each Proposal's source is `{ kind: "capture", ref: <path>, lines }`, where `lines` is the shortest run of the file's lines that holds the quoted evidence.
 
 At session start the hook prints a session context the service rewrites whenever the Brain changes (`agents/context-files.ts`).
-The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `jarvis search` command for deeper recall from the agent's shell.
+The global context, `state/agents/session-context.md`, is the global index only: identity, the titles of the curated notes per type, and the `attache search` command for deeper recall from the agent's shell.
 The command (`agents/search-command.ts`) runs as written in a POSIX shell, Git Bash and cmd.exe; on Windows the context also gives it after PowerShell's call operator `&`, because PowerShell reads a quoted program path as a string.
 A project note lists its repositories in its `Repositories` fact (`memory/repositories.ts`); every form of a repository, `owner/name` (GitHub), `host/owner/name`, an SSH or an HTTPS remote, reduces to one key, `host/owner/name` in lower case.
 For each project that lists one, the service writes `state/agents/projects/<slug>.md`, the project's context, and then `state/agents/projects/repositories.json`, which maps each key to its file; a repository two projects list goes to the more recently updated one.
@@ -468,24 +468,24 @@ Every fact shown that is past its Review date carries `(unverified: Review date 
 The hook reads the remotes of the session's folder from the repository's own git config, following a worktree's `gitdir` and `commondir` (`agents/git-remotes.ts`), runs no `git` process, and prints the first matching project's file, or the global one.
 A save or a Proposal that sets a project's `Repositories` fact to anything that is not a list of repositories is refused (`memory/save-items.ts`, the validation both share).
 Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
-Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Jarvis's own model calls run with `--setting-sources ""`, so neither recurses.
-Turning the feature off disconnects every Harness with hooks; `jarvis-uninstall` runs `jarvis agent-hooks uninstall` first, which also removes the MCP server.
+Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Attache's own model calls run with `--setting-sources ""`, so neither recurses.
+Turning the feature off disconnects every Harness with hooks; `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
 
 ### MCP server in each Harness
 
-Connecting a Harness also registers Jarvis's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).
+Connecting a Harness also registers Attache's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).
 Claude Desktop is a Harness with the MCP server only; its Code tab runs Claude Code, whose hooks already save those sessions.
-The entry is named `jarvis` for the default install (`jarvis-<hash>` for another instance) and runs `jarvis mcp --state-dir <state>` through the bundled runtime and the `current` path; an entry is Jarvis's when its arguments run `mcp` for this state folder, whatever its name.
-JSON files are edited as JSON (`agents/mcp-config-json.ts`); Codex's TOML is edited as text, taking out Jarvis's `[mcp_servers.<name>]` tables and appending a fresh one, and a TOML parser checks before and after that nothing but Jarvis's entry changed, so comments and layout survive and any other outcome is refused (`agents/mcp-config-toml.ts`).
-An entry under Jarvis's name that Jarvis did not add is refused, as is a file that does not parse.
+The entry is named `attache` for the default install (`attache-<hash>` for another instance) and runs `attache mcp --state-dir <state>` through the bundled runtime and the `current` path; an entry is Attache's when its arguments run `mcp` for this state folder, whatever its name.
+JSON files are edited as JSON (`agents/mcp-config-json.ts`); Codex's TOML is edited as text, taking out Attache's `[mcp_servers.<name>]` tables and appending a fresh one, and a TOML parser checks before and after that nothing but Attache's entry changed, so comments and layout survive and any other outcome is refused (`agents/mcp-config-toml.ts`).
+An entry under Attache's name that Attache did not add is refused, as is a file that does not parse.
 Every change across the hooks file, the MCP file and the rule file is worked out before the first write, so a refused file leaves the Harness untouched.
 Disconnecting removes the hooks, the rule and the server, trying each even when another fails, and reports the failures together.
 
-When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.jarvis-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
-The MCP prompts replace those skills, and there is no `jarvis save` command any more, because a save must be confirmed by the owner inside a Harness, which a shell cannot do.
+When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.attache-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
+The MCP prompts replace those skills, and there is no `attache save` command any more, because a save must be confirmed by the owner inside a Harness, which a shell cannot do.
 
-`jarvis audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
-Each pairs itself on first use as client kind `cli` (the same trust as `jarvis pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
+`attache audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
+Each pairs itself on first use as client kind `cli` (the same trust as `attache pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
 Only a save marked `confirmed: true` (the owner accepted it when the MCP server asked) or `autoAccept: true` (checked against the setting) writes as the owner; any other save is stored as Proposals, one per item, and the response lists them under `proposals`.
 Only a client paired as `cli`, which the MCP server uses, may call it: the Dashboard's browser session gets 403 `dashboard_cannot_save` (ADR 0003).
@@ -499,7 +499,7 @@ Rejecting writes nothing.
 Proposals live in the Brain, one file each under `review/proposals/`, so they replicate and can be decided on any Machine (see "Review state" under Replication above).
 The file records the item, the reason, the evidence, the Harness session, the Machine it was made on and every decision made on it; the `proposals` table is only this Machine's index of those files (`memory/proposal-index.ts`), refreshed from `Replication.onPulled` and rebuilt when the data folder is opened.
 Proposals that earlier versions kept as `memory_changes` rows with `change = 'proposal'` are written as files the first time the data folder is opened (`memory/proposal-legacy.ts`), then dropped from the change log; one-fact rows (`{ value, newDoc }`) become the equivalent one-fact item, so they still apply and reject.
-The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Jarvis has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID` in the environment the Harness gives the MCP server (`mcp/agent-env.ts`).
+The write runs as the user, because saving is the user's explicit request; the note's provenance is `agent-saved`, and its source is the agent session (the archived transcript when Attache has one), detected from `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID` or `ANTIGRAVITY_CONVERSATION_ID` in the environment the Harness gives the MCP server (`mcp/agent-env.ts`).
 `GET /api/v1/memory/audit` (`memory/audit.ts`) is read-only: every Current State entry with its age, Review date and source, the flags `stale` (past its Review date, `isPastReview`; there is no age threshold), `unsourced`, `missing-source` and `duplicate-subject`, newer passages about the fact, whether a project's session context carries the note's facts (`inSessionIndex`), and notes whose titles reduce to the same name.
 Newer passages are searched per fact (the note's title and the fact's subject), must name the note, and are dated by what they say rather than by file time: a current fact in another note by its own date, an evidence document by `observed_at`, `captured_at` or `date`, and only then by modification time.
 The document a fact cites as its source, archives under `evidence/archive/`, generated deliverables, and history or undated prose in other notes are never offered, because none of them can overturn the fact.
@@ -516,16 +516,16 @@ Events are append-only History and are never reverted.
 
 ## MCP server
 
-`jarvis mcp` (`mcp/`) is an MCP server a Harness starts as a local process over stdio, built on `@modelcontextprotocol/sdk`.
-It is a client of the running service like `jarvis audit`: it pairs as client kind `cli` and keeps the token in `state/cli-token`, so a Harness's configuration holds only the command.
+`attache mcp` (`mcp/`) is an MCP server a Harness starts as a local process over stdio, built on `@modelcontextprotocol/sdk`.
+It is a client of the running service like `attache audit`: it pairs as client kind `cli` and keeps the token in `state/cli-token`, so a Harness's configuration holds only the command.
 Every tool call builds a fresh client from `state/runtime.json`, so a server started before the service works once the service runs, and a stopped service is reported on the call that meets it with how to start it.
-The server starts even when the service is down, because a Harness launches its MCP servers when it starts and would otherwise mark Jarvis as failed.
+The server starts even when the service is down, because a Harness launches its MCP servers when it starts and would otherwise mark Attache as failed.
 
 - `search` calls `GET /api/v1/memory/search?recall=1`, which applies the recall exclusions (`RECALL_EXCLUDE`: old chat archives and raw session transcripts); without `recall=1` the Dashboard still searches everything.
   Each passage carries its path (relative to the Brain, or absolute for another indexed folder), line range, area, section kind and note title.
   The area tells curated memory, the only place a current fact can come from, apart from evidence, deliverables and imported notes.
 - `read` calls `GET /api/v1/memory/document`, which also accepts an absolute path inside the Brain or another indexed folder when no `root` is given, and slices the requested 1-based, inclusive line range from the raw file, so lines match search citations.
-- `audit` calls `GET /api/v1/memory/audit` and returns the report with every file named by one path, the same kind `search` returns (`memory/audit-view.ts`, shared with `jarvis audit`, which shows absolute paths instead).
+- `audit` calls `GET /api/v1/memory/audit` and returns the report with every file named by one path, the same kind `search` returns (`memory/audit-view.ts`, shared with `attache audit`, which shows absolute paths instead).
   It is read-only and marked so (`readOnlyHint`).
 - The `save` and `audit` prompts (`mcp/prompt-text.ts`) carry the procedures of the save and audit skills earlier versions installed, with the MCP tools in place of shell commands.
   Each takes one optional argument (`focus`, `topic`) appended to the text, and returns one user message.
@@ -542,7 +542,7 @@ The server starts even when the service is down, because a Harness launches its 
   A client that does not declare the `elicitation` capability, or answers the request with "method not found", gets `POST /memory/save/proposals`: the items are checked as one save and stored as one Proposal each in one transaction, with the save's origin in the payload.
   The origin names the Harness and session (`mcp/harness.ts`): from the environment the Harness gives the server (`CLAUDECODE` with `CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`, `ANTIGRAVITY_CONVERSATION_ID`), otherwise from the client name it reported (`claude-ai` is Claude Desktop), without a session; the folder is the server's working directory.
 - The `wrap-up` prompt (text in `mcp/prompt-text.ts` too) asks the agent to pick out the conversation's durable points and call the `wrap_up` tool with them.
-  It exists for conversations Jarvis cannot capture, such as Claude Desktop's Chat tab.
+  It exists for conversations Attache cannot capture, such as Claude Desktop's Chat tab.
   `wrap_up` calls `POST /api/v1/memory/wrap-up` (`memory/wrap-up.ts`), which writes one evidence document per call with the points under `## Points` in the body, never under Current State, so search returns them as evidence and never as a current fact.
   The Harness comes from the same mapping as the save origin (`mcp/harness.ts`); the date and the Machine come from the service.
   The store redacts the title before it names the file and the whole document as it writes it, like all evidence.

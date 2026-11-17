@@ -152,7 +152,7 @@ describe("The inbox replicates", () => {
     expect((await venue(pc))!.state).toBe("resolved");
 
     // An earlier release left such rows open, and the upgrade carried the decision over without working the state out again.
-    const db = new DatabaseSync(join(mac.stateDir, "jarvis.sqlite"));
+    const db = new DatabaseSync(join(mac.stateDir, "attache.sqlite"));
     db.prepare("update attention_items set state = 'open' where id = ?").run(id);
     db.close();
     const restarted = await world.restart(mac);

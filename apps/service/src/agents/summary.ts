@@ -76,7 +76,7 @@ export function sessionLogSection(input: {
 }): string {
   const head = [localTime(input.at), input.agentLabel, projectLabel(input.cwd)].filter(Boolean).join(" · ");
   const lines =
-    input.bullets === null ? ["- No model is connected, so this session was saved without a summary, and Jarvis made no Proposals from it."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
+    input.bullets === null ? ["- No model is connected, so this session was saved without a summary, and Attache made no Proposals from it."] : input.bullets.length ? input.bullets.map((b) => `- ${b}`) : ["- Nothing durable to remember."];
   const repository = repositoryLine(input.repositories);
   return [`## ${head}`, "", `**${input.title}**${input.continued ? " (continued)" : ""}`, "", ...(repository ? [repository, ""] : []), ...lines, "", `Transcript: [${input.title}](${input.transcriptLink})`].join("\n");
 }

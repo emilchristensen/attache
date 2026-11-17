@@ -28,7 +28,7 @@ function cli(svc: TestService, args: string[]): Promise<{ status: number | null;
   });
 }
 
-describe("jarvis replication", () => {
+describe("attache replication", () => {
   it("sets Replication up on one Machine and joins it from another, from a terminal", async () => {
     const remote = createRemote();
     const mac = await startTestService();
@@ -43,7 +43,7 @@ describe("jarvis replication", () => {
 
     const pc = await startTestService({ setup: false });
     services.push(pc);
-    const folder = join(mkdtempSync(join(tmpdir(), "jarvis-it-join-")), "brain");
+    const folder = join(mkdtempSync(join(tmpdir(), "attache-it-join-")), "brain");
     const join_ = await cli(pc, ["replication", "join", remote.url, "--data-folder", folder]);
     expect(join_.stderr).toBe("");
     expect(join_.status).toBe(0);

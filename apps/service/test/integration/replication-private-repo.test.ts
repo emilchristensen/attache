@@ -244,19 +244,19 @@ describe("Replication to a private GitHub repository", () => {
   });
 
   it("runs the credential helper from an install folder whose path has spaces and non-ASCII letters", async () => {
-    // As `C:\Users\Søren Ås\AppData\Local\Jarvis` on Windows: the helper's command line must still reach the `jarvis` executable.
+    // As `C:\Users\Søren Ås\AppData\Local\Attache` on Windows: the helper's command line must still reach the `attache` executable.
     const install = testFolder("install");
-    const script = join(install, "jarvis-service.mjs");
+    const script = join(install, "attache-service.mjs");
     writeFileSync(script, `await import(${JSON.stringify(pathToFileURL(MAIN).href)});\n`);
-    const before = process.env.JARVIS_CLI_SCRIPT;
-    process.env.JARVIS_CLI_SCRIPT = script;
+    const before = process.env.ATTACHE_CLI_SCRIPT;
+    process.env.ATTACHE_CLI_SCRIPT = script;
     try {
       const repo = newRepo();
       const mac = await machine();
       expect((await mac.post("/replication/setup", { remote: repo.full })).status).toBe("up_to_date");
       expect(basicCredentials(repo)).toEqual(new Set([`x-access-token:${TOKEN}`]));
     } finally {
-      process.env.JARVIS_CLI_SCRIPT = before;
+      process.env.ATTACHE_CLI_SCRIPT = before;
     }
   });
 

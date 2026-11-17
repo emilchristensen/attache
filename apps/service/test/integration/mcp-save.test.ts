@@ -207,13 +207,13 @@ describe("MCP save from a Harness that cannot ask the owner", () => {
   });
 });
 
-describe("MCP save while Jarvis is stopped", () => {
-  it("says how to start Jarvis", async () => {
+describe("MCP save while Attache is stopped", () => {
+  it("says how to start Attache", async () => {
     const stopped = await startTestService();
     await stopped.stop();
     const client = await mcp.connect(stopped.stateDir, { confirm: owner("accept").confirm });
     const r = await callTool<SaveReply>(client, "save", { items: [{ action: "create", type: "note", title: "Lost", facts: [{ subject: "Idea", value: "Nowhere to go" }] }] });
     expect(r.isError).toBe(true);
-    expect(r.text).toContain("Jarvis is not running. Start it with `jarvis start`");
+    expect(r.text).toContain("Attache is not running. Start it with `attache start`");
   });
 });

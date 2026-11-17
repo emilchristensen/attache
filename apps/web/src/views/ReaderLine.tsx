@@ -1,4 +1,4 @@
-import type { ReaderView } from "@jarvis/contracts";
+import type { ReaderView } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { Time } from "../components/ui.tsx";
 

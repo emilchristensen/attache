@@ -105,7 +105,7 @@ function notice(path: string, title: string, first: MachineRef, second: MachineR
     kind: PROSE_VERSIONS,
     perPath: true,
     title: `Two versions kept in "${title}"`,
-    message: `${first.name} and ${second.name} changed the same lines of "${title}" while apart. Jarvis kept both versions in the note, each under a heading naming its Machine. Keep the one you want and delete the other with its heading; this item then resolves by itself.`,
+    message: `${first.name} and ${second.name} changed the same lines of "${title}" while apart. Attache kept both versions in the note, each under a heading naming its Machine. Keep the one you want and delete the other with its heading; this item then resolves by itself.`,
   };
 }
 

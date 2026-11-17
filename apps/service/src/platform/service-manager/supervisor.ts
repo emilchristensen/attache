@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 /** What the Windows logon task runs, and in which environment. */
 export interface SupervisedService {
-  /** The `jarvis-service.mjs` (or `main.ts` in development) to run `serve` from. */
+  /** The `attache-service.mjs` (or `main.ts` in development) to run `serve` from. */
   script: string;
   port: number;
   stateDir: string;
@@ -40,14 +40,14 @@ function serviceEnv(s: SupervisedService): NodeJS.ProcessEnv {
     USERPROFILE: s.home,
     ...(s.localAppData ? { LOCALAPPDATA: s.localAppData } : {}),
     ...(s.appData ? { APPDATA: s.appData } : {}),
-    JARVIS_STATE_DIR: s.stateDir,
-    JARVIS_INSTANCE: s.instance,
-    JARVIS_WEB_DIR: resolve(dirname(s.script), "..", "web"),
+    ATTACHE_STATE_DIR: s.stateDir,
+    ATTACHE_INSTANCE: s.instance,
+    ATTACHE_WEB_DIR: resolve(dirname(s.script), "..", "web"),
   };
 }
 
 /**
- * Keep `jarvis serve` running, as launchd's KeepAlive and systemd's
+ * Keep `attache serve` running, as launchd's KeepAlive and systemd's
  * Restart=always do on macOS and Linux: Task Scheduler starts a task at logon
  * but does not restart a program that exits. The service's output is appended
  * to `service.out.log` and `service.err.log` in the state folder's `logs`.
@@ -59,7 +59,7 @@ export function superviseService(s: SupervisedService): Promise<void> {
   const logs = join(s.stateDir, "logs");
   mkdirSync(logs, { recursive: true });
   const errLog = join(logs, "service.err.log");
-  const note = (message: string) => appendFileSync(errLog, `${new Date().toISOString()} jarvis service run: ${message}\n`);
+  const note = (message: string) => appendFileSync(errLog, `${new Date().toISOString()} attache service run: ${message}\n`);
   let child: ChildProcess | null = null;
   let stopping = false;
   let delay = FIRST_DELAY_MS;
@@ -88,7 +88,7 @@ export function superviseService(s: SupervisedService): Promise<void> {
       });
     };
 
-    // Ending the task (Task Scheduler, logoff, `jarvis stop`) ends the console host that started this
+    // Ending the task (Task Scheduler, logoff, `attache stop`) ends the console host that started this
     // process, not this process; so it watches that host and stops with it.
     const parent = process.ppid;
     const watch = setInterval(() => {

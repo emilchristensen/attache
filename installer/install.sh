@@ -1,27 +1,27 @@
 #!/bin/sh
-# Jarvis installer for macOS and Linux. Runs from an extracted release. Uses
+# Attache installer for macOS and Linux. Runs from an extracted release. Uses
 # only tools every such computer has (sh, cp, ln, mkdir); the Node.js runtime
 # is bundled, and everything that differs per operating system (where files
 # go, the background service, the command-line wrappers) is done by the
-# bundled `jarvis` itself through its platform modules.
+# bundled `attache` itself through its platform modules.
 #
 #   ./install.sh                 install or upgrade, start the service, open setup
-#   JARVIS_NO_OPEN=1 ./install.sh   do not open the browser
+#   ATTACHE_NO_OPEN=1 ./install.sh   do not open the browser
 #
 # Environment overrides (for tests and advanced use):
-#   JARVIS_PREFIX     install location   (default: ~/Library/Application Support/Jarvis on macOS, ~/.local/share/jarvis on Linux)
-#   JARVIS_STATE_DIR  service state      (default: <prefix>/state on macOS, ~/.local/state/jarvis on Linux)
-#   JARVIS_PORT       service port       (default: 7427)
-#   JARVIS_INSTANCE   instance name      (default: default; also names the background service)
+#   ATTACHE_PREFIX     install location   (default: ~/Library/Application Support/Attache on macOS, ~/.local/share/attache on Linux)
+#   ATTACHE_STATE_DIR  service state      (default: <prefix>/state on macOS, ~/.local/state/attache on Linux)
+#   ATTACHE_PORT       service port       (default: 7427)
+#   ATTACHE_INSTANCE   instance name      (default: default; also names the background service)
 set -eu
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(cat "$SRC/VERSION")"
 TARGET="$(cat "$SRC/TARGET")"
-NEW="$SRC/bin/jarvis"
+NEW="$SRC/bin/attache"
 
 say() { printf '%s\n' "$*"; }
-fail() { printf 'Jarvis install failed: %s\n' "$*" >&2; exit 1; }
+fail() { printf 'Attache install failed: %s\n' "$*" >&2; exit 1; }
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) HOST="macos-arm64" ;;
@@ -31,29 +31,29 @@ esac
 [ "$HOST" = "$TARGET" ] || fail "this release is for $TARGET, and this computer is $HOST. Download the release for this computer."
 "$SRC/runtime/node" --version >/dev/null 2>&1 || fail "the bundled runtime does not run on this computer"
 
-export JARVIS_INSTANCE="${JARVIS_INSTANCE:-default}"
-PREFIX="${JARVIS_PREFIX:-$("$NEW" paths installPrefix)}"
-PORT="${JARVIS_PORT:-7427}"
-# An install moved with JARVIS_PREFIX keeps its state inside it, as it always has.
-STATE="${JARVIS_STATE_DIR:-${JARVIS_PREFIX:+$JARVIS_PREFIX/state}}"
+export ATTACHE_INSTANCE="${ATTACHE_INSTANCE:-default}"
+PREFIX="${ATTACHE_PREFIX:-$("$NEW" paths installPrefix)}"
+PORT="${ATTACHE_PORT:-7427}"
+# An install moved with ATTACHE_PREFIX keeps its state inside it, as it always has.
+STATE="${ATTACHE_STATE_DIR:-${ATTACHE_PREFIX:+$ATTACHE_PREFIX/state}}"
 [ -n "$STATE" ] || STATE="$("$NEW" paths stateDir)"
 APP="$PREFIX/app/$VERSION"
 
 PREVIOUS=""
 if [ -L "$PREFIX/current" ]; then PREVIOUS="$(basename "$(readlink "$PREFIX/current")")"; fi
 
-say "Installing Jarvis $VERSION${PREVIOUS:+ (currently $PREVIOUS)}"
+say "Installing Attache $VERSION${PREVIOUS:+ (currently $PREVIOUS)}"
 mkdir -p "$PREFIX/app" "$STATE/logs"
 chmod 700 "$PREFIX" "$STATE"
 
 # If a service is already running, back it up before changing anything.
-if [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/jarvis" ]; then
+if [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
   say "Backing up the existing installation"
-  JARVIS_STATE_DIR="$STATE" "$PREFIX/current/bin/jarvis" backup --out "$STATE/backups/pre-upgrade-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz" >/dev/null || fail "could not back up the existing installation; nothing was changed"
+  ATTACHE_STATE_DIR="$STATE" "$PREFIX/current/bin/attache" backup --out "$STATE/backups/pre-upgrade-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz" >/dev/null || fail "could not back up the existing installation; nothing was changed"
 fi
 
 # Stop the running service (if any) and wait until it has really stopped.
-"$NEW" service stop >/dev/null || fail "could not stop the running Jarvis service; nothing was changed"
+"$NEW" service stop >/dev/null || fail "could not stop the running Attache service; nothing was changed"
 
 # Copy this version into place atomically, then point "current" at it.
 TMP="$PREFIX/app/.$VERSION.installing.$$"
@@ -67,7 +67,7 @@ ln -sfn "$APP" "$PREFIX/current"
 [ "$(readlink "$PREFIX/current")" = "$APP" ] || fail "could not switch to version $VERSION"
 
 # Command-line entry points, and the background service: starts at login, restarts on crash, independent of any browser.
-"$NEW" wrappers install --prefix "$PREFIX" --state-dir "$STATE" --port "$PORT" >/dev/null || fail "could not install the jarvis command"
+"$NEW" wrappers install --prefix "$PREFIX" --state-dir "$STATE" --port "$PORT" >/dev/null || fail "could not install the attache command"
 "$NEW" service install --prefix "$PREFIX" --state-dir "$STATE" --port "$PORT" >/dev/null || fail "could not set up the background service"
 BIN="$("$NEW" paths binDir)"
 
@@ -83,7 +83,7 @@ rollback() {
 
 "$NEW" service start >/dev/null || rollback "the background service could not be started"
 
-say "Starting the Jarvis service on http://127.0.0.1:$PORT"
+say "Starting the Attache service on http://127.0.0.1:$PORT"
 # The bundled runtime asks the service for its version, so no curl is needed.
 healthy() {
   "$SRC/runtime/node" -e '
@@ -97,11 +97,11 @@ until healthy; do
   sleep 0.5
 done
 
-say "Jarvis $VERSION is running."
-if [ "${JARVIS_NO_OPEN:-0}" = "1" ]; then
-  "$BIN/jarvis" pair
+say "Attache $VERSION is running."
+if [ "${ATTACHE_NO_OPEN:-0}" = "1" ]; then
+  "$BIN/attache" pair
 else
-  "$BIN/jarvis" pair --open
+  "$BIN/attache" pair --open
 fi
 say ""
-say "Command line: $BIN/jarvis (status, pair, backup, restore). Uninstall: $BIN/jarvis-uninstall"
+say "Command line: $BIN/attache (status, pair, backup, restore). Uninstall: $BIN/attache-uninstall"

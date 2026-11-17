@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { plural, type JobEvent, type JobView } from "@jarvis/contracts";
+import { plural, type JobEvent, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, Markdown, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
@@ -158,7 +158,7 @@ export function JobsView() {
     <div className="page">
       <div className="page-header">
         <h1>Jobs</h1>
-        <span className="subtitle">Background work runs in the Jarvis service. Close this tab and it keeps going.</span>
+        <span className="subtitle">Background work runs in the Attache service. Close this tab and it keeps going.</span>
       </div>
       <form
         className="card row research-form"

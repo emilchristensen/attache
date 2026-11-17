@@ -32,7 +32,7 @@ afterEach(async () => {
 
 /** A service on a copy of the synthetic Brain, whose meaning model comes from the fixture server. */
 async function start(opts: { stateDir?: string; dataDir?: string; loadEmbedder?: LoadEmbedder } = {}): Promise<TestService> {
-  const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "jarvis-meaning-")), "brain");
+  const dataDir = opts.dataDir ?? join(mkdtempSync(join(tmpdir(), "attache-meaning-")), "brain");
   if (!opts.dataDir) cpSync(SYNTHETIC_BRAIN, dataDir, { recursive: true });
   const meaning = { model: model.description(), ...(opts.loadEmbedder ? { loadEmbedder: opts.loadEmbedder } : {}) };
   const svc = await startTestService({ ...(opts.stateDir ? { stateDir: opts.stateDir } : {}), dataDir, meaning });
@@ -176,8 +176,8 @@ describe("after the download", () => {
   it("runs without a network: a restarted service builds vectors for new notes with the model server gone", async () => {
     const own = await startFixtureServer();
     const ownModel = installFixtureMeaningModel(own);
-    const stateDir = mkdtempSync(join(tmpdir(), "jarvis-meaning-state-"));
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-meaning-")), "brain");
+    const stateDir = mkdtempSync(join(tmpdir(), "attache-meaning-state-"));
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-meaning-")), "brain");
     cpSync(SYNTHETIC_BRAIN, dataDir, { recursive: true });
     const first = await startTestService({ stateDir, dataDir, meaning: { model: ownModel.description() } });
     await first.post("/memory/meaning/download");
@@ -261,9 +261,9 @@ describe("once every passage has a vector, search ranks by meaning", () => {
     expect(r.data.passages[0]!.text).toContain(STANDUP);
     expect(r.text).not.toMatch(/keywords only/);
 
-    const modelFile = join(mkdtempSync(join(tmpdir(), "jarvis-meaning-model-")), "model.json");
+    const modelFile = join(mkdtempSync(join(tmpdir(), "attache-meaning-model-")), "model.json");
     writeFileSync(modelFile, JSON.stringify(model.description()));
-    const env = { ...process.env, JARVIS_MEANING_MODEL: modelFile };
+    const env = { ...process.env, ATTACHE_MEANING_MODEL: modelFile };
     const text = execFileSync(process.execPath, [MAIN, "search", DANISH, "--state-dir", svc.stateDir], { encoding: "utf8", env });
     expect(text).not.toMatch(/keywords only/);
     expect(text.split("\n")[0]).toMatch(/team-rituals\.md:\d+-\d+ {2}Team rituals$/);

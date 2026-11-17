@@ -1,14 +1,14 @@
 import { resolve } from "node:path";
-import type { ReplicationView } from "@jarvis/contracts";
+import type { ReplicationView } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import type { CliIo } from "./memory-commands.ts";
 import { ServiceClient } from "./client.ts";
 
-export const REPLICATION_USAGE = `Usage: jarvis replication status [--json]
-       jarvis replication setup <repository> [--json]
-       jarvis replication join <repository> [--data-folder <empty folder>] [--json]
-       jarvis replication check [--json]
-       jarvis replication off [--json]
+export const REPLICATION_USAGE = `Usage: attache replication status [--json]
+       attache replication setup <repository> [--json]
+       attache replication join <repository> [--data-folder <empty folder>] [--json]
+       attache replication check [--json]
+       attache replication off [--json]
 
 Replication keeps the Brain the same on every Machine through a private git repository.
 setup switches it on with this Machine's Brain; the repository must be empty.
@@ -46,7 +46,7 @@ function flag(argv: string[], name: string): string | undefined {
   return value;
 }
 
-/** `jarvis replication`: set up, join and look at Replication through the running service. */
+/** `attache replication`: set up, join and look at Replication through the running service. */
 export async function replicationCommand(argv: string[], paths: ServicePaths, io: CliIo) {
   const [, sub = "status", repository] = positional(argv);
   if (argv.includes("--help")) return io.out(REPLICATION_USAGE);

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, accessSync, constants, statSync } from "node:fs";
 import { resolve, isAbsolute } from "node:path";
 import { z } from "zod";
-import { ConfigPatch, FeatureId, MachineRename, plural, type SetupDefaults } from "@jarvis/contracts";
+import { ConfigPatch, FeatureId, MachineRename, plural, type SetupDefaults } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -27,7 +27,7 @@ export function dataFolderPreview(path: string) {
     writable = false;
   }
   const plan = exists ? planDataFolderScan(abs) : { read: [], skipped: [], totalBytes: 0 };
-  const willCreate = ["memory/", "evidence/", "deliverables/", "README.md", ".jarvis/"].filter((d) => !existsSync(resolve(abs, d)));
+  const willCreate = ["memory/", "evidence/", "deliverables/", "README.md", ".attache/"].filter((d) => !existsSync(resolve(abs, d)));
   return {
     path: abs,
     exists,
@@ -37,15 +37,15 @@ export function dataFolderPreview(path: string) {
     willCreate,
     willModify: [] as string[],
     note: exists
-      ? `Jarvis will add ${willCreate.length ? willCreate.join(", ") : "nothing new"} and index ${plural(plan.read.length, "existing Markdown file")}. Existing files are not modified.`
-      : "Jarvis will create this folder with memory/, evidence/ and deliverables/.",
+      ? `Attache will add ${willCreate.length ? willCreate.join(", ") : "nothing new"} and index ${plural(plan.read.length, "existing Markdown file")}. Existing files are not modified.`
+      : "Attache will create this folder with memory/, evidence/ and deliverables/.",
   };
 }
 
 export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   r.get(
     "/health",
-    () => ({ ok: true, service: "jarvis", version: VERSION, api: "v1", setupCompleted: app.config.get().setupCompleted, time: nowIso() }),
+    () => ({ ok: true, service: "attache", version: VERSION, api: "v1", setupCompleted: app.config.get().setupCompleted, time: nowIso() }),
     { public: true },
   );
 
@@ -121,7 +121,7 @@ export function registerCoreRoutes(r: Router, app: App, port: () => number) {
   r.post("/setup/data-folder", async (c) => {
     const { path } = await c.body(z.object({ path: z.string().min(1) }));
     const preview = dataFolderPreview(path);
-    if (!preview.writable) throw new HttpError(400, "not_writable", `Jarvis cannot write to ${preview.path}`);
+    if (!preview.writable) throw new HttpError(400, "not_writable", `Attache cannot write to ${preview.path}`);
     mkdirSync(preview.path, { recursive: true });
     const { created } = app.useDataFolder(preview.path);
     return { path: preview.path, created, indexed: app.memory.listDocuments({ root: "data", limit: 2000 }).length };

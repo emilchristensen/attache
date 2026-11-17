@@ -2,7 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ServicePaths } from "../core/paths.ts";
-import { MeaningState } from "@jarvis/contracts";
+import { MeaningState } from "@attache/contracts";
 import { serviceBrain, type BrainAccess, type BrainOverview, type NoteText, type Passage, type SearchAnswer } from "./brain.ts";
 import { buildInstructions } from "./instructions.ts";
 import { registerAuditTool } from "./audit-tool.ts";
@@ -61,7 +61,7 @@ function renderNote(n: NoteText): string {
 
 /** The MCP server a Harness talks to, over any transport. */
 export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext }): McpServer {
-  const server = new McpServer({ name: "jarvis", title: "Jarvis", version: info.version }, { instructions: info.instructions });
+  const server = new McpServer({ name: "attache", title: "Attache", version: info.version }, { instructions: info.instructions });
   server.registerTool(
     "search",
     {
@@ -112,7 +112,7 @@ export function createMcpServer(brain: BrainAccess, info: { version: string; ins
 async function fetchOverview(brain: BrainAccess): Promise<{ overview: BrainOverview } | { error: string }> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Jarvis did not answer within ${OVERVIEW_TIMEOUT_MS / 1000} seconds.`)), OVERVIEW_TIMEOUT_MS);
+    timer = setTimeout(() => reject(new Error(`Attache did not answer within ${OVERVIEW_TIMEOUT_MS / 1000} seconds.`)), OVERVIEW_TIMEOUT_MS);
   });
   try {
     return { overview: await Promise.race([brain.overview(), timeout]) };
@@ -124,7 +124,7 @@ async function fetchOverview(brain: BrainAccess): Promise<{ overview: BrainOverv
 }
 
 /**
- * `jarvis mcp`: serve the Brain to the Harness that started this process, over
+ * `attache mcp`: serve the Brain to the Harness that started this process, over
  * stdio. It pairs with the running service the way the CLI does, so a
  * Harness's configuration names only the command, never a token. It starts
  * even while the service is stopped, so the Harness can say how to start it.

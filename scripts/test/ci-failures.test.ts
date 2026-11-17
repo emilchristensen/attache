@@ -109,7 +109,7 @@ describe("summarizeJob", () => {
         "",
         "  1) tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup ",
         "",
-        "    Error: ENOENT: no such file or directory, open '/tmp/jarvis-e2e æøå-6RhlNX/Jarvis/memory/self.md'",
+        "    Error: ENOENT: no such file or directory, open '/tmp/attache-e2e æøå-6RhlNX/Attache/memory/self.md'",
         "",
         "      611 |     await second.getByRole(\"button\", { name: \"Join into this folder\" }).click();",
         "    Error Context: test-results/e2e/journeys-replication/error-context.md",
@@ -128,7 +128,7 @@ describe("summarizeJob", () => {
       {
         name: "Browser journeys",
         failures: [
-          { test: "tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup", errors: ["Error: ENOENT: no such file or directory, open '/tmp/jarvis-e2e æøå-6RhlNX/Jarvis/memory/self.md'"] },
+          { test: "tests/e2e/journeys.spec.ts:589:1 › replication: set up in Settings, joined from another Machine's setup", errors: ["Error: ENOENT: no such file or directory, open '/tmp/attache-e2e æøå-6RhlNX/Attache/memory/self.md'"] },
           { test: "tests/e2e/visual.spec.ts:76:1 › screens", errors: ["Error: The save did not go through"] },
         ],
         output: [],
@@ -145,7 +145,7 @@ describe("summarizeJob", () => {
       "##[group]Run node scripts/test-install.mjs --from 0.1.0 --to 0.1.1",
       "##[endgroup]",
       "PASS [A02] clean-profile install starts the service — version 0.1.0",
-      "FAIL [A14] uninstall --delete-data leaves no Jarvis file in the home folder — AppData\\Local\\Jarvis\\locks\\c2fa.lock",
+      "FAIL [A14] uninstall --delete-data leaves no Attache file in the home folder — AppData\\Local\\Attache\\locks\\c2fa.lock",
       "FAIL [A02] service starts at login",
       "35/36 installation checks passed",
       "##[error]Process completed with exit code 1.",
@@ -157,7 +157,7 @@ describe("summarizeJob", () => {
       {
         name: "Install test",
         failures: [
-          { test: "[A14] uninstall --delete-data leaves no Jarvis file in the home folder", errors: ["AppData\\Local\\Jarvis\\locks\\c2fa.lock"] },
+          { test: "[A14] uninstall --delete-data leaves no Attache file in the home folder", errors: ["AppData\\Local\\Attache\\locks\\c2fa.lock"] },
           { test: "[A02] service starts at login", errors: [] },
         ],
         output: [],
@@ -169,7 +169,7 @@ describe("summarizeJob", () => {
     const job = { name: "checks (macos-latest)", conclusion: "failure", status: "completed", steps: checksSteps(["Lint", "Unit and integration tests"]) };
     const log = checksLog({
       lint: [
-        "/Users/runner/work/jarvis/jarvis/apps/service/src/app.ts",
+        "/Users/runner/work/attache/attache/apps/service/src/app.ts",
         "  12:7  error  'unused' is assigned a value but never used  @typescript-eslint/no-unused-vars",
         "  40:1  warning  Unexpected console statement  no-console",
         "",
@@ -180,7 +180,7 @@ describe("summarizeJob", () => {
     });
 
     expect(summarizeJob({ job, log, annotations: [] }).steps.map((s) => s.failures)).toEqual([
-      [{ test: "/Users/runner/work/jarvis/jarvis/apps/service/src/app.ts", errors: ["12:7  error  'unused' is assigned a value but never used  @typescript-eslint/no-unused-vars"] }],
+      [{ test: "/Users/runner/work/attache/attache/apps/service/src/app.ts", errors: ["12:7  error  'unused' is assigned a value but never used  @typescript-eslint/no-unused-vars"] }],
       [{ test: "src/http/server.ts(3,7)", errors: ["error TS2322: Type 'string' is not assignable to type 'number'."] }],
     ]);
   });
@@ -194,7 +194,7 @@ describe("summarizeJob", () => {
       "##[endgroup]",
       ...Array.from({ length: 12 }, (_, i) => `Progress: resolved ${i}`),
       "",
-      "Your Node version is incompatible with \"/home/runner/work/jarvis/jarvis\".",
+      "Your Node version is incompatible with \"/home/runner/work/attache/attache\".",
       "Expected version: >=24.22.0",
       "Got: v24.21.0",
       "##[error]The operation was canceled.",
@@ -207,7 +207,7 @@ describe("summarizeJob", () => {
       {
         name: "Install dependencies",
         failures: [],
-        output: ["The operation was canceled.", "Progress: resolved 10", "Progress: resolved 11", "Your Node version is incompatible with \"/home/runner/work/jarvis/jarvis\".", "Expected version: >=24.22.0", "Got: v24.21.0"],
+        output: ["The operation was canceled.", "Progress: resolved 10", "Progress: resolved 11", "Your Node version is incompatible with \"/home/runner/work/attache/attache\".", "Expected version: >=24.22.0", "Got: v24.21.0"],
       },
     ]);
   });
@@ -244,7 +244,7 @@ describe("summarizeJob", () => {
       "    at checkExecSyncError (node:child_process:925:11)",
       "    at execFileSync (node:child_process:961:15)",
       "  status: 1,",
-      "  stderr: 'Jarvis install failed: a program is still using it'",
+      "  stderr: 'Attache install failed: a program is still using it'",
       "}",
       "##[error]Process completed with exit code 1.",
     ]);
@@ -254,7 +254,7 @@ describe("summarizeJob", () => {
       "    at checkExecSyncError (node:child_process:925:11)",
       "    at execFileSync (node:child_process:961:15)",
       "  status: 1,",
-      "  stderr: 'Jarvis install failed: a program is still using it'",
+      "  stderr: 'Attache install failed: a program is still using it'",
       "}",
     ]);
   });
@@ -302,7 +302,7 @@ describe("formatRun", () => {
 describe("parseRunRef", () => {
   it("takes a run id, or a run or job URL with its repository", () => {
     expect(parseRunRef("43070983456")).toEqual({ runId: "43070983456", repo: null });
-    expect(parseRunRef("https://github.com/emilchristensen/jarvis/actions/runs/43070983456")).toEqual({ runId: "43070983456", repo: "emilchristensen/jarvis" });
+    expect(parseRunRef("https://github.com/emilchristensen/attache/actions/runs/43070983456")).toEqual({ runId: "43070983456", repo: "emilchristensen/attache" });
     expect(parseRunRef("https://github.com/o/r/actions/runs/1/job/2?pr=3")).toEqual({ runId: "1", repo: "o/r" });
   });
 

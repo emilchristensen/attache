@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { openRunFolder } from "../test-run-folder.mjs";
 
 /** What a test or test service does: make its own folder in the system's temporary folder. */
-const MAKE_TEMP_FOLDER = `const { mkdtempSync } = require("node:fs"); const { join } = require("node:path"); process.stdout.write(mkdtempSync(join(require("node:os").tmpdir(), "jarvis-it-state æøå-")));`;
+const MAKE_TEMP_FOLDER = `const { mkdtempSync } = require("node:fs"); const { join } = require("node:path"); process.stdout.write(mkdtempSync(join(require("node:os").tmpdir(), "attache-it-state æøå-")));`;
 
 const exitedPid = () => spawnSync(process.execPath, ["-e", ""]).pid!;
 
@@ -28,14 +28,14 @@ describe("a test run's temporary folder", () => {
 
   it("removes the folders that killed runs left behind, and keeps those of runs still going", () => {
     const base = mkdtempSync(join(tmpdir(), "run-folder-base-"));
-    const killed = `jarvis-run-${exitedPid()}-a1b2c3`;
-    const going = `jarvis-run-${process.pid}-d4e5f6`;
-    for (const name of [killed, going, "jarvis-it-state-g7h8i9", "someone-else"]) mkdirSync(join(base, name, "logs"), { recursive: true });
+    const killed = `attache-run-${exitedPid()}-a1b2c3`;
+    const going = `attache-run-${process.pid}-d4e5f6`;
+    for (const name of [killed, going, "attache-it-state-g7h8i9", "someone-else"]) mkdirSync(join(base, name, "logs"), { recursive: true });
 
     const run = openRunFolder({ base, env: { CI: undefined } });
     run.close();
 
-    expect(readdirSync(base).sort()).toEqual(["jarvis-it-state-g7h8i9", going, "someone-else"]);
+    expect(readdirSync(base).sort()).toEqual(["attache-it-state-g7h8i9", going, "someone-else"]);
   });
 
   it("on CI, copies the run's service logs out before removing the folder", () => {
@@ -44,13 +44,13 @@ describe("a test run's temporary folder", () => {
     const env: Record<string, string | undefined> = { CI: "true" };
 
     const run = openRunFolder({ base, env, logsOut });
-    const state = join(run.folder, "jarvis-it-state æøå-a1");
+    const state = join(run.folder, "attache-it-state æøå-a1");
     mkdirSync(join(state, "logs"), { recursive: true });
     writeFileSync(join(state, "logs", "service.log"), "Error: boom\n");
     run.close();
 
     const [kept] = readdirSync(logsOut);
-    expect(readFileSync(join(logsOut, kept, "jarvis-it-state æøå-a1", "logs", "service.log"), "utf8")).toBe("Error: boom\n");
+    expect(readFileSync(join(logsOut, kept, "attache-it-state æøå-a1", "logs", "service.log"), "utf8")).toBe("Error: boom\n");
     expect(readdirSync(base)).toEqual([]);
   });
 });

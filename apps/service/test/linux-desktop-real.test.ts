@@ -1,7 +1,7 @@
 /**
  * The Linux secret store and desktop notifications against a real desktop
  * session: GNOME Keyring as the Secret Service and dunst as the notification
- * service. Runs only with JARVIS_TEST_REAL_DESKTOP=1 inside
+ * service. Runs only with ATTACHE_TEST_REAL_DESKTOP=1 inside
  * `scripts/linux-desktop-session.sh` (CI's Linux job does this); the
  * stand-in tests in linux-desktop.test.ts cover every other run.
  */
@@ -11,9 +11,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import type { FixtureServer } from "./fixtures/fixture-server.ts";
-import { connectGithub, githubAskingForReviews, jarvisCli, newStateDir, runningChildren, serveChild, syncGithub } from "./fixtures/jarvis-child.ts";
+import { connectGithub, githubAskingForReviews, attacheCli, newStateDir, runningChildren, serveChild, syncGithub } from "./fixtures/attache-child.ts";
 
-const REAL = process.platform === "linux" && process.env.JARVIS_TEST_REAL_DESKTOP === "1";
+const REAL = process.platform === "linux" && process.env.ATTACHE_TEST_REAL_DESKTOP === "1";
 // Each test starts the service from source, sometimes twice, which is slow under load.
 const SLOW = 90_000;
 const SECRET = "ghp_RealKeyringSecret0123456789abcdefXYZ";
@@ -30,7 +30,7 @@ const which = (tool: string) => spawnSync("sh", ["-c", `command -v ${tool}`], { 
 
 /** A `secret-tool` that appends its arguments to a log, then runs the real one. */
 function recordingSecretTool(): { path: string; calls: () => string } {
-  const dir = tempDir("jarvis-real-keyring-");
+  const dir = tempDir("attache-real-keyring-");
   const path = join(dir, "secret-tool");
   const log = join(dir, "calls.log");
   writeFileSync(path, `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nexec '${which("secret-tool")}' "$@"\n`, { mode: 0o755 });
@@ -39,11 +39,11 @@ function recordingSecretTool(): { path: string; calls: () => string } {
 
 function desktopEnv(extra: Record<string, string | undefined> = {}) {
   return {
-    JARVIS_CREDENTIAL_STORE: undefined,
-    JARVIS_NO_NOTIFY: undefined,
-    JARVIS_TEST_ENDPOINTS: "1",
-    JARVIS_INSTANCE: `real-${Math.random().toString(36).slice(2, 8)}`,
-    HOME: tempDir("jarvis-real-home-"),
+    ATTACHE_CREDENTIAL_STORE: undefined,
+    ATTACHE_NO_NOTIFY: undefined,
+    ATTACHE_TEST_ENDPOINTS: "1",
+    ATTACHE_INSTANCE: `real-${Math.random().toString(36).slice(2, 8)}`,
+    HOME: tempDir("attache-real-home-"),
     ...extra,
   };
 }
@@ -53,7 +53,7 @@ describe.runIf(REAL)("on a real Linux desktop session", () => {
     "keeps secrets in the desktop keyring and never passes them as process arguments",
     async () => {
       const tool = recordingSecretTool();
-      const env = desktopEnv({ JARVIS_SECRET_TOOL_BIN: tool.path });
+      const env = desktopEnv({ ATTACHE_SECRET_TOOL_BIN: tool.path });
       const fx = await githubAskingForReviews(SECRET, () => []);
       fixtures.push(fx);
       const stateDir = newStateDir();
@@ -61,7 +61,7 @@ describe.runIf(REAL)("on a real Linux desktop session", () => {
       expect((await svc.api("GET", "/status")).credentialStore).toBe("secret-service");
 
       await connectGithub(svc, fx, SECRET);
-      const lookup = () => spawnSync(which("secret-tool"), ["lookup", "service", `dev.jarvis.${env.JARVIS_INSTANCE}`, "account", "conn:github:token"], { encoding: "utf8" });
+      const lookup = () => spawnSync(which("secret-tool"), ["lookup", "service", `dev.attache.${env.ATTACHE_INSTANCE}`, "account", "conn:github:token"], { encoding: "utf8" });
       expect(lookup().stdout).toBe(SECRET);
       expect(existsSync(join(stateDir, "secrets.json"))).toBe(false);
 
@@ -73,7 +73,7 @@ describe.runIf(REAL)("on a real Linux desktop session", () => {
       expect(svc.log()).not.toContain(SECRET);
 
       await svc.stop();
-      expect(JSON.parse(jarvisCli(["credentials", "clear", "--state-dir", stateDir], env).stdout)).toEqual({ store: "secret-service", removed: 1 });
+      expect(JSON.parse(attacheCli(["credentials", "clear", "--state-dir", stateDir], env).stdout)).toEqual({ store: "secret-service", removed: 1 });
       expect(lookup().status).toBe(1);
     },
     SLOW,
@@ -95,7 +95,7 @@ describe.runIf(REAL)("on a real Linux desktop session", () => {
       const history = dunst("NotificationListHistory");
       expect(history).toContain('string "Review a/b#7: Ship Linux notifications"');
       expect(history).toContain('string "ada requested your review 10 days ago."');
-      expect(history).toContain('string "Jarvis"');
+      expect(history).toContain('string "Attache"');
       expect(svc.log()).not.toContain("desktop notifications are off");
     },
     SLOW,

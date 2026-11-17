@@ -10,7 +10,7 @@ Vocabulary follows `GLOSSARY.md`, and decisions follow `docs/adr/`.
   The global Vitest `testTimeout` stays at 30 s.
   A test file that starts many child processes may raise its own timeout, with a comment saying why.
   A test that only fails under load points at real slowness (process start-up, a budget that starts too early): find it before touching a limit.
-- **Drive Jarvis the way a user or a Harness does** and assert on what comes back: an API response, a file in the Brain, a line a Harness receives, what the Dashboard shows.
+- **Drive Attache the way a user or a Harness does** and assert on what comes back: an API response, a file in the Brain, a line a Harness receives, what the Dashboard shows.
   Internal functions, table rows and call order are not assertions.
 - **Every defect gets a regression test** that fails without the fix.
 

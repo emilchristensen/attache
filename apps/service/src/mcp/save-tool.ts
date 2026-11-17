@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { MemorySaveInput, plural, type MemorySaveProposalResult, type MemorySaveResult } from "@jarvis/contracts";
+import { MemorySaveInput, plural, type MemorySaveProposalResult, type MemorySaveResult } from "@attache/contracts";
 import type { BrainAccess } from "./brain.ts";
 import { askOwner, confirmationMessage } from "./confirmation.ts";
 import { harnessSession, saveOrigin, type ServerContext } from "./harness.ts";
@@ -10,10 +10,10 @@ const SavedShape = z.object({ action: z.enum(["created", "updated"]), path: z.st
 const ProposedShape = z.object({ id: z.string(), target: z.string() });
 
 const DESCRIPTION = [
-  "Save facts and events to the owner's Brain. Jarvis first asks the owner to confirm inside the Harness, listing every item; nothing is written unless they accept. If the owner switched on auto-accept for this Harness, the save is written without asking.",
+  "Save facts and events to the owner's Brain. Attache first asks the owner to confirm inside the Harness, listing every item; nothing is written unless they accept. If the owner switched on auto-accept for this Harness, the save is written without asking.",
   "Facts are current state: one value per subject, replacing the old value, which moves to the note's History. Events are things that happened, appended to History.",
   "Create a note only after `search` found none of the same type and title; otherwise update it by its path. Every item is checked before anything is written, so one invalid item rejects the whole save.",
-  "The owner's identity record (memory/self.md) cannot be changed here. A Harness that cannot ask the owner gets each item stored as a Proposal for review in the Jarvis Dashboard.",
+  "The owner's identity record (memory/self.md) cannot be changed here. A Harness that cannot ask the owner gets each item stored as a Proposal for review in the Attache Dashboard.",
 ].join(" ");
 
 type Reply = { outcome: "saved"; autoAccepted: boolean; saved: z.infer<typeof SavedShape>[] } | { outcome: "declined" } | { outcome: "proposed"; proposals: z.infer<typeof ProposedShape>[] };
@@ -73,7 +73,7 @@ function proposed(result: MemorySaveProposalResult): CallToolResult {
   const list = result.proposals.map((p) => ({ id: p.id, target: p.target }));
   const lines = list.map((p) => `- ${p.target}`);
   return reply(
-    `This Harness cannot ask the owner to confirm a save, so each item is stored as a Proposal and awaits the owner's review in the Jarvis Dashboard. Nothing is in the Brain until they apply it.\n${lines.join("\n")}`,
+    `This Harness cannot ask the owner to confirm a save, so each item is stored as a Proposal and awaits the owner's review in the Attache Dashboard. Nothing is in the Brain until they apply it.\n${lines.join("\n")}`,
     { outcome: "proposed", proposals: list },
   );
 }

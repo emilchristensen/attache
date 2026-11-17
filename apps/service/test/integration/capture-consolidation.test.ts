@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { JobView, ProposalView } from "@jarvis/contracts";
+import type { JobView, ProposalView } from "@attache/contracts";
 import { startTestService, type TestService } from "./harness.ts";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
@@ -54,7 +54,7 @@ function meetingCapture(title: string, lines: readonly string[], tags: readonly 
   ].join("\n");
 }
 
-/** Put a file into a Machine's copy of the Brain from outside Jarvis, as an export routine or an editor does. */
+/** Put a file into a Machine's copy of the Brain from outside Attache, as an export routine or an editor does. */
 function writeIntoBrain(service: TestService, rel: string, content: string) {
   mkdirSync(dirname(join(service.dataDir, rel)), { recursive: true });
   writeFileSync(join(service.dataDir, rel), content);
@@ -66,7 +66,7 @@ async function jobs(service: TestService): Promise<JobView[]> {
 
 const finished = (j: JobView) => ["succeeded", "failed", "blocked", "cancelled"].includes(j.status);
 
-/** Wait until Jarvis has consolidated the capture at `rel`, and return that job. */
+/** Wait until Attache has consolidated the capture at `rel`, and return that job. */
 async function consolidated(service: TestService, rel: string): Promise<JobView> {
   const job = await until(async () => (await jobs(service)).find((j) => finished(j) && (j.result as { capture?: string } | null)?.capture === rel));
   expect(job.status).toBe("succeeded");
@@ -250,7 +250,7 @@ describe("Consolidation from a meeting capture", () => {
     expect((await proposalsFrom(rel)).flatMap((p) => p.item?.events ?? []).sort()).toEqual([1, 2, 3, 4, 5].map((n) => `Freeze step ${n} logged`));
   });
 
-  it("a capture already consolidated is not read again, when it changes or when Jarvis restarts", async () => {
+  it("a capture already consolidated is not read again, when it changes or when Attache restarts", async () => {
     const calls = consolidationCalls();
     const before = await jobIds(svc);
     const proposals = (await proposalsFrom(STANDUP)).length;
@@ -273,7 +273,7 @@ describe("Consolidation from a meeting capture", () => {
     expect(await proposalsFrom(STANDUP)).toHaveLength(proposals);
   });
 
-  it("a meeting capture that arrived while Jarvis was stopped is consolidated when it starts", async () => {
+  it("a meeting capture that arrived while Attache was stopped is consolidated when it starts", async () => {
     await svc.stop();
     const rel = "evidence/captures/2026-11-11-granola-while-stopped.md";
     writeIntoBrain(svc, rel, meetingCapture("Granola 2026-11-11: While stopped", ["Nothing much."]));
@@ -307,8 +307,8 @@ describe("Consolidation from a meeting capture", () => {
     expect(await startedSince(svc, before)).toEqual([meeting]);
   });
 
-  it("meeting captures already in the Brain when Jarvis is set up are not consolidated", async () => {
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-captures-")), "data");
+  it("meeting captures already in the Brain when Attache is set up are not consolidated", async () => {
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-captures-")), "data");
     const old = "evidence/captures/2026-10-01-granola-old-meeting.md";
     mkdirSync(join(dataDir, "evidence/captures"), { recursive: true });
     writeFileSync(join(dataDir, old), meetingCapture("Granola 2026-10-01: Old meeting", ["We decided something long ago."]));
@@ -334,7 +334,7 @@ describe("Consolidation from a meeting capture without a model", () => {
       const rel = "evidence/captures/2026-11-11-granola-no-model.md";
       writeIntoBrain(bare, rel, meetingCapture("Granola 2026-11-11: No model", ["We decided to cut Orion over on Friday."]));
       const job = await consolidated(bare, rel);
-      expect(job.result).toMatchObject({ capture: rel, proposals: 0, skipped: "no model", message: "No model is connected, so Jarvis made no Proposals from this meeting capture." });
+      expect(job.result).toMatchObject({ capture: rel, proposals: 0, skipped: "no model", message: "No model is connected, so Attache made no Proposals from this meeting capture." });
       expect(await proposalsFrom(rel, bare)).toEqual([]);
     } finally {
       await bare.stop();

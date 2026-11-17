@@ -1,7 +1,7 @@
 /**
  * Counts written with "(s)": text the owner reads gives a count its noun in
  * the right number ("1 file", "2 files"), never "file(s)". Code builds such a
- * count with `plural` from `@jarvis/contracts` (`packages/contracts/src/wording.ts`).
+ * count with `plural` from `@attache/contracts` (`packages/contracts/src/wording.ts`).
  *
  * A word followed directly by "(s)" or "(es)" matches, in any case. A lone
  * "(s)" does not, and neither does a spelling in `NOT_PLURALS`.
@@ -21,7 +21,7 @@ export function findParenthesisedPlurals(text) {
 /** How to write one: "event(s)" → `write the noun in its number ("1 event", "2 events"), …`. */
 export function pluralAdvice(found) {
   const [, one, ending] = found.match(/^(.*)\((e?s)\)$/i);
-  return `write the noun in its number ("1 ${one}", "2 ${one}${ending.toLowerCase()}"), with plural() from @jarvis/contracts in code`;
+  return `write the noun in its number ("1 ${one}", "2 ${one}${ending.toLowerCase()}"), with plural() from @attache/contracts in code`;
 }
 
 /** Returns `{ line, found }` for each count written with "(s)" in Markdown a reader sees. */

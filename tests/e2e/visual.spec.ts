@@ -20,7 +20,7 @@ const runGit = (cwd: string, ...args: string[]) =>
 async function api(page: Page, method: string, path: string, body?: unknown) {
   await page.evaluate(
     async ([m, p, b]) => {
-      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
+      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
       if (!res.ok) throw new Error(`${m} ${p} failed: ${res.status}`);
     },
     [method, path, body] as const,
@@ -48,7 +48,7 @@ async function replicationScreens(page: Page) {
     await page.setViewportSize({ width: 1360, height: 900 });
   };
   await shoot("off");
-  const base = mkdtempSync(join(tmpdir(), "jarvis-visual-remote-"));
+  const base = mkdtempSync(join(tmpdir(), "attache-visual-remote-"));
   const remote = join(base, "brain.git");
   runGit(base, "init", "--bare", "--quiet", "-b", "main", remote);
   await api(page, "POST", "/replication/setup", { remote });
@@ -82,7 +82,7 @@ test("screens", async ({ browser }) => {
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
   await page.screenshot({ path: "test-results/screens/setup-folder.png", fullPage: true });
-  const joinBrain = page.getByText("Already use Jarvis on another Machine?");
+  const joinBrain = page.getByText("Already use Attache on another Machine?");
   await joinBrain.click();
   await page.locator(".join-brain").screenshot({ path: "test-results/screens/setup-join.png" });
   await joinBrain.click();
@@ -111,7 +111,7 @@ test("screens", async ({ browser }) => {
   // A pending Proposal, so the Memory screens show the review list.
   await page.evaluate(async () => {
     const item = { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }, { subject: "Team", value: "Vendor management" }], notes: "Met on the vendor call.\nPrefers email.", events: ["Introduced in the vendor call"], tags: ["vendor"] };
-    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in jarvis" }, evidence: "Lena from Postmark joined the call; she manages our account and prefers email." }) });
+    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in attache" }, evidence: "Lena from Postmark joined the call; she manages our account and prefers email." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
   // Recent saves on the Memory screen: a correction, a reverted one, and one a later save overwrote.
@@ -122,13 +122,13 @@ test("screens", async ({ browser }) => {
   // A pending correction, so the review list shows an old value struck through beside the new one.
   await page.evaluate(async () => {
     const item = { action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Mondays again", reason: "The Friday call clashed with the release meeting." }] };
-    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ item, reason: "The Friday call clashed with the release meeting.", evidence: "Priya asked to go back to written updates on Mondays." }) });
+    const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ item, reason: "The Friday call clashed with the release meeting.", evidence: "Priya asked to go back to written updates on Mondays." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
   // Claude Code connected with auto-accept on, and one auto-accepted save, so Settings and Recent saves show both.
   await page.evaluate(async () => {
     const call = async (method: string, path: string, body: unknown) => {
-      const res = await fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+      const res = await fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
     };
     await call("POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });

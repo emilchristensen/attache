@@ -2,7 +2,7 @@ import { cliScript, stablePath } from "../agents/install.ts";
 import { githubRepoOf, type GitHubAccess } from "./github.ts";
 import type { GitCredentials } from "./seams.ts";
 
-/** The `jarvis` subcommand git runs as its credential helper. */
+/** The `attache` subcommand git runs as its credential helper. */
 export const CREDENTIAL_HELPER_COMMAND = "git-credential";
 /** The user name GitHub expects alongside a token. */
 export const TOKEN_USERNAME = "x-access-token";
@@ -10,15 +10,15 @@ export const TOKEN_USERNAME = "x-access-token";
 /** Quoted for the POSIX shell git runs helpers with (Git for Windows brings its own). */
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
-/** This install's `jarvis`: the bundled runtime and service through the stable `current` path, or `jarvis` on PATH. */
-function jarvisCommand(): string {
+/** This install's `attache`: the bundled runtime and service through the stable `current` path, or `attache` on PATH. */
+function attacheCommand(): string {
   const script = cliScript();
-  return script ? `${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : "jarvis";
+  return script ? `${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : "attache";
 }
 
 /**
  * Git reaches a GitHub repository over https with the GitHub connection's
- * token. Git asks Jarvis's credential helper, which reads the token from the
+ * token. Git asks Attache's credential helper, which reads the token from the
  * secret store at that moment, so the token is never part of the remote
  * address, the repository's configuration, a command line or the logs.
  * The Machine's own credential helpers are switched off for these commands,
@@ -32,10 +32,10 @@ export function githubCredentials(deps: { github: GitHubAccess; stateDir: string
       const connection = deps.github.connection();
       // An empty helper first drops every helper the Machine's git config lists.
       if (!connection) return ["credential.helper="];
-      return ["credential.helper=", `credential.helper=!${jarvisCommand()} ${CREDENTIAL_HELPER_COMMAND} --state-dir ${quote(deps.stateDir)} --connection ${quote(connection.id)}`];
+      return ["credential.helper=", `credential.helper=!${attacheCommand()} ${CREDENTIAL_HELPER_COMMAND} --state-dir ${quote(deps.stateDir)} --connection ${quote(connection.id)}`];
     },
     env(remote): Readonly<Record<string, string>> {
-      return githubRepoOf(remote)?.transport === "https" ? { JARVIS_INSTANCE: deps.instance } : {};
+      return githubRepoOf(remote)?.transport === "https" ? { ATTACHE_INSTANCE: deps.instance } : {};
     },
   };
 }

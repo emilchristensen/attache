@@ -18,7 +18,7 @@ export interface PrivateRemoteGuardDeps {
 
 const OK: RemoteVerdict = Object.freeze({ ok: true });
 
-const reconnect = "Reconnect GitHub in the Jarvis Dashboard with a token that can read and write this repository.";
+const reconnect = "Reconnect GitHub in the Attache Dashboard with a token that can read and write this repository.";
 
 /**
  * Replication goes only to a repository nobody else can read: a private
@@ -40,7 +40,7 @@ export class PrivateRemoteGuard implements RemoteGuard {
     if (isFolderRemote(remote)) return OK;
     const repo = githubRepoOf(remote);
     if (!repo) {
-      return { ok: false, status: "blocked", cause: `Jarvis can confirm that a repository is private only on GitHub, so it does not replicate to ${remote}. Use a private GitHub repository.` };
+      return { ok: false, status: "blocked", cause: `Attache can confirm that a repository is private only on GitHub, so it does not replicate to ${remote}. Use a private GitHub repository.` };
     }
     const now = this.deps.clock.now().getTime();
     const at = this.confirmed.get(remote);
@@ -75,12 +75,12 @@ export class PrivateRemoteGuard implements RemoteGuard {
     }
     // Without a token GitHub answers 404 for a private repository: a public one is always visible.
     if (res.status === 404) return token ? { ok: false, status: "unauthorized", cause: `The GitHub connection cannot see ${full}. Check the repository's name. ${reconnect}` } : OK;
-    if (!res.ok) return { ok: false, status: "offline", cause: `GitHub did not say whether ${full} is private (HTTP ${res.status}). Jarvis asks again shortly.` };
+    if (!res.ok) return { ok: false, status: "offline", cause: `GitHub did not say whether ${full} is private (HTTP ${res.status}). Attache asks again shortly.` };
     const body = (await res.json().catch(() => null)) as { private?: unknown; visibility?: unknown } | null;
     if (body?.private === true || body?.visibility === "private" || body?.visibility === "internal") return OK;
     if (body?.private === false || body?.visibility === "public") {
-      return { ok: false, status: "blocked", cause: `${full} is public on GitHub. Jarvis replicates the Brain only to a private repository: make ${full} private, then check Replication again.` };
+      return { ok: false, status: "blocked", cause: `${full} is public on GitHub. Attache replicates the Brain only to a private repository: make ${full} private, then check Replication again.` };
     }
-    return { ok: false, status: "offline", cause: `GitHub did not say whether ${full} is private. Jarvis asks again shortly.` };
+    return { ok: false, status: "offline", cause: `GitHub did not say whether ${full} is private. Attache asks again shortly.` };
   }
 }

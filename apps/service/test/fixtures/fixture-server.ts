@@ -1,7 +1,7 @@
 /**
  * TEST-ONLY fixture server emulating remote APIs (pagination, errors, rate
  * limits). It is never started by the service in normal operation; the
- * service only talks to it when JARVIS_TEST_ENDPOINTS=1 and a connection's
+ * service only talks to it when ATTACHE_TEST_ENDPOINTS=1 and a connection's
  * endpoint override points here. Results produced against it are fixture
  * results, never live integration evidence.
  */

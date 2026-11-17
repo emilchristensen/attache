@@ -27,7 +27,7 @@ export function createLogger(logDir: string | null, opts: { quiet?: boolean } = 
         // Logging must never take the service down.
       }
     }
-    if (!opts.quiet && (level !== "debug" || process.env.JARVIS_DEBUG)) {
+    if (!opts.quiet && (level !== "debug" || process.env.ATTACHE_DEBUG)) {
       (level === "error" || level === "warn" ? process.stderr : process.stdout).write(line + "\n");
     }
   };

@@ -1,4 +1,4 @@
-import type { MemoryAuditEntry, MemoryAuditReport } from "@jarvis/contracts";
+import type { MemoryAuditEntry, MemoryAuditReport } from "@attache/contracts";
 
 /** Where an indexed file is, as the reader of the report should see it: absolute for a terminal, Brain-relative for a Harness. */
 export type PathOf = (root: string, relPath: string) => string;
@@ -23,7 +23,7 @@ export interface AuditFindingView {
   entries: AuditEntryView[];
 }
 
-/** A memory audit report with every file named by one path, so a reader can open it without knowing Jarvis's roots. */
+/** A memory audit report with every file named by one path, so a reader can open it without knowing Attache's roots. */
 export interface AuditView {
   generatedAt: string;
   notes: number;
@@ -61,7 +61,7 @@ export function renderAudit(v: AuditView, opts: { dataFolder?: string } = {}): s
     .filter(([, n]) => n > 0)
     .map(([k, n]) => `${k} ${n}`)
     .join(" · ");
-  const lines = [`Jarvis memory audit: ${v.notes} notes, ${v.entries} current facts, stale = past its Review date`, ...(opts.dataFolder ? [`Data folder: ${opts.dataFolder}`] : []), `Flags: ${counts || "none"}`];
+  const lines = [`Attache memory audit: ${v.notes} notes, ${v.entries} current facts, stale = past its Review date`, ...(opts.dataFolder ? [`Data folder: ${opts.dataFolder}`] : []), `Flags: ${counts || "none"}`];
   if (v.possibleDuplicates.length) {
     lines.push("", "Possible duplicate notes:");
     for (const d of v.possibleDuplicates) lines.push(`- ${d.title}: ${d.paths.join(", ")}`);

@@ -19,7 +19,7 @@ function hasSessionBus(env: Env): boolean {
 type Route = { tool: string } | { available: false; reason: string };
 
 function route(env: Env): Route {
-  const tool = locateTool("linux", "notify-send", "JARVIS_NOTIFY_SEND_BIN", env);
+  const tool = locateTool("linux", "notify-send", "ATTACHE_NOTIFY_SEND_BIN", env);
   if (!tool) return { available: false, reason: "notify-send is not installed; it comes with libnotify" };
   if (!hasSessionBus(env)) return { available: false, reason: "no desktop session bus (DBUS_SESSION_BUS_ADDRESS is not set)" };
   return { tool };
@@ -40,7 +40,7 @@ export function linuxNotifier(env: Env = process.env): Notifier {
       const r = route(env);
       if (!("tool" in r)) return r;
       // Notification bodies may carry markup (freedesktop.org Desktop Notifications), so their text is escaped.
-      const done = await run(r.tool, ["--app-name=Jarvis", "--", title.slice(0, MAX), escapeXml(body.slice(0, MAX))], { timeoutMs: TIMEOUT_MS });
+      const done = await run(r.tool, ["--app-name=Attache", "--", title.slice(0, MAX), escapeXml(body.slice(0, MAX))], { timeoutMs: TIMEOUT_MS });
       return done.code === 0 ? { available: true } : { available: false, reason: done.stderr.trim().split("\n")[0] || `notify-send exited with ${done.code}` };
     },
     forget: async () => {},

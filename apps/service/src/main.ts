@@ -38,14 +38,14 @@ const out = (s: string) => process.stdout.write(s + "\n");
 
 async function serve(argv: string[]) {
   const stateDir = arg("state-dir", argv);
-  const port = Number(arg("port", argv) ?? process.env.JARVIS_PORT ?? DEFAULT_PORT);
+  const port = Number(arg("port", argv) ?? process.env.ATTACHE_PORT ?? DEFAULT_PORT);
   const app = new App({ ...(stateDir ? { stateDir } : {}) });
   const handle = await startServer(app, { port });
   app.start();
   const runtime: Runtime = { pid: process.pid, port: handle.port, url: handle.url, version: VERSION, startedAt: app.startedAt, instance: app.instance };
   // Whole or not at all: the CLI reads it, and may be reading it while the service starts.
   writeFileWhole(app.paths.runtimeFile, JSON.stringify(runtime, null, 2), { mode: 0o600 });
-  app.log.info("jarvis service listening", { url: handle.url, version: VERSION, stateDir: app.paths.stateDir });
+  app.log.info("attache service listening", { url: handle.url, version: VERSION, stateDir: app.paths.stateDir });
   let stopping = false;
   const stop = async (signal: string) => {
     if (stopping) return;
@@ -58,7 +58,7 @@ async function serve(argv: string[]) {
   };
   process.on("SIGTERM", () => void stop("SIGTERM"));
   process.on("SIGINT", () => void stop("SIGINT"));
-  // Under the Windows logon task's supervisor (`jarvis service run`): stop when it closes the channel or dies.
+  // Under the Windows logon task's supervisor (`attache service run`): stop when it closes the channel or dies.
   if (process.channel) {
     process.channel.unref();
     process.on("disconnect", () => void stop("supervisor gone"));
@@ -71,7 +71,7 @@ async function pair(argv: string[]) {
   const { code, expiresAt } = createPairingCode(db, "setup");
   db.close();
   const rt = readRuntime(paths.runtimeFile);
-  const port = rt?.port ?? Number(process.env.JARVIS_PORT ?? DEFAULT_PORT);
+  const port = rt?.port ?? Number(process.env.ATTACHE_PORT ?? DEFAULT_PORT);
   const url = `http://127.0.0.1:${port}/pair#code=${code}`;
   if (argv.includes("--json")) out(JSON.stringify({ code, url, expiresAt }));
   else out(`Pairing code: ${code} (expires ${expiresAt})\nOpen: ${url}`);
@@ -98,7 +98,7 @@ async function status(argv: string[]) {
 /** Recall from a shell, for a Harness: top hits with file, lines and a snippet. Reads the index; never writes. */
 async function searchCmd(argv: string[]) {
   const query = argv.slice(1).filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--state-dir" && all[i - 1] !== "--limit").join(" ").trim();
-  if (!query) throw new Error('Usage: jarvis search "your query" [--limit 8] [--json]');
+  if (!query) throw new Error('Usage: attache search "your query" [--limit 8] [--json]');
   const paths = resolvePaths(arg("state-dir", argv));
   const db = openDb(paths.dbFile);
   // Ranks by meaning with the model and vectors this Machine already has; it never downloads or builds them.
@@ -151,10 +151,10 @@ async function agentHooksCmd(argv: string[]) {
     const results = hooks.uninstallAll(agents);
     out(JSON.stringify(results));
     const failed = results.filter((r) => r.error);
-    if (failed.length) throw new Error(`Could not remove the Jarvis hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention jarvis-agent-hook and the MCP server that runs \`jarvis mcp\` by hand.`);
+    if (failed.length) throw new Error(`Could not remove the Attache hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention attache-agent-hook and the MCP server that runs \`attache mcp\` by hand.`);
     return;
   }
-  throw new Error(`Usage: jarvis agent-hooks status|uninstall [--agent ${AGENT_INTEGRATIONS.map((a) => a.kind).join("|")}]`);
+  throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${AGENT_INTEGRATIONS.map((a) => a.kind).join("|")}]`);
 }
 
 function cliIo(): CliIo {
@@ -220,10 +220,10 @@ async function main() {
     }
     case "restore": {
       const file = argv[1];
-      if (!file || !existsSync(file)) throw new Error("Usage: jarvis restore <backup.tar.gz> [--data-folder <path>] [--force]");
+      if (!file || !existsSync(file)) throw new Error("Usage: attache restore <backup.tar.gz> [--data-folder <path>] [--force]");
       const paths = resolvePaths(arg("state-dir", argv));
       const rt = readRuntime(paths.runtimeFile);
-      if (rt && alive(rt.pid)) throw new Error(`The Jarvis service is running (pid ${rt.pid}). Run \`jarvis stop\` first, then restore, then \`jarvis start\`.`);
+      if (rt && alive(rt.pid)) throw new Error(`The Attache service is running (pid ${rt.pid}). Run \`attache stop\` first, then restore, then \`attache start\`.`);
       const dataFolder = arg("data-folder", argv);
       const r = await restoreBackup(file, { stateDir: paths.stateDir, ...(dataFolder ? { dataFolder } : {}), force: argv.includes("--force") });
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
@@ -234,6 +234,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  process.stderr.write(`jarvis: ${(e as Error).message}\n`);
+  process.stderr.write(`attache: ${(e as Error).message}\n`);
   process.exit(1);
 });

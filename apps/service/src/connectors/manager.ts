@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { plural, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@jarvis/contracts";
+import { plural, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
@@ -248,7 +248,7 @@ export class ConnectionManager {
    */
   async disconnect(id: string, opts: { deleteData: boolean }): Promise<{ effects: DisconnectEffects; cancelledJobs: string[]; revokedActions: string[]; deleted: boolean }> {
     const rec = this.requireRecord(id);
-    if (rec.settings.builtin) throw new RemoteError("The Jarvis data folder cannot be disconnected; export a backup or uninstall instead.", "error");
+    if (rec.settings.builtin) throw new RemoteError("The Attache data folder cannot be disconnected; export a backup or uninstall instead.", "error");
     const effects = this.disconnectEffects(id);
     // Stop requests already in flight for this connection.
     for (const c of this.inflight.get(id) ?? []) c.abort(new Error("connection disconnected"));
@@ -289,7 +289,7 @@ export class ConnectionManager {
       if (!legacy) continue;
       for (const n of LEGACY_SECRETS) await this.d.secrets.delete(this.secretKey(rec.id, n));
       const how = claudeKind ? "your claude.ai connector through Claude Code" : "the Atlassian Rovo MCP server";
-      const message = `Jarvis now connects to ${rec.label} through ${how}. The old credentials were removed; set this connection up again.`;
+      const message = `Attache now connects to ${rec.label} through ${how}. The old credentials were removed; set this connection up again.`;
       this.d.db
         .prepare("update connections set status = 'needs_auth', settings = ?, last_error = ?, last_error_at = ?, updated_at = ? where id = ?")
         .run(JSON.stringify({ ...rec.settings, migratedTransport: nowIso() }), message, nowIso(), nowIso(), rec.id);
@@ -455,7 +455,7 @@ export class ConnectionManager {
     const abs = resolve(path);
     if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new RemoteError(`Folder not found: ${abs}`, "error");
     const plan = planScan(abs);
-    return { path: abs, filesToRead: plan.read.length, sample: plan.read.slice(0, 20), skipped: plan.skipped.slice(0, 50), skippedCount: plan.skipped.length, totalBytes: plan.totalBytes, filesChanged: 0, note: "Jarvis reads these files and indexes them. It does not modify, move or delete anything in this folder." };
+    return { path: abs, filesToRead: plan.read.length, sample: plan.read.slice(0, 20), skipped: plan.skipped.slice(0, 50), skippedCount: plan.skipped.length, totalBytes: plan.totalBytes, filesChanged: 0, note: "Attache reads these files and indexes them. It does not modify, move or delete anything in this folder." };
   }
 }
 

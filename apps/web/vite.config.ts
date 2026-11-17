@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const service = process.env.JARVIS_DEV_SERVICE ?? "http://127.0.0.1:7427";
+const service = process.env.ATTACHE_DEV_SERVICE ?? "http://127.0.0.1:7427";
 
 export default defineConfig({
   plugins: [react()],

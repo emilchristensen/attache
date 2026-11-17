@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { MeaningStatus } from "@jarvis/contracts";
+import type { MeaningStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useLocation } from "../components/ui.tsx";

@@ -8,20 +8,20 @@ import { areaOf, type Area } from "./policy.ts";
 import { REVIEW_STATE_DIR } from "../review-state/files.ts";
 
 export interface IndexRoot {
-  /** "data" for the Jarvis data folder, "import:<id>" for imported folders. */
+  /** "data" for the Attache data folder, "import:<id>" for imported folders. */
   id: string;
   path: string;
   label: string;
 }
 
-const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".jarvis", ".DS_Store"]);
+const SKIP_DIRS = new Set([".git", ".obsidian", ".trash", "node_modules", ".attache", ".DS_Store"]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 /**
- * Jarvis's own top-level folders in the data folder, never recall and never
+ * Attache's own top-level folders in the data folder, never recall and never
  * reported as skipped: its working files, Replication's repository, and
  * replicated review state (Proposals, inbox).
  */
-const DATA_OWN_TOP: ReadonlySet<string> = new Set([".jarvis", ".git", REVIEW_STATE_DIR]);
+const DATA_OWN_TOP: ReadonlySet<string> = new Set([".attache", ".git", REVIEW_STATE_DIR]);
 const NO_OWN: ReadonlySet<string> = new Set();
 
 export interface ScanPlan {
@@ -32,7 +32,7 @@ export interface ScanPlan {
 
 /**
  * List what an import would read, without reading contents. Top-level folders
- * in `ownTop` belong to Jarvis: they are left out without being listed as skipped.
+ * in `ownTop` belong to Attache: they are left out without being listed as skipped.
  */
 export function planScan(rootPath: string, limit = 50_000, ownTop: ReadonlySet<string> = NO_OWN): ScanPlan {
   const plan: ScanPlan = { read: [], skipped: [], totalBytes: 0 };
@@ -83,7 +83,7 @@ export function planScan(rootPath: string, limit = 50_000, ownTop: ReadonlySet<s
   return plan;
 }
 
-/** What the index reads from the Jarvis data folder: everything but Jarvis's own folders. */
+/** What the index reads from the Attache data folder: everything but Attache's own folders. */
 export function planDataFolderScan(rootPath: string, limit?: number): ScanPlan {
   return planScan(rootPath, limit, DATA_OWN_TOP);
 }

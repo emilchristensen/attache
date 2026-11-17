@@ -41,7 +41,7 @@ step("Lint (ESLint, zero warnings)", npx, ["eslint", ".", "--max-warnings", "0"]
 for (const pkg of ["packages/contracts", "apps/service", "apps/web"]) step(`Typecheck ${pkg}`, npx, ["tsc", "-p", `${pkg}/tsconfig.json`]);
 step("Build service", process.execPath, ["apps/service/build.mjs"]);
 // Through the package's own script: vite is a dependency of apps/web and is not hoisted to the root.
-step("Build Dashboard", "pnpm", ["--filter", "@jarvis/web", "run", "build"]);
+step("Build Dashboard", "pnpm", ["--filter", "@attache/web", "run", "build"]);
 step("Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/vitest.json"], {
   extract: () => {
     try {
@@ -73,7 +73,7 @@ if (!QUICK) {
     }
   };
   const e2e = (name, file) => {
-    const rec = step(name, npx, ["playwright", "test", `tests/e2e/${file}.spec.ts`, "--reporter=list,json"], { env: { JARVIS_E2E_REBUILD_WEB: "0", PLAYWRIGHT_JSON_OUTPUT_NAME: join(OUT, `e2e-${file}.json`) }, extract: e2eExtract(file) });
+    const rec = step(name, npx, ["playwright", "test", `tests/e2e/${file}.spec.ts`, "--reporter=list,json"], { env: { ATTACHE_E2E_REBUILD_WEB: "0", PLAYWRIGHT_JSON_OUTPUT_NAME: join(OUT, `e2e-${file}.json`) }, extract: e2eExtract(file) });
     // A suite that skipped because its host requirement is missing is blocked validation, not a pass.
     if (rec.status === "pass" && rec.skipped && !rec.passed) rec.status = "blocked";
     return rec;
@@ -96,13 +96,13 @@ if (!QUICK) {
   }
 }
 
-const artifacts = [`release/${version}/Jarvis-Installer-${version}-macos-arm64.command`, `release/${version}/jarvis-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
+const artifacts = [`release/${version}/Attache-Installer-${version}-macos-arm64.command`, `release/${version}/attache-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
 const missingArtifacts = QUICK ? [] : artifacts.filter((a) => !existsSync(join(ROOT, a)));
 
 const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, missingArtifacts, live };
 writeFileSync(join(OUT, "verification-report.json"), JSON.stringify(report, null, 2));
 const md = [
-  `# Verification summary — Jarvis ${version}`,
+  `# Verification summary — Attache ${version}`,
   "",
   `Run at ${report.at} on ${process.platform}/${process.arch}, ${process.version}.${QUICK ? " Quick mode: release, install and platform suites skipped." : ""}`,
   "",

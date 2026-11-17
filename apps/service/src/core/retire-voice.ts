@@ -18,7 +18,7 @@ export interface VoiceLeftovers {
 }
 
 /**
- * Voice is no longer part of Jarvis. An install that had it set up keeps a
+ * Voice is no longer part of Attache. An install that had it set up keeps a
  * 148 MB speech model, a speech connection and maybe its API key; remove them
  * on the first start after the upgrade. Running it again finds nothing to do.
  *
@@ -39,7 +39,7 @@ export async function retireVoice({ paths, db, secrets, log }: VoiceLeftovers): 
     db.prepare("delete from sync_runs where connection_id = ?").run(id);
     db.prepare("delete from connections where id = ?").run(id);
   }
-  log.info("removed the speech connection; voice is no longer part of Jarvis", { connections: ids });
+  log.info("removed the speech connection; voice is no longer part of Attache", { connections: ids });
   for (const id of ids) {
     for (const name of SPEECH_SECRET_NAMES) {
       try {

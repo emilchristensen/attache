@@ -136,7 +136,7 @@ describe("A13 security boundaries", () => {
     expect(status).toBe(421);
     // Pairing codes are single use.
     const { code } = createPairingCode(svc.app.db);
-    const pair = (c: string) => raw("/pair", { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code: c, kind: "cli", clientName: "script" }) });
+    const pair = (c: string) => raw("/pair", { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code: c, kind: "cli", clientName: "script" }) });
     expect((await pair(code)).status).toBe(200);
     expect((await pair(code)).status).toBe(401);
     // Path traversal is refused.

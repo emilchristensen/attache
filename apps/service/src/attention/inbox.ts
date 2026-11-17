@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { AttentionItemView, Coverage } from "@jarvis/contracts";
+import type { AttentionItemView, Coverage } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { isReviewPath, listReviewFiles, readReviewFile, removeReviewFile, reviewPath, writeReviewFile } from "../review-state/files.ts";
@@ -147,7 +147,7 @@ export class Inbox {
     if (value === null) return null;
     const rec = parseInboxRecord(value);
     if (!rec || reviewPath("inbox", rec.key) !== rel || this.isLocal(rec)) {
-      this.d.log.warn("ignored an inbox file Jarvis cannot take in", { path: rel });
+      this.d.log.warn("ignored an inbox file Attache cannot take in", { path: rel });
       return null;
     }
     return rec;

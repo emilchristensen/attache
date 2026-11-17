@@ -9,7 +9,7 @@ import { RemoteError } from "./http.ts";
 import { daysBetween, listingState, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 export interface EventTime {
   date?: string;
@@ -158,7 +158,7 @@ export const gcalAdapter: ConnectorAdapter = {
     authMethods: claudeAuthMethods(CLAUDE_SERVERS.gcal),
     scopes: [{ id: "upcoming", label: "My primary calendar, next 48 hours", default: true }],
     writeActions: [],
-    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gcal)} Jarvis only reads your primary calendar and never changes events.`,
+    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gcal)} Attache only reads your primary calendar and never changes events.`,
     unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.gcal),
   },
 

@@ -1,4 +1,4 @@
-import type { MemorySaveItem } from "@jarvis/contracts";
+import type { MemorySaveItem } from "@attache/contracts";
 
 const MAX_LINE_CHARS = 300;
 

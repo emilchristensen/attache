@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * TEST-ONLY stand-in for Windows PowerShell as the Task Scheduler service
- * manager calls it, selected with JARVIS_POWERSHELL_BIN. It ignores the
+ * manager calls it, selected with ATTACHE_POWERSHELL_BIN. It ignores the
  * script, reads the request (`op`, `name`, `xml`) from stdin as the real
  * runner does, and answers with the task's state, keeping Task Scheduler's
  * tasks in `$FAKE_TASK_SCHEDULER_DIR/tasks.json`. Like the real script,

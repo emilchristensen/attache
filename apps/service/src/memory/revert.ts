@@ -18,7 +18,7 @@ export function isBrainChange(c: MemoryChange): boolean {
 /**
  * Whether one click can undo a change, and in plain words why not. A change can
  * be undone only while it is still the last word on what it changed: a later
- * change, or an edit made outside Jarvis, means undoing it would throw that away.
+ * change, or an edit made outside Attache, means undoing it would throw that away.
  */
 export function checkRevert(store: MemoryStore, change: MemoryChange): RevertCheck {
   if (!isBrainChange(change)) return refuse("Only applied changes can be reverted.");
@@ -50,7 +50,7 @@ function checkFact(store: MemoryStore, change: MemoryChange, later: MemoryChange
   if (!store.exists(change.docRelPath)) return refuse("The note no longer exists.");
   const current = parseStateEntries(store.read(change.docRelPath)).find((e) => e.subject.toLowerCase() === subject);
   const unchanged = change.afterValue === null ? !current : current !== undefined && sameText(current.value, change.afterValue) && (current.review ?? null) === change.afterReview;
-  return unchanged ? ALLOWED : refuse(`“${change.subject}” was edited outside Jarvis after this change.`);
+  return unchanged ? ALLOWED : refuse(`“${change.subject}” was edited outside Attache after this change.`);
 }
 
 function checkCreated(store: MemoryStore, change: MemoryChange, later: MemoryChange[], last: MemoryChange): RevertCheck {
@@ -59,12 +59,12 @@ function checkCreated(store: MemoryStore, change: MemoryChange, later: MemoryCha
   // Events and facts written by the same save belong to the creation; anything else would be lost.
   if (later.some((c) => !change.batchId || c.batchId !== change.batchId)) return refuse("The note changed after it was created. Revert the later changes first.");
   if (!last.docHash) return refuse("This change is older than one-click revert.");
-  if (noteHash(store.read(change.docRelPath)) !== last.docHash) return refuse("The note was edited outside Jarvis after it was created.");
+  if (noteHash(store.read(change.docRelPath)) !== last.docHash) return refuse("The note was edited outside Attache after it was created.");
   return ALLOWED;
 }
 
 function checkRemoved(store: MemoryStore, change: MemoryChange, later: MemoryChange[]): RevertCheck {
-  if (!change.beforeValue) return refuse("Jarvis kept no copy of this note.");
+  if (!change.beforeValue) return refuse("Attache kept no copy of this note.");
   if (later.length || store.exists(change.docRelPath)) return refuse("Another note now has this file name.");
   return ALLOWED;
 }

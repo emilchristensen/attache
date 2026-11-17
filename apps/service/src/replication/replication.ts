@@ -1,4 +1,4 @@
-import type { ReplicationView } from "@jarvis/contracts";
+import type { ReplicationView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { Db } from "../core/db.ts";
 import type { MachineIdentity } from "../core/machine.ts";

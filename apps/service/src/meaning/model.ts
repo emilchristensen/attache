@@ -9,7 +9,7 @@ const ModelFile = z.object({
 export type ModelFile = z.infer<typeof ModelFile>;
 
 /**
- * A sentence-embedding model as Jarvis downloads and runs it: an ONNX model
+ * A sentence-embedding model as Attache downloads and runs it: an ONNX model
  * with a `last_hidden_state` output, and a Hugging Face tokenizer.
  */
 export const MeaningModel = z.object({
@@ -57,18 +57,18 @@ export const modelBytes = (m: MeaningModel): number => m.files.model.bytes + m.f
 
 /**
  * The model this service uses: the one described in the JSON file named by
- * `JARVIS_MEANING_MODEL` (a mirror, or the fixture model in tests), else multilingual-e5-small.
+ * `ATTACHE_MEANING_MODEL` (a mirror, or the fixture model in tests), else multilingual-e5-small.
  */
 export function configuredMeaningModel(env: NodeJS.ProcessEnv = process.env): MeaningModel {
-  const file = env.JARVIS_MEANING_MODEL;
+  const file = env.ATTACHE_MEANING_MODEL;
   if (!file) return E5_SMALL;
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, "utf8"));
   } catch (e) {
-    throw new Error(`JARVIS_MEANING_MODEL: cannot read ${file}: ${(e as Error).message}`);
+    throw new Error(`ATTACHE_MEANING_MODEL: cannot read ${file}: ${(e as Error).message}`);
   }
   const parsed = MeaningModel.safeParse(raw);
-  if (!parsed.success) throw new Error(`JARVIS_MEANING_MODEL: ${file} is not a model description: ${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new Error(`ATTACHE_MEANING_MODEL: ${file} is not a model description: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }

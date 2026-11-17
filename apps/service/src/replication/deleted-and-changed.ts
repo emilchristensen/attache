@@ -35,7 +35,7 @@ export const deletedAndChangedRule: MergeRule = {
         {
           path,
           kind: DELETED_AND_CHANGED,
-          message: `"${title}" was deleted on ${deletedOn} and changed on ${changedOn} before either Machine saw the other's change. Jarvis kept the changed note on every Machine; delete it again if it should go.`,
+          message: `"${title}" was deleted on ${deletedOn} and changed on ${changedOn} before either Machine saw the other's change. Attache kept the changed note on every Machine; delete it again if it should go.`,
           title: `Kept "${title}": deleted on one Machine, changed on another`,
           version: createHash("sha256").update(kept).digest("hex").slice(0, 16),
         },

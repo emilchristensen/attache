@@ -1,4 +1,4 @@
-import type { WrapUpInput, WrapUpResult } from "@jarvis/contracts";
+import type { WrapUpInput, WrapUpResult } from "@attache/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";

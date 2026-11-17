@@ -14,7 +14,7 @@ const STOP_WAIT_MS = 10_000;
 const RUNNING = new Set(["active", "activating", "reloading"]);
 
 function noLineBreaks(s: string): string {
-  if (/[\r\n]/.test(s)) throw new Error(`A Jarvis path cannot contain a line break: ${JSON.stringify(s)}`);
+  if (/[\r\n]/.test(s)) throw new Error(`An Attache path cannot contain a line break: ${JSON.stringify(s)}`);
   return s;
 }
 /** systemd expands `%` specifiers in every setting, so a literal `%` is written `%%`. */
@@ -30,14 +30,14 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
   const logs = join(spec.stateDir, "logs");
   return [
     "[Unit]",
-    `Description=Jarvis (${noLineBreaks(spec.instance)})`,
+    `Description=Attache (${noLineBreaks(spec.instance)})`,
     "",
     "[Service]",
     "Type=simple",
-    `ExecStart=${execArg(join(current, "runtime/node"))} ${execArg(join(current, "service/jarvis-service.mjs"))} serve --port ${spec.port}`,
-    environment("JARVIS_STATE_DIR", spec.stateDir),
-    environment("JARVIS_INSTANCE", spec.instance),
-    environment("JARVIS_WEB_DIR", join(current, "web")),
+    `ExecStart=${execArg(join(current, "runtime/node"))} ${execArg(join(current, "service/attache-service.mjs"))} serve --port ${spec.port}`,
+    environment("ATTACHE_STATE_DIR", spec.stateDir),
+    environment("ATTACHE_INSTANCE", spec.instance),
+    environment("ATTACHE_WEB_DIR", join(current, "web")),
     environment("HOME", home),
     environment("PATH", `${home}/.local/bin:/usr/local/bin:/usr/bin:/bin`),
     "Restart=always",
@@ -63,9 +63,9 @@ function userManagerEnv(): NodeJS.ProcessEnv {
 
 function systemctlFailure(args: string[], r: RunResult): Error {
   const reason = r.stderr.trim().split("\n")[0] || `exit ${r.code}`;
-  if (/ENOENT/.test(r.stderr)) return new Error("Jarvis runs as a systemd user service, and systemctl was not found on this computer. Jarvis needs a Linux that uses systemd.");
+  if (/ENOENT/.test(r.stderr)) return new Error("Attache runs as a systemd user service, and systemctl was not found on this computer. Attache needs a Linux that uses systemd.");
   if (/Failed to connect to (user scope )?bus|No medium found|DBUS_SESSION_BUS_ADDRESS|XDG_RUNTIME_DIR/i.test(r.stderr)) {
-    return new Error(`Jarvis runs as a systemd user service, and systemd could not be reached for this user (${reason}). Run the installer from your own desktop or SSH login, or turn on lingering with \`loginctl enable-linger\`, then try again.`);
+    return new Error(`Attache runs as a systemd user service, and systemd could not be reached for this user (${reason}). Run the installer from your own desktop or SSH login, or turn on lingering with \`loginctl enable-linger\`, then try again.`);
   }
   return new Error(`systemctl --user ${args.join(" ")} failed: ${reason}`);
 }
@@ -108,7 +108,7 @@ export class SystemdServiceManager implements ServiceManager {
   }
 
   async start(): Promise<void> {
-    if (!existsSync(this.definition)) throw new Error(`Jarvis is not set up as a background service here: ${this.definition} is missing. Run the Jarvis installer again.`);
+    if (!existsSync(this.definition)) throw new Error(`Attache is not set up as a background service here: ${this.definition} is missing. Run the Attache installer again.`);
     await this.must(["restart", this.name]);
   }
 

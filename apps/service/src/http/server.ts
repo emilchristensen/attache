@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import type { AddressInfo } from "node:net";
-import { API_PREFIX } from "@jarvis/contracts";
+import { API_PREFIX } from "@attache/contracts";
 import type { App } from "../app.ts";
 import { redact } from "../core/log.ts";
 import { HttpError, makeCtx, Router } from "./router.ts";
@@ -52,7 +52,7 @@ function errorResponse(e: unknown): { status: number; body: { error: { code: str
 }
 
 export function webDir(): string | null {
-  const candidates = [process.env.JARVIS_WEB_DIR, join(import.meta.dirname ?? ".", "web"), join(import.meta.dirname ?? ".", "../../web/dist"), join(import.meta.dirname ?? ".", "../../../web/dist")].filter(Boolean) as string[];
+  const candidates = [process.env.ATTACHE_WEB_DIR, join(import.meta.dirname ?? ".", "web"), join(import.meta.dirname ?? ".", "../../web/dist"), join(import.meta.dirname ?? ".", "../../../web/dist")].filter(Boolean) as string[];
   return candidates.map((c) => resolve(c)).find((c) => existsSync(join(c, "index.html"))) ?? null;
 }
 
@@ -87,7 +87,7 @@ export async function startServer(app: App, opts: { port: number; host?: string 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
       if (!hostAllowed(req, port)) {
-        send(res, 421, { error: { code: "bad_host", message: "Jarvis only answers on 127.0.0.1" } });
+        send(res, 421, { error: { code: "bad_host", message: "Attache only answers on 127.0.0.1" } });
         return;
       }
       const origin = req.headers.origin;
@@ -97,7 +97,7 @@ export async function startServer(app: App, opts: { port: number; host?: string 
       }
       const cors: Record<string, string> = origin && allowedOrigins(port).has(origin) ? { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", vary: "Origin" } : {};
       if (req.method === "OPTIONS") {
-        res.writeHead(204, { ...cors, "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE", "access-control-allow-headers": "authorization, content-type, x-jarvis-client, last-event-id", "access-control-max-age": "600" });
+        res.writeHead(204, { ...cors, "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE", "access-control-allow-headers": "authorization, content-type, x-attache-client, last-event-id", "access-control-max-age": "600" });
         res.end();
         return;
       }
@@ -106,7 +106,7 @@ export async function startServer(app: App, opts: { port: number; host?: string 
         if (req.method === "GET" && web && serveStatic(web, url.pathname, res)) return;
         if (req.method === "GET" && !web) {
           res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-          res.end("Jarvis service is running, but the Dashboard is not installed.");
+          res.end("Attache service is running, but the Dashboard is not installed.");
           return;
         }
         send(res, 404, { error: { code: "not_found", message: "Not found" } });
@@ -120,12 +120,12 @@ export async function startServer(app: App, opts: { port: number; host?: string 
       }
       const client = authenticate(app.db, req);
       if (!m.route.public && !client) {
-        send(res, 401, { error: { code: "unauthenticated", message: "Pair this client with Jarvis first." } }, cors);
+        send(res, 401, { error: { code: "unauthenticated", message: "Pair this client with Attache first." } }, cors);
         return;
       }
       // CSRF: state-changing requests must carry a header a cross-site form cannot set.
-      if (req.method !== "GET" && req.headers["x-jarvis-client"] !== "1") {
-        send(res, 403, { error: { code: "csrf", message: "Missing X-Jarvis-Client header" } }, cors);
+      if (req.method !== "GET" && req.headers["x-attache-client"] !== "1") {
+        send(res, 403, { error: { code: "csrf", message: "Missing X-Attache-Client header" } }, cors);
         return;
       }
       const ctx = makeCtx(req, res, url, m.params, client);

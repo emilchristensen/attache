@@ -1,17 +1,17 @@
-# Jarvis
+# Attache
 
-Jarvis is a personal assistant that keeps one person's knowledge and brings forward what needs their attention.
+Attache is a personal assistant that keeps one person's knowledge and brings forward what needs their attention.
 
 ## Language
 
 ### Sharing the Brain
 
 **Brain**:
-The body of knowledge Jarvis keeps for one person: curated memory, evidence and deliverables.
+The body of knowledge Attache keeps for one person: curated memory, evidence and deliverables.
 _Avoid_: Vault, second brain, data folder (the folder is where one Machine keeps its copy)
 
 **Machine**:
-A computer that runs Jarvis and holds a copy of the Brain.
+A computer that runs Attache and holds a copy of the Brain.
 _Avoid_: Node, device, instance, client
 
 **Replication**:
@@ -32,10 +32,10 @@ _Avoid_: Primary, master, leader, server
 The Machine that should be the Reader whenever it is online.
 _Avoid_: Primary Reader, main machine
 
-### Using Jarvis
+### Using Attache
 
 **Dashboard**:
-Jarvis's own screen, which shows the Brain and the inbox and takes the owner's decisions.
+Attache's own screen, which shows the Brain and the inbox and takes the owner's decisions.
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
@@ -45,7 +45,7 @@ It is where the owner asks about the Brain and adds to it.
 _Avoid_: client, coding agent
 
 **Connection**:
-Jarvis's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
+Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
 
 **Agent**:
@@ -59,7 +59,7 @@ A suggested change to the Brain that waits for the owner's decision.
 _Avoid_: Suggestion, pending change, draft
 
 **Consolidation**:
-Jarvis reading finished work, such as a Harness session or a meeting capture, and writing what it learns to the Brain.
+Attache reading finished work, such as a Harness session or a meeting capture, and writing what it learns to the Brain.
 When the owner switches Consolidation off, it makes Proposals instead.
 _Avoid_: Distillation, auto-save, learning
 

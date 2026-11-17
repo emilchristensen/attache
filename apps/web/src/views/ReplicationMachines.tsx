@@ -1,4 +1,4 @@
-import type { ReaderView, ReplicatedMachineView, ReplicationMachinesView } from "@jarvis/contracts";
+import type { ReaderView, ReplicatedMachineView, ReplicationMachinesView } from "@attache/contracts";
 import { put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
 import { api, post, put } from "../api.ts";
 import { MarkdownInline, StatusPill, Time, useAction } from "./ui.tsx";
 
@@ -100,7 +100,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
       <div className="row">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3>{status.label}</h3>
-          <p className="small muted">{builtin ? "Where Jarvis keeps your memory, evidence and deliverables as Markdown. Jarvis reads and writes here; your edits are picked up on the next refresh." : definition.description}</p>
+          <p className="small muted">{builtin ? "Where Attache keeps your memory, evidence and deliverables as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description}</p>
         </div>
         <StatusPill state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
       </div>
@@ -183,7 +183,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
           {definition.scopes.length > 0 && (
             <fieldset className="stack-sm" style={{ border: "none", padding: 0, margin: 0 }}>
               <legend className="small" style={{ fontWeight: 560, color: "var(--text-2)", marginBottom: 4 }}>
-                What Jarvis may read
+                What Attache may read
               </legend>
               {definition.scopes.map((s) => (
                 <label key={s.id} className="check small">
@@ -260,7 +260,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
 
       {configured && !compact && definition.scopes.length > 0 && !editing && (
         <details>
-          <summary className="small">Change what Jarvis reads</summary>
+          <summary className="small">Change what Attache reads</summary>
           <div className="stack-sm" style={{ marginTop: 8 }}>
             {definition.scopes.map((s) => (
               <label key={s.id} className="check small">
@@ -283,7 +283,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
         <div className="state error small" role="alertdialog" aria-label="Disconnect">
           <strong>Disconnect {status.label}?</strong>
           <span>
-            {preview.credentials > 0 ? "Jarvis deletes the stored credentials and stops all requests." : "Jarvis stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
+            {preview.credentials > 0 ? "Attache deletes the stored credentials and stops all requests." : "Attache stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
           </span>
           <span>
             Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open attention item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
@@ -328,7 +328,7 @@ function WriteAuthority({ status, definition, onChanged, onSignIn, signInWith }:
         )}
         {changed && (
           <label className="check small">
-            <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />I understand Jarvis may perform these actions after I approve each one.
+            <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />I understand Attache may perform these actions after I approve each one.
           </label>
         )}
         <div>

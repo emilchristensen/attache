@@ -8,7 +8,7 @@ import { platformLocations } from "../platform/locations.ts";
  * never inside the vault.
  */
 export interface ServicePaths {
-  /** Root of service state, e.g. ~/Library/Application Support/Jarvis/state on macOS. */
+  /** Root of service state, e.g. ~/Library/Application Support/Attache/state on macOS. */
   stateDir: string;
   dbFile: string;
   logDir: string;
@@ -18,21 +18,21 @@ export interface ServicePaths {
   modelsDir: string;
 }
 
-/** `JARVIS_STATE_DIR` when set, otherwise this operating system's default (`platform/locations.ts`). */
+/** `ATTACHE_STATE_DIR` when set, otherwise this operating system's default (`platform/locations.ts`). */
 export function defaultStateDir(): string {
-  return process.env.JARVIS_STATE_DIR || platformLocations().stateDir;
+  return process.env.ATTACHE_STATE_DIR || platformLocations().stateDir;
 }
 
-/** `JARVIS_LOCK_DIR` when set, otherwise this operating system's writer-lock folder (`platform/locations.ts`). */
+/** `ATTACHE_LOCK_DIR` when set, otherwise this operating system's writer-lock folder (`platform/locations.ts`). */
 export function defaultLocksDir(): string {
-  return process.env.JARVIS_LOCK_DIR || platformLocations().locksDir;
+  return process.env.ATTACHE_LOCK_DIR || platformLocations().locksDir;
 }
 
 export function resolvePaths(stateDir = defaultStateDir()): ServicePaths {
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const paths: ServicePaths = {
     stateDir,
-    dbFile: join(stateDir, "jarvis.sqlite"),
+    dbFile: join(stateDir, "attache.sqlite"),
     logDir: join(stateDir, "logs"),
     runtimeFile: join(stateDir, "runtime.json"),
     backupsDir: join(stateDir, "backups"),

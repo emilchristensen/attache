@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { MACHINE_NAME_MAX } from "@jarvis/contracts";
+import { MACHINE_NAME_MAX } from "@attache/contracts";
 import { replaceWith } from "../platform/replace-file.ts";
 
 /**

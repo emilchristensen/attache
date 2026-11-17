@@ -1,4 +1,4 @@
-import type { MeaningStatus } from "@jarvis/contracts";
+import type { MeaningStatus } from "@attache/contracts";
 
 const percent = (part: number, whole: number) => (whole > 0 ? Math.floor((part / whole) * 100) : 0);
 

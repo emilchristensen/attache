@@ -57,16 +57,16 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     expect(claude.calls[0]!.args).toEqual({ channel_id: "C1", limit: 5 });
   });
 
-  it("a call that ran without Jarvis being asked (pre-approved outside Jarvis) fails the session and discards its results", async () => {
+  it("a call that ran without Attache being asked (pre-approved outside Attache) fails the session and discards its results", async () => {
     claude.mode = "preapproved";
-    await expect(runner().run(SLACK, [read("a", "C1")], { signal: signal() })).rejects.toMatchObject({ state: "denied", message: expect.stringMatching(/without asking Jarvis/) });
-    process.env.JARVIS_MANAGED_SETTINGS = join(process.env.CLAUDE_CONFIG_DIR!, "managed.json");
-    writeFileSync(process.env.JARVIS_MANAGED_SETTINGS, JSON.stringify({ permissions: { allow: ["mcp__claude_ai_Slack__*"] } }));
+    await expect(runner().run(SLACK, [read("a", "C1")], { signal: signal() })).rejects.toMatchObject({ state: "denied", message: expect.stringMatching(/without asking Attache/) });
+    process.env.ATTACHE_MANAGED_SETTINGS = join(process.env.CLAUDE_CONFIG_DIR!, "managed.json");
+    writeFileSync(process.env.ATTACHE_MANAGED_SETTINGS, JSON.stringify({ permissions: { allow: ["mcp__claude_ai_Slack__*"] } }));
     claude.mode = "normal";
     try {
       await expect(runner().run(SLACK, [read("a", "C1")], { signal: signal() })).rejects.toMatchObject({ state: "denied", message: expect.stringMatching(/auto-approve/) });
     } finally {
-      delete process.env.JARVIS_MANAGED_SETTINGS;
+      delete process.env.ATTACHE_MANAGED_SETTINGS;
     }
   });
 
@@ -120,7 +120,7 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     expect(claude.started.filter((s) => s.planned === 0)).toHaveLength(1);
   });
 
-  it("a server added since the listing overflows the context once: Jarvis lists again and retries, even a write", async () => {
+  it("a server added since the listing overflows the context once: Attache lists again and retries, even a write", async () => {
     claude.mode = "too-long-unless-hidden";
     const r = runner();
     await r.run(SLACK, [read("a", "C1")], { signal: signal() });
@@ -166,18 +166,18 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
   });
 
   it("a missing CLI is not_configured; cancellation stops the session", async () => {
-    const saved = process.env.JARVIS_CLAUDE_BIN;
-    process.env.JARVIS_CLAUDE_BIN = "/nonexistent/claude";
+    const saved = process.env.ATTACHE_CLAUDE_BIN;
+    process.env.ATTACHE_CLAUDE_BIN = "/nonexistent/claude";
     const home = process.env.HOME;
-    process.env.HOME = mkdtempSync(join(tmpdir(), "jarvis-nohome-"));
+    process.env.HOME = mkdtempSync(join(tmpdir(), "attache-nohome-"));
     try {
       await expect(runner().run(SLACK, [read("a", "C1")], { signal: signal() })).rejects.toMatchObject({ state: "not_configured" });
     } finally {
-      process.env.JARVIS_CLAUDE_BIN = saved;
+      process.env.ATTACHE_CLAUDE_BIN = saved;
       process.env.HOME = home;
     }
     claude.mode = "hang";
-    // Cancelled before the session starts (e.g. while Jarvis lists the MCP servers): nothing is spawned.
+    // Cancelled before the session starts (e.g. while Attache lists the MCP servers): nothing is spawned.
     await expect(runner().run(SLACK, [read("a", "C1")], { signal: AbortSignal.abort() })).rejects.toThrow(/Cancelled/);
     expect(claude.sessions).toBe(0);
     const ctrl = new AbortController();
@@ -191,7 +191,7 @@ describe("claude.ai connector runner (Claude Code session gate)", () => {
     expect(deepEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
     expect(deepEqual({ a: "1" }, { a: 1 })).toBe(false);
     const dir = process.env.CLAUDE_CONFIG_DIR!;
-    const cwd = mkdtempSync(join(tmpdir(), "jarvis-cwd-"));
+    const cwd = mkdtempSync(join(tmpdir(), "attache-cwd-"));
     const proj = join(dir, "projects", projectSlug(realpathSync(cwd)), "sess", "tool-results");
     mkdirSync(proj, { recursive: true });
     const spill = (path: string) => `<persisted-output>\nOutput too large (79.4KB). Full output saved to: ${path}\n\nPreview (first 2KB):\n{"issues":\n</persisted-output>`;

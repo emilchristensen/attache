@@ -105,12 +105,12 @@ describe("The wrap-up prompt", () => {
     expect(r.text.toLowerCase()).not.toContain(key.toLowerCase());
   });
 
-  it("says how to start Jarvis when the service is stopped", async () => {
+  it("says how to start Attache when the service is stopped", async () => {
     const stopped = await startTestService();
     await stopped.stop();
     const client = await mcp.connect(stopped.stateDir, { name: "claude-ai" });
     const r = await callTool(client, "wrap_up", { points: ["Something worth keeping."] });
     expect(r.isError).toBe(true);
-    expect(r.text).toContain("Start it with `jarvis start`");
+    expect(r.text).toContain("Start it with `attache start`");
   });
 });

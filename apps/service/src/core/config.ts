@@ -1,4 +1,4 @@
-import { Config, FeatureId, type ConfigPatch } from "@jarvis/contracts";
+import { Config, FeatureId, type ConfigPatch } from "@attache/contracts";
 import { type Db, nowIso } from "./db.ts";
 
 /** Configuration persisted in the service database, with a revision counter for optimistic updates. */
@@ -48,7 +48,7 @@ export class ConfigStore {
 }
 
 /**
- * A feature Jarvis no longer has (voice, for one) may still be switched on or
+ * A feature Attache no longer has (voice, for one) may still be switched on or
  * off in a configuration saved before the upgrade. Forget it rather than
  * refuse the whole configuration; the next save writes it without the entry.
  */

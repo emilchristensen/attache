@@ -7,16 +7,16 @@
 /** macOS and Linux: a shell header; the tarball follows the marker line. */
 export function posixInstallerHeader({ version, label, installer, tar }) {
   return `#!/bin/sh
-# Jarvis ${version} installer for ${label}. Run: sh "${installer}"
+# Attache ${version} installer for ${label}. Run: sh "${installer}"
 set -eu
-WORK="$(mktemp -d "\${TMPDIR:-/tmp}/jarvis-install.XXXXXX")"
+WORK="$(mktemp -d "\${TMPDIR:-/tmp}/attache-install.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
-LINE=$(awk '/^__JARVIS_PAYLOAD__$/ { print NR + 1; exit 0 }' "$0")
+LINE=$(awk '/^__ATTACHE_PAYLOAD__$/ { print NR + 1; exit 0 }' "$0")
 tail -n +"$LINE" "$0" | ${tar} -xzf - -C "$WORK"
-/bin/sh "$WORK/jarvis-${version}/install.sh"
+/bin/sh "$WORK/attache-${version}/install.sh"
 STATUS=$?
 exit $STATUS
-__JARVIS_PAYLOAD__
+__ATTACHE_PAYLOAD__
 `;
 }
 
@@ -28,11 +28,11 @@ const OFFSET_DIGITS = 12;
 function unpackScript(version, offset) {
   return `$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$work = Join-Path ([IO.Path]::GetTempPath()) ('jarvis-install-' + [guid]::NewGuid().ToString('N'))
+$work = Join-Path ([IO.Path]::GetTempPath()) ('attache-install-' + [guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($work)
 try {
-  $zip = Join-Path $work 'jarvis.zip'
-  $in = [IO.File]::OpenRead($env:JARVIS_INSTALLER)
+  $zip = Join-Path $work 'attache.zip'
+  $in = [IO.File]::OpenRead($env:ATTACHE_INSTALLER)
   try {
     [void]$in.Seek(${offset}, [IO.SeekOrigin]::Begin)
     $out = [IO.File]::Create($zip)
@@ -40,7 +40,7 @@ try {
   } finally { $in.Dispose() }
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   [IO.Compression.ZipFile]::ExtractToDirectory($zip, $work)
-  & (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work 'jarvis-${version}\\install.ps1')
+  & (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -ExecutionPolicy Bypass -File (Join-Path $work 'attache-${version}\\install.ps1')
   $status = $LASTEXITCODE
 } finally {
   Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
@@ -61,14 +61,14 @@ export function windowsInstallerHeader({ version, label, installer }) {
     const encoded = Buffer.from(unpackScript(version, String(offset).padStart(OFFSET_DIGITS, "0")), "utf16le").toString("base64");
     return [
       "@echo off",
-      `rem Jarvis ${version} installer for ${label}. Double-click ${installer}, or run it in a terminal.`,
+      `rem Attache ${version} installer for ${label}. Double-click ${installer}, or run it in a terminal.`,
       "setlocal",
-      'set "JARVIS_INSTALLER=%~f0"',
+      'set "ATTACHE_INSTALLER=%~f0"',
       `"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
-      'set "JARVIS_STATUS=%ERRORLEVEL%"',
-      'if not "%JARVIS_NO_OPEN%"=="1" pause',
-      "exit /b %JARVIS_STATUS%",
-      "__JARVIS_PAYLOAD__",
+      'set "ATTACHE_STATUS=%ERRORLEVEL%"',
+      'if not "%ATTACHE_NO_OPEN%"=="1" pause',
+      "exit /b %ATTACHE_STATUS%",
+      "__ATTACHE_PAYLOAD__",
       "",
     ].join("\r\n");
   };
@@ -79,4 +79,4 @@ export function windowsInstallerHeader({ version, label, installer }) {
 }
 
 /** `install.cmd` inside the Windows release, for an owner who unpacked the zip by hand. */
-export const WINDOWS_INSTALL_CMD = ["@echo off", "setlocal", `"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*`, 'set "JARVIS_STATUS=%ERRORLEVEL%"', 'if not "%JARVIS_NO_OPEN%"=="1" pause', "exit /b %JARVIS_STATUS%", ""].join("\r\n");
+export const WINDOWS_INSTALL_CMD = ["@echo off", "setlocal", `"${POWERSHELL}" -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" %*`, 'set "ATTACHE_STATUS=%ERRORLEVEL%"', 'if not "%ATTACHE_NO_OPEN%"=="1" pause', "exit /b %ATTACHE_STATUS%", ""].join("\r\n");

@@ -1,11 +1,11 @@
-# Jarvis
+# Attache
 
-[![CI](https://github.com/emilchristensen/jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/emilchristensen/jarvis/actions/workflows/ci.yml)
+[![CI](https://github.com/emilchristensen/attache/actions/workflows/ci.yml/badge.svg)](https://github.com/emilchristensen/attache/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A local-first personal assistant for macOS, Linux and Windows that keeps your knowledge and brings forward what needs your attention.
 
-Jarvis keeps your knowledge as Markdown in a folder you choose and answers with cited evidence.
+Attache keeps your knowledge as Markdown in a folder you choose and answers with cited evidence.
 It watches the sources you connect and prepares drafts that are sent only after you approve the exact version.
 You can read and edit the notes in Obsidian or any other Markdown editor.
 
@@ -16,7 +16,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Meaning-based search.**
   A small multilingual model runs locally and ranks passages by meaning and keywords, so a question worded differently, or in another language, still finds the note.
 - **The Brain in your Harness.**
-  A local MCP server (`jarvis mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts you confirm.
+  A local MCP server (`attache mcp`) lets Claude Code, Codex, Antigravity and Claude Desktop search and read your notes with file and line citations, and save facts you confirm.
   Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
 - **Memory with history.**
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
@@ -25,27 +25,27 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Drafts and approvals.**
   PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts.
 - **Replication (opt-in).**
-  Every Machine you run Jarvis on keeps the same Brain through a private git repository, including offline saves and hand edits.
+  Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**
   Research, briefing and draft jobs survive closing the browser tab and restarting the service.
 
-Jarvis has no chat box of its own; you ask the Brain from your Harness.
+Attache has no chat box of its own; you ask the Brain from your Harness.
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.
 
 ## Install
 
-Download the installer for your platform from [Releases](https://github.com/emilchristensen/jarvis/releases).
+Download the installer for your platform from [Releases](https://github.com/emilchristensen/attache/releases).
 No developer tools are needed.
 
 | Platform | File | How to run it |
 | --- | --- | --- |
-| macOS (Apple silicon) | `Jarvis-Installer-<version>-macos-arm64.command` | Double-click it. |
-| Linux (x86_64 with systemd) | `Jarvis-Installer-<version>-linux-x64.sh` | `sh Jarvis-Installer-<version>-linux-x64.sh` |
-| Windows 10 or 11 (x86_64) | `Jarvis-Installer-<version>-windows-x64.cmd` | Double-click it. |
+| macOS (Apple silicon) | `Attache-Installer-<version>-macos-arm64.command` | Double-click it. |
+| Linux (x86_64 with systemd) | `Attache-Installer-<version>-linux-x64.sh` | `sh Attache-Installer-<version>-linux-x64.sh` |
+| Windows 10 or 11 (x86_64) | `Attache-Installer-<version>-windows-x64.cmd` | Double-click it. |
 
-The installer starts Jarvis as a background service and opens first-run setup in your browser.
+The installer starts Attache as a background service and opens first-run setup in your browser.
 The releases are not code-signed, so macOS may ask you to right-click the file and choose **Open** the first time.
 
 The [user guide](docs/user-guide.md) covers setup, everyday use, Harness connections, Replication, backups and uninstalling.
@@ -72,14 +72,23 @@ The [developer guide](docs/developer-guide.md) lists every check, the CI setup a
 - [Glossary](GLOSSARY.md)
 - [Architecture decision records](docs/adr/)
 
+## The name
+
+An attaché is the aide who keeps your papers, briefs you before a meeting and drafts letters for your signature, which is what this project does.
+The name is written without the accent so it works as a command: `attache`.
+
+Until November 2026 the project was called Jarvis, after the AI assistant in the Iron Man films.
+It was renamed before going public, because that name belongs to Marvel and many other AI assistants already use it.
+Older commits still say Jarvis.
+
 ## Contributing
 
-Jarvis is open source but not open to contributions.
+Attache is open source but not open to contributions.
 Pull requests will be closed without review.
 You are welcome to fork it and change it for your own use under the terms of the license.
 
-Bug reports are welcome as [GitHub issues](https://github.com/emilchristensen/jarvis/issues), with no promise of a fix or a reply.
-Please report security problems privately through [GitHub security advisories](https://github.com/emilchristensen/jarvis/security/advisories/new) instead of a public issue.
+Bug reports are welcome as [GitHub issues](https://github.com/emilchristensen/attache/issues), with no promise of a fix or a reply.
+Please report security problems privately through [GitHub security advisories](https://github.com/emilchristensen/attache/security/advisories/new) instead of a public issue.
 
 ## License
 

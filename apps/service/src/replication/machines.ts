@@ -1,4 +1,4 @@
-import type { ReplicatedMachineView, ReplicationMachinesView } from "@jarvis/contracts";
+import type { ReplicatedMachineView, ReplicationMachinesView } from "@attache/contracts";
 import type { MachineIdentity } from "../core/machine.ts";
 import type { Clock } from "./clock.ts";
 import { MachineRecords, type MachineRecord } from "./machine-records.ts";

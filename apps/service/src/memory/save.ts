@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import type { MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@jarvis/contracts";
+import type { MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult } from "@attache/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
 import { harnessLabel } from "../agents/integrations.ts";
@@ -77,7 +77,7 @@ export function proposeSave(app: App, input: MemorySaveProposalInput): MemorySav
   return { proposals: app.proposals.proposeItems(input.items, { reason: input.reason, source, origin: input.origin ?? null, proposedBy }) };
 }
 
-/** Cite the session the items came from: its archived transcript when Jarvis has one, otherwise the agent and session id. */
+/** Cite the session the items came from: its archived transcript when Attache has one, otherwise the agent and session id. */
 export function originSource(app: App, origin: MemorySaveInput["origin"]): SourceRef | null {
   if (!origin) return null;
   const agentLabel = harnessLabel(origin.agent);

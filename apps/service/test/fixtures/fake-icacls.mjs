@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TEST-ONLY stand-in for Windows `icacls`, selected with JARVIS_ICACLS_BIN.
+ * TEST-ONLY stand-in for Windows `icacls`, selected with ATTACHE_ICACLS_BIN.
  * Each call's arguments are appended to `$FAKE_WINDOWS_DIR/acl.jsonl`, with
  * whether the file was still empty, as it must be when it is made private.
  */

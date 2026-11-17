@@ -10,11 +10,11 @@ export const BRANCH = "main";
 export const REMOTE = "origin";
 const TRACKING = `refs/remotes/${REMOTE}/${BRANCH}`;
 /**
- * The remote's `refs/jarvis/*` (the Reader lease), fetched with the Brain. A
+ * The remote's `refs/attache/*` (the Reader lease), fetched with the Brain. A
  * glob, so a remote without them is no error. They are never part of the Brain's history.
  */
-export const JARVIS_REFS_FETCH = `+refs/jarvis/*:refs/remotes/${REMOTE}/jarvis/*`;
-const MACHINE_EMAIL_DOMAIN = "machine.jarvis.invalid";
+export const ATTACHE_REFS_FETCH = `+refs/attache/*:refs/remotes/${REMOTE}/attache/*`;
+const MACHINE_EMAIL_DOMAIN = "machine.attache.invalid";
 /** Locks, under `.git`, that the git commands Replication runs take while they change the repository. */
 const LOCK_FILES = ["index.lock", "HEAD.lock", "ORIG_HEAD.lock", `refs/heads/${BRANCH}.lock`, `${TRACKING}.lock`];
 
@@ -29,7 +29,7 @@ export type PullOutcome =
 
 /** A Machine's name and id as a git author, so every commit says where it came from. */
 export function authorEnv(machine: MachineRef & { id: string }, at: Date): Record<string, string> {
-  const name = machine.name.replace(/[<>\n\r]/g, "").trim() || "Jarvis";
+  const name = machine.name.replace(/[<>\n\r]/g, "").trim() || "Attache";
   const email = `${machine.id}@${MACHINE_EMAIL_DOMAIN}`;
   const date = at.toISOString();
   return { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_AUTHOR_DATE: date, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email, GIT_COMMITTER_DATE: date };
@@ -163,9 +163,9 @@ export class BrainRepo {
     return Number(this.git.okSync(["rev-list", "--count", range]).trim());
   }
 
-  /** Fetch the Brain and the remote's `refs/jarvis/*`; refs the remote no longer has, such as a retired lease generation, are dropped here too. */
+  /** Fetch the Brain and the remote's `refs/attache/*`; refs the remote no longer has, such as a retired lease generation, are dropped here too. */
   async fetch(remote: string): Promise<void> {
-    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", "--prune", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, JARVIS_REFS_FETCH]);
+    await this.git.with(this.seams.credentials.env(remote)).ok([...this.credentialArgs(remote), "fetch", "--quiet", "--no-tags", "--prune", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`, ATTACHE_REFS_FETCH]);
   }
 
   /** Push this Machine's commits. Only ever a fast-forward: a rejection means another Machine pushed first. */
@@ -231,7 +231,7 @@ export class BrainRepo {
       this.writeResolved(path, outcome.content);
       notices.push(...(outcome.notices ?? []));
     }
-    if (unresolved.length) return { kind: "blocked", status: "blocked", cause: `Both Machines changed ${unresolved.join(", ")} and Jarvis has no rule to merge ${unresolved.length === 1 ? "it" : "them"}. Edit the file on one Machine to match the other.` };
+    if (unresolved.length) return { kind: "blocked", status: "blocked", cause: `Both Machines changed ${unresolved.join(", ")} and Attache has no rule to merge ${unresolved.length === 1 ? "it" : "them"}. Edit the file on one Machine to match the other.` };
     return { kind: "resolved", notices };
   }
 

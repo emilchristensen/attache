@@ -26,7 +26,7 @@ export interface HarnessClientOptions {
 /** Clients a test file opened, closed together when it ends. */
 export interface McpClients {
   /**
-   * Start Jarvis's MCP server the way a Harness does: the `jarvis` executable
+   * Start Attache's MCP server the way a Harness does: the `attache` executable
    * with `mcp` as a child process over stdio, with no token in its command or
    * environment.
    */

@@ -2,7 +2,7 @@ import type { Os } from "../platform/os.ts";
 import { shellPath } from "../platform/shell-command.ts";
 
 /**
- * How a Harness runs Jarvis's search from its shell. `line` is the same in a
+ * How a Harness runs Attache's search from its shell. `line` is the same in a
  * POSIX shell, in Git Bash (Claude Code on Windows) and in cmd.exe. PowerShell
  * (Codex on Windows) reads a quoted program path as a string, not a command,
  * so it gets the same line after the call operator `&`; null where no Harness
@@ -13,10 +13,10 @@ export interface SearchCommand {
   powershell: string | null;
 }
 
-/** The search command pinned to this install's state folder, through the bundled runtime when Jarvis runs from its bundle. */
+/** The search command pinned to this install's state folder, through the bundled runtime when Attache runs from its bundle. */
 export function searchCommand(opts: { os: Os; execPath: string; entry: string; stateDir: string }): SearchCommand {
   const q = (s: string) => shellPath(s, opts.os);
-  if (!/jarvis-service\.mjs$/.test(opts.entry)) return { line: `jarvis search --state-dir ${q(opts.stateDir)}`, powershell: null };
+  if (!/attache-service\.mjs$/.test(opts.entry)) return { line: `attache search --state-dir ${q(opts.stateDir)}`, powershell: null };
   const line = `${q(opts.execPath)} ${q(opts.entry)} search --state-dir ${q(opts.stateDir)}`;
   return { line, powershell: opts.os === "windows" ? `& ${line}` : null };
 }

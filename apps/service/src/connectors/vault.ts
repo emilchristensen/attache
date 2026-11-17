@@ -7,7 +7,7 @@ import { splitFrontmatter } from "../memory/markdown.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { expandHome } from "../platform/locations.ts";
 import { folderSuggestions } from "../platform/folder-suggestions.ts";
-import { plural, type ConnectionDefinition } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition } from "@attache/contracts";
 
 /**
  * Deadlines from Markdown: open tasks with a due date (Obsidian Tasks `📅
@@ -94,11 +94,11 @@ function vaultDefinition(): ConnectionDefinition {
   return {
     kind: "vault",
     label: "Markdown folder / Obsidian vault",
-    description: "A folder of Markdown notes, such as an Obsidian vault. Jarvis reads and indexes it without changing it.",
+    description: "A folder of Markdown notes, such as an Obsidian vault. Attache reads and indexes it without changing it.",
     authMethods: [{ id: "folder", label: "Local folder", fields: [{ id: "path", label: "Folder path", secret: false, placeholder: folderSuggestions().examples.notes }, { id: "label", label: "Name", secret: false, optional: true }] }],
     scopes: [{ id: "deadlines", label: "Tasks and notes with due dates", default: true }],
     writeActions: [],
-    setupHelp: "Read-only: Jarvis never modifies files in an imported folder. Captures and memory are written to your Jarvis data folder.",
+    setupHelp: "Read-only: Attache never modifies files in an imported folder. Captures and memory are written to your Attache data folder.",
     unavoidableSteps: [],
   };
 }

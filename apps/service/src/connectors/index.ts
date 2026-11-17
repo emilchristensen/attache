@@ -1,4 +1,4 @@
-import type { ConnectionKind } from "@jarvis/contracts";
+import type { ConnectionKind } from "@attache/contracts";
 import type { ConnectorAdapter } from "./types.ts";
 import { githubAdapter } from "./github.ts";
 import { jiraAdapter } from "./jira.ts";
@@ -9,7 +9,7 @@ import { gcalAdapter } from "./gcal.ts";
 import { modelAdapter } from "./model.ts";
 import { vaultAdapter } from "./vault.ts";
 
-/** Every connection Jarvis supports. Each entry is a real adapter with setup, test and (for sources) Source refresh. */
+/** Every connection Attache supports. Each entry is a real adapter with setup, test and (for sources) Source refresh. */
 export const ADAPTERS = new Map<ConnectionKind, ConnectorAdapter>([
   ["vault", vaultAdapter],
   ["github", githubAdapter],

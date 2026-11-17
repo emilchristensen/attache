@@ -38,9 +38,9 @@ afterAll(async () => {
 describe("saving from a Harness", () => {
   it("creates a new note and corrects an existing one in one save, citing the session", async () => {
     const r = await svc.post("/memory/save", { confirmed: true,
-      origin: { agent: "claude-code", sessionId: "sess-1", cwd: "/Users/alex/code/jarvis" },
+      origin: { agent: "claude-code", sessionId: "sess-1", cwd: "/Users/alex/code/attache" },
       items: [
-        { action: "create", type: "decision", title: "CLI writes go through the service", facts: [{ subject: "Decision", value: "jarvis save posts to the running service instead of writing files" }], notes: "The service holds the data folder's writer lock.", events: ["Agreed while adding jarvis save"] },
+        { action: "create", type: "decision", title: "CLI writes go through the service", facts: [{ subject: "Decision", value: "attache save posts to the running service instead of writing files" }], notes: "The service holds the data folder's writer lock.", events: ["Agreed while adding attache save"] },
         { action: "update", path: "memory/projects/orion-migration.md", facts: [{ subject: "Status", value: "Cutover moved to November", reason: "vendor delay" }], events: ["Vendor slipped the cutover by a month"] },
       ],
     });
@@ -51,15 +51,15 @@ describe("saving from a Harness", () => {
     const decision = readFileSync(join(svc.dataDir, "memory/decisions/cli-writes-go-through-the-service.md"), "utf8");
     expect(decision).toContain("provenance: agent-saved");
     expect(decision).toContain("kind: agent-session");
-    expect(decision).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): jarvis save posts to the running service/);
+    expect(decision).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): attache save posts to the running service/);
     expect(decision).toContain("The service holds the data folder's writer lock.");
     // An event names its source briefly; the note's sources and the change log keep the full citation.
-    expect(decision).toMatch(/— Agreed while adding jarvis save \(source: Claude Code session in jarvis\)\n/);
+    expect(decision).toMatch(/— Agreed while adding attache save \(source: Claude Code session in attache\)\n/);
     const orion = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
-    expect(orion).toMatch(/— Vendor slipped the cutover by a month \(source: Claude Code session in jarvis\)\n/);
+    expect(orion).toMatch(/— Vendor slipped the cutover by a month \(source: Claude Code session in attache\)\n/);
     const logged = (await svc.get(`/memory/document?path=${encodeURIComponent("memory/projects/orion-migration.md")}`)).changes as Array<{ change: string; afterValue: string; source: string | null }>;
-    expect(logged.find((c) => c.change === "append")).toMatchObject({ afterValue: "Vendor slipped the cutover by a month (source: Claude Code session in jarvis)", source: expect.stringMatching(/\(agent-session: claude-code\/sess-1/) });
-    expect(orion).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Cutover moved to November — source: Claude Code session in jarvis/);
+    expect(logged.find((c) => c.change === "append")).toMatchObject({ afterValue: "Vendor slipped the cutover by a month (source: Claude Code session in attache)", source: expect.stringMatching(/\(agent-session: claude-code\/sess-1/) });
+    expect(orion).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Cutover moved to November — source: Claude Code session in attache/);
     // The old value is kept in History, not left looking current.
     expect(orion).toMatch(/\*\*Status\*\* was "Cutover planned for October".*superseded: vendor delay/);
     expect(orion.match(/Cutover planned for October/g)).toHaveLength(1);
@@ -191,24 +191,24 @@ describe("the terminal commands", () => {
     expect(r.status).toBe(0);
     expect(accessOutsideOwner(join(svc.stateDir, "cli-token"))).toEqual([]);
     const clients = svc.app.db.prepare("select name, kind from clients where revoked_at is null").all() as Array<{ name: string; kind: string }>;
-    expect(clients).toContainEqual({ name: "Jarvis CLI", kind: "cli" });
+    expect(clients).toContainEqual({ name: "Attache CLI", kind: "cli" });
   });
 
   it("audit re-pairs when its token was revoked", async () => {
-    svc.app.db.prepare("update clients set revoked_at = ? where name = 'Jarvis CLI'").run(new Date().toISOString());
+    svc.app.db.prepare("update clients set revoked_at = ? where name = 'Attache CLI'").run(new Date().toISOString());
     const r = await cli(["audit", "--json"]);
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).findings.length).toBeGreaterThan(0);
   });
 
-  it("audit says how to start Jarvis when it is not running", async () => {
+  it("audit says how to start Attache when it is not running", async () => {
     const rt = join(svc.stateDir, "runtime.json");
     const saved = readFileSync(rt, "utf8");
     writeFileSync(rt, JSON.stringify({ ...JSON.parse(saved), pid: 999_999 }));
     try {
       const r = await cli(["audit"]);
       expect(r.status).toBe(1);
-      expect(r.stderr).toContain("jarvis start");
+      expect(r.stderr).toContain("attache start");
     } finally {
       writeFileSync(rt, saved);
     }
@@ -216,7 +216,7 @@ describe("the terminal commands", () => {
 
   it("audit prints a readable report with absolute paths, and JSON on request", async () => {
     const text = (await cli(["audit"])).stdout;
-    expect(text).toMatch(/^Jarvis memory audit: \d+ notes, \d+ current facts, stale = past its Review date/);
+    expect(text).toMatch(/^Attache memory audit: \d+ notes, \d+ current facts, stale = past its Review date/);
     expect(text).toContain(`## Orion migration [project, in a project's session context]`);
     expect(text).toContain(`## Helios budget [project]`);
     expect(text).toMatch(/- Budget \(2026-01-05, review 2026-02-01, \d+ days, line \d+\): 40k EUR .*\{stale, missing-source\}/);

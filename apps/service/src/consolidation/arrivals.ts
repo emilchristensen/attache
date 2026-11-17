@@ -26,7 +26,7 @@ export interface CaptureArrivalsDeps {
  * Notices meeting captures that arrive in the Brain on this Machine, so each
  * is consolidated once, where it arrived. A capture arrives when it appears
  * in `evidence/captures/` by any route but Replication: an export routine or
- * an editor writing the file, or Jarvis itself. What is there when a folder is
+ * an editor writing the file, or Attache itself. What is there when a folder is
  * first used, and what another Machine's change brings, is only recorded.
  * The record is this Machine's own state and never enters the Brain.
  */
@@ -41,7 +41,7 @@ export class CaptureArrivals {
    * The data folder was opened. A folder being adopted (set up, changed or
    * joined), or one never watched before, has its captures recorded as
    * present; a folder watched before is checked for captures that arrived
-   * while Jarvis was not running.
+   * while Attache was not running.
    */
   opened(opts: { adopt: boolean }): void {
     const folder = this.deps.dataRoot();
@@ -64,7 +64,7 @@ export class CaptureArrivals {
     for (const rel of paths) if (inCapturesArea(rel)) this.record(folder, toPosix(rel), "pulled", now);
   }
 
-  /** Jarvis wrote a file in the data folder. */
+  /** Attache wrote a file in the data folder. */
   written(relPath: string): void {
     if (inCapturesArea(relPath)) this.check();
   }

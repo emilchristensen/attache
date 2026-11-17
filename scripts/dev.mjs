@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SERVICE_DIR = join(ROOT, "apps/service");
-const BUNDLE = join(SERVICE_DIR, "dist/jarvis-service.mjs");
+const BUNDLE = join(SERVICE_DIR, "dist/attache-service.mjs");
 const WEB_PORT = 5173;
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 /** A burst of rebuilt files restarts the service once. */
@@ -33,22 +33,22 @@ function option(name, fallback) {
   return value;
 }
 
-const port = Number(option("port", process.env.JARVIS_PORT ?? "7500"));
+const port = Number(option("port", process.env.ATTACHE_PORT ?? "7500"));
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`--port must be a TCP port number, not ${port}`);
-const stateDir = resolve(option("state-dir", process.env.JARVIS_STATE_DIR ?? join(tmpdir(), "jarvis-dev")));
+const stateDir = resolve(option("state-dir", process.env.ATTACHE_STATE_DIR ?? join(tmpdir(), "attache-dev")));
 const serviceUrl = `http://127.0.0.1:${port}`;
 
 const env = {
   ...process.env,
-  JARVIS_STATE_DIR: stateDir,
-  JARVIS_PORT: String(port),
-  JARVIS_INSTANCE: process.env.JARVIS_INSTANCE ?? "dev",
-  JARVIS_CREDENTIAL_STORE: "file",
-  JARVIS_AGENT_HOME: join(stateDir, "home"),
-  JARVIS_LOCK_DIR: join(stateDir, "locks"),
-  JARVIS_DEV_ORIGINS: WEB_ORIGIN,
+  ATTACHE_STATE_DIR: stateDir,
+  ATTACHE_PORT: String(port),
+  ATTACHE_INSTANCE: process.env.ATTACHE_INSTANCE ?? "dev",
+  ATTACHE_CREDENTIAL_STORE: "file",
+  ATTACHE_AGENT_HOME: join(stateDir, "home"),
+  ATTACHE_LOCK_DIR: join(stateDir, "locks"),
+  ATTACHE_DEV_ORIGINS: WEB_ORIGIN,
 };
-mkdirSync(env.JARVIS_AGENT_HOME, { recursive: true });
+mkdirSync(env.ATTACHE_AGENT_HOME, { recursive: true });
 
 const children = new Set();
 function start(command, args, opts = {}) {
@@ -112,12 +112,12 @@ await restartService();
 start(process.execPath, [join(SERVICE_DIR, "build.mjs"), "--watch"]);
 let timer = null;
 watch(dirname(BUNDLE), (_event, file) => {
-  if (file !== "jarvis-service.mjs") return;
+  if (file !== "attache-service.mjs") return;
   clearTimeout(timer);
   timer = setTimeout(() => void restartService(), RESTART_AFTER_MS);
 });
-start("pnpm", ["--filter", "@jarvis/web", "exec", "vite", "--port", String(WEB_PORT), "--strictPort"], { env: { ...env, JARVIS_DEV_SERVICE: serviceUrl }, shell: process.platform === "win32" });
+start("pnpm", ["--filter", "@attache/web", "exec", "vite", "--port", String(WEB_PORT), "--strictPort"], { env: { ...env, ATTACHE_DEV_SERVICE: serviceUrl }, shell: process.platform === "win32" });
 
 const link = pairingLink();
-console.log(`\nJarvis dev: service ${serviceUrl}, state in ${stateDir}`);
+console.log(`\nAttache dev: service ${serviceUrl}, state in ${stateDir}`);
 console.log(`Open the hot-reload Dashboard and pair it: ${link ?? `${WEB_ORIGIN} (run \`node ${BUNDLE} pair --state-dir ${stateDir}\` for a code)`}\n`);

@@ -10,12 +10,12 @@ import { modelDir } from "../../src/meaning/model-files.ts";
 
 /**
  * The real multilingual-e5-small, run on this platform. Opt-in, because tests
- * never download it: set JARVIS_TEST_REAL_MODEL_DIR to a folder holding
+ * never download it: set ATTACHE_TEST_REAL_MODEL_DIR to a folder holding
  * `onnx/model_quantized.onnx`, `tokenizer.json` and `tokenizer_config.json`
  * from the model's pinned revision. The files are served locally and checked
  * against the published checksums, like a real download.
  */
-const SOURCE = process.env.JARVIS_TEST_REAL_MODEL_DIR;
+const SOURCE = process.env.ATTACHE_TEST_REAL_MODEL_DIR;
 const SOURCE_FILES: Record<ModelFileRole, string> = { model: "onnx/model_quantized.onnx", tokenizer: "tokenizer.json", tokenizerConfig: "tokenizer_config.json" };
 
 describe.skipIf(!SOURCE)("the real meaning model", () => {
@@ -33,7 +33,7 @@ describe.skipIf(!SOURCE)("the real meaning model", () => {
       }),
     ) as MeaningModel["files"];
     model = { ...E5_SMALL, files };
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-real-model-")), "brain");
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-real-model-")), "brain");
     cpSync(join(import.meta.dirname, "../fixtures/recall-brain"), dataDir, { recursive: true });
     svc = await startTestService({ dataDir, meaning: { model } });
   }, 120_000);

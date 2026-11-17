@@ -73,7 +73,7 @@ interface Match {
 function matches(text: string): Match[] {
   const out: Match[] = [];
   for (const secret of knownSecrets) {
-    for (let i = text.indexOf(secret); i !== -1; i = text.indexOf(secret, i + secret.length)) out.push({ index: i, kind: "a secret Jarvis holds", value: secret });
+    for (let i = text.indexOf(secret); i !== -1; i = text.indexOf(secret, i + secret.length)) out.push({ index: i, kind: "a secret Attache holds", value: secret });
   }
   for (const { kind, pattern } of SECRET_PATTERNS) {
     for (const m of text.matchAll(pattern)) out.push({ index: m.index, kind, value: m[0] });

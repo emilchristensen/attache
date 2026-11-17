@@ -1,4 +1,4 @@
-import type { MemorySaveItem } from "@jarvis/contracts";
+import type { MemorySaveItem } from "@attache/contracts";
 import { HttpError } from "../http/router.ts";
 import { slugify } from "./markdown.ts";
 import { isProtected, normalizeRel } from "./policy.ts";
@@ -81,7 +81,7 @@ function reviewDatesAfterToday(today: string, facts: ReadonlyArray<{ subject: st
   }
 }
 
-/** A new note must not duplicate one Jarvis already has: the same type and title is an update, not a second note. */
+/** A new note must not duplicate one Attache already has: the same type and title is an update, not a second note. */
 function checkCreate(memory: MemoryStore, item: CreateItem): CheckedItem {
   uniqueSubjects(item.facts, `"${item.title}"`);
   reviewDatesAfterToday(memory.today(), item.facts, `"${item.title}"`);
@@ -95,7 +95,7 @@ function checkCreate(memory: MemoryStore, item: CreateItem): CheckedItem {
 function checkUpdate(memory: MemoryStore, item: UpdateItem): CheckedItem {
   const relPath = normalizeRel(item.path.replace(/^\.\//, ""));
   if (!relPath.startsWith("memory/") || !relPath.endsWith(".md")) throw new HttpError(400, "not_memory", `${item.path} is not a memory note. Only notes under memory/ can be updated.`);
-  if (isProtected(relPath)) throw new HttpError(403, "protected", `${relPath} is your identity record; change it in Jarvis Settings.`);
+  if (isProtected(relPath)) throw new HttpError(403, "protected", `${relPath} is your identity record; change it in Attache Settings.`);
   if (!memory.exists(relPath)) throw new HttpError(404, "not_found", `${relPath} does not exist. Search for the note, or create a new one.`);
   if (!item.facts?.length && !item.events?.length) throw new HttpError(400, "invalid_request", `The update to ${relPath} has no facts or events.`);
   uniqueSubjects(item.facts ?? [], relPath);

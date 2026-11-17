@@ -8,7 +8,7 @@ import { callTool, mcpClients } from "./mcp-client.ts";
 import { currentOs } from "../../src/platform/os.ts";
 import { harnessMcpConfigs } from "../../src/platform/harness-locations.ts";
 
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const MCP = harnessMcpConfigs(currentOs());
 const at = (...rel: string[]) => join(HOME, ...rel);
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
@@ -40,22 +40,22 @@ let svc: TestService;
 let stateDir: string;
 const mcp = mcpClients();
 
-/** The MCP server entry Jarvis registered in a JSON config, by the name Jarvis gave it. */
+/** The MCP server entry Attache registered in a JSON config, by the name Attache gave it. */
 function registered(file: string): { name: string; command: string; args: string[] } {
   const servers = readJson(file).mcpServers as Record<string, { command: string; args: string[] }>;
   const [name, entry] = Object.entries(servers).find(([, e]) => Array.isArray(e.args) && e.args.includes("mcp") && e.args.includes(stateDir)) ?? [];
-  if (!name || !entry) throw new Error(`no Jarvis MCP server in ${file}`);
+  if (!name || !entry) throw new Error(`no Attache MCP server in ${file}`);
   return { name, ...entry };
 }
 
-/** A skill folder an earlier version of Jarvis installed, with its marker. */
+/** A skill folder an earlier version of Attache installed, with its marker. */
 function legacySkill(folder: string, markerStateDir: string) {
-  write(join(folder, "SKILL.md"), "---\nname: jarvis-save\ndisable-model-invocation: true\n---\nRun jarvis save.\n");
-  write(join(folder, ".jarvis-skill.json"), JSON.stringify({ managedBy: "jarvis", stateDir: markerStateDir, agents: ["claude-code", "codex"] }));
+  write(join(folder, "SKILL.md"), "---\nname: attache-save\ndisable-model-invocation: true\n---\nRun attache save.\n");
+  write(join(folder, ".attache-skill.json"), JSON.stringify({ managedBy: "attache", stateDir: markerStateDir, agents: ["claude-code", "codex"] }));
 }
 
 beforeAll(async () => {
-  stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-state-"));
+  stateDir = mkdtempSync(join(tmpdir(), "attache-it-state-"));
   write(at(".claude/settings.json"), JSON.stringify({ model: "opus" }, null, 2));
   write(at(".claude.json"), JSON.stringify(CLAUDE_JSON, null, 2));
   write(at(".codex/config.toml"), CODEX_TOML);
@@ -64,13 +64,13 @@ beforeAll(async () => {
   write(at(".local/bin", process.platform === "win32" ? "agy.exe" : "agy"), "");
   write(at(MCP["claude-desktop"].file), JSON.stringify(DESKTOP_CONFIG, null, 2));
   // What an earlier version left: its save and audit skills, another install's skill, and skills of the owner's own.
-  legacySkill(at(".claude/skills/jarvis-save"), stateDir);
-  legacySkill(at(".claude/skills/jarvis-audit"), stateDir);
-  legacySkill(at(".agents/skills/jarvis-save"), stateDir);
-  legacySkill(at(".gemini/config/skills/jarvis-audit"), stateDir);
-  legacySkill(at(".claude/skills/jarvis-other-save"), "/another/jarvis/state");
+  legacySkill(at(".claude/skills/attache-save"), stateDir);
+  legacySkill(at(".claude/skills/attache-audit"), stateDir);
+  legacySkill(at(".agents/skills/attache-save"), stateDir);
+  legacySkill(at(".gemini/config/skills/attache-audit"), stateDir);
+  legacySkill(at(".claude/skills/attache-other-save"), "/another/attache/state");
   write(at(".claude/skills/my-save/SKILL.md"), "---\nname: my-save\n---\nMine.\n");
-  write(at(".agents/skills/jarvis-notes/SKILL.md"), "---\nname: jarvis-notes\n---\nNamed like Jarvis, but mine.\n");
+  write(at(".agents/skills/attache-notes/SKILL.md"), "---\nname: attache-notes\n---\nNamed like Attache, but mine.\n");
   svc = await startTestService({ stateDir });
   await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
   await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Orion migration", facts: [{ subject: "Status", value: "Cutover planned for the first weekend of December" }] }] });
@@ -82,8 +82,8 @@ afterAll(async () => {
 
 describe("after an upgrade", () => {
   it("removes the save and audit skill folders that carry this install's marker, and nothing else", () => {
-    expect(readdirSync(at(".claude/skills")).sort()).toEqual(["jarvis-other-save", "my-save"]);
-    expect(readdirSync(at(".agents/skills"))).toEqual(["jarvis-notes"]);
+    expect(readdirSync(at(".claude/skills")).sort()).toEqual(["attache-other-save", "my-save"]);
+    expect(readdirSync(at(".agents/skills"))).toEqual(["attache-notes"]);
     expect(readdirSync(at(".gemini/config/skills"))).toEqual([]);
     expect(readFileSync(at(".claude/skills/my-save/SKILL.md"), "utf8")).toContain("Mine.");
   });
@@ -93,20 +93,20 @@ describe("connecting a Harness", () => {
   it("Claude Code gets the MCP server in ~/.claude.json and the hooks, with every other entry kept and the files backed up", async () => {
     const r = await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     expect(r.test.ok).toBe(true);
-    expect(r.test.message).toMatch(/3 Jarvis hooks in .*settings\.json and Jarvis's MCP server in .*\.claude\.json/);
+    expect(r.test.message).toMatch(/3 Attache hooks in .*settings\.json and Attache's MCP server in .*\.claude\.json/);
     const after = readJson(at(".claude.json"));
     expect(after.numStartups).toBe(12);
     expect(after.projects).toEqual(CLAUDE_JSON.projects);
     expect(after.mcpServers.granola).toEqual(CLAUDE_JSON.mcpServers.granola);
     expect(Object.keys(after.mcpServers)).toHaveLength(2);
-    expect(JSON.stringify(readJson(at(".claude/settings.json")).hooks.SessionStart)).toContain("jarvis-agent-hook");
+    expect(JSON.stringify(readJson(at(".claude/settings.json")).hooks.SessionStart)).toContain("attache-agent-hook");
     expect(readdirSync(svc.app.paths.backupsDir).some((f) => f.includes("claude_json"))).toBe(true);
-    expect(existsSync(at(".claude/skills/jarvis-save"))).toBe(false);
+    expect(existsSync(at(".claude/skills/attache-save"))).toBe(false);
   });
 
   it("the registered server, started the way the Harness starts it, reaches the Brain", async () => {
     const entry = registered(at(".claude.json"));
-    expect(entry.name).toMatch(/^jarvis(-[0-9a-f]{8})?$/);
+    expect(entry.name).toMatch(/^attache(-[0-9a-f]{8})?$/);
     const client = await mcp.connectRegistered(entry, { name: "claude-code" });
     const r = await callTool<{ passages: Array<{ title: string }> }>(client, "search", { query: "Orion cutover" });
     expect(r.isError).toBe(false);
@@ -145,7 +145,7 @@ describe("connecting a Harness", () => {
     expect(definitions.find((d) => d.kind === "claude-desktop")?.label).toBe("Claude Desktop");
     const r = await svc.post("/connections/claude-desktop/configure", { method: "mcp", fields: {} });
     expect(r.test.ok).toBe(true);
-    expect(r.test.message).toContain("Jarvis's MCP server in");
+    expect(r.test.message).toContain("Attache's MCP server in");
     const after = readJson(at(MCP["claude-desktop"].file));
     expect(after.preferences).toEqual(DESKTOP_CONFIG.preferences);
     expect(after.coworkUserFilesPath).toBe(DESKTOP_CONFIG.coworkUserFilesPath);
@@ -161,20 +161,20 @@ describe("connecting a Harness", () => {
     write(at(".codex/config.toml"), broken);
     const r = await svc.call("POST", "/connections/codex/configure", { method: "hooks", fields: {} });
     expect(r.status).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(r.body)).toMatch(/config\.toml is not valid TOML.*Jarvis will not change it/);
+    expect(JSON.stringify(r.body)).toMatch(/config\.toml is not valid TOML.*Attache will not change it/);
     expect(readFileSync(at(".codex/config.toml"), "utf8")).toBe(broken);
     expect(readFileSync(at(".codex/hooks.json"), "utf8")).toBe(hooksBefore);
     write(at(".codex/config.toml"), CODEX_TOML);
   });
 
-  it("refuses to replace an MCP server entry under Jarvis's name that Jarvis did not add", async () => {
+  it("refuses to replace an MCP server entry under Attache's name that Attache did not add", async () => {
     await svc.post("/connections/claude-desktop/disconnect", { deleteData: false });
     const name = registered(at(".claude.json")).name;
     const mine = { ...DESKTOP_CONFIG, mcpServers: { [name]: { command: "/usr/local/bin/my-own-server", args: [] } } };
     write(at(MCP["claude-desktop"].file), JSON.stringify(mine));
     const r = await svc.call("POST", "/connections/claude-desktop/configure", { method: "mcp", fields: {} });
     expect(r.status).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(r.body)).toContain(`already has an MCP server named \\"${name}\\" that Jarvis did not add`);
+    expect(JSON.stringify(r.body)).toContain(`already has an MCP server named \\"${name}\\" that Attache did not add`);
     expect(readJson(at(MCP["claude-desktop"].file))).toEqual(mine);
     write(at(MCP["claude-desktop"].file), JSON.stringify(DESKTOP_CONFIG, null, 2));
   });

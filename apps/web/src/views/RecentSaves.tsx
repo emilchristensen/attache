@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RecentChangeView, RecentChangesResult } from "@jarvis/contracts";
+import type { RecentChangeView, RecentChangesResult } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Link, StatusPill, Time, useAction } from "../components/ui.tsx";

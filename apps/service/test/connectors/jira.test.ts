@@ -10,10 +10,10 @@ let fx: FixtureServer;
 let atl: AtlassianFixture;
 beforeAll(async () => {
   fx = await startFixtureServer();
-  process.env.JARVIS_TEST_ENDPOINTS = "1";
+  process.env.ATTACHE_TEST_ENDPOINTS = "1";
 });
 afterAll(async () => {
-  delete process.env.JARVIS_TEST_ENDPOINTS;
+  delete process.env.ATTACHE_TEST_ENDPOINTS;
   await fx.close();
 });
 

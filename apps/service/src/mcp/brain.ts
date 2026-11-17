@@ -1,4 +1,4 @@
-import type { Config, MeaningState, MeaningStatus, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@jarvis/contracts";
+import type { Config, MeaningState, MeaningStatus, MemoryAuditReport, MemorySaveCheckResult, MemorySaveInput, MemorySaveProposalInput, MemorySaveProposalResult, MemorySaveResult, WrapUpInput, WrapUpResult } from "@attache/contracts";
 import { meaningNote } from "../meaning/note.ts";
 import { join } from "node:path";
 import type { ServicePaths } from "../core/paths.ts";
@@ -8,7 +8,7 @@ import type { StateEntry } from "../memory/markdown.ts";
 
 /** One search result as a Harness sees it: where it is, what kind of section, and the passage itself. */
 export interface Passage {
-  /** Relative to the Brain, or absolute for a note in another folder Jarvis indexes. `read` takes it as is. */
+  /** Relative to the Brain, or absolute for a note in another folder Attache indexes. `read` takes it as is. */
   path: string;
   startLine: number;
   endLine: number;
@@ -154,7 +154,7 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
 
 /**
  * The path a Harness sees for an indexed file: relative for the Brain,
- * absolute for another folder Jarvis indexes. `read` takes either. The roots
+ * absolute for another folder Attache indexes. `read` takes either. The roots
  * are fetched only when a file outside the Brain is among `used`.
  */
 async function brainPaths(c: ServiceClient, used: string[]): Promise<PathOf> {

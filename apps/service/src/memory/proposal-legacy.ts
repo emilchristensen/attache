@@ -1,4 +1,4 @@
-import { MemorySaveInput, MemorySaveItem, SourceRefInput } from "@jarvis/contracts";
+import { MemorySaveInput, MemorySaveItem, SourceRefInput } from "@attache/contracts";
 import { json } from "../core/db.ts";
 import type { ReviewMachine } from "../review-state/decisions.ts";
 import type { ProposalRecord } from "./proposal-record.ts";

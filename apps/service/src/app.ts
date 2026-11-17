@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import type { ConnectionKind, FeatureId, JobView } from "@jarvis/contracts";
+import type { ConnectionKind, FeatureId, JobView } from "@attache/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
@@ -58,7 +58,7 @@ export interface AppOptions {
   leaseGenerationCommits?: number;
 }
 
-export const VERSION = process.env.JARVIS_VERSION ?? "0.1.0";
+export const VERSION = process.env.ATTACHE_VERSION ?? "0.1.0";
 /** How often housekeeping runs: stale drafts expire and snoozes end within this long of their time. */
 const HOUSEKEEPING_EVERY_MS = 30_000;
 
@@ -110,7 +110,7 @@ export class App {
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
-    this.instance = opts.instance ?? process.env.JARVIS_INSTANCE ?? "default";
+    this.instance = opts.instance ?? process.env.ATTACHE_INSTANCE ?? "default";
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
@@ -328,7 +328,7 @@ export class App {
 
   // ---- lifecycle -----------------------------------------------------------------
 
-  /** Jarvis wrote a file in the data folder: Replication commits it, and a meeting capture is consolidated. */
+  /** Attache wrote a file in the data folder: Replication commits it, and a meeting capture is consolidated. */
   private wrote(rel: string) {
     this.replication.noteWrite();
     this.captures.written(rel);
@@ -343,7 +343,7 @@ export class App {
     const existing = this.connections.record("vault-data");
     const now = nowIso();
     if (!existing) {
-      this.db.prepare("insert into connections (id, kind, label, status, settings, read_scopes, write_actions, created_at, updated_at, account) values ('vault-data','vault','Jarvis data folder','connected',?, '[\"deadlines\"]','[]',?,?,?)").run(JSON.stringify({ builtin: true, path }), now, now, path);
+      this.db.prepare("insert into connections (id, kind, label, status, settings, read_scopes, write_actions, created_at, updated_at, account) values ('vault-data','vault','Attache data folder','connected',?, '[\"deadlines\"]','[]',?,?,?)").run(JSON.stringify({ builtin: true, path }), now, now, path);
     } else {
       this.db.prepare("update connections set settings = ?, status = 'connected', account = ?, updated_at = ? where id = 'vault-data'").run(JSON.stringify({ builtin: true, path }), path, now);
     }

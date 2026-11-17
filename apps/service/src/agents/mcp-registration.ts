@@ -17,8 +17,8 @@ export interface McpPlan {
 }
 
 /**
- * Jarvis's MCP server in each Harness's configuration: one entry per Jarvis
- * install, named after the install, whose command starts `jarvis mcp` pinned
+ * Attache's MCP server in each Harness's configuration: one entry per Attache
+ * install, named after the install, whose command starts `attache mcp` pinned
  * to this install's state folder. Only that entry is ever added, replaced or
  * removed.
  */
@@ -42,7 +42,7 @@ export class McpRegistration {
     return join(this.home(), ...harnessMcpConfigs(currentOs())[a.kind].file.split("/"));
   }
 
-  /** An entry that runs `jarvis mcp` for this install's state folder, whatever its name. */
+  /** An entry that runs `attache mcp` for this install's state folder, whatever its name. */
   isOurs = (entry: unknown): boolean => {
     const args = (entry as { args?: unknown } | null)?.args;
     if (!Array.isArray(args) || !args.includes("mcp")) return false;
@@ -73,7 +73,7 @@ export class McpRegistration {
     return { path, registered: ours.length > 0, current };
   }
 
-  /** The change that registers the server. Throws, before anything is written, on a file Jarvis must not change. */
+  /** The change that registers the server. Throws, before anything is written, on a file Attache must not change. */
   planInstall(a: AgentIntegration): McpPlan {
     const path = this.path(a);
     const before = this.read(path);

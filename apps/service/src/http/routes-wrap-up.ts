@@ -1,4 +1,4 @@
-import { WrapUpInput } from "@jarvis/contracts";
+import { WrapUpInput } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import type { App } from "../app.ts";
 import { recordWrapUp } from "../memory/wrap-up.ts";

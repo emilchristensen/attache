@@ -77,7 +77,7 @@ describe("Replication between Machines", () => {
     expect(message).toContain('created "Orion migration"');
     expect(message).toContain("corrected Status");
     expect(message).toContain("added an event");
-    expect(message).toMatch(/Jarvis-Machine: Mac \([0-9a-f-]{36}\)/);
+    expect(message).toMatch(/Attache-Machine: Mac \([0-9a-f-]{36}\)/);
   });
 
   it("says a save added a subject the note did not have, and corrected one whose value it replaced", async () => {
@@ -244,8 +244,8 @@ describe("Replication between Machines", () => {
   it("checks that git is installed before setting up or joining, and says how to get it on this operating system", async () => {
     single = await startTestService();
     const howTo = { darwin: "xcode-select --install", linux: "package manager", win32: "https://git-scm.com/download/win" }[process.platform as string] ?? "git";
-    const before = process.env.JARVIS_GIT_BIN;
-    process.env.JARVIS_GIT_BIN = join(single.stateDir, "no-git-here", process.platform === "win32" ? "git.exe" : "git");
+    const before = process.env.ATTACHE_GIT_BIN;
+    process.env.ATTACHE_GIT_BIN = join(single.stateDir, "no-git-here", process.platform === "win32" ? "git.exe" : "git");
     try {
       for (const [path, body] of [["/replication/setup", { remote: "owner/brain" }], ["/replication/join", { remote: "owner/brain", path: join(single.stateDir, "joined") }]] as const) {
         const r = await single.call("POST", path, body);
@@ -255,8 +255,8 @@ describe("Replication between Machines", () => {
         expect(r.body.error.message).toContain(howTo);
       }
     } finally {
-      if (before === undefined) delete process.env.JARVIS_GIT_BIN;
-      else process.env.JARVIS_GIT_BIN = before;
+      if (before === undefined) delete process.env.ATTACHE_GIT_BIN;
+      else process.env.ATTACHE_GIT_BIN = before;
     }
     expect((await single.get("/replication")).status).toBe("off");
     expect(existsSync(join(single.dataDir, ".git"))).toBe(false);

@@ -133,7 +133,7 @@ describe("the Reader lease", () => {
     const renewed = (await readerOn(mac)).heartbeatAt!;
     expect(Date.parse(renewed) - Date.parse(first)).toBeGreaterThanOrEqual(20 * 60_000);
     // The lease lives on a ref of its own, never on a branch, so a clone of the Brain does not carry it.
-    expect(world.remote.git("for-each-ref", "--format=%(refname)")).toBe(["refs/heads/main", "refs/jarvis/reader-lease/1"].join("\n"));
+    expect(world.remote.git("for-each-ref", "--format=%(refname)")).toBe(["refs/attache/reader-lease/1", "refs/heads/main"].join("\n"));
     await pc.clock.advance(CHECK);
     expect((await readerOn(pc)).heartbeatAt).toBe(renewed);
   });
@@ -147,11 +147,11 @@ describe("the Reader lease", () => {
     const brain = world.remote.git("rev-parse", "main");
     for (let renewal = 0; renewal < 8; renewal++) await mac.clock.advance(10 * 60_000);
 
-    const leaseRefs = world.remote.git("for-each-ref", "--format=%(refname)", "refs/jarvis").split("\n");
+    const leaseRefs = world.remote.git("for-each-ref", "--format=%(refname)", "refs/attache").split("\n");
     expect(leaseRefs.length).toBeLessThanOrEqual(2);
     // The lease moved on from its first generation, which is gone from the remote.
-    expect(leaseRefs).not.toContain("refs/jarvis/reader-lease/1");
-    expect(Number(world.remote.git("rev-list", "--count", "--glob=refs/jarvis/*"))).toBeLessThanOrEqual(2 * (2 + 1));
+    expect(leaseRefs).not.toContain("refs/attache/reader-lease/1");
+    expect(Number(world.remote.git("rev-list", "--count", "--glob=refs/attache/*"))).toBeLessThanOrEqual(2 * (2 + 1));
     expect(world.remote.git("rev-parse", "main")).toBe(brain);
     // Every Machine still reads the current lease.
     await pc.clock.advance(CHECK);

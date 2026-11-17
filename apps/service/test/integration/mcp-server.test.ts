@@ -54,8 +54,8 @@ afterAll(async () => {
   await svc?.stop();
 });
 
-describe("Jarvis MCP server", () => {
-  it("starts through the jarvis executable and lists its tools", async () => {
+describe("Attache MCP server", () => {
+  it("starts through the attache executable and lists its tools", async () => {
     const client = await connect(svc.stateDir);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["audit", "read", "save", "search", "wrap_up"]));
@@ -152,21 +152,21 @@ describe("Jarvis MCP server", () => {
     const token = readFileSync(tokenFile, "utf8").trim();
     expect(token.length).toBeGreaterThan(10);
     expect(accessOutsideOwner(tokenFile)).toEqual([]);
-    for (const file of filesUnder(process.env.JARVIS_AGENT_HOME!)) expect(readFileSync(file, "utf8")).not.toContain(token);
+    for (const file of filesUnder(process.env.ATTACHE_AGENT_HOME!)) expect(readFileSync(file, "utf8")).not.toContain(token);
   });
 });
 
-describe("Jarvis MCP server while the service is stopped", () => {
-  it("still starts, each tool says how to start Jarvis, and the tools work once it runs", async () => {
+describe("Attache MCP server while the service is stopped", () => {
+  it("still starts, each tool says how to start Attache, and the tools work once it runs", async () => {
     const stopped = await startTestService();
     await stopped.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "note", title: "Quokka plan", facts: [{ subject: "Start", value: "The quokka rollout starts in March" }] }] });
     await stopped.stop();
     const client = await connect(stopped.stateDir);
-    expect(client.getInstructions()).toContain("Start it with `jarvis start`");
+    expect(client.getInstructions()).toContain("Start it with `attache start`");
     for (const [name, args] of [["search", { query: "quokka" }], ["read", { path: "memory/notes/quokka-plan.md" }], ["audit", {}]] as const) {
       const r = await callTool(client, name, args);
       expect(r.isError).toBe(true);
-      expect(r.text).toContain("Jarvis is not running. Start it with `jarvis start`");
+      expect(r.text).toContain("Attache is not running. Start it with `attache start`");
     }
     const again = await startTestService({ stateDir: stopped.stateDir, dataDir: stopped.dataDir });
     try {
@@ -178,21 +178,21 @@ describe("Jarvis MCP server while the service is stopped", () => {
     }
   });
 
-  it("still starts when Jarvis has never run in its state folder", async () => {
-    const client = await connect(join(tmpdir(), `jarvis-never-${Math.random().toString(36).slice(2)}`));
+  it("still starts when Attache has never run in its state folder", async () => {
+    const client = await connect(join(tmpdir(), `attache-never-${Math.random().toString(36).slice(2)}`));
     const r = await callTool(client, "search", { query: "anything" });
     expect(r.isError).toBe(true);
-    expect(r.text).toContain("Start it with `jarvis start`");
+    expect(r.text).toContain("Start it with `attache start`");
   });
 
-  it("says how to start Jarvis when the service stopped without cleaning up", async () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "jarvis-crashed-"));
+  it("says how to start Attache when the service stopped without cleaning up", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "attache-crashed-"));
     // A runtime file left behind, naming a live process that no longer listens.
     writeFileSync(join(stateDir, "runtime.json"), JSON.stringify({ pid: process.pid, port: 9, url: "http://127.0.0.1:9", version: "test", startedAt: new Date().toISOString(), instance: "crashed" }));
     const client = await connect(stateDir);
-    expect(client.getInstructions()).toContain("start it with `jarvis start`");
+    expect(client.getInstructions()).toContain("start it with `attache start`");
     const r = await callTool(client, "read", { path: "memory/notes/anything.md" });
     expect(r.isError).toBe(true);
-    expect(r.text).toContain("start it with `jarvis start`");
+    expect(r.text).toContain("start it with `attache start`");
   });
 });

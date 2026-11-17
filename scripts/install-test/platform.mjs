@@ -2,7 +2,7 @@
  * What the install test needs to know about the operating system it runs on:
  * where the release installs in a clean home folder, how to run its scripts
  * and a Harness's hook commands, and how to ask the service manager about the
- * Jarvis service (launchd on macOS, the systemd user manager on Linux, Task
+ * Attache service (launchd on macOS, the systemd user manager on Linux, Task
  * Scheduler on Windows).
  */
 import { execFileSync, execSync } from "node:child_process";
@@ -37,7 +37,7 @@ function posix(home) {
     command: (binDir, name) => join(binDir, name),
     runScript: (file, args, env) => execFileSync("/bin/sh", [file, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
     runHook: (command, input, env) => execFileSync("/bin/sh", ["-lc", command], { input, env, encoding: "utf8" }),
-    /** How a path appears in a command line Jarvis writes into a Harness's settings. */
+    /** How a path appears in a command line Attache writes into a Harness's settings. */
     commandPath: (p) => p,
     /** A clean profile: this home folder and a PATH with no developer tools. */
     cleanEnv: (vars) => ({ HOME: home, PATH: "/usr/bin:/bin:/usr/sbin:/sbin", ...vars }),
@@ -61,10 +61,10 @@ function macos(loc, name) {
     /** Service definitions of this instance in the owner's LaunchAgents folder. */
     definitions: () => (existsSync(loc.serviceDefinitionDir) ? readdirSync(loc.serviceDefinitionDir).filter((f) => f.startsWith(`${name}.`)) : []),
     ownerFiles: { "Library/LaunchAgents/com.example.owner.plist": "<plist><dict><key>Label</key><string>com.example.owner</string></dict></plist>\n" },
-    /** The owner's own Jarvis LaunchAgents on this Mac must not change while the test runs. */
+    /** The owner's own Attache LaunchAgents on this Mac must not change while the test runs. */
     machineFingerprint: () => {
       const plistDir = join(homedir(), "Library/LaunchAgents");
-      const own = (f) => /jarvis/i.test(f) && !f.startsWith(`${name}.`);
+      const own = (f) => /attache/i.test(f) && !f.startsWith(`${name}.`);
       const agents = output("/bin/launchctl", ["list"]).split("\n").map((l) => l.split("\t").pop()).filter((label) => own(`${label}.`)).sort().join(",");
       const plists = existsSync(plistDir) ? readdirSync(plistDir).filter(own).map((f) => `${f}:${createHash("sha256").update(readFileSync(join(plistDir, f))).digest("hex").slice(0, 12)}`).sort().join(",") : "";
       return { agents, plists };
@@ -155,15 +155,15 @@ function windows(loc, name) {
     /** Logon tasks of this instance. */
     definitions: () => [].concat(JSON.parse(powershell("@(Get-ScheduledTask -TaskPath '\\' | Where-Object { $_.TaskName -eq $env:N -or $_.TaskName -like \"$env:N.*\" } | ForEach-Object { $_.TaskName }) | ConvertTo-Json -Compress", { N: name }) || "[]")),
     ownerFiles: { "AppData/Local/OwnerApp/settings.ini": "[owner]\ntheme=dark\n", "AppData/Roaming/OwnerApp/notes.txt": "mine\n" },
-    /** The owner's own Jarvis logon tasks on this computer must not change while the test runs. */
-    machineFingerprint: () => ({ tasks: powershell("(@(Get-ScheduledTask -TaskPath '\\' | Where-Object { $_.TaskName -like 'Jarvis*' -and $_.TaskName -ne $env:N } | ForEach-Object { $_.TaskName }) | Sort-Object) -join ','", { N: name }) }),
+    /** The owner's own Attache logon tasks on this computer must not change while the test runs. */
+    machineFingerprint: () => ({ tasks: powershell("(@(Get-ScheduledTask -TaskPath '\\' | Where-Object { $_.TaskName -like 'Attache*' -and $_.TaskName -ne $env:N } | ForEach-Object { $_.TaskName }) | Sort-Object) -join ','", { N: name }) }),
   };
 }
 
 /** The install test's view of this computer, for a clean home folder and a test-only service instance. */
 export function installTestPlatform(home, instance) {
   const target = hostTarget();
-  if (!target) throw new Error(`The install test runs where Jarvis has a release; this is ${process.platform}/${process.arch}.`);
+  if (!target) throw new Error(`The install test runs where Attache has a release; this is ${process.platform}/${process.arch}.`);
   const os = currentOs();
   const loc = locationsForHome(home, os, {});
   const name = serviceName(os, instance);

@@ -1,4 +1,4 @@
-import type { Coverage, ReplicationView } from "@jarvis/contracts";
+import type { Coverage, ReplicationView } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { applyCandidates, type CandidateWithSource } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";

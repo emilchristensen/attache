@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MACHINE_NAME_MAX } from "@jarvis/contracts";
+import { MACHINE_NAME_MAX } from "@attache/contracts";
 
 /**
  * The Reader lease: which Machine runs scheduled Source refresh, briefings and

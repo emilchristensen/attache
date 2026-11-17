@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import type { JobEvent, JobKind, JobStatus, JobView } from "@jarvis/contracts";
+import type { JobEvent, JobKind, JobStatus, JobView } from "@attache/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { redactDeep } from "../core/log.ts";

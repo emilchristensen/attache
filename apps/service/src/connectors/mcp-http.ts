@@ -5,7 +5,7 @@
  * one re-initialize when the server forgets the session, a token refresh on
  * 401, and classified errors so coverage never mistakes a failure for "empty".
  */
-import type { CoverageState } from "@jarvis/contracts";
+import type { CoverageState } from "@attache/contracts";
 import { RemoteError, classifyStatus } from "./http.ts";
 import { sleep } from "../platform/wait.ts";
 
@@ -162,7 +162,7 @@ export class McpHttpClient {
 
   initialize(): Promise<void> {
     this.init ??= (async () => {
-      await this.rpc("initialize", { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: this.opts.clientName ?? "jarvis", version: "0.1" } }, { retries: 1 });
+      await this.rpc("initialize", { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: this.opts.clientName ?? "attache", version: "0.1" } }, { retries: 1 });
       await this.post({ jsonrpc: "2.0", method: "notifications/initialized" });
     })().catch((e) => {
       this.init = null;

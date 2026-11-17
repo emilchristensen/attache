@@ -1,4 +1,4 @@
-import type { MemorySaveItem } from "@jarvis/contracts";
+import type { MemorySaveItem } from "@attache/contracts";
 
 /**
  * A Proposal's item as it is applied today. A Review date must come after the

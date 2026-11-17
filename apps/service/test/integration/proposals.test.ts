@@ -5,7 +5,7 @@ import { startTestService, type TestService } from "./harness.ts";
 
 let svc: TestService;
 const read = (rel: string) => readFileSync(join(svc.dataDir, rel), "utf8");
-const session = { kind: "agent-session", ref: "claude-code/sess-7", observedAt: "2026-11-10T09:00:00.000Z", label: "Claude Code session in jarvis" };
+const session = { kind: "agent-session", ref: "claude-code/sess-7", observedAt: "2026-11-10T09:00:00.000Z", label: "Claude Code session in attache" };
 
 beforeAll(async () => {
   svc = await startTestService();
@@ -41,7 +41,7 @@ describe("a Proposal holds a whole save item", () => {
     expect(listed.item.facts.map((f: any) => f.subject)).toEqual(["Decision", "Project"]);
     expect(listed.item.events).toEqual(["Chosen after the load test"]);
     expect(listed.reason).toBe("Decided in the session");
-    expect(listed.source).toContain("Claude Code session in jarvis");
+    expect(listed.source).toContain("Claude Code session in attache");
 
     const applied = await svc.post(`/memory/proposals/${proposal.id}/apply`);
     expect(applied.status).toBe("applied");
@@ -49,11 +49,11 @@ describe("a Proposal holds a whole save item", () => {
     const note = read("memory/decisions/atlas-uses-postgres.md");
     expect(note).toContain("provenance: user-approved");
     expect(note).toContain("kind: agent-session");
-    expect(note).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): Atlas stores rollout state in Postgres — source: Claude Code session in jarvis/);
+    expect(note).toMatch(/\*\*Decision\*\* \(\d{4}-\d{2}-\d{2}\): Atlas stores rollout state in Postgres — source: Claude Code session in attache/);
     expect(note).toMatch(/\*\*Project\*\* \(\d{4}-\d{2}-\d{2}\): Atlas rollout/);
     expect(note).toContain("SQLite could not handle the concurrent writers.");
     expect(note).toContain("tags:\n  - atlas");
-    expect(note.split("## History")[1]).toMatch(/— Chosen after the load test \(source: Claude Code session in jarvis/);
+    expect(note.split("## History")[1]).toMatch(/— Chosen after the load test \(source: Claude Code session in attache/);
     const after = (await svc.get("/memory/proposals")).proposals;
     expect(after.some((p: any) => p.id === proposal.id)).toBe(false);
   });
@@ -79,14 +79,14 @@ describe("deciding a Proposal", () => {
     await svc.post(`/memory/proposals/${proposal.id}/apply`);
     const note = read("memory/projects/atlas-rollout.md");
     const [current, history] = note.split("## History");
-    expect(current).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Live in Copenhagen and Aarhus — source: Claude Code session in jarvis/);
+    expect(current).toMatch(/\*\*Status\*\* \(\d{4}-\d{2}-\d{2}\): Live in Copenhagen and Aarhus — source: Claude Code session in attache/);
     expect(current).toMatch(/\*\*Owner\*\* \(\d{4}-\d{2}-\d{2}\): Jonas/);
     expect(current).toMatch(/\*\*Next step\*\* \(\d{4}-\d{2}-\d{2}\): Odense in January/);
     expect(current).not.toContain("Pilot in Copenhagen");
     expect(history).toMatch(/\*\*Status\*\* was "Pilot in Copenhagen".*superseded: Aarhus went live/);
     expect(history).toMatch(/\*\*Owner\*\* was "Mia".*superseded: Mia moved team/);
-    expect(history).toContain("Aarhus cut over without downtime (source: Claude Code session in jarvis");
-    expect(history).toContain("Mia handed over to Jonas (source: Claude Code session in jarvis");
+    expect(history).toContain("Aarhus cut over without downtime (source: Claude Code session in attache");
+    expect(history).toContain("Mia handed over to Jonas (source: Claude Code session in attache");
     const hits = (await svc.get(`/memory/search?q=${encodeURIComponent("Atlas owner")}`)).hits;
     expect(hits[0].snippet).toContain("Jonas");
   });

@@ -1,4 +1,4 @@
-import type { CoverageState } from "@jarvis/contracts";
+import type { CoverageState } from "@attache/contracts";
 import type { CoverageTracker } from "./types.ts";
 import { RemoteError } from "./http.ts";
 

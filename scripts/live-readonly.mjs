@@ -5,7 +5,7 @@
  * the GitHub CLI login, and the claude.ai connectors (Slack, Gmail, Google
  * Calendar, and Jira/Confluence through Atlassian Rovo) through the signed-in
  * Claude Code CLI. Jira and Confluence need the site in
- * JARVIS_LIVE_ATLASSIAN_SITE; with _EMAIL and _TOKEN an MCP-scoped API token is
+ * ATTACHE_LIVE_ATLASSIAN_SITE; with _EMAIL and _TOKEN an MCP-scoped API token is
  * used instead. It performs only reads and
  * deletes the profile afterwards. Services without a usable sign-in are
  * reported as "not configured", never as passed. Writes
@@ -17,11 +17,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-process.env.JARVIS_CREDENTIAL_STORE = "file";
-process.env.JARVIS_NO_NOTIFY = "1";
+process.env.ATTACHE_CREDENTIAL_STORE = "file";
+process.env.ATTACHE_NO_NOTIFY = "1";
 const { App } = await import(join(ROOT, "apps/service/dist/live-probe.mjs"));
 
-const state = mkdtempSync(join(tmpdir(), "jarvis-live-"));
+const state = mkdtempSync(join(tmpdir(), "attache-live-"));
 const app = new App({ stateDir: state, quiet: true, instance: "live-probe" });
 const results = [];
 try {
@@ -77,14 +77,14 @@ try {
     if (claudeSignedIn) results.push(await live(kind, "claude-ai", {}, scopes));
     else results.push({ kind, mode: "live-read-only", ok: null, status: "not_configured", note: "Claude Code is not signed in with a claude.ai account on this machine." });
   }
-  const site = process.env.JARVIS_LIVE_ATLASSIAN_SITE;
-  const email = process.env.JARVIS_LIVE_ATLASSIAN_EMAIL;
-  const token = process.env.JARVIS_LIVE_ATLASSIAN_TOKEN;
+  const site = process.env.ATTACHE_LIVE_ATLASSIAN_SITE;
+  const email = process.env.ATTACHE_LIVE_ATLASSIAN_EMAIL;
+  const token = process.env.ATTACHE_LIVE_ATLASSIAN_TOKEN;
   // Jira and Confluence: the claude.ai Atlassian Rovo connector when Claude Code is signed in, else an MCP-scoped token.
   for (const [kind, scopes] of [["jira", ["assigned_open", "due_soon"]], ["confluence", ["mentions", "my_recent"]]]) {
     if (site && email && token) results.push(await live(kind, "api-token", { siteUrl: site, email, apiToken: token }, scopes));
     else if (site && claudeSignedIn) results.push(await live(kind, "claude-ai", { siteUrl: site }, scopes));
-    else results.push({ kind, mode: "live-read-only", ok: null, status: "not_configured", note: "Set JARVIS_LIVE_ATLASSIAN_SITE (with Claude Code signed in and the claude.ai Atlassian Rovo connector connected), or _SITE/_EMAIL/_TOKEN for an mcp-v2 API token. Contract tests cover the adapter." });
+    else results.push({ kind, mode: "live-read-only", ok: null, status: "not_configured", note: "Set ATTACHE_LIVE_ATLASSIAN_SITE (with Claude Code signed in and the claude.ai Atlassian Rovo connector connected), or _SITE/_EMAIL/_TOKEN for an mcp-v2 API token. Contract tests cover the adapter." });
   }
 } finally {
   await app.stop();

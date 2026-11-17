@@ -12,20 +12,20 @@ export interface PlatformLocations {
   home: string;
   /** Where a release installs: app versions, the `current` link and, on macOS and Windows, the service state. */
   installPrefix: string;
-  /** Default service state folder, used when neither `JARVIS_STATE_DIR` nor `--state-dir` is given. */
+  /** Default service state folder, used when neither `ATTACHE_STATE_DIR` nor `--state-dir` is given. */
   stateDir: string;
   /**
-   * Writer locks: one folder per user, shared by every Jarvis service of that
+   * Writer locks: one folder per user, shared by every Attache service of that
    * user whatever its state folder, so two services cannot both open one data
    * folder. It ignores XDG variables on purpose, because a login service and a
    * terminal can see different values for them.
    */
   locksDir: string;
-  /** Folder for the command-line entry points `jarvis` and `jarvis-uninstall`. */
+  /** Folder for the command-line entry points `attache` and `attache-uninstall`. */
   binDir: string;
   /** Folder of per-user service definitions (LaunchAgents, systemd user units); null where the service manager keeps none on disk. */
   serviceDefinitionDir: string | null;
-  /** The owner's Documents folder, where Jarvis suggests a data folder and draws its example folder paths from. */
+  /** The owner's Documents folder, where Attache suggests a data folder and draws its example folder paths from. */
   documentsDir: string;
   /** Archive tool for backup and restore. */
   tar: string;
@@ -47,7 +47,7 @@ function homeFor(os: Os, env: Env): string {
 function macos(env: Env): PlatformLocations {
   const home = homeFor("macos", env);
   const { join } = posix;
-  const installPrefix = join(home, "Library", "Application Support", "Jarvis");
+  const installPrefix = join(home, "Library", "Application Support", "Attache");
   return {
     os: "macos",
     home,
@@ -69,9 +69,9 @@ function linux(env: Env): PlatformLocations {
   return {
     os: "linux",
     home,
-    installPrefix: join(env.XDG_DATA_HOME || join(home, ".local", "share"), "jarvis"),
-    stateDir: join(env.XDG_STATE_HOME || join(home, ".local", "state"), "jarvis"),
-    locksDir: join(home, ".local", "state", "jarvis", "locks"),
+    installPrefix: join(env.XDG_DATA_HOME || join(home, ".local", "share"), "attache"),
+    stateDir: join(env.XDG_STATE_HOME || join(home, ".local", "state"), "attache"),
+    locksDir: join(home, ".local", "state", "attache", "locks"),
     binDir: join(home, ".local", "bin"),
     serviceDefinitionDir: join(env.XDG_CONFIG_HOME || join(home, ".config"), "systemd", "user"),
     documentsDir: join(home, "Documents"),
@@ -91,7 +91,7 @@ function windows(env: Env): PlatformLocations {
   const home = homeFor("windows", env);
   const { join } = win32;
   const { localAppData, appData } = windowsAppData(env);
-  const installPrefix = join(localAppData, "Jarvis");
+  const installPrefix = join(localAppData, "Attache");
   return {
     os: "windows",
     home,
@@ -115,7 +115,7 @@ export function platformLocations(os: Os = currentOs(), env: Env = process.env):
   return BY_OS[os](env);
 }
 
-/** The locations as seen from another home folder, e.g. the one whose Harness settings Jarvis edits. */
+/** The locations as seen from another home folder, e.g. the one whose Harness settings Attache edits. */
 export function locationsForHome(home: string, os: Os = currentOs(), env: Env = process.env): PlatformLocations {
   return platformLocations(os, { ...env, [os === "windows" ? "USERPROFILE" : "HOME"]: home });
 }
@@ -138,9 +138,9 @@ export function toolCandidates(loc: PlatformLocations, name: string): string[] {
  */
 export function serviceName(os: Os, instance: string): string {
   const isDefault = instance === "default";
-  if (os === "macos") return isDefault ? "dev.jarvis.service" : `dev.jarvis.${instance}`;
-  if (os === "linux") return isDefault ? "jarvis.service" : `jarvis-${instance}.service`;
-  return isDefault ? "Jarvis" : `Jarvis-${instance}`;
+  if (os === "macos") return isDefault ? "dev.attache.service" : `dev.attache.${instance}`;
+  if (os === "linux") return isDefault ? "attache.service" : `attache-${instance}.service`;
+  return isDefault ? "Attache" : `Attache-${instance}`;
 }
 
 /**

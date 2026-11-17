@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * TEST-ONLY stand-in for libsecret's `secret-tool`, selected with
- * JARVIS_SECRET_TOOL_BIN. It answers `store`, `lookup` and `clear` like the
+ * ATTACHE_SECRET_TOOL_BIN. It answers `store`, `lookup` and `clear` like the
  * real tool and keeps items in `$FAKE_SECRET_SERVICE_DIR/items.json`.
  * Every call's arguments are appended to `calls.jsonl` there, so tests can
  * check that no secret ever reaches process arguments.

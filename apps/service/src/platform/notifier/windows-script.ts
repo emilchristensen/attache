@@ -2,7 +2,7 @@
  * The Windows PowerShell script behind Windows notifications (toasts),
  * through the Windows Runtime's ToastNotificationManager.
  *
- * Windows shows toasts only from a sender it knows, so Jarvis registers its
+ * Windows shows toasts only from a sender it knows, so Attache registers its
  * own app id with the name people see, under
  * `HKCU\Software\Classes\AppUserModelId\<app>`, the registration Windows
  * accepts from apps without an installer package. The text is added as text
@@ -45,7 +45,7 @@ function Invoke-Request($req) {
   $null = $texts.Item(0).AppendChild($xml.CreateTextNode([string]$req.title))
   $null = $texts.Item(1).AppendChild($xml.CreateTextNode([string]$req.body))
   $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-  $toast.Group = 'jarvis'
+  $toast.Group = 'attache'
   $notifier.Show($toast)
   return @{ ok = $true; enabled = $true }
 }

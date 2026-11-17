@@ -37,9 +37,9 @@ const key = (server: string, tool: string) => `${server}\0${tool}`;
 
 /** Point the connector runner at the fixture CLI and an empty Claude config directory. */
 export function useFakeClaude(fixtureUrl: string): void {
-  process.env.JARVIS_CLAUDE_BIN = FAKE_CLAUDE;
-  process.env.JARVIS_FAKE_CLAUDE_URL = fixtureUrl;
-  process.env.CLAUDE_CONFIG_DIR ??= mkdtempSync(join(tmpdir(), "jarvis-claude-config-"));
+  process.env.ATTACHE_CLAUDE_BIN = FAKE_CLAUDE;
+  process.env.ATTACHE_FAKE_CLAUDE_URL = fixtureUrl;
+  process.env.CLAUDE_CONFIG_DIR ??= mkdtempSync(join(tmpdir(), "attache-claude-config-"));
 }
 
 export function mountClaude(fx: FixtureServer, init: Partial<Omit<ClaudeFixture, "tools" | "calls" | "sessions" | "nextModes" | "started">> = {}): ClaudeFixture {

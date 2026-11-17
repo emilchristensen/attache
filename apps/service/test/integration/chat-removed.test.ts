@@ -13,7 +13,7 @@ afterAll(async () => {
 
 const ARCHIVE = "evidence/conversations/0b6f3c1e-chat.md";
 
-/** The schema version an install had while Jarvis still kept conversations: every migration before the one that drops them. */
+/** The schema version an install had while Attache still kept conversations: every migration before the one that drops them. */
 function chatEraSchema(db: DatabaseSync) {
   const drop = MIGRATIONS.findIndex((m) => /drop table if exists messages/.test(m));
   expect(drop, "a migration drops the chat tables").toBeGreaterThan(0);
@@ -23,14 +23,14 @@ function chatEraSchema(db: DatabaseSync) {
 
 /** A state folder and Brain as an install that used the chat left them: feature on, conversations stored, an archive in the Brain. */
 function chatEraState(): { stateDir: string; dataDir: string } {
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-chat-state-"));
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-chat-data-")), "data");
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-it-chat-state-"));
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-chat-data-")), "data");
   mkdirSync(join(dataDir, "evidence/conversations"), { recursive: true });
   mkdirSync(join(dataDir, "memory/projects"), { recursive: true });
   writeFileSync(join(dataDir, ARCHIVE), "---\ntype: conversation\ntitle: Zephyr rollout\nprovenance: conversation-archive\n---\n\n### user · 2026-10-01\n\nWhen does the Zephyr rollout start?\n\n### assistant · 2026-10-01\n\nThe Zephyr rollout starts on 3 November.\n");
   writeFileSync(join(dataDir, "memory/projects/zephyr.md"), "---\ntype: project\ntitle: Zephyr\n---\n\n# Zephyr\n\n## Current State\n\n- Rollout: starts 3 November\n");
   const now = new Date().toISOString();
-  const db = new DatabaseSync(join(stateDir, "jarvis.sqlite"));
+  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
   chatEraSchema(db);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, features: { conversation: true, drafts: false } };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), now);

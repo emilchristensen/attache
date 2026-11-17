@@ -21,11 +21,11 @@ function syncEraSchema(db: DatabaseSync) {
 
 /** A state folder as an install left it while Source refresh was stored as "sync": its interval, a scheduled run and a refresh of one connection. */
 function syncEraState(): { stateDir: string; dataDir: string } {
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-sync-state-"));
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-sync-data-")), "data");
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-it-sync-state-"));
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-sync-data-")), "data");
   mkdirSync(dataDir, { recursive: true });
   const now = new Date().toISOString();
-  const db = new DatabaseSync(join(stateDir, "jarvis.sqlite"));
+  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
   syncEraSchema(db);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30", briefingEnabled: true } };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), now);

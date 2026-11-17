@@ -1,4 +1,4 @@
-# Jarvis
+# Attache
 
 ## Navigation
 
@@ -11,7 +11,7 @@
 
 ### Issue tracker
 
-Issues and specs live as GitHub issues in `emilchristensen/jarvis`, through the `gh` CLI.
+Issues and specs live as GitHub issues in `emilchristensen/attache`, through the `gh` CLI.
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels

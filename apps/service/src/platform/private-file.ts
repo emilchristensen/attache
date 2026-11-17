@@ -21,9 +21,9 @@ let userSid: string | null = null;
 /** The security identifier of the user this process runs as, from `whoami /user`. */
 function currentUserSid(env: Env): string {
   if (userSid) return userSid;
-  const r = runSync(env.JARVIS_WHOAMI_BIN || system32(env, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]);
+  const r = runSync(env.ATTACHE_WHOAMI_BIN || system32(env, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]);
   const sid = /"(S-1-[\d-]+)"/.exec(r.stdout)?.[1];
-  if (!r.ok || !sid) throw new Error(`Jarvis could not find out which Windows user it runs as: ${r.why}`);
+  if (!r.ok || !sid) throw new Error(`Attache could not find out which Windows user it runs as: ${r.why}`);
   userSid = sid;
   return sid;
 }
@@ -31,13 +31,13 @@ function currentUserSid(env: Env): string {
 /**
  * Give a file an access-control list of its own that lets only the current
  * user in: inherited entries are removed, so a folder that others may read
- * (a state folder outside the user profile, such as `D:\Jarvis`) does not
+ * (a state folder outside the user profile, such as `D:\Attache`) does not
  * pass that on.
  */
 function restrictToOwner(path: string, env: Env): void {
   const sid = currentUserSid(env);
-  const r = runSync(env.JARVIS_ICACLS_BIN || system32(env, "icacls.exe"), [path, "/inheritance:r", "/grant:r", `*${sid}:(F)`]);
-  if (!r.ok) throw new Error(`Jarvis could not make ${path} private: ${r.why}`);
+  const r = runSync(env.ATTACHE_ICACLS_BIN || system32(env, "icacls.exe"), [path, "/inheritance:r", "/grant:r", `*${sid}:(F)`]);
+  if (!r.ok) throw new Error(`Attache could not make ${path} private: ${r.why}`);
 }
 
 /**

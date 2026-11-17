@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@jarvis/contracts";
+import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -94,7 +94,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const body = await c.body(z.object({ instructions: z.string().max(2000).optional() }));
     const item = getItem(app.db, c.params.id!);
     if (!item) throw new HttpError(404, "not_found", "Attention item not found");
-    if (!item.draftable) throw new HttpError(409, "not_draftable", "Jarvis cannot draft a response for this kind of item.");
+    if (!item.draftable) throw new HttpError(409, "not_draftable", "Attache cannot draft a response for this kind of item.");
     const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}) }, capability: "drafts", connectionId: item.connectionId });
     return { __status: 201, body: { job } };
   });

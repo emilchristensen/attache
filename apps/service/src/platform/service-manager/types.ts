@@ -4,12 +4,12 @@ export interface ServiceSpec {
   installPrefix: string;
   stateDir: string;
   port: number;
-  /** Install name, passed on to the service as `JARVIS_INSTANCE`. */
+  /** Install name, passed on to the service as `ATTACHE_INSTANCE`. */
   instance: string;
 }
 
 /**
- * Runs Jarvis as a per-user background service that starts at login and is
+ * Runs Attache as a per-user background service that starts at login and is
  * restarted if it stops: a launchd agent on macOS, a systemd user service on
  * Linux, a logon task on Windows.
  */

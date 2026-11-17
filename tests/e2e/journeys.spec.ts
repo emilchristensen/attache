@@ -39,7 +39,7 @@ test.describe.configure({ mode: "serial" });
 
 /** An empty bare repository standing in for the owner's private GitHub repository. */
 function createBareRemote(): string {
-  const url = join(mkdtempSync(join(tmpdir(), "jarvis-e2e-remote-")), "brain.git");
+  const url = join(mkdtempSync(join(tmpdir(), "attache-e2e-remote-")), "brain.git");
   execFileSync("git", ["init", "--bare", "--quiet", "-b", "main", url]);
   return url;
 }
@@ -70,7 +70,7 @@ test("setup keeps its place when a step grows taller than the window", async ({ 
   try {
     const page = await chrome.newPage({ viewport: { width: 1360, height: 900 } });
     await page.goto(stack.pairUrl());
-    await expect(page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
     const column = async () => (await page.locator("main.setup").boundingBox())!.x;
     expect(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight)).toBe(false);
     const short = await column();
@@ -98,7 +98,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
     await route.continue();
   });
   await page.goto(stack.pairUrl());
-  await expect(page.getByRole("heading", { name: "Where should Jarvis keep your knowledge?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
   const folder = page.getByRole("textbox", { name: /Data folder/ });
   await folder.click();
   const answered = page.waitForResponse("**/api/v1/setup/defaults");
@@ -110,7 +110,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText(`New folder: ${stack.dataDir}`)).toBeVisible();
   await expect(page.getByText("Will modify: nothing")).toBeVisible();
-  // Example folders are shaped for the computer Jarvis runs on.
+  // Example folders are shaped for the computer Attache runs on.
   await expect(page.getByRole("textbox", { name: "Folder to import" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
   await expectNoMacWording(page, "setup: data folder");
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
@@ -121,7 +121,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("textbox", { name: "Email" }).fill("alex@example.com");
   await page.getByRole("button", { name: "Use this folder" }).click();
 
-  await expect(page.getByRole("heading", { name: "Choose what Jarvis does" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
   // Voice is not a feature any more.
   await expect(page.getByRole("checkbox", { name: /^Voice/ })).toHaveCount(0);
   // Keyboard: toggle drafts off and on with Space, then check the dependency explanation for Background work.
@@ -145,16 +145,16 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await gh.getByRole("button", { name: "Connect" }).click();
   await expect(gh.getByText("connected", { exact: true })).toBeVisible();
   await expect(gh.getByText("Signed in as alex")).toBeVisible();
-  // Harnesses: connecting Claude Code adds Jarvis's MCP server and hooks, and keeps the user's own entries.
+  // Harnesses: connecting Claude Code adds Attache's MCP server and hooks, and keeps the user's own entries.
   await expect(page.locator('[data-connection="claude-desktop"]')).toBeVisible();
   const claude = page.locator('[data-connection="claude-code"]');
   await claude.getByRole("button", { name: "Set up" }).click();
-  await expect(claude.getByText(/Adds Jarvis's MCP server to ~\/.claude.json and three hooks to ~\/.claude\/settings.json/)).toBeVisible();
+  await expect(claude.getByText(/Adds Attache's MCP server to ~\/.claude.json and three hooks to ~\/.claude\/settings.json/)).toBeVisible();
   await claude.getByRole("button", { name: "Connect" }).click();
   await expect(claude.getByText("connected", { exact: true })).toBeVisible();
   const claudeSettings = JSON.parse(readFileSync(join(stack.agentHome, ".claude/settings.json"), "utf8"));
   expect(claudeSettings.hooks.PreToolUse[0].hooks[0].command).toBe("rtk hook claude");
-  for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(claudeSettings.hooks[e])).toContain("jarvis-agent-hook");
+  for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(claudeSettings.hooks[e])).toContain("attache-agent-hook");
   const claudeMcp = JSON.parse(readFileSync(join(stack.agentHome, ".claude.json"), "utf8")).mcpServers;
   expect(Object.values(claudeMcp)).toEqual([expect.objectContaining({ args: expect.arrayContaining(["mcp", "--state-dir", stack.stateDir]) })]);
   // A Harness that is not installed says so instead of writing anything.
@@ -195,7 +195,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
 test("home: the inbox only, with no chat box or chat shortcut", async () => {
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Message Jarvis" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Message Attache" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
   await expect(page.getByRole("separator")).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Main" }).first()).not.toContainText("ask");
@@ -304,14 +304,14 @@ test("wording: counts read as words in the right number, never with (s)", async 
 
   await page.locator('[data-connection="github"]').getByRole("button", { name: "Disconnect…" }).click();
   const disconnect = page.getByRole("alertdialog", { name: "Disconnect" });
-  await expect(disconnect).toContainText("Jarvis deletes the stored credentials and stops all requests.");
+  await expect(disconnect).toContainText("Attache deletes the stored credentials and stops all requests.");
   await expect(disconnect).toContainText(/\d+ queued jobs? will be cancelled and approvals for \d+ drafts? revoked\./);
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
   // A notes folder has no credentials to delete, and its indexed files are counted too.
   const notes = page.locator(".card", { has: page.getByRole("heading", { name: basename(stack.vaultDir), exact: true }) });
   await notes.getByRole("button", { name: "Disconnect…" }).click();
-  await expect(disconnect).toContainText("Jarvis stops reading from it.");
+  await expect(disconnect).toContainText("Attache stops reading from it.");
   await expect(disconnect).not.toContainText("credentials");
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open attention items?, 2 indexed files\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
@@ -371,7 +371,7 @@ test("credentials: Settings says which secret store holds them and why", async (
   const store = page.locator("[data-credential-store]");
   await expect(store).toHaveAttribute("data-credential-store", "file");
   await expect(store).toContainText("Private file (only you can read it)");
-  await expect(store).toContainText("JARVIS_CREDENTIAL_STORE=file chose the file.");
+  await expect(store).toContainText("ATTACHE_CREDENTIAL_STORE=file chose the file.");
 });
 
 test("meaning-based search: search says it matches keywords only, and why, until the owner downloads the model in Settings", async () => {
@@ -400,9 +400,9 @@ test("reconnection: service restart shows a banner, then recovers state", async 
   const page = await open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
   await stack.stopService();
-  await expect(page.getByText(/Reconnecting to the Jarvis service|Disconnected from the Jarvis service/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Reconnecting to the Attache service|Disconnected from the Attache service/)).toBeVisible({ timeout: 20_000 });
   await stack.startService();
-  await expect(page.getByText(/Reconnecting to the Jarvis service|Disconnected from the Jarvis service/)).toBeHidden({ timeout: 30_000 });
+  await expect(page.getByText(/Reconnecting to the Attache service|Disconnected from the Attache service/)).toBeHidden({ timeout: 30_000 });
   // The Dashboard reaches the service again without a reload.
   await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Memory" }).click();
   await page.getByRole("searchbox", { name: "Search memory" }).fill("Priya Shah");
@@ -530,7 +530,7 @@ test("memory: notes, evidence and deliverables are read-only, with no capture bo
   // The endpoints behind the old controls are closed to the Dashboard's own session.
   const statuses = await page.evaluate(async (note) => {
     const send = (method: string, path: string, body: unknown) =>
-      fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) }).then((r) => r.status);
+      fetch(`/api/v1${path}`, { method, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) }).then((r) => r.status);
     return [
       await send("POST", "/memory/capture", { text: "Typed in the Dashboard", source: { kind: "user", ref: "browser capture" } }),
       await send("POST", "/memory/notes", { type: "note", title: "Typed in the Dashboard", state: [{ subject: "Idea", value: "x" }] }),
@@ -553,7 +553,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   // Proposals arrive from outside the Dashboard; post them with the browser's own session.
   const propose = (body: unknown) =>
     page.evaluate(async (b) => {
-      const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(b) });
+      const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(b) });
       if (!res.ok) throw new Error(`propose failed: ${res.status} ${await res.text()}`);
       return (await res.json()) as { id: string };
     }, body);
@@ -568,7 +568,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
       events: ["Postmark contract signed"],
     },
     reason: "Vendor review session",
-    source: { kind: "agent-session", ref: "claude-code/sess-e2e", label: "Claude Code session in jarvis" },
+    source: { kind: "agent-session", ref: "claude-code/sess-e2e", label: "Claude Code session in attache" },
     evidence: "Procurement signed the Postmark contract this morning.",
   });
   const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
@@ -583,7 +583,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
   await expect(card.locator("[data-evidence]")).toHaveText(/Evidence\s*Procurement signed the Postmark contract this morning\./);
   await expect(card).toContainText("Why: Vendor review session");
-  await expect(card).toContainText("Source: Claude Code session in jarvis");
+  await expect(card).toContainText("Source: Claude Code session in attache");
   const newNote = review.locator(`[data-proposal="${create.id}"]`);
   await expect(newNote.getByText("New person: Lena Berg")).toBeVisible();
   await expect(newNote.locator('[data-part="tags"]')).toContainText("vendor");
@@ -828,7 +828,7 @@ test("auto-accept: switched on for one Harness in Settings, kept across reload, 
   await harnessSave(stack, [{ action: "create", type: "note", title: "Nebula naming", facts: [{ subject: "Idea", value: "Name releases after nebulae" }] }], { agent: "claude-code", session: "sess-auto" });
   const dashboardSave = await page.evaluate(async () => {
     const body = { items: [{ action: "create", type: "note", title: "Typed in the Dashboard", facts: [{ subject: "Idea", value: "x" }] }] };
-    const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+    const res = await fetch("/api/v1/memory/save", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) });
     return res.status;
   });
   expect(dashboardSave).toBe(403);
@@ -902,12 +902,12 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     watch(second);
     await second.goto(other.pairUrl());
     await second.getByRole("textbox", { name: /Data folder/ }).fill(other.dataDir);
-    await second.getByText("Already use Jarvis on another Machine?").click();
+    await second.getByText("Already use Attache on another Machine?").click();
     await second.getByRole("textbox", { name: "Repository" }).fill(remote);
     await second.getByRole("button", { name: "Join into this folder" }).click();
-    await expect(second.getByRole("heading", { name: "Choose what Jarvis does" })).toBeVisible();
+    await expect(second.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
     expect(readFileSync(join(other.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
-    await second.evaluate(() => fetch("/api/v1/setup/complete", { method: "POST", credentials: "same-origin", headers: { "x-jarvis-client": "1" } }));
+    await second.evaluate(() => fetch("/api/v1/setup/complete", { method: "POST", credentials: "same-origin", headers: { "x-attache-client": "1" } }));
     await second.goto(`${other.url}/settings`);
     const machineCard = second.locator(".card", { has: second.getByRole("heading", { name: "This Machine" }) });
     await machineCard.getByRole("textbox", { name: "Name" }).fill("Work Mac");

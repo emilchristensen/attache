@@ -12,7 +12,7 @@ import { RemoteError, afterWrite } from "./http.ts";
 import { attemptStartMs, csvList, recordFailure, stringSetting } from "./common.ts";
 import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, type Stream, type StreamResult } from "./claude-adapter.ts";
 import { parseHistory, parseProfile, parseSearch, sameText, sentTs, type SlackItem } from "./slack-format.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 const WINDOW_MS = 48 * 3_600_000;
 const RECOVERY_WINDOW_MS = 7 * 86_400_000;

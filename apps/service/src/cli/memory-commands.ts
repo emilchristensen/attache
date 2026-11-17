@@ -1,4 +1,4 @@
-import type { MemoryAuditReport } from "@jarvis/contracts";
+import type { MemoryAuditReport } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { ServiceClient } from "./client.ts";
 import { auditView, renderAudit } from "../memory/audit-view.ts";
@@ -14,12 +14,12 @@ export interface CliIo {
   cwd: string;
 }
 
-export const AUDIT_USAGE = `Usage: jarvis audit [--json]
+export const AUDIT_USAGE = `Usage: attache audit [--json]
 
 Lists every current fact in the Brain with its date, Review date, source and flags.
 A fact is flagged stale only when it is past its Review date.`;
 
-/** `jarvis audit`: the deterministic memory audit, printed for a person or an agent to judge. */
+/** `attache audit`: the deterministic memory audit, printed for a person or an agent to judge. */
 export async function auditCommand(argv: string[], paths: ServicePaths, io: CliIo) {
   if (argv.includes("--help")) return io.out(AUDIT_USAGE);
   const unknown = unknownAuditOption(argv.slice(1));
@@ -31,7 +31,7 @@ export async function auditCommand(argv: string[], paths: ServicePaths, io: CliI
   io.out(renderAudit(auditView(report, (root, rel) => join(roots.get(root) ?? root, ...rel.split("/"))), { dataFolder: report.dataFolder }));
 }
 
-/** The first argument `jarvis audit` does not take, if any; `--state-dir <folder>` is the global option every command takes. */
+/** The first argument `attache audit` does not take, if any; `--state-dir <folder>` is the global option every command takes. */
 function unknownAuditOption(args: readonly string[]): string | null {
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;

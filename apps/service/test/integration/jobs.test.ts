@@ -9,7 +9,7 @@ import { openDb } from "../../src/core/db.ts";
 import { createLogger } from "../../src/core/log.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
-const BUNDLE = join(ROOT, "apps/service/dist/jarvis-service.mjs");
+const BUNDLE = join(ROOT, "apps/service/dist/attache-service.mjs");
 
 let svc: TestService;
 beforeAll(async () => {
@@ -139,9 +139,9 @@ describe("outbox: side effects run at most once across recovery", () => {
 
 describe("A08 service restart recovers work without duplicate execution", () => {
   let child: ChildProcess | null = null;
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-restart-state-"));
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-restart-data-")), "d");
-  const env = { ...process.env, JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", JARVIS_INSTANCE: "restart-test" };
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-restart-state-"));
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-restart-data-")), "d");
+  const env = { ...process.env, ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ATTACHE_INSTANCE: "restart-test" };
 
   const boot = async (): Promise<string> => {
     const proc = spawn(process.execPath, [BUNDLE, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
@@ -168,8 +168,8 @@ describe("A08 service restart recovers work without duplicate execution", () => 
     execFileSync(process.execPath, [join(ROOT, "apps/service/build.mjs")], { stdio: "ignore" });
     let url = await boot();
     const code = JSON.parse(execFileSync(process.execPath, [BUNDLE, "pair", "--state-dir", stateDir, "--json"], { env }).toString()).code;
-    const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "restart-test" }) })).json();
-    const h = { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-jarvis-client": "1" };
+    const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "restart-test" }) })).json();
+    const h = { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-attache-client": "1" };
     const api = async (method: string, path: string, body?: unknown) => (await fetch(`${url}/api/v1${path}`, { method, headers: h, ...(body ? { body: JSON.stringify(body) } : {}) })).json();
     await api("POST", "/setup/data-folder", { path: dataDir });
     await api("POST", "/setup/complete");

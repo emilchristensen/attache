@@ -22,7 +22,7 @@ const RUNBOOK = [
   "title: Ledger cutover runbook",
   "---",
   "",
-  "Before the cutover, run `jarvis-ledger migrate --dry-run --from billing-v1 --to ledger-v2` on staging. The Quokkaflow check compares totals.",
+  "Before the cutover, run `attache-ledger migrate --dry-run --from billing-v1 --to ledger-v2` on staging. The Quokkaflow check compares totals.",
   "",
   "- Freeze **invoice runs** at noon",
   "- Point the [billing dashboard](https://example.com/billing) at the _new_ ledger",

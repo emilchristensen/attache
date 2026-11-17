@@ -1,7 +1,7 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 /**
- * Jarvis memory notes are plain Markdown with YAML frontmatter.
+ * Attache memory notes are plain Markdown with YAML frontmatter.
  *
  * State versus event: `## Current State` holds one dated entry per subject and
  * is REPLACED on correction; `## History` is append-only and keeps every
@@ -44,7 +44,7 @@ const FM_RE = /^---\n([\s\S]*?)\n---\n?/;
 
 /**
  * A note's text with LF line endings. An editor on Windows may save a note
- * with CRLF; Jarvis reads it the same, and everything it writes is LF, as
+ * with CRLF; Attache reads it the same, and everything it writes is LF, as
  * the Brain repository stores it on every Machine.
  */
 export function toLf(text: string): string {
@@ -109,7 +109,7 @@ export function parseMarkdown(raw: string, fallbackTitle: string): ParsedMarkdow
 }
 
 /**
- * `- **Subject** (date[, review date]): value[ — source: …]`. Jarvis writes
+ * `- **Subject** (date[, review date]): value[ — source: …]`. Attache writes
  * `(2026-11-10, review 2026-11-13)`; a hand edit may vary the spacing, the
  * case of "review" or add a colon after it, and still reads the same.
  */

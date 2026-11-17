@@ -34,7 +34,7 @@ export class KeychainSecretStore implements SecretStore {
   async set(key: string, value: string) {
     if (/[\n\r]/.test(value)) throw new Error("Credential values cannot contain newlines");
     registerSecret(value);
-    const cmd = `add-generic-password -U -s ${securityQuote(this.service)} -a ${securityQuote(key)} -l ${securityQuote("Jarvis: " + key)} -w ${securityQuote(value)}\n`;
+    const cmd = `add-generic-password -U -s ${securityQuote(this.service)} -a ${securityQuote(key)} -l ${securityQuote("Attache: " + key)} -w ${securityQuote(value)}\n`;
     const r = await run(SECURITY, ["-i"], { input: cmd });
     if (r.code !== 0 || /error/i.test(r.stderr)) throw new Error(`Keychain write failed: ${r.stderr.trim() || r.code}`);
     this.index.add(key);

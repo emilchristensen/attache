@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { MemoryAuditEntry, MemoryAuditReport } from "@jarvis/contracts";
+import type { MemoryAuditEntry, MemoryAuditReport } from "@attache/contracts";
 import type { App } from "../app.ts";
 import { nowIso } from "../core/db.ts";
 import { notesInSessionContext } from "../agents/project-notes.ts";

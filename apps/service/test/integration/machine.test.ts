@@ -91,7 +91,7 @@ describe("per-Machine evidence", () => {
 
 describe("evidence written before the change", () => {
   it("is still found by search and the audit", async () => {
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-legacy-")), "data");
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-legacy-")), "data");
     const yesterday = daysAgo(1);
     mkdirSync(join(dataDir, "evidence/sessions"), { recursive: true });
     mkdirSync(join(dataDir, "evidence/connectors/slack"), { recursive: true });
@@ -137,10 +137,10 @@ describe("evidence written before the change", () => {
 
 describe("the writer lock", () => {
   const START_WAIT_MS = 60_000;
-  /** A second Jarvis service, as its own process, on its own state folder. */
+  /** A second Attache service, as its own process, on its own state folder. */
   async function otherService(dataDir: string): Promise<ChildProcess> {
-    const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-other-state-"));
-    const env = { ...process.env, JARVIS_INSTANCE: "other-machine-test" };
+    const stateDir = mkdtempSync(join(tmpdir(), "attache-it-other-state-"));
+    const env = { ...process.env, ATTACHE_INSTANCE: "other-machine-test" };
     const child = spawn(process.execPath, [MAIN, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
     children.push(child);
     let url = "";
@@ -153,21 +153,21 @@ describe("the writer lock", () => {
     }
     if (!url) throw new Error(child.exitCode === null ? "the other service did not start" : `the other service exited with code ${child.exitCode}`);
     const code = JSON.parse(execFileSync(process.execPath, [MAIN, "pair", "--state-dir", stateDir, "--json"], { env, encoding: "utf8" })).code;
-    const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "other" }) })).json();
-    const res = await fetch(`${url}/api/v1/setup/data-folder`, { method: "POST", headers: { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ path: dataDir }) });
+    const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "other" }) })).json();
+    const res = await fetch(`${url}/api/v1/setup/data-folder`, { method: "POST", headers: { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ path: dataDir }) });
     if (res.status !== 200) throw new Error(`the other service could not open the folder: ${await res.text()}`);
     return child;
   }
 
   it("is not inside the data folder, and a second service on the same folder is refused", async () => {
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-shared-")), "data");
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-shared-")), "data");
     const other = await otherService(dataDir);
     expect(walk(dataDir).filter((f) => /lock/i.test(f))).toEqual([]);
 
     const svc = await start({ setup: false });
     const refused = await svc.call("POST", "/setup/data-folder", { path: dataDir });
     expect(refused.status).toBe(403);
-    expect(refused.body.error.message).toMatch(/Another Jarvis service \(pid \d+\) owns this data folder/);
+    expect(refused.body.error.message).toMatch(/Another Attache service \(pid \d+\) owns this data folder/);
 
     other.kill("SIGKILL");
     await new Promise((r) => other.once("exit", r));
@@ -177,10 +177,10 @@ describe("the writer lock", () => {
   }, 120_000);
 
   it("removes a lock an earlier version left inside the data folder", async () => {
-    const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-oldlock-")), "data");
-    mkdirSync(join(dataDir, ".jarvis"), { recursive: true });
-    writeFileSync(join(dataDir, ".jarvis/writer.lock"), JSON.stringify({ pid: 2 ** 22 + 7, instance: "old", at: "2026-01-01T00:00:00.000Z" }));
+    const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-oldlock-")), "data");
+    mkdirSync(join(dataDir, ".attache"), { recursive: true });
+    writeFileSync(join(dataDir, ".attache/writer.lock"), JSON.stringify({ pid: 2 ** 22 + 7, instance: "old", at: "2026-01-01T00:00:00.000Z" }));
     await start({ dataDir });
-    expect(existsSync(join(dataDir, ".jarvis/writer.lock"))).toBe(false);
+    expect(existsSync(join(dataDir, ".attache/writer.lock"))).toBe(false);
   });
 });

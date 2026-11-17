@@ -1,4 +1,4 @@
-import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type ProposalView, type RecentChangesResult } from "@jarvis/contracts";
+import { ArchiveInput, AttentionDecision, MemorySaveInput, MemorySaveProposalInput, ProposalInput, type FeatureId, type ProposalView, type RecentChangesResult } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -40,7 +40,7 @@ function rootPath(app: App, root: string): string {
 
 export function memoryRoots(app: App): Array<{ root: string; path: string; label: string }> {
   const out: Array<{ root: string; path: string; label: string }> = [];
-  if (app.memory.dataRoot) out.push({ root: "data", path: app.memory.dataRoot, label: "Jarvis data folder" });
+  if (app.memory.dataRoot) out.push({ root: "data", path: app.memory.dataRoot, label: "Attache data folder" });
   for (const rec of app.connections.records()) {
     if (rec.kind === "vault" && !rec.settings.builtin && rec.status !== "disconnected") out.push({ root: `import:${rec.id}`, path: String(rec.settings.path), label: rec.label });
   }
@@ -63,7 +63,7 @@ function documentTarget(app: App, root: string | null | undefined, path: string 
   if (!path) throw new HttpError(400, "invalid_request", "path is required");
   if (root || !isAbsolute(path)) return { root: root ?? "data", rel: path };
   const found = resolveAbsolute(app, path);
-  if (!found) throw new HttpError(404, "not_found", `${path} is not in the Brain or another folder Jarvis indexes.`);
+  if (!found) throw new HttpError(404, "not_found", `${path} is not in the Brain or another folder Attache indexes.`);
   return { root: found.root, rel: found.relPath };
 }
 
@@ -93,7 +93,7 @@ export function registerDataRoutes(r: Router, app: App) {
     const raw = toLf(readFileSync(abs, "utf8"));
     const parsed = parseMarkdown(raw, rel);
     const doc = app.db.prepare("select id, area, doc_type as docType, indexed_at as indexedAt from documents where root = ? and rel_path = ?").get(root, rel) as Record<string, unknown> | undefined;
-    const rootLabel = root === "data" ? "Jarvis data folder" : (app.connections.record(root.replace(/^import:/, ""))?.label ?? root);
+    const rootLabel = root === "data" ? "Attache data folder" : (app.connections.record(root.replace(/^import:/, ""))?.label ?? root);
     return {
       root,
       rootLabel,

@@ -1,8 +1,8 @@
-import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@jarvis/contracts";
+import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@attache/contracts";
 import { HOOK_AGENT_KINDS } from "../agents/integrations.ts";
 
 /**
- * The single server-side definition of what Jarvis can do. The setup
+ * The single server-side definition of what Attache can do. The setup
  * checklist, dependency validation, API access checks and the scheduler all
  * read this registry; the clients only render it.
  */
@@ -78,14 +78,14 @@ export const FEATURES: FeatureDefinition[] = [
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["attention", "jobs"],
-    connections: [{ kinds: ["model"], label: "A model to prepare drafts", required: false, missingEffect: "Drafts start empty for you to write; Jarvis cannot prepare them." }],
+    connections: [{ kinds: ["model"], label: "A model to prepare drafts", required: false, missingEffect: "Drafts start empty for you to write; Attache cannot prepare them." }],
     schedules: [],
     jobKinds: ["draft", "action"],
   },
   {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Jarvis memory.",
+    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, propose what the Brain should change because of them, and give each new session your Attache memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],

@@ -13,7 +13,7 @@ const TOKEN = "ghp_credentialhelpertoken0123456789abcd";
 
 /** A state folder whose file secret store holds the GitHub connection's token. */
 function stateWithToken(): string {
-  const stateDir = tempDir("jarvis-cred-state-");
+  const stateDir = tempDir("attache-cred-state-");
   writeFileSync(join(stateDir, "secrets.json"), JSON.stringify({ "conn:gh-1:token": TOKEN }), { mode: 0o600 });
   return stateDir;
 }
@@ -21,7 +21,7 @@ function stateWithToken(): string {
 /** Run the helper the way git does: the action last, the request on stdin. */
 function helper(stateDir: string, action: string, request: string) {
   const r = spawnSync(process.execPath, [MAIN, "git-credential", "--connection", "gh-1", action], {
-    env: { ...process.env, JARVIS_STATE_DIR: stateDir, JARVIS_CREDENTIAL_STORE: "file" },
+    env: { ...process.env, ATTACHE_STATE_DIR: stateDir, ATTACHE_CREDENTIAL_STORE: "file" },
     input: request,
     encoding: "utf8",
     timeout: 60_000,
@@ -48,7 +48,7 @@ describe("the credential helper git runs for Replication", () => {
   });
 
   it("answers nothing when the connection has no token", () => {
-    const r = helper(tempDir("jarvis-cred-empty-"), "get", "protocol=https\nhost=github.com\n\n");
+    const r = helper(tempDir("attache-cred-empty-"), "get", "protocol=https\nhost=github.com\n\n");
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
   });
@@ -56,10 +56,10 @@ describe("the credential helper git runs for Replication", () => {
 
 describe("which remotes are GitHub repositories", () => {
   it("recognises GitHub over https and ssh, and nothing else", () => {
-    expect(githubRepoOf("https://github.com/owner/jarvis-brain.git")).toEqual({ owner: "owner", name: "jarvis-brain", transport: "https" });
-    expect(githubRepoOf("https://github.com/owner/jarvis-brain")).toEqual({ owner: "owner", name: "jarvis-brain", transport: "https" });
-    expect(githubRepoOf("git@github.com:owner/jarvis-brain.git")).toEqual({ owner: "owner", name: "jarvis-brain", transport: "ssh" });
-    expect(githubRepoOf("ssh://git@github.com/owner/jarvis.brain.git")).toEqual({ owner: "owner", name: "jarvis.brain", transport: "ssh" });
+    expect(githubRepoOf("https://github.com/owner/attache-brain.git")).toEqual({ owner: "owner", name: "attache-brain", transport: "https" });
+    expect(githubRepoOf("https://github.com/owner/attache-brain")).toEqual({ owner: "owner", name: "attache-brain", transport: "https" });
+    expect(githubRepoOf("git@github.com:owner/attache-brain.git")).toEqual({ owner: "owner", name: "attache-brain", transport: "ssh" });
+    expect(githubRepoOf("ssh://git@github.com/owner/attache.brain.git")).toEqual({ owner: "owner", name: "attache.brain", transport: "ssh" });
     expect(githubRepoOf("https://github.com.evil.example/owner/brain.git")).toBeNull();
     expect(githubRepoOf("https://gitlab.com/owner/brain.git")).toBeNull();
     expect(githubRepoOf("/srv/brain.git")).toBeNull();

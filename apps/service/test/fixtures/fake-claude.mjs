@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * TEST-ONLY stand-in for the Claude Code CLI, selected with JARVIS_CLAUDE_BIN.
- * It speaks the same stream-json + permission-control protocol Jarvis uses
+ * TEST-ONLY stand-in for the Claude Code CLI, selected with ATTACHE_CLAUDE_BIN.
+ * It speaks the same stream-json + permission-control protocol Attache uses
  * with the real CLI, and executes approved connector calls against the
- * fixture server (JARVIS_FAKE_CLAUDE_URL). The fixture decides server status,
+ * fixture server (ATTACHE_FAKE_CLAUDE_URL). The fixture decides server status,
  * sign-in state and how "the model" behaves, so the approval gate is tested
  * against deviations a real model could produce. Never live evidence.
  */
 import { createInterface } from "node:readline";
 
-const BASE = (process.env.JARVIS_FAKE_CLAUDE_URL ?? "").replace(/\/$/, "");
+const BASE = (process.env.ATTACHE_FAKE_CLAUDE_URL ?? "").replace(/\/$/, "");
 const get = async (path) => (await fetch(`${BASE}${path}`)).json();
 const post = async (path, body) => (await fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
 const emit = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
@@ -105,7 +105,7 @@ if (mode === "hang") await new Promise(() => {});
 const target = plan[0]?.tool ?? "";
 const targetServer = servers.find((s) => target.startsWith(`${prefix(s.name)}__`));
 if (mode === "preapproved" && targetServer) {
-  // A tool pre-approved by settings outside Jarvis runs without any permission request.
+  // A tool pre-approved by settings outside Attache runs without any permission request.
   const id = `toolu_${++toolUse}`;
   emit({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id, name: `${prefix(targetServer.name)}__slack_send_message`, input: { channel_id: "C1", message: "injected" } }] } });
   emit({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: "{\"ok\":true}" }] }] } });

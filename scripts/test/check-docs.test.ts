@@ -64,7 +64,7 @@ describe("avoided glossary terms", () => {
   });
 
   it("finds an avoided term as a whole word in any case, with its inflections", () => {
-    expect(find("Jarvis syncs your Second Brain.")).toEqual([
+    expect(find("Attache syncs your Second Brain.")).toEqual([
       { term: "sync", found: "syncs", preferred: ["Replication", "Source refresh"] },
       { term: "second brain", found: "Second Brain", preferred: ["Brain"] },
     ]);
@@ -140,7 +140,7 @@ describe("checking a repository", () => {
     expect(run.stdout).toContain("README.md:4: two sentences on one line; put each sentence on its own line");
     expect(run.stdout).toContain('installer/install.sh:2: "Polling" is avoided in GLOSSARY.md; use Source refresh');
     expect(run.stdout).toContain('docs/adr/0001-example.md:3: "sync" is avoided in GLOSSARY.md; use Replication or Source refresh');
-    expect(run.stdout).toContain('apps/service/src/notes.ts:2: "event(s)" writes a count with (s); write the noun in its number ("1 event", "2 events"), with plural() from @jarvis/contracts in code');
+    expect(run.stdout).toContain('apps/service/src/notes.ts:2: "event(s)" writes a count with (s); write the noun in its number ("1 event", "2 events"), with plural() from @attache/contracts in code');
     expect(run.stderr).toContain("Docs check: 1 line with two sentences, 3 avoided glossary terms, 3 counts written with (s).");
   });
 

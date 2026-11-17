@@ -1,4 +1,4 @@
-import type { HarnessSettingView } from "@jarvis/contracts";
+import type { HarnessSettingView } from "@attache/contracts";
 import { type Db, nowIso } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
@@ -26,7 +26,7 @@ export class AutoAcceptStore {
       .run(harness, on ? 1 : 0, nowIso());
   }
 
-  /** Every connected Harness with its setting, in the order Jarvis lists Harnesses. */
+  /** Every connected Harness with its setting, in the order Attache lists Harnesses. */
   list(connected: (kind: string) => boolean): HarnessSettingView[] {
     return AGENT_INTEGRATIONS.filter((a) => connected(a.kind)).map((a) => ({ id: a.kind, label: a.label, autoAccept: this.isOn(a.kind) }));
   }
@@ -34,7 +34,7 @@ export class AutoAcceptStore {
   /** Switch auto-accept for one connected Harness. A Harness that is not connected has nothing to switch. */
   change(harness: string, on: boolean, connected: (kind: string) => boolean): HarnessSettingView {
     const integration = integrationFor(harness);
-    if (!integration) throw new HttpError(404, "not_found", `Jarvis does not know a Harness called ${harness}.`);
+    if (!integration) throw new HttpError(404, "not_found", `Attache does not know a Harness called ${harness}.`);
     if (!connected(harness)) throw new HttpError(409, "not_connected", `Connect ${integration.label} first; auto-accept applies only to a connected Harness.`);
     this.set(harness, on);
     return { id: integration.kind, label: integration.label, autoAccept: on };

@@ -156,7 +156,7 @@ describe("reverting a change to a fact with a Review date", () => {
     const file = join(svc.dataDir, rel);
     writeFileSync(file, brainFile(rel).replace(`review ${IN_TWO_MONTHS}`, `review ${IN_A_MONTH}`));
     svc.app.memory.indexer.indexFile(svc.app.memory.rootRef!, rel);
-    expect((await statusChange("Upgrade scheduled")).revert).toMatchObject({ allowed: false, reason: expect.stringContaining("edited outside Jarvis") });
+    expect((await statusChange("Upgrade scheduled")).revert).toMatchObject({ allowed: false, reason: expect.stringContaining("edited outside Attache") });
 
     writeFileSync(file, brainFile(rel).replace(`review ${IN_A_MONTH}`, `review ${IN_TWO_MONTHS}`));
     await svc.post(`/memory/changes/${scheduled.id}/revert`);

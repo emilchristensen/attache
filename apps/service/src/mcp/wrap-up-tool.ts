@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WRAP_UP_POINTS_MAX, type WrapUpResult } from "@jarvis/contracts";
+import { WRAP_UP_POINTS_MAX, type WrapUpResult } from "@attache/contracts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { BrainAccess } from "./brain.ts";

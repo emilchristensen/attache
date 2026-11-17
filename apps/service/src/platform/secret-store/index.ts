@@ -15,7 +15,7 @@ export interface SecretStoreOptions {
   secretsFile: string;
   /** Install name; each instance keeps its own secrets. */
   instance: string;
-  /** `JARVIS_CREDENTIAL_STORE=file` forces the file store (tests, isolated installs). */
+  /** `ATTACHE_CREDENTIAL_STORE=file` forces the file store (tests, isolated installs). */
   env?: Readonly<Record<string, string | undefined>>;
 }
 
@@ -26,8 +26,8 @@ export interface SecretStoreOptions {
  */
 export function createSecretStore(opts: SecretStoreOptions): SecretStore {
   const env = opts.env ?? process.env;
-  if (env.JARVIS_CREDENTIAL_STORE === "file") return new FileSecretStore(opts.secretsFile, "JARVIS_CREDENTIAL_STORE=file chose the file.");
-  const service = `dev.jarvis.${opts.instance}`;
+  if (env.ATTACHE_CREDENTIAL_STORE === "file") return new FileSecretStore(opts.secretsFile, "ATTACHE_CREDENTIAL_STORE=file chose the file.");
+  const service = `dev.attache.${opts.instance}`;
   switch (opts.os) {
     case "macos":
       return new KeychainSecretStore(service, join(opts.stateDir, "keychain-index.json"));

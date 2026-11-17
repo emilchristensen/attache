@@ -11,24 +11,24 @@ import { spoolDir } from "../../src/agents/spool.ts";
 import { homeEnv, hookShell, runInShell } from "../fixtures/harness-shell.ts";
 import { callTool, mcpClients } from "./mcp-client.ts";
 
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const FOREIGN_CLAUDE = { model: "opus", hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "rtk hook claude" }] }], SessionStart: [{ matcher: "", hooks: [{ type: "command", command: "bash snapshot.sh", timeout: 5 }] }] } };
 
 let svc: TestService;
 let fx: FixtureServer;
 const mcp = mcpClients();
-/** The name Jarvis registers its MCP server under for this install. */
+/** The name Attache registers its MCP server under for this install. */
 const registeredName = () => svc.app.sessions.hooks.ownerKey();
-const work = mkdtempSync(join(tmpdir(), "jarvis-it-agentwork-"));
+const work = mkdtempSync(join(tmpdir(), "attache-it-agentwork-"));
 
 const readJson = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 
-/** Find the command Jarvis registered for `event` and run it the way the agent does: through a shell, JSON on stdin. */
+/** Find the command Attache registered for `event` and run it the way the agent does: through a shell, JSON on stdin. */
 function runHook(settingsPath: string, event: string, input: Record<string, unknown>, opts: { named?: boolean; env?: Record<string, string> } = {}): string {
   const s = readJson(settingsPath);
   const command = opts.named
-    ? (Object.values(s).flatMap((v: any) => v?.[event] ?? []) as Array<{ command: string }>).find((h) => h.command.includes("jarvis-agent-hook"))!.command
-    : (s.hooks[event] as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("jarvis-agent-hook"))!.command;
+    ? (Object.values(s).flatMap((v: any) => v?.[event] ?? []) as Array<{ command: string }>).find((h) => h.command.includes("attache-agent-hook"))!.command
+    : (s.hooks[event] as Array<{ hooks: Array<{ command: string }> }>).flatMap((g) => g.hooks).find((h) => h.command.includes("attache-agent-hook"))!.command;
   const harness = settingsPath.includes(".codex") ? "codex" : settingsPath.includes(".gemini") ? "antigravity" : "claude-code";
   return runInShell(hookShell(harness), command, { input: JSON.stringify(input), env: { ...process.env, ...homeEnv(HOME), ...opts.env } });
 }
@@ -80,14 +80,14 @@ afterAll(async () => {
 });
 
 describe("Harness sessions", () => {
-  it("connecting Claude Code adds only Jarvis's hooks and keeps everything else", async () => {
+  it("connecting Claude Code adds only Attache's hooks and keeps everything else", async () => {
     const r = await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     expect(r.test.ok).toBe(true);
     const s = readJson(join(HOME, ".claude/settings.json"));
     expect(s.model).toBe("opus");
     expect(s.hooks.PreToolUse).toEqual(FOREIGN_CLAUDE.hooks.PreToolUse);
     expect(s.hooks.SessionStart[0]).toEqual(FOREIGN_CLAUDE.hooks.SessionStart[0]);
-    for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(s.hooks[e])).toContain("jarvis-agent-hook");
+    for (const e of ["SessionStart", "PreCompact", "SessionEnd"]) expect(JSON.stringify(s.hooks[e])).toContain("attache-agent-hook");
     // The previous file was backed up first.
     expect(readdirSync(svc.app.paths.backupsDir).some((f) => f.includes("claude_settings_json"))).toBe(true);
     // Saves go through the MCP server now; no skills are installed.
@@ -95,7 +95,7 @@ describe("Harness sessions", () => {
     expect(existsSync(join(HOME, ".claude/skills"))).toBe(false);
   });
 
-  it("a new session starts with the user's Jarvis memory", async () => {
+  it("a new session starts with the user's Attache memory", async () => {
     await until(() => existsSync(join(svc.stateDir, "agents/session-context.md")));
     const out = JSON.parse(runHook(join(HOME, ".claude/settings.json"), "SessionStart", { session_id: "s1", cwd: work, source: "startup" }));
     const ctx = out.hookSpecificOutput.additionalContext as string;
@@ -108,7 +108,7 @@ describe("Harness sessions", () => {
   it("an ended session is archived and summarised into this Machine's session log for the day", async () => {
     await svc.call("PATCH", "/machine", { name: "Work Laptop" });
     const transcript = join(work, "s1.jsonl");
-    writeFileSync(transcript, claudeTranscript("s1", join(work, "jarvis"), [["Should the hook call the API?", "We decided the hook only copies the transcript, because the SessionEnd budget is short."]]));
+    writeFileSync(transcript, claudeTranscript("s1", join(work, "attache"), [["Should the hook call the API?", "We decided the hook only copies the transcript, because the SessionEnd budget is short."]]));
     runHook(join(HOME, ".claude/settings.json"), "SessionEnd", { session_id: "s1", transcript_path: transcript, cwd: work, reason: "exit" });
     const job = await until(() => distillJobs().find((j) => j.status === "succeeded"));
     expect(job.result).toMatchObject({ summarised: true, durable: 1 });
@@ -145,7 +145,7 @@ describe("Harness sessions", () => {
     expect(r.data.outcome).toBe("saved");
     const note = readFileSync(join(svc.dataDir, "memory/projects/orion-migration.md"), "utf8");
     // s1 was archived above, so the fact cites its transcript.
-    expect(note).toMatch(/Cutover moved to November — source: Claude Code session in jarvis-it-agentwork-\w+ \(agent-session: evidence\/sessions\/transcripts\/claude-code\/\d{4}-\d{2}-\d{2}-s1\.md/);
+    expect(note).toMatch(/Cutover moved to November — source: Claude Code session in attache-it-agentwork-\w+ \(agent-session: evidence\/sessions\/transcripts\/claude-code\/\d{4}-\d{2}-\d{2}-s1\.md/);
   });
 
   it("a compaction then the end of the same session adds only the new turns", async () => {
@@ -205,7 +205,7 @@ describe("Harness sessions", () => {
     expect(start(work)).not.toContain("migrate the ledger table by table");
   });
 
-  it("sessions are saved even when Jarvis was not running", async () => {
+  it("sessions are saved even when Attache was not running", async () => {
     const stateDir = svc.stateDir;
     const dataDir = svc.dataDir;
     await svc.stop();
@@ -229,7 +229,7 @@ describe("Harness sessions", () => {
     await until(() => existsSync(join(svc.dataDir, "evidence/sessions/transcripts/codex")) && readdirSync(join(svc.dataDir, "evidence/sessions/transcripts/codex")).length === 1);
     const archived = readFileSync(join(svc.dataDir, "evidence/sessions/transcripts/codex", readdirSync(join(svc.dataDir, "evidence/sessions/transcripts/codex"))[0]!), "utf8");
     expect(archived).toContain("pin the runner image");
-    expect(archived).not.toContain("Jarvis memory");
+    expect(archived).not.toContain("Attache memory");
   });
 
   it("Antigravity: a named hooks entry, an always-on memory rule, and turn-by-turn capture that waits for a quiet spell", async () => {
@@ -326,14 +326,14 @@ describe("Harness sessions", () => {
     await svc.post("/connections/codex/configure", { method: "hooks", fields: {} });
     const claudeFile = join(HOME, ".claude/settings.json");
     const good = readFileSync(claudeFile, "utf8");
-    writeFileSync(claudeFile, good + "\n// a comment Jarvis cannot parse");
+    writeFileSync(claudeFile, good + "\n// a comment Attache cannot parse");
     const results = hooks.uninstallAll(AGENT_INTEGRATIONS);
     expect(results.find((r) => r.agent === "claude-code")!.error).toMatch(/not valid JSON/);
-    expect(JSON.stringify(readJson(join(HOME, ".codex/hooks.json")))).not.toContain("jarvis-agent-hook");
+    expect(JSON.stringify(readJson(join(HOME, ".codex/hooks.json")))).not.toContain("attache-agent-hook");
     writeFileSync(claudeFile, good);
   });
 
-  it("disconnecting removes only Jarvis's hooks and memory rule", async () => {
+  it("disconnecting removes only Attache's hooks and memory rule", async () => {
     for (const k of ["claude-code", "codex", "antigravity"]) await svc.post(`/connections/${k}/disconnect`, { deleteData: false });
     expect(readJson(join(HOME, ".claude/settings.json"))).toEqual({ ...FOREIGN_CLAUDE });
     expect(readJson(join(HOME, ".codex/hooks.json"))).toEqual({ hooks: {} });
@@ -344,8 +344,8 @@ describe("Harness sessions", () => {
     expect(readJson(join(HOME, ".gemini/config/mcp_config.json")).mcpServers).toBeUndefined();
   });
 
-  it("hooks from another Jarvis instance are left alone", async () => {
-    const other = { hooks: { SessionEnd: [{ matcher: "", hooks: [{ type: "command", command: "'node' 'jarvis-agent-hook.mjs' claude-code session-end --state-dir '/elsewhere/state'", timeout: 5 }] }] } };
+  it("hooks from another Attache instance are left alone", async () => {
+    const other = { hooks: { SessionEnd: [{ matcher: "", hooks: [{ type: "command", command: "'node' 'attache-agent-hook.mjs' claude-code session-end --state-dir '/elsewhere/state'", timeout: 5 }] }] } };
     writeFileSync(join(HOME, ".claude/settings.json"), JSON.stringify(other));
     await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     await svc.post("/connections/claude-code/disconnect", { deleteData: false });
@@ -356,7 +356,7 @@ describe("Harness sessions", () => {
     writeFileSync(join(HOME, ".claude/settings.json"), JSON.stringify(FOREIGN_CLAUDE));
     await svc.post("/connections/claude-code/configure", { method: "hooks", fields: {} });
     await svc.put("/features", { changes: { sessions: false }, cascade: true });
-    await until(() => !JSON.stringify(readJson(join(HOME, ".claude/settings.json"))).includes("jarvis-agent-hook"));
+    await until(() => !JSON.stringify(readJson(join(HOME, ".claude/settings.json"))).includes("attache-agent-hook"));
     expect(existsSync(join(svc.stateDir, "agents/session-context.md"))).toBe(false);
   });
 });

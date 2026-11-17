@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * TEST-ONLY stand-in for Windows PowerShell, selected with
- * JARVIS_POWERSHELL_BIN. It ignores the script and answers the request Jarvis
- * writes on stdin the way Jarvis's Credential Manager and notification
+ * ATTACHE_POWERSHELL_BIN. It ignores the script and answers the request Attache
+ * writes on stdin the way Attache's Credential Manager and notification
  * scripts do, keeping its state in `$FAKE_WINDOWS_DIR`:
  * `credentials.json` (generic credentials), `toasts.jsonl` (notifications
  * shown) and `calls.jsonl` (every call's process arguments, so tests can check

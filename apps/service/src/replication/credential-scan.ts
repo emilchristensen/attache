@@ -31,7 +31,7 @@ export function credentialCause(places: readonly Place[]): string {
   const more = places.length > PLACES_SHOWN ? `, and ${places.length - PLACES_SHOWN} more` : "";
   const one = places.length === 1;
   return [
-    `Jarvis found what looks like a credential in ${shown.join(", ")}${more}, so it did not commit or push.`,
+    `Attache found what looks like a credential in ${shown.join(", ")}${more}, so it did not commit or push.`,
     `Remove ${one ? "it" : "them"} from the ${one ? "file" : "files"} and Replication continues by itself.`,
   ].join(" ");
 }

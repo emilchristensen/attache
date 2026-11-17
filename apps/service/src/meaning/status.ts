@@ -1,4 +1,4 @@
-import type { MeaningRanking, MeaningState } from "@jarvis/contracts";
+import type { MeaningRanking, MeaningState } from "@attache/contracts";
 
 /** What meaning-based search can do, from what is known about the model and the vectors. */
 export function meaningStateOf(s: { downloading: boolean; failed: boolean; installed: boolean; vectors: { chunks: number; embedded: number } }): MeaningState {

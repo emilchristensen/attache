@@ -1,9 +1,9 @@
-import { WRAP_UP_POINTS_MAX } from "@jarvis/contracts";
+import { WRAP_UP_POINTS_MAX } from "@attache/contracts";
 
 /**
  * The save, audit and wrap-up procedures a Harness offers its user as MCP prompts.
- * They replace the `save` and `audit` skills Jarvis used to install: the same
- * procedure, with Jarvis's MCP tools (`search`, `read`, `save`, `audit`) in
+ * They replace the `save` and `audit` skills Attache used to install: the same
+ * procedure, with Attache's MCP tools (`search`, `read`, `save`, `audit`) in
  * place of shell commands.
  */
 
@@ -27,11 +27,11 @@ const CORRECTION_EXAMPLE = [
 /** The tool the wrap-up prompt asks the agent to call (registered in `wrap-up-tool.ts`). */
 export const WRAP_UP_TOOL = "wrap_up";
 
-const HANDS_OFF = "Never write, edit or delete files in the Brain yourself; Jarvis's tools are the only way in.";
+const HANDS_OFF = "Never write, edit or delete files in the Brain yourself; Attache's tools are the only way in.";
 
-const SAVE_BODY = `# Save to Jarvis
+const SAVE_BODY = `# Save to Attache
 
-The owner wants what matters from the last turn kept in Jarvis, their Brain.
+The owner wants what matters from the last turn kept in Attache, their Brain.
 The last turn is their most recent request before this prompt, and your work and answer to it.
 
 ## Decide what is worth keeping
@@ -43,19 +43,19 @@ Keep what a future session would need and could not get from the code or git his
 - current facts about people and projects: status, owner, deadline, where something lives, who to ask
 - commitments made to or by someone
 
-Leave out the play-by-play of what you did, anything temporary, anything Jarvis already has unchanged, and every secret, token or password.
+Leave out the play-by-play of what you did, anything temporary, anything Attache already has unchanged, and every secret, token or password.
 If nothing is worth keeping, say so and save nothing.
 Three precise items beat ten vague ones.
 
 ## Sort each item into a fact or an event
 
 - A **fact** has one current value that can change (a status, an owner, a decision in force).
-  It goes in \`facts\` as a subject and value; saving replaces the subject's old value and Jarvis moves the old one to History.
+  It goes in \`facts\` as a subject and value; saving replaces the subject's old value and Attache moves the old one to History.
 - An **event** is something that happened (a meeting, a slip, a fix that shipped).
   It goes in \`events\` and is appended to History, never replacing anything.
 
 A fact you expect to change, such as a status, a plan or a deadline, can carry a Review date: \`review\`, a day (YYYY-MM-DD) after today, after which it should be checked again.
-Past that day Jarvis keeps the fact but shows it as unverified.
+Past that day Attache keeps the fact but shows it as unverified.
 Leave it out for facts that stay true, such as a repository's name; a correction without one clears the old Review date.
 
 Write every value so it makes sense months from now without this conversation.
@@ -65,23 +65,23 @@ Name the project, the person and the system, use absolute dates (YYYY-MM-DD), an
 
 Search the Brain with the \`search\` tool for every person, project and decision you are about to save.
 When a note under \`memory/\` already covers it, update that note by the path \`search\` returned (the part from \`memory/\` on); use \`read\` when you need the whole note.
-Jarvis refuses a second note with the same type and title.
+Attache refuses a second note with the same type and title.
 Note types are \`person\`, \`project\`, \`decision\` and \`note\`.
 A decision gets its own decision note with the subject \`Decision\` and the reasoning in \`notes\`; also add an event to the project it belongs to, when there is one.
 
 ## Save
 
-Call the \`save\` tool once with every item; Jarvis checks them all and writes nothing if any is wrong.
+Call the \`save\` tool once with every item; Attache checks them all and writes nothing if any is wrong.
 Its arguments look like this:
 
 ${SAVE_EXAMPLE}
 
-Jarvis asks the owner to confirm the items before it writes them, and records which Harness and session they came from.
-If the owner switched on auto-accept for this Harness, Jarvis writes them without asking; the reply says so.
+Attache asks the owner to confirm the items before it writes them, and records which Harness and session they came from.
+If the owner switched on auto-accept for this Harness, Attache writes them without asking; the reply says so.
 If the owner declines, nothing is saved: say so, and do not call the tool again unless they ask.
-If the reply says the items await review, tell the owner they can approve them in the Jarvis Dashboard.
+If the reply says the items await review, tell the owner they can approve them in the Attache Dashboard.
 If the tool returns an error, read its message, fix the items and call it again.
-If it says Jarvis is not running, pass that message on to the owner.
+If it says Attache is not running, pass that message on to the owner.
 ${HANDS_OFF}
 
 ## Report
@@ -90,12 +90,12 @@ List each saved note, one line each: created or updated, its title, and its path
 Then, in one sentence, say what you chose to leave out, if anything.
 `;
 
-const AUDIT_BODY = `# Audit Jarvis memory
+const AUDIT_BODY = `# Audit Attache memory
 
 Memory rots quietly: a fact stops being true, the note keeps saying it, and every new session repeats it.
 Find those facts, show the owner the worst ones, and fix what they agree to.
 
-Every Jarvis note has a \`## Current State\` section with one dated entry per subject, which a correction replaces, and an append-only \`## History\`.
+Every Attache note has a \`## Current State\` section with one dated entry per subject, which a correction replaces, and an append-only \`## History\`.
 The structure already separates state from events, so the audit is about whether each current value is still true.
 
 ## 1. Get the report
@@ -135,16 +135,16 @@ Say plainly when a value that should be in memory was never written down anywher
 ## 4. Fix what the owner agrees to
 
 Show each correction to the owner first, as the item you would pass to the \`save\` tool.
-Every fact needs a \`reason\` that cites the evidence; Jarvis moves the old value to History with that reason:
+Every fact needs a \`reason\` that cites the evidence; Attache moves the old value to History with that reason:
 
 ${CORRECTION_EXAMPLE}
 
 Make the corrections through the \`save\` tool only after the owner says yes, and only the ones they accept.
-Jarvis then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
+Attache then asks the owner to confirm the save once more before it writes, unless they switched on auto-accept for this Harness.
 For an unsupported fact, ask the owner for the current value rather than guessing.
 A stale fact the owner confirms is still true is saved again with the same value and a later Review date; a correction without one clears it.
 ${HANDS_OFF}
-The identity record (\`memory/self.md\`) can only be changed in Jarvis Settings; point the owner there.
+The identity record (\`memory/self.md\`) can only be changed in Attache Settings; point the owner there.
 Afterwards, call the \`audit\` tool again and report how the counts moved.
 `;
 
@@ -164,12 +164,12 @@ export function auditPrompt(topic?: string): string {
 
 /**
  * What the agent is asked to do when the owner runs the wrap-up prompt. It is
- * meant for conversations Jarvis cannot capture itself, such as Claude
+ * meant for conversations Attache cannot capture itself, such as Claude
  * Desktop's Chat tab: the agent distils them, and `wrap_up` stores the result
  * as evidence.
  */
 const WRAP_UP_BODY = [
-  "Wrap up this conversation for Jarvis.",
+  "Wrap up this conversation for Attache.",
   "",
   "Read back over the conversation so far and pick out its durable points: what will still matter in a week or a month.",
   "That means decisions and why they were made, facts about people, projects and the owner's work, commitments with who owns them and by when, and preferences the owner stated.",
@@ -179,9 +179,9 @@ const WRAP_UP_BODY = [
   `Keep to the points that matter, at most ${WRAP_UP_POINTS_MAX}.`,
   "",
   `Then call the \`${WRAP_UP_TOOL}\` tool once, with a short \`title\` for the conversation and the points.`,
-  "Jarvis stores them in the Brain as evidence of this conversation, not as curated memory: none of them becomes a current fact unless it is saved to a note later.",
+  "Attache stores them in the Brain as evidence of this conversation, not as curated memory: none of them becomes a current fact unless it is saved to a note later.",
   "",
-  `If the conversation holds nothing durable, call \`${WRAP_UP_TOOL}\` with an empty \`points\` list: Jarvis stores nothing.`,
+  `If the conversation holds nothing durable, call \`${WRAP_UP_TOOL}\` with an empty \`points\` list: Attache stores nothing.`,
   "",
   "Finish by telling the owner in a line or two what was stored and where, or that there was nothing durable to store.",
 ].join("\n");

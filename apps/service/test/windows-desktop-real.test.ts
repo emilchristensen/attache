@@ -1,7 +1,7 @@
 /**
  * The Windows secret store and notifications against the real Windows:
  * Credential Manager and Windows notifications, through Windows PowerShell.
- * Runs only on Windows with JARVIS_TEST_REAL_DESKTOP=1 (CI's Windows job does
+ * Runs only on Windows with ATTACHE_TEST_REAL_DESKTOP=1 (CI's Windows job does
  * this), because it shows notifications and writes to the user's Credential
  * Manager; the stand-in tests in windows-desktop.test.ts cover every other run.
  */
@@ -11,10 +11,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import type { FixtureServer } from "./fixtures/fixture-server.ts";
-import { connectGithub, githubAskingForReviews, jarvisCli, newStateDir, runningChildren, serveChild, syncGithub } from "./fixtures/jarvis-child.ts";
+import { connectGithub, githubAskingForReviews, attacheCli, newStateDir, runningChildren, serveChild, syncGithub } from "./fixtures/attache-child.ts";
 import { createSecretStore } from "../src/platform/secret-store/index.ts";
 
-const REAL = process.platform === "win32" && process.env.JARVIS_TEST_REAL_DESKTOP === "1";
+const REAL = process.platform === "win32" && process.env.ATTACHE_TEST_REAL_DESKTOP === "1";
 // Each test starts the service from source, sometimes twice, and Windows PowerShell for every secret, which is slow.
 const SLOW = 180_000;
 const SECRET = "ghp_RealVaultSecret0123456789abcdefXYZ";
@@ -32,18 +32,18 @@ const instanceName = () => `real-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Windows PowerShell started through a recorder of its process arguments. */
 function recordingPowerShell(): { env: Record<string, string>; args: () => string } {
-  const log = join(tempDir("jarvis-real-powershell-"), "calls.jsonl");
-  return { env: { JARVIS_POWERSHELL_BIN: RECORDING_POWERSHELL, RECORD_POWERSHELL_LOG: log }, args: () => (existsSync(log) ? readFileSync(log, "utf8") : "") };
+  const log = join(tempDir("attache-real-powershell-"), "calls.jsonl");
+  return { env: { ATTACHE_POWERSHELL_BIN: RECORDING_POWERSHELL, RECORD_POWERSHELL_LOG: log }, args: () => (existsSync(log) ? readFileSync(log, "utf8") : "") };
 }
 
 function desktopEnv(instance: string, extra: Record<string, string | undefined> = {}) {
-  return { JARVIS_CREDENTIAL_STORE: undefined, JARVIS_NO_NOTIFY: undefined, JARVIS_TEST_ENDPOINTS: "1", JARVIS_INSTANCE: instance, ...extra };
+  return { ATTACHE_CREDENTIAL_STORE: undefined, ATTACHE_NO_NOTIFY: undefined, ATTACHE_TEST_ENDPOINTS: "1", ATTACHE_INSTANCE: instance, ...extra };
 }
 
 /** The generic credentials Credential Manager lists for an install, by target, as `cmdkey` shows them. */
 function storedTargets(instance: string): string[] {
   const out = spawnSync("cmdkey", ["/list"], { encoding: "utf8" }).stdout;
-  const prefix = `dev.jarvis.${instance}/`;
+  const prefix = `dev.attache.${instance}/`;
   return [...out.matchAll(/target=(\S+)/g)]
     .map((m) => m[1]!)
     .filter((t) => t.startsWith(prefix))
@@ -70,7 +70,7 @@ describe.runIf(REAL)("on a real Windows desktop", () => {
       expect(status.credentialStore).toBe("credential-manager");
 
       await connectGithub(svc, fx, SECRET);
-      expect(storedTargets(instance)).toEqual([`dev.jarvis.${instance}/conn:github:token`]);
+      expect(storedTargets(instance)).toEqual([`dev.attache.${instance}/conn:github:token`]);
       expect(existsSync(join(stateDir, "secrets.json"))).toBe(false);
 
       await svc.stop();
@@ -82,7 +82,7 @@ describe.runIf(REAL)("on a real Windows desktop", () => {
       expect(svc.log()).not.toContain(SECRET);
 
       await svc.stop();
-      expect(JSON.parse(jarvisCli(["credentials", "clear", "--state-dir", stateDir], env).stdout)).toEqual({ store: "credential-manager", removed: 1 });
+      expect(JSON.parse(attacheCli(["credentials", "clear", "--state-dir", stateDir], env).stdout)).toEqual({ store: "credential-manager", removed: 1 });
       expect(storedTargets(instance)).toEqual([]);
     },
     SLOW,
@@ -98,12 +98,12 @@ describe.runIf(REAL)("on a real Windows desktop", () => {
       const long = `eyJ${"x".repeat(6000)}-ÆØÅ-東京-🔑`;
       await store.set("oauth:access", long);
       expect(await store.get("oauth:access")).toBe(long);
-      expect(storedTargets(instance)).toEqual([`dev.jarvis.${instance}/oauth:access`, `dev.jarvis.${instance}/oauth:access#2`, `dev.jarvis.${instance}/oauth:access#3`]);
+      expect(storedTargets(instance)).toEqual([`dev.attache.${instance}/oauth:access`, `dev.attache.${instance}/oauth:access#2`, `dev.attache.${instance}/oauth:access#3`]);
 
       // A shorter value leaves no stale parts behind.
       await store.set("oauth:access", "short");
       expect(await store.get("oauth:access")).toBe("short");
-      expect(storedTargets(instance)).toEqual([`dev.jarvis.${instance}/oauth:access`]);
+      expect(storedTargets(instance)).toEqual([`dev.attache.${instance}/oauth:access`]);
 
       await store.delete("oauth:access");
       expect(await store.get("oauth:access")).toBeNull();
@@ -113,11 +113,11 @@ describe.runIf(REAL)("on a real Windows desktop", () => {
   );
 
   it(
-    "shows an urgent inbox item as a Windows notification from Jarvis",
+    "shows an urgent inbox item as a Windows notification from Attache",
     async () => {
       const instance = instanceName();
-      const app = `dev.jarvis.${instance}`;
-      const env = desktopEnv(instance, { JARVIS_CREDENTIAL_STORE: "file" });
+      const app = `dev.attache.${instance}`;
+      const env = desktopEnv(instance, { ATTACHE_CREDENTIAL_STORE: "file" });
       const fx = await githubAskingForReviews(SECRET, () => [{ number: 7, title: "Ship Windows notifications" }]);
       fixtures.push(fx);
       const svc = await serveChild(newStateDir(), env);
@@ -133,14 +133,14 @@ describe.runIf(REAL)("on a real Windows desktop", () => {
         );
         expect(history).toContain("<text>Review a/b#7: Ship Windows notifications</text>");
         expect(history).toContain("<text>ada requested your review 10 days ago.</text>");
-        expect(powershell(`(Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Classes\\AppUserModelId\\${app}').DisplayName`).trim()).toBe(`Jarvis (${instance})`);
+        expect(powershell(`(Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Classes\\AppUserModelId\\${app}').DisplayName`).trim()).toBe(`Attache (${instance})`);
       } finally {
         await svc.stop();
         powershell(`$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]; [Windows.UI.Notifications.ToastNotificationManager]::History.Clear('${app}')`);
       }
 
       // What the uninstaller runs: the sender registration is removed.
-      const forgot = jarvisCli(["notifications", "forget"], env);
+      const forgot = attacheCli(["notifications", "forget"], env);
       expect(forgot.stderr).toBe("");
       expect(powershell(`Test-Path -LiteralPath 'HKCU:\\Software\\Classes\\AppUserModelId\\${app}'`).trim()).toBe("False");
     },

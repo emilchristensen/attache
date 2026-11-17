@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { MemorySaveInput, MemorySaveItem, ProposalInput, ProposalView } from "@jarvis/contracts";
+import type { MemorySaveInput, MemorySaveItem, ProposalInput, ProposalView } from "@attache/contracts";
 import { tx, type Db } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import type { MachineIdentity } from "../core/machine.ts";

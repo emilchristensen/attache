@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { ProposalView } from "@jarvis/contracts";
+import type { ProposalView } from "@attache/contracts";
 import { createPairingCode } from "../../src/http/security.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
@@ -17,7 +17,7 @@ const NOTE = "memory/decisions/ledger-for-billing.md";
 /** A Dashboard session, as the browser gets it when it pairs. */
 async function dashboardCookie(): Promise<string> {
   const { code } = createPairingCode(svc.app.db);
-  const res = await fetch(`${svc.url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify({ code, kind: "browser" }) });
+  const res = await fetch(`${svc.url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "browser" }) });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
@@ -48,7 +48,7 @@ describe("who a save writes as", () => {
     const cookie = await dashboardCookie();
     const before = (await pending()).length;
     for (const body of [{ items: ITEMS }, { items: ITEMS, confirmed: true }]) {
-      const res = await fetch(`${svc.url}/api/v1/memory/save`, { method: "POST", headers: { cookie, "content-type": "application/json", "x-jarvis-client": "1" }, body: JSON.stringify(body) });
+      const res = await fetch(`${svc.url}/api/v1/memory/save`, { method: "POST", headers: { cookie, "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify(body) });
       expect(res.status).toBe(403);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("dashboard_cannot_save");
     }

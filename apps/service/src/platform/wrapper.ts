@@ -2,7 +2,7 @@ import { win32 } from "node:path";
 import { pathFor, type PlatformLocations } from "./locations.ts";
 import type { Os } from "./os.ts";
 
-/** A small executable file that starts Jarvis. */
+/** A small executable file that starts Attache. */
 export interface WrapperFile {
   path: string;
   text: string;
@@ -21,7 +21,7 @@ export interface WrapperSpec {
 const shDouble = (s: string) => s.replace(/[\\"$`]/g, (c) => `\\${c}`);
 /** cmd.exe has no escape inside double quotes; `%` would expand and `"` would end the string, so they are refused. */
 function cmdValue(s: string): string {
-  if (/["%\r\n]/.test(s)) throw new Error(`A Jarvis path cannot contain ", % or a line break on Windows: ${s}`);
+  if (/["%\r\n]/.test(s)) throw new Error(`An Attache path cannot contain ", % or a line break on Windows: ${s}`);
   return s;
 }
 
@@ -38,7 +38,7 @@ function fromWrapperFolder(binDir: string, target: string): string {
   cmdValue(target);
   const relative = win32.relative(binDir, target);
   const text = win32.isAbsolute(relative) ? relative : `%~dp0${relative}`;
-  if (!ASCII_ONLY.test(text)) throw new Error(`Jarvis cannot pin ${target} in its Windows command wrappers: cmd.exe misreads letters outside ASCII in batch files. Keep the state folder inside the install folder, or choose a path with ASCII letters only.`);
+  if (!ASCII_ONLY.test(text)) throw new Error(`Attache cannot pin ${target} in its Windows command wrappers: cmd.exe misreads letters outside ASCII in batch files. Keep the state folder inside the install folder, or choose a path with ASCII letters only.`);
   return text;
 }
 
@@ -46,7 +46,7 @@ function fromWrapperFolder(binDir: string, target: string): string {
 const setFullPath = (name: string, path: string) => `for %%p in ("${path}") do set "${name}=%%~fp"`;
 
 /**
- * `jarvis.cmd` and `jarvis-uninstall.cmd` in the install's own `bin` folder.
+ * `attache.cmd` and `attache-uninstall.cmd` in the install's own `bin` folder.
  * They are plain ASCII and find the install from their own folder, so they
  * work whatever letters the owner's name or the install path has.
  */
@@ -58,12 +58,12 @@ function windowsWrappers(spec: WrapperSpec): WrapperFile[] {
   const powershell = "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
   return [
     {
-      path: win32.join(binDir, "jarvis.cmd"),
-      text: ["@echo off", "setlocal", `if not defined JARVIS_STATE_DIR ${setFullPath("JARVIS_STATE_DIR", at(spec.stateDir))}`, `if not defined JARVIS_INSTANCE set "JARVIS_INSTANCE=${instance}"`, `if not defined JARVIS_PORT set "JARVIS_PORT=${spec.port}"`, `"${at(win32.join(current, "bin", "jarvis.cmd"))}" %*`, ""].join("\r\n"),
+      path: win32.join(binDir, "attache.cmd"),
+      text: ["@echo off", "setlocal", `if not defined ATTACHE_STATE_DIR ${setFullPath("ATTACHE_STATE_DIR", at(spec.stateDir))}`, `if not defined ATTACHE_INSTANCE set "ATTACHE_INSTANCE=${instance}"`, `if not defined ATTACHE_PORT set "ATTACHE_PORT=${spec.port}"`, `"${at(win32.join(current, "bin", "attache.cmd"))}" %*`, ""].join("\r\n"),
       mode: 0o755,
     },
     {
-      path: win32.join(binDir, "jarvis-uninstall.cmd"),
+      path: win32.join(binDir, "attache-uninstall.cmd"),
       // The uninstaller deletes this very file, and cmd.exe reads a batch file again after every command.
       // `(goto)` ends the batch first; the rest of the line, already expanded, still runs, and nothing is read again.
       // So the pinned values go as arguments: the batch's own variables end with it.
@@ -74,20 +74,20 @@ function windowsWrappers(spec: WrapperSpec): WrapperFile[] {
 }
 
 /**
- * The launcher inside a release (`bin/jarvis`): runs the bundled runtime on
+ * The launcher inside a release (`bin/attache`): runs the bundled runtime on
  * the bundled service, wherever the release was unpacked. Path relative to
  * the release root.
  */
 export function releaseLauncher(os: Os): WrapperFile {
-  if (os === "windows") return { path: "bin/jarvis.cmd", text: '@"%~dp0..\\runtime\\node.exe" "%~dp0..\\service\\jarvis-service.mjs" %*\r\n', mode: 0o755 };
-  return { path: "bin/jarvis", text: '#!/bin/sh\nD="$(cd "$(dirname "$0")/.." && pwd -P)"\nexec "$D/runtime/node" "$D/service/jarvis-service.mjs" "$@"\n', mode: 0o755 };
+  if (os === "windows") return { path: "bin/attache.cmd", text: '@"%~dp0..\\runtime\\node.exe" "%~dp0..\\service\\attache-service.mjs" %*\r\n', mode: 0o755 };
+  return { path: "bin/attache", text: '#!/bin/sh\nD="$(cd "$(dirname "$0")/.." && pwd -P)"\nexec "$D/runtime/node" "$D/service/attache-service.mjs" "$@"\n', mode: 0o755 };
 }
 
 /**
  * The command-line entry points the installer puts on the owner's PATH
  * (on Windows, in the install's own `bin` folder):
- * `jarvis`, pinned to this install's state folder, instance and port unless
- * the environment says otherwise, and `jarvis-uninstall`, pinned to the
+ * `attache`, pinned to this install's state folder, instance and port unless
+ * the environment says otherwise, and `attache-uninstall`, pinned to the
  * install and its state folder. Both go through
  * the stable `current` link so they survive upgrades.
  */
@@ -98,13 +98,13 @@ export function commandWrappers(loc: PlatformLocations, spec: WrapperSpec): Wrap
   const q = shDouble;
   return [
     {
-      path: join(loc.binDir, "jarvis"),
-      text: `#!/bin/sh\nexport JARVIS_STATE_DIR="\${JARVIS_STATE_DIR:-${q(spec.stateDir)}}"\nexport JARVIS_INSTANCE="\${JARVIS_INSTANCE:-${q(spec.instance)}}"\nexport JARVIS_PORT="\${JARVIS_PORT:-${spec.port}}"\nexec "${q(join(current, "bin", "jarvis"))}" "$@"\n`,
+      path: join(loc.binDir, "attache"),
+      text: `#!/bin/sh\nexport ATTACHE_STATE_DIR="\${ATTACHE_STATE_DIR:-${q(spec.stateDir)}}"\nexport ATTACHE_INSTANCE="\${ATTACHE_INSTANCE:-${q(spec.instance)}}"\nexport ATTACHE_PORT="\${ATTACHE_PORT:-${spec.port}}"\nexec "${q(join(current, "bin", "attache"))}" "$@"\n`,
       mode: 0o755,
     },
     {
-      path: join(loc.binDir, "jarvis-uninstall"),
-      text: `#!/bin/sh\nJARVIS_PREFIX="${q(spec.installPrefix)}" JARVIS_STATE_DIR="${q(spec.stateDir)}" JARVIS_INSTANCE="${q(spec.instance)}" exec /bin/sh "${q(join(current, "uninstall.sh"))}" "$@"\n`,
+      path: join(loc.binDir, "attache-uninstall"),
+      text: `#!/bin/sh\nATTACHE_PREFIX="${q(spec.installPrefix)}" ATTACHE_STATE_DIR="${q(spec.stateDir)}" ATTACHE_INSTANCE="${q(spec.instance)}" exec /bin/sh "${q(join(current, "uninstall.sh"))}" "$@"\n`,
       mode: 0o755,
     },
   ];

@@ -43,8 +43,8 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 
 /**
  * Permission rules in the user's own Claude Code settings that would approve a
- * connector tool without asking Jarvis. Such a rule would let a call run
- * without Jarvis checking its arguments, so a session refuses to start.
+ * connector tool without asking Attache. Such a rule would let a call run
+ * without Attache checking its arguments, so a session refuses to start.
  */
 export function preApprovingRules(allowRules: unknown, server: string): string[] {
   if (!Array.isArray(allowRules)) return [];

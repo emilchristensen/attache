@@ -29,8 +29,8 @@ export interface PlatformCliIo {
 const INSTANCE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function instance(): string {
-  const name = process.env.JARVIS_INSTANCE ?? "default";
-  if (!INSTANCE_NAME.test(name)) throw new Error(`JARVIS_INSTANCE must be letters, digits, ".", "_" or "-", not ${JSON.stringify(name)}`);
+  const name = process.env.ATTACHE_INSTANCE ?? "default";
+  if (!INSTANCE_NAME.test(name)) throw new Error(`ATTACHE_INSTANCE must be letters, digits, ".", "_" or "-", not ${JSON.stringify(name)}`);
   return name;
 }
 
@@ -44,13 +44,13 @@ function portNumber(value: string | undefined, anyPort: boolean): number {
 /** Install prefix, state folder and port from the flags, falling back to this platform's defaults. */
 function installSpec(io: PlatformCliIo, loc: PlatformLocations): WrapperSpec {
   const installPrefix = io.arg("prefix") ?? loc.installPrefix;
-  const port = portNumber(io.arg("port") ?? process.env.JARVIS_PORT ?? String(io.defaultPort), false);
-  return { installPrefix, stateDir: io.arg("state-dir") ?? process.env.JARVIS_STATE_DIR ?? loc.stateDir, instance: instance(), port };
+  const port = portNumber(io.arg("port") ?? process.env.ATTACHE_PORT ?? String(io.defaultPort), false);
+  return { installPrefix, stateDir: io.arg("state-dir") ?? process.env.ATTACHE_STATE_DIR ?? loc.stateDir, instance: instance(), port };
 }
 
-const RUN_USAGE = "Usage: jarvis service run --port <n> --state-dir <path> --instance <name> --home <path> [--local-app-data <path>] [--app-data <path>]";
+const RUN_USAGE = "Usage: attache service run --port <n> --state-dir <path> --instance <name> --home <path> [--local-app-data <path>] [--app-data <path>]";
 
-/** `jarvis service run`, what the Windows logon task starts: keeps `jarvis serve` running until it is stopped. */
+/** `attache service run`, what the Windows logon task starts: keeps `attache serve` running until it is stopped. */
 function runSupervised(io: PlatformCliIo): Promise<void> {
   const need = (name: string) => {
     const value = io.arg(name);
@@ -58,8 +58,8 @@ function runSupervised(io: PlatformCliIo): Promise<void> {
     return value;
   };
   const script = process.argv[1];
-  if (!script) throw new Error("jarvis service run cannot tell which script it runs from");
-  process.env.JARVIS_INSTANCE = need("instance");
+  if (!script) throw new Error("attache service run cannot tell which script it runs from");
+  process.env.ATTACHE_INSTANCE = need("instance");
   const localAppData = io.arg("local-app-data");
   const appData = io.arg("app-data");
   return superviseService({
@@ -73,7 +73,7 @@ function runSupervised(io: PlatformCliIo): Promise<void> {
   });
 }
 
-/** `jarvis start|stop` and `jarvis service install|start|stop|uninstall|status|run`. */
+/** `attache start|stop` and `attache service install|start|stop|uninstall|status|run`. */
 export async function serviceCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
   if (sub === "run") return runSupervised(io);
   const loc = platformLocations();
@@ -81,21 +81,21 @@ export async function serviceCommand(sub: string | undefined, io: PlatformCliIo)
   switch (sub) {
     case "install": {
       await manager.install(installSpec(io, loc));
-      return io.out(`Jarvis background service ${manager.name} set up${manager.definition ? ` in ${manager.definition}` : ""}.`);
+      return io.out(`Attache background service ${manager.name} set up${manager.definition ? ` in ${manager.definition}` : ""}.`);
     }
     case "start":
       await manager.start();
-      return io.out("Jarvis service started.");
+      return io.out("Attache service started.");
     case "stop":
       await manager.stop();
-      return io.out("Jarvis service stopped. Start it again with: jarvis start");
+      return io.out("Attache service stopped. Start it again with: attache start");
     case "uninstall":
       await manager.uninstall();
-      return io.out(`Jarvis background service ${manager.name} removed.`);
+      return io.out(`Attache background service ${manager.name} removed.`);
     case "status":
       return io.out(JSON.stringify({ name: manager.name, definition: manager.definition, loaded: await manager.loaded() }));
     default:
-      throw new Error("Usage: jarvis service install|start|stop|uninstall|status [--prefix <path>] [--state-dir <path>] [--port <n>]");
+      throw new Error("Usage: attache service install|start|stop|uninstall|status [--prefix <path>] [--state-dir <path>] [--port <n>]");
   }
 }
 
@@ -107,7 +107,7 @@ function writeExecutable(path: string, text: string, mode: number): void {
   replaceWith(tmp, path);
 }
 
-/** `jarvis wrappers install|uninstall`: the `jarvis` and `jarvis-uninstall` commands on the owner's PATH. */
+/** `attache wrappers install|uninstall`: the `attache` and `attache-uninstall` commands on the owner's PATH. */
 export async function wrappersCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
   const loc = platformLocations();
   const files = commandWrappers(loc, installSpec(io, loc));
@@ -119,12 +119,12 @@ export async function wrappersCommand(sub: string | undefined, io: PlatformCliIo
     for (const f of files) rmSync(f.path, { force: true });
     return io.out(JSON.stringify(files.map((f) => f.path)));
   }
-  throw new Error("Usage: jarvis wrappers install|uninstall [--prefix <path>] [--state-dir <path>] [--port <n>]");
+  throw new Error("Usage: attache wrappers install|uninstall [--prefix <path>] [--state-dir <path>] [--port <n>]");
 }
 
-/** `jarvis credentials clear`: delete every secret this install stored, from whichever secret store holds them. */
+/** `attache credentials clear`: delete every secret this install stored, from whichever secret store holds them. */
 export async function credentialsCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
-  if (sub !== "clear") throw new Error("Usage: jarvis credentials clear [--state-dir <path>]");
+  if (sub !== "clear") throw new Error("Usage: attache credentials clear [--state-dir <path>]");
   const paths = resolvePaths(io.arg("state-dir"));
   const store = createSecretStore({ os: currentOs(), stateDir: paths.stateDir, secretsFile: paths.secretsFile, instance: instance() });
   const removed = await clearSecrets(store);
@@ -132,20 +132,20 @@ export async function credentialsCommand(sub: string | undefined, io: PlatformCl
 }
 
 /**
- * `jarvis locks clear-stale [--locks-dir <path>]`: for a data-deleting
+ * `attache locks clear-stale [--locks-dir <path>]`: for a data-deleting
  * uninstall, remove the writer locks of services that are gone, so the shared
  * locks folder can go once no live service holds a lock in it.
  */
 export function locksCommand(sub: string | undefined, io: PlatformCliIo): void {
-  if (sub !== "clear-stale") throw new Error("Usage: jarvis locks clear-stale [--locks-dir <path>]");
+  if (sub !== "clear-stale") throw new Error("Usage: attache locks clear-stale [--locks-dir <path>]");
   io.out(JSON.stringify(clearStaleLocks(io.arg("locks-dir") ?? defaultLocksDir())));
 }
 
-/** `jarvis notifications forget`: remove what Jarvis registered to show notifications (its sender on Windows; nothing elsewhere). */
+/** `attache notifications forget`: remove what Attache registered to show notifications (its sender on Windows; nothing elsewhere). */
 export async function notificationsCommand(sub: string | undefined, io: PlatformCliIo): Promise<void> {
-  if (sub !== "forget") throw new Error("Usage: jarvis notifications forget");
+  if (sub !== "forget") throw new Error("Usage: attache notifications forget");
   await notifierFor(currentOs(), instance()).forget();
-  io.out("Jarvis's notification registration removed.");
+  io.out("Attache's notification registration removed.");
 }
 
 /** An entry name in `owned.json` that may be removed: one plain name at the top of the data folder, never a path. */
@@ -169,21 +169,21 @@ function configuredDataFolder(dbFile: string): string | null {
 }
 
 /**
- * `jarvis data-folder --state-dir <dir>`: for a data-deleting uninstall, the
- * data folder this install uses and what Jarvis created in it (`owned.json`),
+ * `attache data-folder --state-dir <dir>`: for a data-deleting uninstall, the
+ * data folder this install uses and what Attache created in it (`owned.json`),
  * so files the owner already had are never removed. Fails rather than naming
  * no folder when the database cannot be read.
  */
 export function dataFolderCommand(io: PlatformCliIo): void {
   const paths = resolvePaths(io.arg("state-dir"));
   const dataFolder = configuredDataFolder(paths.dbFile);
-  const ownedFile = dataFolder ? join(dataFolder, ".jarvis", "owned.json") : null;
+  const ownedFile = dataFolder ? join(dataFolder, ".attache", "owned.json") : null;
   if (!dataFolder || !ownedFile || !existsSync(ownedFile)) return io.out(JSON.stringify({ dataFolder, createdFolder: false, created: [] }));
   let record: { createdFolder?: unknown; created?: unknown };
   try {
     record = JSON.parse(readFileSync(ownedFile, "utf8")) as typeof record;
   } catch (err) {
-    throw new Error(`could not read what Jarvis created from ${ownedFile}: ${(err as Error).message}`);
+    throw new Error(`could not read what Attache created from ${ownedFile}: ${(err as Error).message}`);
   }
   const created = Array.isArray(record.created) ? record.created.filter((e): e is string => typeof e === "string" && OWNED_ENTRY.test(e)) : [];
   io.out(JSON.stringify({ dataFolder, createdFolder: record.createdFolder === true, created }));

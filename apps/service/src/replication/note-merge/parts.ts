@@ -27,8 +27,8 @@ export interface NoteParts {
 }
 
 /** Lines that stand for the facts and the History items inside `NoteParts.prose`. A note never holds a NUL. */
-export const FACTS_PLACEHOLDER = "\u0000jarvis:facts\u0000";
-export const HISTORY_PLACEHOLDER = "\u0000jarvis:history\u0000";
+export const FACTS_PLACEHOLDER = "\u0000attache:facts\u0000";
+export const HISTORY_PLACEHOLDER = "\u0000attache:history\u0000";
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;

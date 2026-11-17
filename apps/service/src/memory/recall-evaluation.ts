@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { RecallQuestionSet, type MeaningRanking, type RecallEvaluationHit, type RecallEvaluationReport, type RecallQuestion } from "@jarvis/contracts";
+import { RecallQuestionSet, type MeaningRanking, type RecallEvaluationHit, type RecallEvaluationReport, type RecallQuestion } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { nowIso } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";

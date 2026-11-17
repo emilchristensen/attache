@@ -17,7 +17,7 @@ export interface GitHubGitServer {
   readonly url: string;
   readonly gitBase: string;
   readonly apiBase: string;
-  /** Every request git or Jarvis made, with the address and the credentials it sent. */
+  /** Every request git or Attache made, with the address and the credentials it sent. */
   readonly requests: Array<{ method: string; url: string; authorization: string | null }>;
   /** Create an empty repository `owner/name`. */
   createRepo(owner: string, name: string): void;
@@ -99,7 +99,7 @@ function serveGit(root: string, path: string, req: IncomingMessage, input: Buffe
 }
 
 export async function startGitHubGitServer(): Promise<GitHubGitServer> {
-  const root = mkdtempSync(join(tmpdir(), "jarvis-it-github-"));
+  const root = mkdtempSync(join(tmpdir(), "attache-it-github-"));
   const visibility = new Map<string, "public" | "private">();
   let accepted = new Set<string>();
   const requests: GitHubGitServer["requests"] = [];

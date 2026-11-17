@@ -1,4 +1,4 @@
-import type { RecentChangeView } from "@jarvis/contracts";
+import type { RecentChangeView } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { integrationFor } from "../agents/integrations.ts";
 import { parseMarkdown } from "./markdown.ts";

@@ -11,7 +11,7 @@ A hyphenated word such as sync-state or auto-saved-items is a different word.
 Ordinary words the check leaves alone: an Obsidian vault, a data folder, a backup and the agent in a Harness.
 
 ```sh
-jarvis sync
+attache sync
 ```
 
 <!-- A comment about the second brain is not read. -->

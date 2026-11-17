@@ -21,7 +21,7 @@ interface SearchItem {
 }
 
 const MAX_PAGES = 5;
-const MARKER = (key: string) => `<!-- jarvis:effect=${key} -->`;
+const MARKER = (key: string) => `<!-- attache:effect=${key} -->`;
 
 function repoOf(item: SearchItem): string {
   return item.repository_url.replace(/^.*\/repos\//, "");
@@ -87,7 +87,7 @@ export const githubAdapter: ConnectorAdapter = {
       { id: "assigned_issues", label: "Issues assigned to me", default: false },
     ],
     writeActions: [{ id: "github.comment", label: "Post a comment on a pull request or issue" }],
-    setupHelp: "Jarvis reads with the token you provide. Writes need separate authorisation below and a token with Issues: write.",
+    setupHelp: "Attache reads with the token you provide. Writes need separate authorisation below and a token with Issues: write.",
     unavoidableSteps: ["Create a personal access token at github.com/settings/tokens (or sign in to the GitHub CLI)."],
   },
 

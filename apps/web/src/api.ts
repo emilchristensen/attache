@@ -21,7 +21,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
       credentials: "same-origin",
       headers: {
         ...(init.body !== undefined ? { "content-type": "application/json" } : {}),
-        ...(init.method && init.method !== "GET" ? { "x-jarvis-client": "1" } : init.body !== undefined || init.raw !== undefined ? { "x-jarvis-client": "1" } : {}),
+        ...(init.method && init.method !== "GET" ? { "x-attache-client": "1" } : init.body !== undefined || init.raw !== undefined ? { "x-attache-client": "1" } : {}),
         ...(init.headers ?? {}),
       },
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : init.raw !== undefined ? { body: init.raw } : {}),
@@ -29,7 +29,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
     });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
-    throw new ApiError(0, "offline", "Jarvis service is not reachable. Is it running?");
+    throw new ApiError(0, "offline", "Attache service is not reachable. Is it running?");
   }
   if (res.status === 204) return undefined as T;
   const type = res.headers.get("content-type") ?? "";

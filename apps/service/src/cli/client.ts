@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { API_PREFIX } from "@jarvis/contracts";
+import { API_PREFIX } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import { openDb } from "../core/db.ts";
 import { createPairingCode } from "../http/security.ts";
@@ -45,7 +45,7 @@ export class ServiceError extends Error {
 /**
  * The CLI as a paired client of the running service. Memory writes go through
  * the service, which owns the data folder; the CLI pairs itself the first time
- * (the same trust as `jarvis pair`) and keeps its token in the state folder.
+ * (the same trust as `attache pair`) and keeps its token in the state folder.
  */
 export class ServiceClient {
   private readonly paths: ServicePaths;
@@ -54,7 +54,7 @@ export class ServiceClient {
   constructor(paths: ServicePaths) {
     this.paths = paths;
     const rt = readRuntime(paths.runtimeFile);
-    if (!rt || !alive(rt.pid)) throw new ServiceError(503, "not_running", "Jarvis is not running. Start it with `jarvis start`, then try again.");
+    if (!rt || !alive(rt.pid)) throw new ServiceError(503, "not_running", "Attache is not running. Start it with `attache start`, then try again.");
     this.base = rt.url;
   }
 
@@ -79,7 +79,7 @@ export class ServiceClient {
       return this.call<T>(method, path, body, true);
     }
     const parsed = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
-    if (!res.ok) throw new ServiceError(res.status, parsed?.error?.code ?? "error", parsed?.error?.message ?? `Jarvis answered ${res.status}`);
+    if (!res.ok) throw new ServiceError(res.status, parsed?.error?.code ?? "error", parsed?.error?.message ?? `Attache answered ${res.status}`);
     return parsed as T;
   }
 
@@ -87,11 +87,11 @@ export class ServiceClient {
     try {
       return await fetch(`${this.base}${API_PREFIX}${path}`, {
         method,
-        headers: { "x-jarvis-client": "1", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+        headers: { "x-attache-client": "1", ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (e) {
-      throw new ServiceError(503, "unreachable", `Could not reach Jarvis at ${this.base} (${(e as Error).message}). If it is stopped, start it with \`jarvis start\`, then try again.`);
+      throw new ServiceError(503, "unreachable", `Could not reach Attache at ${this.base} (${(e as Error).message}). If it is stopped, start it with \`attache start\`, then try again.`);
     }
   }
 
@@ -103,9 +103,9 @@ export class ServiceClient {
     } finally {
       db.close();
     }
-    const res = await this.fetch("POST", "/pair", null, { code, clientName: "Jarvis CLI", kind: "cli" });
+    const res = await this.fetch("POST", "/pair", null, { code, clientName: "Attache CLI", kind: "cli" });
     const out = (await res.json().catch(() => null)) as { token?: string; error?: { message?: string } } | null;
-    if (!res.ok || !out?.token) throw new ServiceError(res.status, "pairing_failed", `The CLI could not pair with Jarvis: ${out?.error?.message ?? res.status}`);
+    if (!res.ok || !out?.token) throw new ServiceError(res.status, "pairing_failed", `The CLI could not pair with Attache: ${out?.error?.message ?? res.status}`);
     writePrivateFile(this.tokenFile, out.token);
     return out.token;
   }

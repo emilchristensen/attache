@@ -147,7 +147,7 @@ async function runDraft(app: App, ctx: JobContext) {
   const itemId = String(ctx.input.attentionItemId ?? "");
   const item = getItem(app.db, itemId);
   if (!item) throw new JobBlockedError("The attention item no longer exists");
-  if (!item.draftable) throw new JobBlockedError("This item has no action Jarvis can draft");
+  if (!item.draftable) throw new JobBlockedError("This item has no action Attache can draft");
   const d = item.draftable;
   ctx.progress(0.1, "Gathering context");
   const related = search(app.db, `${item.title} ${String(d.context.title ?? "")}`, { limit: 5, areas: ["memory", "import", "evidence"], excludePrefixes: RECALL_EXCLUDE });
@@ -181,7 +181,7 @@ async function runDraft(app: App, ctx: JobContext) {
     payload: { [key]: text },
     context: { item: { id: item.id, title: item.title, summary: item.summary, url: item.url }, source: d.context, fetched: extra, related: related.map(toCitation), preparedBy: model ? `${model.id}:${model.model}` : null, preparedAt: nowIso() },
     attentionItemKey: item.key,
-    createdBy: model ? "jarvis" : "user",
+    createdBy: model ? "attache" : "user",
   });
   app.bus.emit("event", { type: "actions.changed", id: action.id });
   return { actionId: action.id, version: action.version, prepared: !!model };

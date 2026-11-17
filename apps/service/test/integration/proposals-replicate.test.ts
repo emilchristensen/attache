@@ -150,7 +150,7 @@ describe("Proposals pending before they moved into the Brain", () => {
   /** A Proposal as an earlier version kept it in this Machine's change log. */
   function storeLegacy(stateDir: string, row: { target: string; subject: string; payload: unknown; status?: string }): string {
     const id = randomUUID();
-    const db = new DatabaseSync(join(stateDir, "jarvis.sqlite"));
+    const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
     try {
       db.prepare("insert into memory_changes (id, doc_rel_path, change, subject, before_value, after_value, reason, source, actor, status, created_at, decided_at) values (?,?,?,?,?,?,?,?,?,?,?,?)").run(
         id,

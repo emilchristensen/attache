@@ -1,7 +1,7 @@
 import { Component, createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import MarkdownIt from "markdown-it";
 import type { ApiError } from "../api.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 // ---- routing -------------------------------------------------------------------
 
@@ -74,7 +74,7 @@ export function ErrorState({ error, retry, title }: { error: ApiError | Error | 
   const disabled = (error as ApiError).code === "feature_disabled";
   return (
     <div className="state error" role="alert">
-      <strong>{title ?? (offline ? "Jarvis is not reachable" : disabled ? "This feature is turned off" : "Something went wrong")}</strong>
+      <strong>{title ?? (offline ? "Attache is not reachable" : disabled ? "This feature is turned off" : "Something went wrong")}</strong>
       <span className="small">{error.message}</span>
       <div className="row">
         {retry && <button onClick={retry}>Try again</button>}

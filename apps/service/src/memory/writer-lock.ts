@@ -10,7 +10,7 @@ interface LockOwner {
 }
 
 /** Where versions before Machine identity kept the lock: inside the data folder, which Replication shares. */
-const LEGACY_LOCK = join(".jarvis", "writer.lock");
+const LEGACY_LOCK = join(".attache", "writer.lock");
 const TAKE_ATTEMPTS = 3;
 /** A lock file's name: a hash of the data folder's real path. */
 const LOCK_FILE = /^[0-9a-f]{32}\.lock$/;
@@ -50,7 +50,7 @@ export class WriterLock {
       refuseIfHeld(readOwner(file), opts.instance);
       rmSync(file, { force: true });
     }
-    throw new PolicyError(`Could not take the writer lock for ${real}; another Jarvis service is starting on it`, "actor_denied");
+    throw new PolicyError(`Could not take the writer lock for ${real}; another Attache service is starting on it`, "actor_denied");
   }
 
   /** Whether this lock covers `folder`. */
@@ -97,7 +97,7 @@ function readOwner(file: string): LockOwner | null {
 function refuseIfHeld(owner: LockOwner | null, instance: string): void {
   if (!owner) return;
   const alive = owner.pid > 0 && owner.pid !== process.pid && isAlive(owner.pid);
-  if (alive && owner.instance !== instance) throw new PolicyError(`Another Jarvis service (pid ${owner.pid}) owns this data folder`, "actor_denied");
+  if (alive && owner.instance !== instance) throw new PolicyError(`Another Attache service (pid ${owner.pid}) owns this data folder`, "actor_denied");
 }
 
 /** Honour a lock an earlier version holds on the folder; remove it once nobody does. */

@@ -62,7 +62,7 @@ function buildFiles(): Record<FixtureModelFile, Buffer> {
 
 export const fixtureModelFiles: Readonly<Record<FixtureModelFile, Buffer>> = buildFiles();
 
-/** The model description Jarvis reads from `JARVIS_MEANING_MODEL`, pointing at files under `baseUrl`. */
+/** The model description Attache reads from `ATTACHE_MEANING_MODEL`, pointing at files under `baseUrl`. */
 export function fixtureModelDescription(baseUrl: string) {
   const file = (name: FixtureModelFile) => ({ url: `${baseUrl}/${name}`, sha256: createHash("sha256").update(fixtureModelFiles[name]).digest("hex"), bytes: fixtureModelFiles[name].length });
   return {

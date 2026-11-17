@@ -140,7 +140,7 @@ def codex_hook_hash(event_snake, matcher, handler):  # handler already normalize
     s = json.dumps(ident, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return "sha256:" + hashlib.sha256(s.encode()).hexdigest()
 
-codex_hook_hash("stop", None, {"type": "command", "command": "/usr/local/bin/jarvis-hook stop",
+codex_hook_hash("stop", None, {"type": "command", "command": "/usr/local/bin/attache-hook stop",
                                "timeout": 600, "async": False})
 # == "sha256:be3104f1...abcf", identical to Codex's own hooks/list output
 ```
@@ -161,7 +161,7 @@ The product intent is that the user reviews hooks in Codex (docs: "Non-managed h
 The legitimate options are:
 
 - (a) Install `hooks.json` and have the user approve once in Codex (startup prompt or `/hooks`).
-- (b) Have the Jarvis setup UI itself show the exact hook commands, get explicit user consent, and only then write the trust entries.
+- (b) Have the Attache setup UI itself show the exact hook commands, get explicit user consent, and only then write the trust entries.
 
 Option (b) is not a documented public contract, so it may break in future versions.
 
@@ -186,7 +186,7 @@ Fallback: glob `~/.codex/sessions/*/*/*/rollout-*-<session_id>.jsonl` (also `*_*
 - `turn_context`: per-turn `turn_id`, `cwd`, `workspace_roots`, `current_date`, `timezone`, approval policy.
 - User text: `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"..."}],"id":"msg_...","internal_chat_message_metadata_passthrough":{"turn_id":...}}}`.
 - Assistant text: `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"..."}],"phase":"final_answer",...}}`.
-- `role: "developer"` messages also appear as `response_item`/`message`; hook `additionalContext` lands here, so filter these out when capturing, or Jarvis will re-ingest its own injected memory.
+- `role: "developer"` messages also appear as `response_item`/`message`; hook `additionalContext` lands here, so filter these out when capturing, or Attache will re-ingest its own injected memory.
 - Other lines: `reasoning` (encrypted), `function_call`/`function_call_output`, `custom_tool_call`/`custom_tool_call_output`, `agent_message` (sub-agent traffic), and `event_msg` with subtypes `task_started`, `task_complete` (has `last_agent_message`), `turn_aborted`, `item_completed` (a UI-level duplicate of user/agent items), `token_count`, `thread_settings_applied`, plus `token_usage_record`, `world_state` and `compacted` (payload `replacement_history`).
 
 The rollout JSONL schema is an internal format, not a documented contract.
@@ -196,8 +196,8 @@ The rollout JSONL schema is an internal format, not a documented contract.
 Default timeout is 600 s for all events except `SessionEnd` and `Interrupt`, which default to 1 s and are clamped to at most 3 s; minimum is 1 s (`discovery.rs:740-764`, `session_end.rs:20-23`).
 The 3 s cap keeps SessionEnd inside app-server's 5 s shutdown bound (`session_end.rs:21-22`).
 **A transcript-capture SessionEnd hook therefore must return within 3 s.**
-It should copy or enqueue the `transcript_path` and exit, deferring heavy work to a detached Jarvis process.
-That a hook-spawned child outlives the hook is **unverified**: on Unix the hook runs in a new session, and on timeout Codex kills its process group (`command_runner.rs:339`, `:430`), so a daemonized grandchild would need `setsid` or a handoff to an already-running Jarvis service.
+It should copy or enqueue the `transcript_path` and exit, deferring heavy work to a detached Attache process.
+That a hook-spawned child outlives the hook is **unverified**: on Unix the hook runs in a new session, and on timeout Codex kills its process group (`command_runner.rs:339`, `:430`), so a daemonized grandchild would need `setsid` or a handoff to an already-running Attache service.
 The deadline includes writing stdin, even if the hook never reads it (`command_runner.rs:276-279`).
 On timeout the run fails with "hook timed out after Ns" (`command_runner.rs:317`).
 

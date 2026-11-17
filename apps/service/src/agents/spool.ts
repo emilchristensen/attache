@@ -29,7 +29,7 @@ export interface SpoolRecord {
   /**
    * True when the Harness named a transcript that does not exist. It writes
    * one once a conversation starts, so a session-end or compaction without one
-   * had no conversation, unless Jarvis saved part of it before it went.
+   * had no conversation, unless Attache saved part of it before it went.
    */
   absent?: true;
 }

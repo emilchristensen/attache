@@ -5,7 +5,7 @@ import { replaceWith } from "../platform/replace-file.ts";
 
 /**
  * Editing the `{ hooks: { Event: [{ matcher, hooks: [{ type, command, timeout }] }] } }`
- * shape that Claude Code, Codex and Gemini CLI share. Jarvis only ever adds,
+ * shape that Claude Code, Codex and Gemini CLI share. Attache only ever adds,
  * replaces or removes its own entries (recognised by `isOurs`); every other
  * hook and setting in the file is preserved exactly.
  */
@@ -36,11 +36,11 @@ export class HooksFileError extends Error {}
 function hooksOf(settings: Settings): Record<string, HookGroup[]> {
   const h = settings.hooks;
   if (h === undefined) return {};
-  if (!h || typeof h !== "object" || Array.isArray(h)) throw new HooksFileError("The settings file has a `hooks` value that is not an object; Jarvis will not change it.");
+  if (!h || typeof h !== "object" || Array.isArray(h)) throw new HooksFileError("The settings file has a `hooks` value that is not an object; Attache will not change it.");
   return h;
 }
 
-/** The settings with every Jarvis-owned hook removed. Groups and events Jarvis emptied are dropped. */
+/** The settings with every Attache-owned hook removed. Groups and events Attache emptied are dropped. */
 export function withoutOurHooks(settings: Settings, isOurs: (command: string) => boolean): Settings {
   const hooks = hooksOf(settings);
   const next: Record<string, HookGroup[]> = {};
@@ -64,8 +64,8 @@ export function withoutOurHooks(settings: Settings, isOurs: (command: string) =>
 const groupFor = (s: HookSpec): HookGroup => ({ ...(s.matcher !== undefined ? { matcher: s.matcher } : {}), hooks: [{ type: "command", command: s.command, timeout: s.timeout, ...s.options }] });
 
 /**
- * The settings with exactly `specs` as the Jarvis-owned hooks, each in its own
- * group. An existing Jarvis group is updated where it stands, so every other
+ * The settings with exactly `specs` as the Attache-owned hooks, each in its own
+ * group. An existing Attache group is updated where it stands, so every other
  * hook keeps its position: Codex records trust per position, and moving a
  * user's hook would quietly stop it from running.
  */
@@ -94,7 +94,7 @@ export function withOurHooks(settings: Settings, specs: HookSpec[], isOurs: (com
   return { ...settings, hooks: next };
 }
 
-/** The Jarvis-owned hooks currently in the settings. */
+/** The Attache-owned hooks currently in the settings. */
 export function ourHooks(settings: Settings, isOurs: (command: string) => boolean): HookSpec[] {
   return Object.entries(hooksOf(settings)).flatMap(([event, groups]) =>
     (Array.isArray(groups) ? groups : []).flatMap((g) =>
@@ -124,9 +124,9 @@ export function readSettings(path: string): Settings {
   try {
     parsed = JSON.parse(raw);
   } catch (e) {
-    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); Jarvis will not change it.`);
+    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); Attache will not change it.`);
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; Jarvis will not change it.`);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; Attache will not change it.`);
   return parsed as Settings;
 }
 
@@ -156,7 +156,7 @@ export function replaceFile(path: string, content: string) {
   const target = existsSync(path) ? realpathSync(path) : path;
   const mode = existsSync(target) ? statSync(target).mode & 0o777 : 0o600;
   mkdirSync(dirname(target), { recursive: true });
-  const tmp = join(dirname(target), `.${randomUUID()}.jarvis.tmp`);
+  const tmp = join(dirname(target), `.${randomUUID()}.attache.tmp`);
   writeFileSync(tmp, content, { mode });
   chmodSync(tmp, mode);
   replaceWith(tmp, target);
@@ -180,7 +180,7 @@ function commandsOf(entry: unknown): string[] {
   return Object.values(entry as Record<string, unknown>).flatMap((v) => (Array.isArray(v) ? handlerCommands(v) : []));
 }
 
-/** Owner entries that consist only of Jarvis hooks (whatever key they were written under). */
+/** Owner entries that consist only of Attache hooks (whatever key they were written under). */
 function ourOwnerKeys(settings: Named, isOurs: (command: string) => boolean): string[] {
   return Object.entries(settings).filter(([, v]) => {
     const cmds = commandsOf(v);
@@ -195,7 +195,7 @@ export function withoutNamedHooks(settings: Named, isOurs: (command: string) => 
 
 export function withNamedHooks(settings: Named, owner: string, specs: HookSpec[], isOurs: (command: string) => boolean): Named {
   const base = withoutNamedHooks(settings, isOurs);
-  if (owner in base) throw new HooksFileError(`The hooks file already has an entry named "${owner}" that Jarvis did not create; Jarvis will not change it.`);
+  if (owner in base) throw new HooksFileError(`The hooks file already has an entry named "${owner}" that Attache did not create; Attache will not change it.`);
   const entry: Record<string, unknown> = { enabled: true };
   for (const s of specs) entry[s.event] = [...((entry[s.event] as HookEntry[] | undefined) ?? []), { type: "command", command: s.command, timeout: s.timeout, ...s.options }];
   return { ...base, [owner]: entry };

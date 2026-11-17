@@ -2,7 +2,7 @@ import type { AdapterContext, ConnectionRecord } from "../../src/connectors/type
 import { createHttpClient } from "../../src/connectors/http.ts";
 import { createLogger } from "../../src/core/log.ts";
 import { createClaudeConnectorRunner } from "../../src/connectors/claude/runner.ts";
-import type { ConnectionKind } from "@jarvis/contracts";
+import type { ConnectionKind } from "@attache/contracts";
 
 /**
  * One connector runner for every context in a test file, as the service keeps

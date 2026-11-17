@@ -57,5 +57,5 @@ export function gatherEmbeddingModel(table: number[][]): Uint8Array {
     ...bytes(12, valueInfo("last_hidden_state", ONNX_FLOAT, ["batch", "sequence", dims])),
   ];
   const opset = [...text(1, ""), ...int(2, OPSET)];
-  return Uint8Array.from([...int(1, IR_VERSION), ...text(2, "jarvis-tests"), ...bytes(7, graph), ...bytes(8, opset)]);
+  return Uint8Array.from([...int(1, IR_VERSION), ...text(2, "attache-tests"), ...bytes(7, graph), ...bytes(8, opset)]);
 }

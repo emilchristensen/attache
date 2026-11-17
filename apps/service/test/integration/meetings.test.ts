@@ -37,16 +37,16 @@ beforeAll(async () => {
   fx = await startFixtureServer();
   installScenarios(fx, { selfEmail: "alex@example.com" });
   useFakeClaude(fx.url);
-  process.env.JARVIS_TEST_ENDPOINTS = "1";
-  process.env.JARVIS_FIXTURE_URL = fx.url;
+  process.env.ATTACHE_TEST_ENDPOINTS = "1";
+  process.env.ATTACHE_FIXTURE_URL = fx.url;
   svc = await startTestService();
   await svc.post("/setup/identity", { name: "Alex", email: "alex@example.com", confirm: true });
 });
 afterAll(async () => {
   await svc.stop();
   await fx.close();
-  delete process.env.JARVIS_TEST_ENDPOINTS;
-  delete process.env.JARVIS_FIXTURE_URL;
+  delete process.env.ATTACHE_TEST_ENDPOINTS;
+  delete process.env.ATTACHE_FIXTURE_URL;
 });
 
 describe("meeting preparation, team recall and pending replies through claude.ai connectors and Atlassian sign-in", () => {

@@ -1,4 +1,4 @@
-import type { MeaningState, MeaningStatus } from "@jarvis/contracts";
+import type { MeaningState, MeaningStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction } from "../components/ui.tsx";

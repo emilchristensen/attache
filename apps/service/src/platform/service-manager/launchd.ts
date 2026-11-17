@@ -24,15 +24,15 @@ export function launchAgentPlist(label: string, home: string, spec: ServiceSpec)
   <key>ProgramArguments</key>
   <array>
     <string>${p(join(current, "runtime/node"))}</string>
-    <string>${p(join(current, "service/jarvis-service.mjs"))}</string>
+    <string>${p(join(current, "service/attache-service.mjs"))}</string>
     <string>serve</string>
     <string>--port</string><string>${spec.port}</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>JARVIS_STATE_DIR</key><string>${p(spec.stateDir)}</string>
-    <key>JARVIS_INSTANCE</key><string>${p(spec.instance)}</string>
-    <key>JARVIS_WEB_DIR</key><string>${p(join(current, "web"))}</string>
+    <key>ATTACHE_STATE_DIR</key><string>${p(spec.stateDir)}</string>
+    <key>ATTACHE_INSTANCE</key><string>${p(spec.instance)}</string>
+    <key>ATTACHE_WEB_DIR</key><string>${p(join(current, "web"))}</string>
     <key>HOME</key><string>${p(home)}</string>
     <key>PATH</key><string>${p(`${home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>
   </dict>
@@ -72,7 +72,7 @@ export class LaunchdServiceManager implements ServiceManager {
   }
 
   async start(): Promise<void> {
-    if (!existsSync(this.definition)) throw new Error(`Jarvis is not set up as a background service here: ${this.definition} is missing. Run the Jarvis installer again.`);
+    if (!existsSync(this.definition)) throw new Error(`Attache is not set up as a background service here: ${this.definition} is missing. Run the Attache installer again.`);
     if (!(await this.loaded())) {
       // launchd can refuse a bootstrap for a moment after a bootout; retry briefly.
       for (let attempt = 1; ; attempt++) {

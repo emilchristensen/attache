@@ -1,6 +1,6 @@
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ErrorCode, McpError, type RequestId } from "@modelcontextprotocol/sdk/types.js";
-import type { MemorySaveCheckResult, MemorySaveItem } from "@jarvis/contracts";
+import type { MemorySaveCheckResult, MemorySaveItem } from "@attache/contracts";
 
 /** How long the owner has to answer before the save is given up. */
 export const CONFIRMATION_TIMEOUT_MS = 10 * 60_000;
@@ -21,7 +21,7 @@ export class ConfirmationError extends Error {}
 export function confirmationMessage(harness: string, items: readonly MemorySaveItem[], check: MemorySaveCheckResult): string {
   const count = items.length === 1 ? "1 change" : `${items.length} changes`;
   const blocks = items.map((item, i) => [`${i + 1}. ${heading(item, check.items[i])}`, ...details(item).map((d) => `   - ${d}`)].join("\n"));
-  return [`${harness} asks to save ${count} to your Jarvis Brain:`, "", ...blocks, "", "Accept to write them as you. Decline to write nothing."].join("\n");
+  return [`${harness} asks to save ${count} to your Attache Brain:`, "", ...blocks, "", "Accept to write them as you. Decline to write nothing."].join("\n");
 }
 
 function heading(item: MemorySaveItem, checked: MemorySaveCheckResult["items"][number] | undefined): string {

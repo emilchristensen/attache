@@ -12,11 +12,11 @@ afterAll(async () => {
 
 /** A state folder as an install with voice set up left it: feature on, speech provider connected, model downloaded. */
 function voiceEraState(): { stateDir: string; dataDir: string } {
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-voice-state-"));
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-voice-data-")), "data");
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-it-voice-state-"));
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-voice-data-")), "data");
   mkdirSync(dataDir, { recursive: true });
   const now = new Date().toISOString();
-  const db = openDb(join(stateDir, "jarvis.sqlite"));
+  const db = openDb(join(stateDir, "attache.sqlite"));
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, features: { voice: true, drafts: false } };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), now);
   db.prepare("insert into connections (id, kind, label, status, settings, created_at, updated_at) values ('speech', 'speech', 'Speech', 'connected', ?, ?, ?)").run(JSON.stringify({ stt: "openai-compatible", tts: "macos-say" }), now, now);

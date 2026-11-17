@@ -7,7 +7,7 @@
 .claude/settings.local.json
 
 # Runtime data and local tooling
-.jarvis-runtime/
+.attache-runtime/
 .t3/
 *.sqlite
 *.sqlite3

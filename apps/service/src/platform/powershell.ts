@@ -7,11 +7,11 @@ import { run } from "./run.ts";
 
 /**
  * Windows PowerShell 5.1, which every Windows 10 and 11 installation has, so
- * Jarvis reaches Windows APIs (Credential Manager, notifications) without a
- * native module. `JARVIS_POWERSHELL_BIN` puts a stand-in in its place.
+ * Attache reaches Windows APIs (Credential Manager, notifications) without a
+ * native module. `ATTACHE_POWERSHELL_BIN` puts a stand-in in its place.
  */
 export function powershellPath(env: Env = process.env): string {
-  return env.JARVIS_POWERSHELL_BIN || win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  return env.ATTACHE_POWERSHELL_BIN || win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
 /** A request to a PowerShell script: plain JSON values only. */
@@ -64,7 +64,7 @@ function interpret(out: { stdout: string; stderr: string; code: number | null; t
     const said = out.stderr.trim().split(/\r?\n/)[0];
     return { ok: false, why: said || `Windows PowerShell exited with ${out.code} without an answer` };
   }
-  if (!reply || typeof reply !== "object") return { ok: false, why: "Windows PowerShell gave an answer Jarvis does not understand" };
+  if (!reply || typeof reply !== "object") return { ok: false, why: "Windows PowerShell gave an answer Attache does not understand" };
   const r = reply as Record<string, unknown>;
   if (r.ok === true) return { ok: true, reply: r };
   // Some failures (a compiler error, for one) run over several lines; the first says what happened.

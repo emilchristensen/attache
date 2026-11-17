@@ -100,7 +100,7 @@ export const MemorySaveInput = z.object({
    */
   autoAccept: z.boolean().optional(),
   /**
-   * The owner accepted this save when Jarvis's MCP server asked them in the
+   * The owner accepted this save when Attache's MCP server asked them in the
    * Harness. A save that is neither confirmed nor auto-accepted is stored as
    * Proposals instead of being written.
    */

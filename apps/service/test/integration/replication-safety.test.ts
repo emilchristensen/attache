@@ -52,7 +52,7 @@ describe("A service stopped in the middle of a merge", () => {
 });
 
 describe("Deleting a note", () => {
-  it("removes it from every Machine and from their search, whether deleted in Jarvis or by hand", async () => {
+  it("removes it from every Machine and from their search, whether deleted in Attache or by hand", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];
     await saveProject(mac, "Kiwi tracking", "Collars fitted");
@@ -65,7 +65,7 @@ describe("Deleting a note", () => {
     // Undoing the save that created a note removes the note.
     const created = ((await mac.get("/memory/recent-changes")).changes as Array<{ id: string; relPath: string; kind: string }>).find((c) => c.relPath === "memory/projects/kiwi-tracking.md" && c.kind === "create")!;
     await mac.post(`/memory/changes/${created.id}/revert`);
-    // An editor deletes a file outside Jarvis.
+    // An editor deletes a file outside Attache.
     rmSync(join(mac.dataDir, "memory/projects/kea-survey.md"));
     await mac.clock.advance(60_000);
     await pc.clock.advance(60_000);
@@ -150,7 +150,7 @@ describe("Joining a Machine that already has a Brain", () => {
     expect(listed.map((b) => b.path)).toContain(backup);
     const archived = execFileSync("tar", ["-tzf", backup], { encoding: "utf8" });
     expect(archived).toContain("data/memory/projects/kakapo-census.md");
-    expect(archived).toContain("jarvis.sqlite");
+    expect(archived).toContain("attache.sqlite");
 
     expect(readdirSync(join(pc.dataDir, "memory/projects"))).toEqual(before);
     expect(existsSync(join(pc.dataDir, ".git"))).toBe(false);

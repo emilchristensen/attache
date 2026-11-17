@@ -1,4 +1,4 @@
-import type { MeaningState, MeaningStatus } from "@jarvis/contracts";
+import type { MeaningState, MeaningStatus } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { VectorBuilder } from "./builder.ts";

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copy the logs that test services left in Jarvis's temporary folders (Vitest, the browser
+ * Copy the logs that test services left in Attache's temporary folders (Vitest, the browser
  * journeys, the install test) to test-results/service-logs, for CI to upload after a failure.
  * Usage: node scripts/collect-service-logs.mjs [--out <folder>]
  */

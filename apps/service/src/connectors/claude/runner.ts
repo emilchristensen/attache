@@ -1,7 +1,7 @@
 /**
  * The seam adapters use to reach claude.ai connectors. The default runner
  * spawns the user's own Claude Code CLI (see session.ts); tests substitute
- * the CLI with a fixture binary through JARVIS_CLAUDE_BIN, so the protocol
+ * the CLI with a fixture binary through ATTACHE_CLAUDE_BIN, so the protocol
  * handling below is exercised for real.
  */
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
@@ -55,7 +55,7 @@ function allowRules(file: string): unknown[] {
 }
 
 function userAllowRules(): unknown[] {
-  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.JARVIS_MANAGED_SETTINGS ?? platformLocations().claudeManagedSettings)];
+  return [...allowRules(join(claudeConfigDir(), "settings.json")), ...allowRules(process.env.ATTACHE_MANAGED_SETTINGS ?? platformLocations().claudeManagedSettings)];
 }
 
 /** Claude Code's project directory name for a working directory: every non-alphanumeric character becomes "-". */
@@ -68,7 +68,7 @@ export function projectSlug(dir: string): string {
  * pointer instead:
  *   <persisted-output>\nOutput too large (79.4KB). Full output saved to: /…/tool-results/toolu_….txt …
  * Only that exact wrapper is followed, and only to a file inside the project
- * directory of Jarvis's own connector session, so a path written into a Slack
+ * directory of Attache's own connector session, so a path written into a Slack
  * message or an email is never read. The file holds connector data, so it is
  * deleted once read.
  */
@@ -91,7 +91,7 @@ export function resolveSpill(text: string, configDir = claudeConfigDir(), cwd = 
 
 function serverError(label: string, server: { status: string; source: string | null } | null): RemoteError | null {
   if (!server) return new RemoteError(`The ${label} connector is not available to your claude.ai account. Add it in claude.ai → Settings → Connectors (a workspace admin may have to enable it for your organization).`, "not_configured");
-  if (server.source !== "claudeai") return new RemoteError(`The server named like the ${label} connector comes from ${server.source ?? "an unknown source"}, not claude.ai; Jarvis only uses the claude.ai connector.`, "denied");
+  if (server.source !== "claudeai") return new RemoteError(`The server named like the ${label} connector comes from ${server.source ?? "an unknown source"}, not claude.ai; Attache only uses the claude.ai connector.`, "denied");
   if (server.status === "needs-auth") return new RemoteError(`${label} is not connected in claude.ai. Open claude.ai → Settings → Connectors, connect ${label}, then test again.`, "unauthorized");
   if (server.status !== "connected") return new RemoteError(`The ${label} connector is ${server.status} in Claude Code. Try again shortly.`, "offline");
   return null;
@@ -136,7 +136,7 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
     const label = labelOf(server);
     const rules = preApprovingRules(userAllowRules(), server);
     if (rules.length) {
-      throw new RemoteError(`Your Claude Code settings auto-approve ${label} tools (${rules.join(", ")}). Jarvis must approve each connector call itself; remove that rule from ${join(claudeConfigDir(), "settings.json")} and test again.`, "denied");
+      throw new RemoteError(`Your Claude Code settings auto-approve ${label} tools (${rules.join(", ")}). Attache must approve each connector call itself; remove that rule from ${join(claudeConfigDir(), "settings.json")} and test again.`, "denied");
     }
     if (!knownServers.size) await discover(server, run.signal);
     const hidden = () => [...knownServers].filter((s) => s !== server).map(serverPrefix);
@@ -163,8 +163,8 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
       const err = serverError(label, out.server);
       if (err) throw err;
       if (out.bypassed.length) {
-        log.error("claude connector: a call ran without Jarvis's approval", { server, bypassed: out.bypassed });
-        throw new RemoteError(`${label} ran ${out.bypassed.join(", ")} without asking Jarvis. A permission rule or hook outside Jarvis (user, managed or enterprise Claude Code settings) pre-approves it; remove that rule, then test again. The session was stopped and its results were discarded.`, "denied");
+        log.error("claude connector: a call ran without Attache's approval", { server, bypassed: out.bypassed });
+        throw new RemoteError(`${label} ran ${out.bypassed.join(", ")} without asking Attache. A permission rule or hook outside Attache (user, managed or enterprise Claude Code settings) pre-approves it; remove that rule, then test again. The session was stopped and its results were discarded.`, "denied");
       }
       if (out.violations.length && run.write) throw new RemoteError(`The ${label} session attempted calls outside the approved action (${out.violations.join("; ")}). Nothing beyond the approved call was allowed.`, "error");
       if (out.violations.length) log.warn("claude connector: denied unplanned calls", { server, violations: out.violations });
@@ -179,9 +179,9 @@ export function createClaudeConnectorRunner(log: Logger, config: { pendingDelayM
       const bin = findClaudeCli();
       if (!bin) throw new RemoteError("Claude Code is not installed on this computer. Install it from claude.com/claude-code and sign in with your claude.ai account.", "not_configured");
       const args = ["auth", "status", "--json"];
-      // runTool reports a CLI Jarvis cannot start as a failed run; claudeLaunch names it not_configured first.
+      // runTool reports a CLI Attache cannot start as a failed run; claudeLaunch names it not_configured first.
       claudeLaunch(bin, args);
-      const result = await runTool(bin, args, { signal, timeoutMs: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } });
+      const result = await runTool(bin, args, { signal, timeoutMs: 20_000, env: { ...process.env, CLAUDE_INVOKED_BY: "attache" } });
       const stdout = result.stdout;
       if (result.code !== 0) {
         const text = stdout || result.stderr;

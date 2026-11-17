@@ -1,4 +1,4 @@
-import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState } from "@jarvis/contracts";
+import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { HttpClient } from "./http.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
@@ -22,7 +22,7 @@ export interface AdapterContext {
   log: Logger;
   signal: AbortSignal;
   now: () => Date;
-  /** Base URL override for contract tests; only honoured when JARVIS_TEST_ENDPOINTS=1. */
+  /** Base URL override for contract tests; only honoured when ATTACHE_TEST_ENDPOINTS=1. */
   endpoint(defaultBase: string): string;
   /** Identity of the user (email) for "sent by me" classification. */
   selfEmail: string | null;

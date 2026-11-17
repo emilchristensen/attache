@@ -25,13 +25,13 @@ const hour = 3_600_000;
 
 /** A state folder whose inbox was made before it replicated: items in each state, with their decision log. */
 function stateFromBefore(): { stateDir: string; dataDir: string; until: string } {
-  const stateDir = mkdtempSync(join(tmpdir(), "jarvis-it-inbox-state-"));
-  const dataDir = join(mkdtempSync(join(tmpdir(), "jarvis-it-inbox-data-")), "data");
+  const stateDir = mkdtempSync(join(tmpdir(), "attache-it-inbox-state-"));
+  const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-inbox-data-")), "data");
   mkdirSync(dataDir, { recursive: true });
   const now = new Date();
   const at = (ms: number) => new Date(now.getTime() + ms).toISOString();
   const until = at(48 * hour);
-  const db = new DatabaseSync(join(stateDir, "jarvis.sqlite"));
+  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
   schemaBeforeReplicatedInbox(db);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, features: {} };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), at(0));

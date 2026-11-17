@@ -1,10 +1,10 @@
 /**
  * Shared plumbing for adapters that read and write through the user's
  * claude.ai connectors (Slack, Gmail, Google Calendar) via Claude Code.
- * Authorization lives in claude.ai: Jarvis stores no credential for these
+ * Authorization lives in claude.ai: Attache stores no credential for these
  * connections and only needs Claude Code signed in on this computer.
  */
-import type { ConnectionDefinition, CoverageState } from "@jarvis/contracts";
+import type { ConnectionDefinition, CoverageState } from "@attache/contracts";
 import type { AdapterContext, TestResult } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import { asRemoteError, stringSetting } from "./common.ts";
@@ -45,7 +45,7 @@ export function claudeSetupSteps(server: string): string[] {
 }
 
 export function claudeDataNote(server: string): string {
-  return `Jarvis reaches ${labelOf(server)} through your own claude.ai connector: a local Claude Code session makes only the calls Jarvis approves, and the results pass through Anthropic as they do when you use the connector in Claude.`;
+  return `Attache reaches ${labelOf(server)} through your own claude.ai connector: a local Claude Code session makes only the calls Attache approves, and the results pass through Anthropic as they do when you use the connector in Claude.`;
 }
 
 export function serverName(ctx: AdapterContext, fallback: string): string {

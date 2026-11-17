@@ -4,12 +4,12 @@ import type { Os } from "./os.ts";
 export type HarnessKind = "claude-code" | "codex" | "antigravity" | "claude-desktop";
 
 /**
- * Where a Harness keeps the files Jarvis edits for its hooks, relative to the
+ * Where a Harness keeps the files Attache edits for its hooks, relative to the
  * home folder. Harnesses use the same layout under the home folder on every
  * operating system, so these are constants.
  */
 export interface HarnessFiles {
-  /** The hooks file Jarvis adds its hooks to; null for a Harness without hooks. */
+  /** The hooks file Attache adds its hooks to; null for a Harness without hooks. */
   hooksFile: string | null;
   /** Folder of always-loaded rule files, for a Harness without a session-start hook. */
   rulesDir: string | null;
@@ -55,7 +55,7 @@ export function harnessMcpConfigs(os: Os): Readonly<Record<HarnessKind, HarnessM
 
 /** Where a Harness is installed on this operating system, as absolute paths. */
 export interface HarnessInstall {
-  /** Its command-line executable, in the order Jarvis prefers them. */
+  /** Its command-line executable, in the order Attache prefers them. */
   executables: string[];
   /** Any of these existing means the Harness is installed. */
   presence: string[];
@@ -77,7 +77,7 @@ function claudeDesktopApp(loc: PlatformLocations): string[] {
 
 /**
  * Where each Harness is installed. Pass the locations for the home folder
- * whose Harness settings Jarvis edits (`locationsForHome`), which tests point
+ * whose Harness settings Attache edits (`locationsForHome`), which tests point
  * at a temporary folder.
  */
 export function harnessInstalls(loc: PlatformLocations): Record<HarnessKind, HarnessInstall> {

@@ -64,13 +64,13 @@ describe("memory store and retrieval", () => {
 
   it("refuses to write through a symlink that leaves the data folder", () => {
     const { store, root } = setup();
-    const outside = tempDir("jarvis-outside-");
+    const outside = tempDir("attache-outside-");
     symlinkSync(outside, join(root, "memory", "escape"));
     expect(() => store.createMemory({ type: "note", title: "x", state: [] }, "user")).not.toThrow();
     expect(() => (store as unknown as { writeFile: (r: string, c: string, a: string) => void }).writeFile("memory/escape/evil.md", "x", "user")).toThrow(/escapes/);
   });
 
-  it("picks up edits made outside Jarvis on rescan and drops deleted files", () => {
+  it("picks up edits made outside Attache on rescan and drops deleted files", () => {
     const { db, store, root } = setup();
     mkdirSync(join(root, "memory", "notes"), { recursive: true });
     writeFileSync(join(root, "memory/notes/manual.md"), "# Manual\n\nThe espresso machine descaling is due Friday.\n");

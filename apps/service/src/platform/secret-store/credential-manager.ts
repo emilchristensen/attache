@@ -6,7 +6,7 @@ import type { SecretBackend } from "./system-store.ts";
 /** Starting Windows PowerShell and compiling the script takes a few seconds on a slow computer. */
 const TIMEOUT_MS = 60_000;
 /** The account of the throwaway credential written to check Credential Manager. */
-const PROBE_KEY = "jarvis-reachability-check";
+const PROBE_KEY = "attache-reachability-check";
 
 const target = (service: string, key: string) => `${service}/${key}`;
 const toBase64 = (value: string) => Buffer.from(value, "utf8").toString("base64");
@@ -20,7 +20,7 @@ async function ask(request: PowerShellRequest, env: Env): Promise<Readonly<Recor
 
 /**
  * Windows Credential Manager. Each secret is a generic credential with the
- * target `dev.jarvis.<instance>/<key>`. Values travel on stdin and stdout of
+ * target `dev.attache.<instance>/<key>`. Values travel on stdin and stdout of
  * Windows PowerShell, so they never appear in process arguments.
  */
 export function credentialManagerBackend(service: string, env: Env): SecretBackend {

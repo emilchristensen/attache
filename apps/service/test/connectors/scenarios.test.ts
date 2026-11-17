@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionKind } from "@jarvis/contracts";
+import type { ConnectionKind } from "@attache/contracts";
 import { githubAdapter } from "../../src/connectors/github.ts";
 import { jiraAdapter } from "../../src/connectors/jira.ts";
 import { confluenceAdapter } from "../../src/connectors/confluence.ts";
@@ -27,7 +27,7 @@ beforeEach(() => {
   ({ state, claude } = installScenarios(fx, { selfEmail: "alex@example.com" }));
 });
 
-/** A context that routes each default base through its scenario prefix, like JARVIS_TEST_ENDPOINTS does. */
+/** A context that routes each default base through its scenario prefix, like ATTACHE_TEST_ENDPOINTS does. */
 function scenarioCtx(kind: ConnectionKind, opts: { scopes: string[]; secrets?: Record<string, string>; settings?: Record<string, unknown> }) {
   const c = fixtureContext({ kind, baseUrl: fx.url, readScopes: opts.scopes, selfEmail: "alex@example.com", ...(opts.secrets ? { secrets: opts.secrets } : {}), ...(opts.settings ? { settings: opts.settings } : {}), now: new Date() });
   c.endpoint = (d) => {

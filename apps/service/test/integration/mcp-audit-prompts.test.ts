@@ -67,7 +67,7 @@ describe("the MCP audit tool", () => {
     expect(r.data.findings.map((f) => f.path)).not.toContain("memory/self.md");
 
     // The text a model reads carries the same facts, with paths it can pass to `read`.
-    expect(r.text).toMatch(/Jarvis memory audit: \d+ notes, \d+ current facts/);
+    expect(r.text).toMatch(/Attache memory audit: \d+ notes, \d+ current facts/);
     expect(r.text).toContain(`## Tamarind rollout [project`);
     expect(r.text).toContain(NOTE);
     expect(r.text).toMatch(/- Owner \(2026-03-01, \d+ days, line 8\): Ingrid — source: .*\{.*missing-source.*\}/);
@@ -88,7 +88,7 @@ describe("the MCP audit tool", () => {
 });
 
 /** What the prompts must never ask for: a shell command, or a file edit in the Brain. */
-const SHELL = [/\bjarvis (save|audit|search|start)\b/, /<<\s*'?JSON/, /^ {4}\S/m, /\$\(/, /\bcurl\b/];
+const SHELL = [/\battache (save|audit|search|start)\b/, /<<\s*'?JSON/, /^ {4}\S/m, /\$\(/, /\bcurl\b/];
 
 describe("the MCP save and audit prompts", () => {
   it("are listed and fetched by a real MCP client", async () => {

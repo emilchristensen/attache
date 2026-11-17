@@ -16,7 +16,7 @@ export function secretServiceBackend(tool: string, service: string): SecretBacke
     },
     async store(key, value) {
       // A locked keyring asks the owner to unlock it, so allow time for that.
-      const r = await run(tool, ["store", `--label=Jarvis: ${key}`, ...attributes(key)], { input: value, timeoutMs: 120_000 });
+      const r = await run(tool, ["store", `--label=Attache: ${key}`, ...attributes(key)], { input: value, timeoutMs: 120_000 });
       if (r.code !== 0) throw new Error(`Secret Service write failed: ${r.stderr.trim() || `exit ${r.code}`}`);
     },
     async clear(key) {

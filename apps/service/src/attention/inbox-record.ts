@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AttentionItemView } from "@jarvis/contracts";
+import type { AttentionItemView } from "@attache/contracts";
 
 /**
  * One inbox item as it is kept in the Brain (`review/inbox/<key>.json`), so it

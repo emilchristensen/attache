@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AttentionItemView, Coverage } from "@jarvis/contracts";
+import type { AttentionItemView, Coverage } from "@attache/contracts";
 import { type Db, json, nowIso } from "../core/db.ts";
 import { listItems } from "./engine.ts";
 import { FACT_REVIEW_KIND } from "./fact-reviews.ts";

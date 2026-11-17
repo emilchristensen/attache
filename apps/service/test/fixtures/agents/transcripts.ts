@@ -22,7 +22,7 @@ export function claudeTranscript(sessionId: string, cwd: string, exchanges: Arra
 export function codexRollout(sessionId: string, cwd: string, exchanges: Array<[string, string]>): string {
   const rows: unknown[] = [
     { timestamp: "2026-10-02T09:00:00.000Z", type: "session_meta", payload: { id: sessionId, session_id: sessionId, cwd, timestamp: "2026-10-02T09:00:00.000Z" } },
-    { timestamp: "2026-10-02T09:00:00.100Z", type: "response_item", payload: { type: "message", role: "developer", content: [{ type: "input_text", text: "## Jarvis memory\nalready injected" }] } },
+    { timestamp: "2026-10-02T09:00:00.100Z", type: "response_item", payload: { type: "message", role: "developer", content: [{ type: "input_text", text: "## Attache memory\nalready injected" }] } },
     { timestamp: "2026-10-02T09:00:00.200Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: `<environment_context>\n<cwd>${cwd}</cwd>\n</environment_context>` }] } },
   ];
   exchanges.forEach(([user, assistant], i) => {

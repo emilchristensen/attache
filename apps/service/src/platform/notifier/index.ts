@@ -34,7 +34,7 @@ function inQuietHours(q: QuietHours, now: Date): boolean {
 
 /**
  * Desktop notifications for the service: skipped when switched off
- * (`JARVIS_NO_NOTIFY=1`) or in quiet hours, and logged when the operating
+ * (`ATTACHE_NO_NOTIFY=1`) or in quiet hours, and logged when the operating
  * system cannot show them, once per change, so a computer without a
  * notification service runs on and says so in the log.
  */
@@ -52,7 +52,7 @@ export class DesktopNotifications {
   }
 
   private get disabled(): boolean {
-    return this.env.JARVIS_NO_NOTIFY === "1";
+    return this.env.ATTACHE_NO_NOTIFY === "1";
   }
 
   /** Check once at start, so a computer without a notification service says so in the log right away. */

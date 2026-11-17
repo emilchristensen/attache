@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 import { isPastReview, unverifiedLabel } from "../memory/review-date.ts";
 import type { SearchCommand } from "./search-command.ts";
 
@@ -94,7 +94,7 @@ function render(c: ContextInput, shown: Shown, all: Shown): string {
   const out = header(c);
   if (c.project) out.push(...projectLines(c.project, shown, c));
   out.push(...indexLines(c.notes, shown.titles));
-  out.push("", "### Deeper recall", "", "Nothing else from the Brain is loaded. When a topic matters, search Jarvis instead of guessing; results cite file and line in the data folder:", "", `    ${c.searchCommand.line} "your query"`);
+  out.push("", "### Deeper recall", "", "Nothing else from the Brain is loaded. When a topic matters, search Attache instead of guessing; results cite file and line in the data folder:", "", `    ${c.searchCommand.line} "your query"`);
   if (c.searchCommand.powershell) out.push("", "In PowerShell, start it with the call operator:", "", `    ${c.searchCommand.powershell} "your query"`);
   const cut = cutNotice(shown, all);
   if (cut) out.push("", cut);
@@ -102,7 +102,7 @@ function render(c: ContextInput, shown: Shown, all: Shown): string {
 }
 
 function header(c: ContextInput): string[] {
-  const out = [`## Jarvis memory`, "", `Data folder: ${c.dataFolder}`, `Now: ${c.now.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`];
+  const out = [`## Attache memory`, "", `Data folder: ${c.dataFolder}`, `Now: ${c.now.toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`];
   if (c.identity) {
     out.push("", "### Who you are working with", "", `- Name: ${c.identity.name}`);
     if (c.identity.email) out.push(`- Email: ${c.identity.email}`);
@@ -149,7 +149,7 @@ function indexLines(notes: ContextInput["notes"], perType: number): string[] {
   if (!notes.length) return [];
   const byType = new Map<string, string[]>();
   for (const n of notes) byType.set(n.type, [...(byType.get(n.type) ?? []), n.title]);
-  const out = ["", "### What Jarvis remembers", "", "Curated notes in the data folder's `memory/`, most recently updated first. Search reaches every one of them.", ""];
+  const out = ["", "### What Attache remembers", "", "Curated notes in the data folder's `memory/`, most recently updated first. Search reaches every one of them.", ""];
   for (const [type, titles] of byType) {
     const named = titles.slice(0, perType);
     const more = titles.length - named.length;

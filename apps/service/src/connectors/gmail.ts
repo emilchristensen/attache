@@ -4,7 +4,7 @@
  * carrying dates and labels (and strip dots from addresses), so a thread
  * without them is completed with get_thread in its MINIMAL format: metadata,
  * subject and snippet, never bodies. The one write
- * saves a reply as a draft (create_draft); Jarvis never sends mail.
+ * saves a reply as a draft (create_draft); Attache never sends mail.
  */
 import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
@@ -12,7 +12,7 @@ import { RemoteError, afterWrite } from "./http.ts";
 import { asRemoteError, attemptStartMs, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, callOne, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 export interface GmailMessage {
   id: string;
@@ -290,7 +290,7 @@ export const gmailAdapter: ConnectorAdapter = {
     authMethods: claudeAuthMethods(CLAUDE_SERVERS.gmail),
     scopes: [{ id: "inbox_recent", label: "Inbox threads from the last 7 days", default: true }],
     writeActions: [{ id: "gmail.draft", label: "Save a reply as a Gmail draft (never sends)" }],
-    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gmail)} Jarvis never sends mail; with drafting authorised it only saves replies as Gmail drafts.`,
+    setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gmail)} Attache never sends mail; with drafting authorised it only saves replies as Gmail drafts.`,
     unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.gmail),
   },
 

@@ -34,7 +34,7 @@ const replyShape = (noun: string) => JSON.stringify({
 export function consolidationSystemPrompt(userName: string, today: string, subject: ConsolidationSubject): string {
   const { noun, reads, ignore } = SUBJECTS[subject];
   return [
-    `You are the Consolidation step of Jarvis, ${userName}'s second brain: a set of Markdown notes, each with current facts (one value per subject) and a History of events.`,
+    `You are the Consolidation step of Attache, ${userName}'s second brain: a set of Markdown notes, each with current facts (one value per subject) and a History of events.`,
     `You read ${reads} and propose changes to the Brain. ${userName} approves or rejects each Proposal; nothing is written without that click.`,
     `Propose only what the ${noun} states and what will still matter weeks from now: decisions and their reasons, changed facts about projects, people and systems, and events worth keeping in a note's History.`,
     ignore,

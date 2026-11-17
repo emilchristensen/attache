@@ -1,6 +1,6 @@
 /**
  * The Linux secret store and desktop notifications, driven through the
- * `jarvis` executable as if on Linux. libsecret's `secret-tool` and
+ * `attache` executable as if on Linux. libsecret's `secret-tool` and
  * libnotify's `notify-send` are replaced by recording stand-ins, so this runs
  * on any operating system.
  */
@@ -9,7 +9,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import type { FixtureServer } from "./fixtures/fixture-server.ts";
-import { connectGithub as connect, githubAskingForReviews, jarvisCli, newStateDir, runningChildren, serveChild as serve, syncGithub, type ChildService, type ReviewRequest } from "./fixtures/jarvis-child.ts";
+import { connectGithub as connect, githubAskingForReviews, attacheCli, newStateDir, runningChildren, serveChild as serve, syncGithub, type ChildService, type ReviewRequest } from "./fixtures/attache-child.ts";
 
 // Each test starts the service from source, sometimes twice, which is slow under load.
 const SLOW = 90_000;
@@ -25,23 +25,23 @@ interface Desktop {
 }
 
 function linuxDesktop(env: Record<string, string | undefined> = {}): Desktop {
-  const keyring = tempDir("jarvis-keyring-");
-  const notifyLog = join(tempDir("jarvis-notify-"), "notifications.jsonl");
+  const keyring = tempDir("attache-keyring-");
+  const notifyLog = join(tempDir("attache-notify-"), "notifications.jsonl");
   return {
     keyring,
     notifyLog,
     env: {
-      JARVIS_TEST_FAKE_PLATFORM: "linux",
-      JARVIS_CREDENTIAL_STORE: undefined,
-      JARVIS_NO_NOTIFY: undefined,
-      JARVIS_TEST_ENDPOINTS: "1",
-      JARVIS_SECRET_TOOL_BIN: FAKE_SECRET_TOOL,
-      JARVIS_NOTIFY_SEND_BIN: FAKE_NOTIFY_SEND,
+      ATTACHE_TEST_FAKE_PLATFORM: "linux",
+      ATTACHE_CREDENTIAL_STORE: undefined,
+      ATTACHE_NO_NOTIFY: undefined,
+      ATTACHE_TEST_ENDPOINTS: "1",
+      ATTACHE_SECRET_TOOL_BIN: FAKE_SECRET_TOOL,
+      ATTACHE_NOTIFY_SEND_BIN: FAKE_NOTIFY_SEND,
       DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus",
       FAKE_SECRET_SERVICE_DIR: keyring,
       FAKE_NOTIFY_LOG: notifyLog,
-      HOME: tempDir("jarvis-linux-home-"),
-      JARVIS_INSTANCE: "linux-test",
+      HOME: tempDir("attache-linux-home-"),
+      ATTACHE_INSTANCE: "linux-test",
       ...env,
     },
   };
@@ -79,7 +79,7 @@ describe("Linux secret store", () => {
 
       const configured = await connectGithub(svc, fx);
       expect(JSON.stringify(configured)).not.toContain(SECRET);
-      expect(keyringItems(desktop)).toEqual([{ label: "Jarvis: conn:github:token", attributes: { service: "dev.jarvis.linux-test", account: "conn:github:token" }, secret: SECRET }]);
+      expect(keyringItems(desktop)).toEqual([{ label: "Attache: conn:github:token", attributes: { service: "dev.attache.linux-test", account: "conn:github:token" }, secret: SECRET }]);
       expect(existsSync(join(stateDir, "secrets.json"))).toBe(false);
 
       // After a restart the token is read back from the Secret Service.
@@ -95,7 +95,7 @@ describe("Linux secret store", () => {
 
       // What the uninstaller runs: every secret this install stored is removed from the Secret Service.
       await svc.stop();
-      const cleared = jarvisCli(["credentials", "clear", "--state-dir", stateDir], desktop.env);
+      const cleared = attacheCli(["credentials", "clear", "--state-dir", stateDir], desktop.env);
       expect(cleared.stderr).toBe("");
       expect(JSON.parse(cleared.stdout)).toEqual({ store: "secret-service", removed: 1 });
       expect(keyringItems(desktop)).toEqual([]);
@@ -106,9 +106,9 @@ describe("Linux secret store", () => {
   it("removes a reachability check item a stopped check left behind when credentials are cleared", () => {
     const desktop = linuxDesktop();
     // A check stopped between writing its throwaway item and removing it, as a slow keyring can make it.
-    const probe = { label: "Jarvis: reachability check", attributes: { service: "dev.jarvis.linux-test", account: "jarvis-reachability-check" }, secret: "0123abcd" };
+    const probe = { label: "Attache: reachability check", attributes: { service: "dev.attache.linux-test", account: "attache-reachability-check" }, secret: "0123abcd" };
     writeFileSync(join(desktop.keyring, "items.json"), JSON.stringify([probe]));
-    const cleared = jarvisCli(["credentials", "clear", "--state-dir", newStateDir()], desktop.env);
+    const cleared = attacheCli(["credentials", "clear", "--state-dir", newStateDir()], desktop.env);
     expect(cleared.stderr).toBe("");
     expect(JSON.parse(cleared.stdout)).toEqual({ store: "secret-service", removed: 0 });
     expect(keyringItems(desktop)).toEqual([]);
@@ -135,7 +135,7 @@ describe("Linux secret store", () => {
   it(
     "says the secret tool is missing when libsecret is not installed",
     async () => {
-      const desktop = linuxDesktop({ JARVIS_SECRET_TOOL_BIN: "/nonexistent/secret-tool" });
+      const desktop = linuxDesktop({ ATTACHE_SECRET_TOOL_BIN: "/nonexistent/secret-tool" });
       const svc = await serve(newStateDir(), desktop.env);
       const status = await svc.api("GET", "/status");
       expect(status.credentialStore).toBe("file");
@@ -199,7 +199,7 @@ describe("Linux desktop notifications", () => {
       await svc.api("PATCH", "/config", { notifications: { desktop: true } });
 
       expect(await syncGithub(svc)).toBe("succeeded");
-      expect(notifications(desktop)).toEqual([["--app-name=Jarvis", "--", "Review a/b#7: Ship the <b>keyring</b> & notifications", "&lt;ada&gt; requested your review 10 days ago."]]);
+      expect(notifications(desktop)).toEqual([["--app-name=Attache", "--", "Review a/b#7: Ship the <b>keyring</b> & notifications", "&lt;ada&gt; requested your review 10 days ago."]]);
 
       await svc.api("PATCH", "/config", { notifications: { quietHours: { start: hhmm(-60), end: hhmm(60) } } });
       prs.push({ number: 8, title: "Quiet please" });
@@ -213,7 +213,7 @@ describe("Linux desktop notifications", () => {
   it(
     "runs without notify-send and logs that notifications are off",
     async () => {
-      const desktop = linuxDesktop({ JARVIS_NOTIFY_SEND_BIN: "/nonexistent/notify-send" });
+      const desktop = linuxDesktop({ ATTACHE_NOTIFY_SEND_BIN: "/nonexistent/notify-send" });
       const svc = await serve(newStateDir(), desktop.env);
       expect((await svc.api("GET", "/status")).version).toBeTruthy();
       await expect.poll(() => svc.log()).toContain("desktop notifications are off");
@@ -225,7 +225,7 @@ describe("Linux desktop notifications", () => {
   it(
     "runs without a desktop session bus and logs that notifications are off",
     async () => {
-      const desktop = linuxDesktop({ DBUS_SESSION_BUS_ADDRESS: undefined, XDG_RUNTIME_DIR: tempDir("jarvis-runtime-") });
+      const desktop = linuxDesktop({ DBUS_SESSION_BUS_ADDRESS: undefined, XDG_RUNTIME_DIR: tempDir("attache-runtime-") });
       const svc = await serve(newStateDir(), desktop.env);
       await expect.poll(() => svc.log()).toContain("desktop notifications are off");
       expect(svc.log()).toContain("no desktop session bus");

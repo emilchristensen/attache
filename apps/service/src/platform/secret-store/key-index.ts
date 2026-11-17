@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { writePrivateFile } from "../private-file.ts";
 
 /**
- * The keys this install has put in a system secret store, kept by Jarvis in
+ * The keys this install has put in a system secret store, kept by Attache in
  * an owner-only file because those stores cannot be listed safely.
  * Holds key names only, never values.
  */

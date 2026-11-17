@@ -1,5 +1,5 @@
 /**
- * runtime.json tells the CLI and the tests where `jarvis serve`
+ * runtime.json tells the CLI and the tests where `attache serve`
  * listens, and they read it while the service is still starting. A loaded
  * machine can pause the service midway through writing it; a reader must still
  * see no file or the whole file, never an empty or half-written one.
@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tempDir } from "./helpers.ts";
-import { childEnv, MAIN, newStateDir, runningChildren } from "./fixtures/jarvis-child.ts";
+import { childEnv, MAIN, newStateDir, runningChildren } from "./fixtures/attache-child.ts";
 
 /** A URL, because `--import` reads a Windows path's drive letter as a URL scheme. */
 const SLOW_RUNTIME_WRITE = pathToFileURL(join(import.meta.dirname, "fixtures/slow-runtime-write.mjs")).href;
@@ -26,8 +26,8 @@ describe("runtime.json", () => {
     "is never seen half written, even when the service is paused while writing it",
     async () => {
       const stateDir = newStateDir();
-      const pauses = join(tempDir("jarvis-runtime-"), "pauses.log");
-      const env = childEnv({ JARVIS_CREDENTIAL_STORE: "file", JARVIS_NO_NOTIFY: "1", SLOW_RUNTIME_WRITE_MS: "500", SLOW_RUNTIME_WRITE_LOG: pauses });
+      const pauses = join(tempDir("attache-runtime-"), "pauses.log");
+      const env = childEnv({ ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", SLOW_RUNTIME_WRITE_MS: "500", SLOW_RUNTIME_WRITE_LOG: pauses });
       const child = spawn(process.execPath, ["--import", SLOW_RUNTIME_WRITE, MAIN, "serve", "--state-dir", stateDir, "--port", "0"], { env, stdio: "ignore" });
       runningChildren.push(child);
 

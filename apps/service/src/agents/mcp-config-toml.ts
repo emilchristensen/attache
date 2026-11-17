@@ -5,10 +5,10 @@ import { foreignEntryError, isPlainObject, ourNames, type IsOurServer, type McpC
 /**
  * `[mcp_servers.<name>]` tables in a TOML file (Codex's `~/.codex/config.toml`).
  *
- * TOML has no editor that keeps comments and layout, so Jarvis edits the text:
+ * TOML has no editor that keeps comments and layout, so Attache edits the text:
  * it takes out the tables of its own entry and appends a fresh one. A real
  * parser checks the file before the edit, and checks afterwards that the only
- * change is Jarvis's entry; anything else is refused rather than written.
+ * change is Attache's entry; anything else is refused rather than written.
  */
 const KEY = "mcp_servers";
 
@@ -16,19 +16,19 @@ function parseToml(text: string, path: string): Record<string, unknown> {
   try {
     return parse(text) as Record<string, unknown>;
   } catch (e) {
-    throw new HooksFileError(`${path} is not valid TOML (${(e as Error).message.split("\n")[0]}); Jarvis will not change it.`);
+    throw new HooksFileError(`${path} is not valid TOML (${(e as Error).message.split("\n")[0]}); Attache will not change it.`);
   }
 }
 
 function serversOf(doc: Record<string, unknown>, path: string): Record<string, unknown> {
   const servers = doc[KEY];
   if (servers === undefined) return {};
-  if (!isPlainObject(servers)) throw new HooksFileError(`${path} has an \`${KEY}\` value that is not a table; Jarvis will not change it.`);
+  if (!isPlainObject(servers)) throw new HooksFileError(`${path} has an \`${KEY}\` value that is not a table; Attache will not change it.`);
   return servers;
 }
 
 const cannotEdit = (path: string) =>
-  new HooksFileError(`${path} lists MCP servers in a form Jarvis cannot change without touching other entries (an inline table or dotted keys); Jarvis will not change it. Write each server as its own [${KEY}.<name>] table, then connect again.`);
+  new HooksFileError(`${path} lists MCP servers in a form Attache cannot change without touching other entries (an inline table or dotted keys); Attache will not change it. Write each server as its own [${KEY}.<name>] table, then connect again.`);
 
 /** The document with `servers` as its server list; no list at all when it is empty. */
 function withServers(doc: Record<string, unknown>, servers: Record<string, unknown>): Record<string, unknown> {
@@ -44,7 +44,7 @@ function canonical(v: unknown): unknown {
   return v;
 }
 
-/** Whether `text` parses to exactly `expected`; Jarvis writes nothing else. */
+/** Whether `text` parses to exactly `expected`; Attache writes nothing else. */
 function parsesTo(text: string, expected: Record<string, unknown>): boolean {
   try {
     const actual = parse(text) as Record<string, unknown>;

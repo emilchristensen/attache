@@ -1,5 +1,5 @@
 /**
- * The logs a Jarvis service writes in its state folder's `logs` (service.log, and service.err.log
+ * The logs an Attache service writes in its state folder's `logs` (service.log, and service.err.log
  * and service.out.log under a service manager), copied out of temporary folders before they are gone,
  * so a failed CI run can upload them.
  */
@@ -9,10 +9,10 @@ import { join, relative } from "node:path";
 
 // Large enough for a whole test run's log; a runaway one keeps its end, where the failure is.
 const MAX_BYTES = 2 * 1024 * 1024;
-// Deep enough for a state folder inside the install test's home (AppData/Local/Jarvis/state/logs).
+// Deep enough for a state folder inside the install test's home (AppData/Local/Attache/state/logs).
 const MAX_DEPTH = 6;
-// Jarvis's test folders: jarvis-it-*, jarvis-e2e-*, "jarvis clean home æøå-*".
-const JARVIS_FOLDER = /^jarvis/i;
+// Attache's test folders: attache-it-*, attache-e2e-*, "attache clean home æøå-*".
+const ATTACHE_FOLDER = /^attache/i;
 const SKIP = new Set(["node_modules", ".git"]);
 
 /** The file's content, or its last `maxBytes` with a note of how much was left out. */
@@ -59,11 +59,11 @@ function logFolders(dir, depth) {
 }
 
 /**
- * Copy the `logs` folders of every Jarvis test folder in `tmp` to `out`, at the same relative paths.
+ * Copy the `logs` folders of every Attache test folder in `tmp` to `out`, at the same relative paths.
  * Returns how many files were copied.
  */
 export function collectServiceLogs({ tmp = tmpdir(), out, maxBytes = MAX_BYTES }) {
-  const roots = readdirSync(tmp, { withFileTypes: true }).filter((e) => e.isDirectory() && JARVIS_FOLDER.test(e.name));
+  const roots = readdirSync(tmp, { withFileTypes: true }).filter((e) => e.isDirectory() && ATTACHE_FOLDER.test(e.name));
   let copied = 0;
   for (const root of roots) {
     for (const logs of logFolders(join(tmp, root.name), MAX_DEPTH)) copied += copyLogFolder(logs, join(out, relative(tmp, logs)), { maxBytes });

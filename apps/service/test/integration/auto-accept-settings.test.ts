@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
-const HOME = process.env.JARVIS_AGENT_HOME!;
+const HOME = process.env.ATTACHE_AGENT_HOME!;
 const running: TestService[] = [];
 
 async function start(opts: Parameters<typeof startTestService>[0] = {}): Promise<TestService> {

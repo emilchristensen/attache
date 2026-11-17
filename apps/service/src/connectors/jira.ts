@@ -1,6 +1,6 @@
 /**
  * Jira through the Atlassian Rovo MCP server, reached either through the
- * user's claude.ai connector or Jarvis's own MCP client (atlassian-backend.ts).
+ * user's claude.ai connector or Attache's own MCP client (atlassian-backend.ts).
  * Reads are JQL searches with cursor pagination; the one write is a comment,
  * verified by reading the issue's comments back.
  */
@@ -22,7 +22,7 @@ import {
 } from "./atlassian.ts";
 import { adfText, authorId, pick, str } from "./atlassian-shapes.ts";
 import { atlassianBackend, usesClaude } from "./atlassian-backend.ts";
-import { plural } from "@jarvis/contracts";
+import { plural } from "@attache/contracts";
 
 export interface JiraIssue {
   key: string;
@@ -140,7 +140,7 @@ export const jiraAdapter: ConnectorAdapter = {
     authMethods: atlassianAuthMethods("jira"),
     scopes: SCOPES.map((s) => ({ id: s.id, label: s.label, default: s.id !== "reported_open" })),
     writeActions: [{ id: "jira.comment", label: "Add a comment to a work item" }],
-    setupHelp: "Jarvis connects to Jira through the Atlassian Rovo MCP server with your own permissions, read-only unless you authorise commenting. Comments are only posted after you approve each draft.",
+    setupHelp: "Attache connects to Jira through the Atlassian Rovo MCP server with your own permissions, read-only unless you authorise commenting. Comments are only posted after you approve each draft.",
     unavoidableSteps: atlassianSetupSteps(),
   },
 

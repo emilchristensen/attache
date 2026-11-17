@@ -1,4 +1,4 @@
-import type { JobView } from "@jarvis/contracts";
+import type { JobView } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 
 /**

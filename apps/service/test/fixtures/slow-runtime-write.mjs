@@ -1,4 +1,4 @@
-// Preloaded with `node --import` so the `jarvis` executable writes runtime.json the way a loaded
+// Preloaded with `node --import` so the `attache` executable writes runtime.json the way a loaded
 // machine can make it: paused between creating the file and filling it. Every write to a file named
 // after runtime.json, its temporary files included, waits SLOW_RUNTIME_WRITE_MS after opening the
 // file, and its path is appended to SLOW_RUNTIME_WRITE_LOG, so a test can tell the pause took place.

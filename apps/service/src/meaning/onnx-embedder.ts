@@ -24,7 +24,7 @@ export function ortWasmDir(): string {
   } catch {
     // not installed as a package: only the release layout applies
   }
-  throw new Error(`ONNX Runtime's ${WASM_FILE} is missing from ${here}. Reinstall Jarvis.`);
+  throw new Error(`ONNX Runtime's ${WASM_FILE} is missing from ${here}. Reinstall Attache.`);
 }
 
 let runtimeReady = false;

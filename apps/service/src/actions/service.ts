@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import type { ActionStatus, ActionView } from "@jarvis/contracts";
+import type { ActionStatus, ActionView } from "@attache/contracts";
 import { type Db, json, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 

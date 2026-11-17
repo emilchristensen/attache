@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@jarvis/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@attache/contracts";
 import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
@@ -41,7 +41,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
   return (
     <main className="setup">
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" aria-hidden /> Jarvis setup
+        <span className="orb" aria-hidden /> Attache setup
       </div>
       <nav aria-label="Setup progress">
         <ol className="steps">
@@ -112,8 +112,8 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
     });
   return (
     <section className="stack">
-      <h1>Where should Jarvis keep your knowledge?</h1>
-      <p className="muted">Jarvis stores memory as plain Markdown in a folder you choose. You can open it in Obsidian or any editor. Settings, jobs and credentials stay outside this folder.</p>
+      <h1>Where should Attache keep your knowledge?</h1>
+      <p className="muted">Attache stores memory as plain Markdown in a folder you choose. You can open it in Obsidian or any editor. Settings, jobs and credentials stay outside this folder.</p>
       <div className="card stack">
         <label className="field">
           Data folder
@@ -132,22 +132,22 @@ function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void
             <span className="small">{preview.note}</span>
             {preview.willCreate.length > 0 && <span className="small">Will create: {preview.willCreate.join(", ")}</span>}
             <span className="small">Will modify: {preview.willModify.length ? preview.willModify.join(", ") : "nothing"}</span>
-            {!preview.writable && <span className="error-text small">Jarvis cannot write here. Choose another folder.</span>}
+            {!preview.writable && <span className="error-text small">Attache cannot write here. Choose another folder.</span>}
           </div>
         )}
       </div>
       <details className="card join-brain">
         <summary>
-          <strong>Already use Jarvis on another Machine?</strong>
+          <strong>Already use Attache on another Machine?</strong>
           <span className="small muted"> Join its Brain instead of starting a new one.</span>
         </summary>
         <div className="join-brain-body">
-          <JoinForm folder={path} primary={false} intro="With Replication set up on your other Machine, Jarvis clones that Brain into the data folder above, which must be empty or new. Leave the import and identity below as they are: they come with the Brain." onDone={onNext} />
+          <JoinForm folder={path} primary={false} intro="With Replication set up on your other Machine, Attache clones that Brain into the data folder above, which must be empty or new. Leave the import and identity below as they are: they come with the Brain." onDone={onNext} />
         </div>
       </details>
       <div className="card stack">
         <h3>Import an existing Markdown folder or Obsidian vault (optional)</h3>
-        <p className="small muted">Jarvis reads it in place and cites it. It does not copy, change or move anything in that folder.</p>
+        <p className="small muted">Attache reads it in place and cites it. It does not copy, change or move anything in that folder.</p>
         <div className="row" style={{ flexWrap: "nowrap" }}>
           <input value={importPath} onChange={(e) => { setImportPath(e.target.value); setImportPreview(null); }} placeholder={defaults.data?.examples.notes} spellCheck={false} aria-label="Folder to import" />
           <button disabled={!importPath.trim()} onClick={() => run("ip", async () => setImportPreview(await post("/import/preview", { path: importPath })))}>
@@ -239,7 +239,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
   const caps = useResource<Caps>("/capabilities", ["config.changed", "connections.changed"]);
   return (
     <section className="stack">
-      <h1>Choose what Jarvis does</h1>
+      <h1>Choose what Attache does</h1>
       <p className="muted">Search is the core and works with just your notes. Everything else is optional, and you can change it later in Settings.</p>
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
@@ -259,13 +259,13 @@ function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () =>
   return (
     <section className="stack">
       <h1>Connect sources (optional)</h1>
-      <p className="muted">Connect only what you want Jarvis to watch. Every connection starts read-only; writing is authorised separately, per action. You can skip this and connect later.</p>
+      <p className="muted">Connect only what you want Attache to watch. Every connection starts read-only; writing is authorised separately, per action. You can skip this and connect later.</p>
       {oauth && <div className={`state ${oauth === "ok" ? "partial" : "error"} small`}>{loc.search.get("message")}</div>}
       {caps.loading && !caps.data && <Loading />}
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && SOURCE_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <h2>Harnesses</h2>
-      <p className="muted">Connect the Harnesses you use. Each gets Jarvis's MCP server, so it can search, read and save to your Brain, and asks you to confirm every save. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Jarvis's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
+      <p className="muted">Connect the Harnesses you use. Each gets Attache's MCP server, so it can search, read and save to your Brain, and asks you to confirm every save. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Attache's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
       {caps.data && HARNESS_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <Nav onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </section>
@@ -295,7 +295,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
     <section className="stack">
       <h1>Model and schedules</h1>
       <h2>Model</h2>
-      <p className="muted small">Optional. Without a model, Jarvis still searches and shows the evidence it finds.</p>
+      <p className="muted small">Optional. Without a model, Attache still searches and shows the evidence it finds.</p>
       {card("model")}
       {attentionOn && (
         <>
@@ -316,7 +316,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
               <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> Show a desktop notification for new urgent items
             </label>
           </div>
-          <p className="small muted">Schedules run in the Jarvis service, not the browser. If this Machine sleeps, missed runs are caught up once when it wakes.</p>
+          <p className="small muted">Schedules run in the Attache service, not the browser. If this Machine sleeps, missed runs are caught up once when it wakes.</p>
         </>
       )}
       <h2>Action permissions</h2>
@@ -351,7 +351,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
   return (
     <section className="stack">
       <h1>Check and finish</h1>
-      <p className="muted">Jarvis tests each connection you set up. Anything not ready stays visible in Settings; you can finish now and fix it later.</p>
+      <p className="muted">Attache tests each connection you set up. Anything not ready stays visible in Settings; you can finish now and fix it later.</p>
       {testing && <Loading lines={5} label="Testing configuration" />}
       <ErrorState error={err} retry={test} />
       {result && (
@@ -371,7 +371,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
           <div className="card">
             <h3>Connections</h3>
             {result.connections.length === 0 ? (
-              <p className="small muted">No connections. Jarvis will work as a notes-only workspace.</p>
+              <p className="small muted">No connections. Attache will work as a notes-only workspace.</p>
             ) : (
               <div className="check-list">
                 {result.connections.map((c) => (

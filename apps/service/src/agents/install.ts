@@ -10,9 +10,9 @@ import type { AgentIntegration } from "./integrations.ts";
 import { McpRegistration } from "./mcp-registration.ts";
 import type { McpServerEntry } from "./mcp-config.ts";
 
-/** Home directory whose Harness settings Jarvis edits. Tests point this at a temporary folder. */
+/** Home directory whose Harness settings Attache edits. Tests point this at a temporary folder. */
 export function agentHome(): string {
-  return process.env.JARVIS_AGENT_HOME || platformLocations().home;
+  return process.env.ATTACHE_AGENT_HOME || platformLocations().home;
 }
 
 /**
@@ -34,33 +34,33 @@ export function stablePath(p: string): string {
 
 /** The hook script next to the running service: the bundled .mjs in releases, the TypeScript source in development. */
 export function hookScript(): string {
-  if (process.env.JARVIS_AGENT_HOOK_SCRIPT) return process.env.JARVIS_AGENT_HOOK_SCRIPT;
+  if (process.env.ATTACHE_AGENT_HOOK_SCRIPT) return process.env.ATTACHE_AGENT_HOOK_SCRIPT;
   const here = dirname(fileURLToPath(import.meta.url));
-  for (const candidate of [join(here, "jarvis-agent-hook.mjs"), join(here, "jarvis-agent-hook.ts")]) if (existsSync(candidate)) return candidate;
-  throw new Error(`The Jarvis agent hook script is missing next to ${here}`);
+  for (const candidate of [join(here, "attache-agent-hook.mjs"), join(here, "attache-agent-hook.ts")]) if (existsSync(candidate)) return candidate;
+  throw new Error(`The Attache agent hook script is missing next to ${here}`);
 }
 
-/** The script behind this install's `jarvis` command: the bundled service in releases, `JARVIS_CLI_SCRIPT` in tests and development. */
+/** The script behind this install's `attache` command: the bundled service in releases, `ATTACHE_CLI_SCRIPT` in tests and development. */
 export function cliScript(): string {
-  return process.env.JARVIS_CLI_SCRIPT || (process.argv[1] && /jarvis-service\.mjs$/.test(process.argv[1]) ? process.argv[1] : "");
+  return process.env.ATTACHE_CLI_SCRIPT || (process.argv[1] && /attache-service\.mjs$/.test(process.argv[1]) ? process.argv[1] : "");
 }
 
 /**
- * How a Harness starts Jarvis's MCP server for this install: `jarvis mcp`
+ * How a Harness starts Attache's MCP server for this install: `attache mcp`
  * pinned to its state folder, through the bundled runtime and the installer's
  * stable `current` path when there is one, so it needs nothing on PATH.
  */
 export function mcpServerEntry(stateDir: string): McpServerEntry {
   const script = cliScript();
   const args = ["mcp", "--state-dir", stateDir];
-  return script ? { command: stablePath(process.execPath), args: [stablePath(script), ...args] } : { command: "jarvis", args };
+  return script ? { command: stablePath(process.execPath), args: [stablePath(script), ...args] } : { command: "attache", args };
 }
 
-const RULE_MARKER = "<!-- managed by Jarvis: this file is rewritten when your memory changes, and removed when you disconnect -->";
+const RULE_MARKER = "<!-- managed by Attache: this file is rewritten when your memory changes, and removed when you disconnect -->";
 
 /** Turn the memory context into an always-on rule file (Antigravity's rule format). */
 export function ruleFileText(context: string): string {
-  return `---\ntrigger: always_on\ndescription: Jarvis memory for this user\n---\n${RULE_MARKER}\n\n${context.trim()}\n`;
+  return `---\ntrigger: always_on\ndescription: Attache memory for this user\n---\n${RULE_MARKER}\n\n${context.trim()}\n`;
 }
 
 /** What is installed in one Harness. */
@@ -77,16 +77,16 @@ export interface HarnessStatus {
 }
 
 /**
- * Connecting a Harness: Jarvis's MCP server in its MCP configuration and, for
+ * Connecting a Harness: Attache's MCP server in its MCP configuration and, for
  * a Harness with hooks, the hooks and (where it has no session-start hook) an
- * always-on memory rule. Only Jarvis's own entries are touched, each file is
- * backed up first, and a file Jarvis cannot parse stops the change before
+ * always-on memory rule. Only Attache's own entries are touched, each file is
+ * backed up first, and a file Attache cannot parse stops the change before
  * anything is written.
  */
 export class AgentHooks {
   private readonly stateDir: string;
   private readonly backupDir: string;
-  /** Jarvis's MCP server in each Harness's configuration. */
+  /** Attache's MCP server in each Harness's configuration. */
   readonly mcp: McpRegistration;
 
   constructor(stateDir: string, backupDir: string) {
@@ -99,17 +99,17 @@ export class AgentHooks {
     return a.hooks ? join(agentHome(), a.hooks.configFile) : null;
   }
 
-  /** One rule file per Jarvis instance: `jarvis-memory.md` for the default install. */
+  /** One rule file per Attache instance: `attache-memory.md` for the default install. */
   rulesPath(a: AgentIntegration): string | null {
     return a.hooks?.rulesDir ? join(agentHome(), a.hooks.rulesDir, `${this.ownerKey()}-memory.md`) : null;
   }
 
-  /** Only hooks that point at this Jarvis instance's state folder are ours; another instance's are foreign. */
-  isOurs = (command: string): boolean => command.includes("jarvis-agent-hook") && command.includes(shellPath(this.stateDir));
+  /** Only hooks that point at this Attache instance's state folder are ours; another instance's are foreign. */
+  isOurs = (command: string): boolean => command.includes("attache-agent-hook") && command.includes(shellPath(this.stateDir));
 
-  /** Owner key for `named` hook files and the MCP server's name: plain "jarvis" for the default install, distinct for any other instance. */
+  /** Owner key for `named` hook files and the MCP server's name: plain "attache" for the default install, distinct for any other instance. */
   ownerKey(): string {
-    return this.stateDir === defaultStateDir() ? "jarvis" : `jarvis-${createHash("sha256").update(this.stateDir).digest("hex").slice(0, 8)}`;
+    return this.stateDir === defaultStateDir() ? "attache" : `attache-${createHash("sha256").update(this.stateDir).digest("hex").slice(0, 8)}`;
   }
 
   expected(a: AgentIntegration): HookSpec[] {
@@ -144,7 +144,7 @@ export class AgentHooks {
   }
 
   install(a: AgentIntegration, context: string): { path: string | null; backup: string | null; hooks: HookSpec[]; mcp: { path: string; backup: string | null } } {
-    // Every change is worked out first: a file Jarvis must not change stops the connection before anything is written.
+    // Every change is worked out first: a file Attache must not change stops the connection before anything is written.
     const hooks = this.planHooks(a);
     const mcp = this.mcp.planInstall(a);
     this.checkRules(a);
@@ -156,10 +156,10 @@ export class AgentHooks {
 
   private checkRules(a: AgentIntegration) {
     const rules = this.rulesPath(a);
-    if (rules && existsSync(rules) && !readFileSync(rules, "utf8").includes(RULE_MARKER)) throw new HooksFileError(`${rules} exists and was not written by Jarvis; Jarvis will not change it.`);
+    if (rules && existsSync(rules) && !readFileSync(rules, "utf8").includes(RULE_MARKER)) throw new HooksFileError(`${rules} exists and was not written by Attache; Attache will not change it.`);
   }
 
-  /** Keep a Harness's rule file in step with the memory context. Never replaces a file Jarvis did not write. */
+  /** Keep a Harness's rule file in step with the memory context. Never replaces a file Attache did not write. */
   writeRules(a: AgentIntegration, context: string) {
     const rules = this.rulesPath(a);
     if (!rules) return;
@@ -175,7 +175,7 @@ export class AgentHooks {
     return { path: r.path, changed: r.changed };
   }
 
-  /** Remove this install from every Harness, one at a time, so a file Jarvis cannot edit does not stop the rest. */
+  /** Remove this install from every Harness, one at a time, so a file Attache cannot edit does not stop the rest. */
   uninstallAll(agents: AgentIntegration[]): Array<{ agent: string; path: string | null; removed: number; mcp: string | null; error?: string }> {
     return agents.map((a) => {
       try {

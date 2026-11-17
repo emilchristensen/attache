@@ -1,6 +1,6 @@
 /**
  * Shared access to the Atlassian Rovo MCP server for the Jira and Confluence
- * adapters. Jarvis is a direct MCP client (no model in the loop):
+ * adapters. Attache is a direct MCP client (no model in the loop):
  *
  * - "oauth": OAuth 2.1 against the authorization server the MCP resource
  *   advertises (RFC 9728 → RFC 8414), dynamic client registration (RFC 7591)
@@ -8,7 +8,7 @@
  * - "api-token": an Atlassian API token created for the MCP server, sent as
  *   Basic auth. The organization admin must allow API-token access.
  */
-import type { ConnectionDefinition } from "@jarvis/contracts";
+import type { ConnectionDefinition } from "@attache/contracts";
 import type { AdapterContext } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import { asRemoteError, basicAuth, normalizeSiteUrl, stringSetting } from "./common.ts";
@@ -59,9 +59,9 @@ export function atlassianAuthMethods(product: Product, extraFields: ConnectionDe
 
 export function atlassianSetupSteps(): string[] {
   return [
-    "Recommended: connect Atlassian Rovo in claude.ai → Settings → Connectors with your work account, and have Claude Code installed and signed in on this computer. Nothing else is needed; Jarvis stores no Atlassian credential.",
-    "Signing in directly instead: your Atlassian organization must allow the Atlassian Rovo MCP server. If sign-in or the API token is refused, an org admin manages it in Atlassian Administration → your organization → Rovo → Rovo MCP server (trusted domains, and whether API tokens are allowed). Jarvis signs in from this computer (http://127.0.0.1).",
-    "Signing in directly the first time asks you to approve Jarvis for your site; approve it for the site you enter here.",
+    "Recommended: connect Atlassian Rovo in claude.ai → Settings → Connectors with your work account, and have Claude Code installed and signed in on this computer. Nothing else is needed; Attache stores no Atlassian credential.",
+    "Signing in directly instead: your Atlassian organization must allow the Atlassian Rovo MCP server. If sign-in or the API token is refused, an org admin manages it in Atlassian Administration → your organization → Rovo → Rovo MCP server (trusted domains, and whether API tokens are allowed). Attache signs in from this computer (http://127.0.0.1).",
+    "Signing in directly the first time asks you to approve Attache for your site; approve it for the site you enter here.",
   ];
 }
 
@@ -123,7 +123,7 @@ interface OAuthClient {
 function requireSecureUrl(raw: string, what: string): string {
   const u = new URL(raw);
   const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost";
-  if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback && process.env.JARVIS_TEST_ENDPOINTS === "1")) throw new RemoteError(`Refusing a non-https ${what}: ${u.origin}`, "error");
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback && process.env.ATTACHE_TEST_ENDPOINTS === "1")) throw new RemoteError(`Refusing a non-https ${what}: ${u.origin}`, "error");
   return u.toString();
 }
 
@@ -163,10 +163,10 @@ async function registeredClient(ctx: AdapterContext, redirectUri: string): Promi
   const reg = await ctx.http.request<{ client_id?: string; client_secret?: string }>({
     method: "POST",
     url: requireSecureUrl(server.registration_endpoint, "registration endpoint"),
-    body: { client_name: "Jarvis (local)", redirect_uris: [redirectUri], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" },
+    body: { client_name: "Attache (local)", redirect_uris: [redirectUri], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" },
     retries: 0,
   });
-  if (!reg.data.client_id) throw new RemoteError("Atlassian did not register a client for Jarvis", "error");
+  if (!reg.data.client_id) throw new RemoteError("Atlassian did not register a client for Attache", "error");
   if (reg.data.client_secret) await ctx.setSecret("clientSecret", reg.data.client_secret);
   return {
     clientId: reg.data.client_id,
@@ -205,7 +205,7 @@ async function tokenRequest(ctx: AdapterContext, form: Record<string, string>, r
   } catch (e) {
     const err = asRemoteError(e);
     if (/invalid_grant/.test(err.message)) throw new RemoteError("Atlassian rejected the stored sign-in (invalid_grant). Sign in with Atlassian again.", "unauthorized", err.status);
-    if (/invalid_client|unauthorized_client/.test(err.message)) throw new RemoteError("Atlassian no longer recognises Jarvis's registered client. Sign in with Atlassian again.", "unauthorized", err.status);
+    if (/invalid_client|unauthorized_client/.test(err.message)) throw new RemoteError("Atlassian no longer recognises Attache's registered client. Sign in with Atlassian again.", "unauthorized", err.status);
     throw err;
   }
 }
@@ -290,7 +290,7 @@ function client(ctx: AdapterContext): McpHttpClient {
             }),
       },
       ctx.signal,
-      { clientName: "jarvis", baseDelayMs: process.env.JARVIS_TEST_ENDPOINTS === "1" ? 5 : 500 },
+      { clientName: "attache", baseDelayMs: process.env.ATTACHE_TEST_ENDPOINTS === "1" ? 5 : 500 },
     );
     clients.set(ctx, c);
   }

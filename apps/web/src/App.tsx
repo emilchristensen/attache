@@ -51,11 +51,11 @@ function Pair({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="setup" style={{ maxWidth: 520 }}>
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" aria-hidden /> Jarvis
+        <span className="orb" aria-hidden /> Attache
       </div>
       <div className="card stack" style={{ marginTop: 24 }}>
         <h1>Pair this browser</h1>
-        <p className="muted">Jarvis runs on this computer and only talks to paired clients. The installer opens this page with a code. To pair again, run <code>jarvis pair --open</code> in a terminal, or create a code in Settings on an already paired browser.</p>
+        <p className="muted">Attache runs on this computer and only talks to paired clients. The installer opens this page with a code. To pair again, run <code>attache pair --open</code> in a terminal, or create a code in Settings on an already paired browser.</p>
         <form
           className="stack"
           onSubmit={(e) => {
@@ -111,7 +111,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="brand">
-          <span className="orb" aria-hidden /> Jarvis
+          <span className="orb" aria-hidden /> Attache
         </div>
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={`g then ${n.key}`}>
@@ -127,7 +127,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
       <div className="main">
         {live !== "open" && (
           <div className={`banner ${live === "closed" ? "danger" : "warn"}`} role="status">
-            {live === "connecting" ? "Reconnecting to the Jarvis service… Work in progress continues in the service." : "Disconnected from the Jarvis service. Retrying."}
+            {live === "connecting" ? "Reconnecting to the Attache service… Work in progress continues in the service." : "Disconnected from the Attache service. Retrying."}
           </div>
         )}
         <ErrorBoundary>{children}</ErrorBoundary>
@@ -165,8 +165,8 @@ export function App() {
   };
   useEffect(check, []);
 
-  if (state === "checking") return <div className="setup"><Loading lines={4} label="Connecting to Jarvis" /></div>;
-  if (state === "offline") return <div className="setup"><ErrorState error={err} retry={check} title="Jarvis service is not reachable" /><p className="muted small" style={{ marginTop: 12 }}>The service normally starts at login. Run <code>jarvis status</code> or reinstall to repair it.</p></div>;
+  if (state === "checking") return <div className="setup"><Loading lines={4} label="Connecting to Attache" /></div>;
+  if (state === "offline") return <div className="setup"><ErrorState error={err} retry={check} title="Attache service is not reachable" /><p className="muted small" style={{ marginTop: 12 }}>The service normally starts at login. Run <code>attache status</code> or reinstall to repair it.</p></div>;
   if (state === "unpaired" || loc.path === "/pair") return <Pair onPaired={check} />;
   if (!session || !cfg.data) return <div className="setup"><Loading lines={4} /></div>;
   if (!cfg.data.config.setupCompleted || loc.path === "/setup") return <EvidenceProvider><Setup onDone={() => { cfg.reload(); navigate("/"); }} /></EvidenceProvider>;

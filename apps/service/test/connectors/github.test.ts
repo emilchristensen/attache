@@ -133,7 +133,7 @@ describe("GitHub adapter contract", () => {
     const action = { kind: "github.comment", target: { repo: "acme/web", number: 7 }, payload: { body: "LGTM" }, effectKey: "eff-1" };
     const r = await githubAdapter.execute!(ctx(), action);
     expect(r).toMatchObject({ verified: true, remoteId: "100" });
-    expect(posted[0]!.body).toContain("<!-- jarvis:effect=eff-1 -->");
+    expect(posted[0]!.body).toContain("<!-- attache:effect=eff-1 -->");
     const found = await githubAdapter.findEffect!(ctx(), action);
     expect(found?.remoteId).toBe("100");
     expect(await githubAdapter.findEffect!(ctx(), { ...action, effectKey: "other" })).toBeNull();

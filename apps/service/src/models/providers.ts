@@ -39,7 +39,7 @@ export const DEFAULT_MODELS = {
 } as const;
 
 export function findClaudeCli(): string | null {
-  const candidates = [process.env.JARVIS_CLAUDE_BIN, ...harnessInstalls(platformLocations())["claude-code"].executables].filter(Boolean) as string[];
+  const candidates = [process.env.ATTACHE_CLAUDE_BIN, ...harnessInstalls(platformLocations())["claude-code"].executables].filter(Boolean) as string[];
   return candidates.find((c) => existsSync(c)) ?? null;
 }
 
@@ -62,12 +62,12 @@ export function claudeCliProvider(model: string, bin = findClaudeCli()): ModelPr
     model: model || DEFAULT_MODELS["claude-cli"],
     async *stream(req) {
       if (!bin) throw new ModelError("not_configured", "Claude Code CLI was not found. Install it from claude.com/claude-code, or choose another model provider.");
-      const cwd = join(tmpdir(), "jarvis-model-cwd");
+      const cwd = join(tmpdir(), "attache-model-cwd");
       mkdirSync(cwd, { recursive: true });
       const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--system-prompt", req.system, "--model", model || DEFAULT_MODELS["claude-cli"]];
       let child;
       try {
-        child = spawnTool(bin, args, { cwd, env: { ...process.env, CLAUDE_INVOKED_BY: "jarvis" } });
+        child = spawnTool(bin, args, { cwd, env: { ...process.env, CLAUDE_INVOKED_BY: "attache" } });
       } catch (e) {
         if (e instanceof UnlaunchableToolError) throw new ModelError("not_configured", e.message);
         throw e;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AttentionItemView, Coverage } from "@jarvis/contracts";
+import type { AttentionItemView, Coverage } from "@attache/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import { fingerprint } from "./fingerprint.ts";
 import type { AttentionCandidate } from "../connectors/types.ts";

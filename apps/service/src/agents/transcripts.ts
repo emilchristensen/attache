@@ -72,7 +72,7 @@ export function parseClaudeCode(raw: string): ParsedSession {
 /**
  * Codex `~/.codex/sessions/YYYY/MM/DD/rollout-<time>-<session>.jsonl`. User and
  * assistant `message` items only: developer-role items are where injected
- * context (including Jarvis's own memory block) lands, so they are skipped.
+ * context (including Attache's own memory block) lands, so they are skipped.
  */
 export function parseCodex(raw: string): ParsedSession {
   const turns: Turn[] = [];

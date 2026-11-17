@@ -6,12 +6,12 @@ import { startServer, type ServerHandle } from "../../src/http/server.ts";
 import { createPairingCode, redeemPairingCode } from "../../src/http/security.ts";
 import type { Clock } from "../../src/replication/clock.ts";
 
-process.env.JARVIS_CREDENTIAL_STORE = "file";
-process.env.JARVIS_NO_NOTIFY = "1";
+process.env.ATTACHE_CREDENTIAL_STORE = "file";
+process.env.ATTACHE_NO_NOTIFY = "1";
 // Harness hooks are written under this home, never the real ~/.claude, ~/.codex or ~/.gemini.
-process.env.JARVIS_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "jarvis-it-home æøå-"));
+process.env.ATTACHE_AGENT_HOME ??= mkdtempSync(join(tmpdir(), "attache-it-home æøå-"));
 // The command skills tell agents to run: the CLI from source, since tests have no bundle.
-process.env.JARVIS_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts");
+process.env.ATTACHE_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts");
 
 /**
  * A new temporary folder whose path has a space and non-ASCII letters, as an
@@ -19,7 +19,7 @@ process.env.JARVIS_CLI_SCRIPT ??= join(import.meta.dirname, "../../src/main.ts")
  * harness shows that such paths work: in hook commands, git, the index and file watching.
  */
 export function testFolder(name: string): string {
-  return mkdtempSync(join(tmpdir(), `jarvis-it-${name} æøå-`));
+  return mkdtempSync(join(tmpdir(), `attache-it-${name} æøå-`));
 }
 
 export interface TestService {
@@ -55,14 +55,14 @@ export async function startTestService(opts: TestServiceOptions = {}): Promise<T
   const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
-  // What `jarvis serve` writes, so the CLI finds this service.
+  // What `attache serve` writes, so the CLI finds this service.
   writeFileSync(app.paths.runtimeFile, JSON.stringify({ pid: process.pid, port: server.port, url: server.url, version: "test", startedAt: app.startedAt, instance: app.instance }));
   const { code } = createPairingCode(app.db);
   const token = redeemPairingCode(app.db, code, { name: "test", kind: "cli" })!.token;
   const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
     const res = await fetch(`${server.url}/api/v1${path}`, {
       method,
-      headers: { authorization: `Bearer ${token}`, "x-jarvis-client": "1", ...(body !== undefined ? { "content-type": "application/json" } : {}), ...headers },
+      headers: { authorization: `Bearer ${token}`, "x-attache-client": "1", ...(body !== undefined ? { "content-type": "application/json" } : {}), ...headers },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
     const text = await res.text();
@@ -103,7 +103,7 @@ export async function startTestService(opts: TestServiceOptions = {}): Promise<T
     async stop() {
       await server.close();
       await app.stop();
-      // What `jarvis serve` does on a clean stop, so the CLI sees the service as stopped.
+      // What `attache serve` does on a clean stop, so the CLI sees the service as stopped.
       rmSync(app.paths.runtimeFile, { force: true });
     },
   };

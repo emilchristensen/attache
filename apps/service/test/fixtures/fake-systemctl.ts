@@ -14,7 +14,7 @@ export interface FakeSystemdState {
  * can pretend there is no user session to talk to.
  */
 export function fakeSystemctl(opts: { noUserSession?: boolean } = {}) {
-  const dir = tempDir("jarvis-fake-systemctl-");
+  const dir = tempDir("attache-fake-systemctl-");
   const stateFile = join(dir, "state.json");
   writeFileSync(stateFile, JSON.stringify({ enabled: [], active: [] } satisfies FakeSystemdState));
   const bin = join(dir, "bin");

@@ -14,6 +14,6 @@ const WINDOWS_UNQUOTABLE = /["%$`\r\n]/;
  */
 export function shellPath(path: string, os: Os = currentOs()): string {
   if (os !== "windows") return `'${path.replace(/'/g, `'\\''`)}'`;
-  if (WINDOWS_UNQUOTABLE.test(path)) throw new Error(`Jarvis cannot put ${path} in a command line on Windows, because it contains ", %, $, \` or a line break. Move Jarvis or its state folder to a path without them.`);
+  if (WINDOWS_UNQUOTABLE.test(path)) throw new Error(`Attache cannot put ${path} in a command line on Windows, because it contains ", %, $, \` or a line break. Move Attache or its state folder to a path without them.`);
   return `"${path.replace(/\\/g, "/")}"`;
 }

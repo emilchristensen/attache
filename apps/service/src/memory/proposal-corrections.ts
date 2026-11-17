@@ -1,4 +1,4 @@
-import type { ProposalCorrection } from "@jarvis/contracts";
+import type { ProposalCorrection } from "@attache/contracts";
 import { z } from "zod";
 import { HttpError } from "../http/router.ts";
 import { sameText } from "./same-text.ts";

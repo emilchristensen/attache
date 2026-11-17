@@ -45,17 +45,17 @@ export interface IndexedDocument {
   mtimeMs: number;
 }
 
-const README = `# Jarvis data folder
+const README = `# Attache data folder
 
-Jarvis keeps your knowledge here as plain Markdown. You can read and edit these files in any editor, including Obsidian.
+Attache keeps your knowledge here as plain Markdown. You can read and edit these files in any editor, including Obsidian.
 
-- \`memory/\` is curated memory: people, projects, decisions and notes Jarvis recalls as knowledge.
+- \`memory/\` is curated memory: people, projects, decisions and notes Attache recalls as knowledge.
   Each note has a \`## Current State\` section (one dated entry per subject, replaced on correction) and an append-only \`## History\`.
 - \`evidence/\` is archived evidence: captures, Harness sessions and connector observations (and chat archives from earlier versions).
-  Jarvis cites it but does not treat it as confirmed fact.
+  Attache cites it but does not treat it as confirmed fact.
 - \`deliverables/\` holds generated work products such as briefings, research results and drafts.
 - \`review/\` holds what waits for your decision: the inbox (with its dismiss and snooze decisions) and Proposals, one small JSON file per item, so every Machine shows the same.
-  It is Jarvis's own bookkeeping in JSON and is never searched.
+  It is Attache's own bookkeeping in JSON and is never searched.
 
 Search indexes are rebuilt from these files, so deleting the index never loses knowledge.
 Service state (jobs, approvals, settings) and credentials live outside this folder.
@@ -106,7 +106,7 @@ export class MemoryStore {
   }
 
   get rootRef(): IndexRoot | null {
-    return this.root ? { id: "data", path: this.root, label: "Jarvis data folder" } : null;
+    return this.root ? { id: "data", path: this.root, label: "Attache data folder" } : null;
   }
 
   private requireRoot(): string {
@@ -119,7 +119,7 @@ export class MemoryStore {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
-    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".jarvis"]) {
+    for (const d of ["memory/people", "memory/projects", "memory/decisions", "memory/notes", "evidence/captures", "evidence/connectors", "evidence/sessions", "deliverables/briefings", "deliverables/research", "deliverables/drafts", ".attache"]) {
       const abs = join(root, d);
       if (!existsSync(abs)) {
         mkdirSync(abs, { recursive: true });
@@ -130,10 +130,10 @@ export class MemoryStore {
       writeFileSync(join(root, "README.md"), README);
       created.push("README.md");
     }
-    // Record what Jarvis created, so a data-deleting uninstall never removes files the user already had.
-    const owned = join(root, ".jarvis", "owned.json");
+    // Record what Attache created, so a data-deleting uninstall never removes files the user already had.
+    const owned = join(root, ".attache", "owned.json");
     if (!existsSync(owned)) {
-      const mine = ["memory", "evidence", "deliverables", REVIEW_STATE_DIR, ".jarvis", "README.md"].filter((e) => !before?.has(e));
+      const mine = ["memory", "evidence", "deliverables", REVIEW_STATE_DIR, ".attache", "README.md"].filter((e) => !before?.has(e));
       writeFileSync(owned, JSON.stringify({ createdFolder: !before || before.size === 0, created: mine, at: nowIso() }, null, 2));
     }
     this.takeLock(root);
@@ -182,7 +182,7 @@ export class MemoryStore {
     mkdirSync(dirname(abs), { recursive: true });
     const tmp = join(dirname(abs), `.${randomUUID()}.tmp`);
     // Archived evidence and generated deliverables never keep credentials that appeared in sources.
-    // Everything Jarvis writes is LF, whatever line breaks the text arrived with, so every Machine holds the same bytes.
+    // Everything Attache writes is LF, whatever line breaks the text arrived with, so every Machine holds the same bytes.
     const text = toLf(content);
     writeFileSync(tmp, n.startsWith("memory/") ? text : redact(text));
     replaceWith(tmp, abs);

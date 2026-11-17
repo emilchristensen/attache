@@ -22,10 +22,10 @@ export class ReplicationSetupError extends Error {
 }
 
 /**
- * Files that are this Machine's alone: Jarvis's own bookkeeping, half-written
+ * Files that are this Machine's alone: Attache's own bookkeeping, half-written
  * temporary files and the folder state editors keep per computer.
  */
-export const IGNORED = [".jarvis/", ".*.tmp", ".DS_Store", "Thumbs.db", ".obsidian/workspace*.json"];
+export const IGNORED = [".attache/", ".*.tmp", ".DS_Store", "Thumbs.db", ".obsidian/workspace*.json"];
 
 /**
  * Notes are text with LF line endings on every Machine, Windows included:
@@ -44,8 +44,8 @@ function pinLineEndings(file: string): void {
   writeFileSync(file, `${LF_ATTRIBUTE}\n${existing}`);
 }
 
-/** Marks a repository as one Jarvis made, so setup can be finished after it was interrupted. */
-const MANAGED_KEY = "jarvis.managed";
+/** Marks a repository as one Attache made, so setup can be finished after it was interrupted. */
+const MANAGED_KEY = "attache.managed";
 
 /** The remote the owner typed, normalised, or why it is not one. */
 export function setupRemote(input: string): string {
@@ -71,7 +71,7 @@ export function refusalOf(v: RemoteVerdict): ReplicationSetupError | null {
  * can move it aside and still keep what it held.
  */
 export async function notEmptyRefusal(target: string, backUp: (folder: string) => Promise<string>, log: Logger): Promise<ReplicationSetupError> {
-  const refusal = `${target} is not empty. Jarvis joins a Brain only into an empty folder, so two Brains are never merged.`;
+  const refusal = `${target} is not empty. Attache joins a Brain only into an empty folder, so two Brains are never merged.`;
   try {
     const backup = await backUp(target);
     return new ReplicationSetupError(409, "not_empty", `${refusal} It was backed up to ${backup}. Move the folder aside or choose an empty one, then join again.`, { backup });
@@ -97,7 +97,7 @@ function ensureLines(file: string, lines: readonly string[]): void {
   writeFileSync(file, `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`);
 }
 
-/** Whether `git.cwd` is a repository Jarvis made, i.e. Replication ran here before. */
+/** Whether `git.cwd` is a repository Attache made, i.e. Replication ran here before. */
 export function isManagedRepository(git: Git): boolean {
   return existsSync(join(git.cwd, ".git")) && git.runSync(["config", "--get", MANAGED_KEY]).stdout.trim() === "true";
 }
@@ -109,7 +109,7 @@ export function isManagedRepository(git: Git): boolean {
  */
 export async function sharesHistoryWith(git: Git, remote: string, seams: ReplicationSeams): Promise<boolean> {
   if (!isManagedRepository(git) || git.runSync(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).code !== 0) return false;
-  const scratch = "refs/jarvis/candidate";
+  const scratch = "refs/attache/candidate";
   try {
     await git.with(seams.credentials.env(remote)).ok([...seams.credentials.config(remote).flatMap((c) => ["-c", c]), "fetch", "--quiet", "--no-tags", remote, `+refs/heads/${BRANCH}:${scratch}`]);
   } catch (e) {
@@ -123,15 +123,15 @@ export async function sharesHistoryWith(git: Git, remote: string, seams: Replica
 }
 
 /**
- * Make the data folder a repository Jarvis manages, pointed at `remote`.
- * A repository Jarvis did not make is refused: its branches and settings are
+ * Make the data folder a repository Attache manages, pointed at `remote`.
+ * A repository Attache did not make is refused: its branches and settings are
  * the owner's, and Replication would rewrite neither safely.
  */
 export function prepareRepository(git: Git, remote: string): void {
   const root = git.cwd;
   if (existsSync(join(root, ".git"))) {
     if (!isManagedRepository(git)) {
-      throw new ReplicationSetupError(409, "already_a_repository", `${root} is already a git repository that Jarvis did not make. Replication needs a data folder that is not under git yet.`);
+      throw new ReplicationSetupError(409, "already_a_repository", `${root} is already a git repository that Attache did not make. Replication needs a data folder that is not under git yet.`);
     }
   } else {
     git.okSync(["init", "-q", "-b", BRANCH]);

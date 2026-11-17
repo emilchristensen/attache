@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { collectServiceLogs } from "./service-logs.mjs";
 
-const PREFIX = "jarvis-run-";
+const PREFIX = "attache-run-";
 // TMPDIR on macOS and Linux; TEMP, then TMP, on Windows.
 const TEMP_VARIABLES = ["TMPDIR", "TMP", "TEMP"];
 const SERVICE_LOGS = resolve(import.meta.dirname, "..", "test-results", "service-logs");

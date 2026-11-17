@@ -15,14 +15,14 @@ async function setupTestMessage(s: TestService, id: string): Promise<string> {
 }
 
 describe("what testing a folder of notes says", () => {
-  it("a data folder Jarvis just created reports its one note and nothing skipped", async () => {
+  it("a data folder Attache just created reports its one note and nothing skipped", async () => {
     // Setup as the Dashboard runs it: choose a folder that does not exist yet, then test.
     svc = await startTestService({ setup: false });
     await svc.post("/setup/data-folder", { path: svc.dataDir });
     expect(await setupTestMessage(svc, "vault-data")).toBe("1 Markdown file readable");
   });
 
-  it("the data folder preview counts an existing folder's notes, without Jarvis's own folders", async () => {
+  it("the data folder preview counts an existing folder's notes, without Attache's own folders", async () => {
     svc = await startTestService({ setup: false });
     const folder = testFolder("existing");
     writeFileSync(join(folder, "one.md"), "# One\n");
@@ -41,7 +41,7 @@ describe("what testing a folder of notes says", () => {
     expect(card).toContain("1 Markdown file indexed (");
   });
 
-  it("leaves Jarvis's own folders in the data folder out of what it skipped", async () => {
+  it("leaves Attache's own folders in the data folder out of what it skipped", async () => {
     svc = await startTestService();
     // What Replication and replicated review state put in the data folder.
     mkdirSync(join(svc.dataDir, ".git"), { recursive: true });

@@ -1,4 +1,4 @@
-import type { MemorySaveItem, ProposalCorrection, ProposalView } from "@jarvis/contracts";
+import type { MemorySaveItem, ProposalCorrection, ProposalView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Time, useAction } from "./ui.tsx";

@@ -10,6 +10,6 @@ export interface SecretStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   delete(key: string): Promise<void>;
-  /** Keys this install has stored (tracked by Jarvis, because a system secret store cannot be listed safely). */
+  /** Keys this install has stored (tracked by Attache, because a system secret store cannot be listed safely). */
   keys(): Promise<string[]>;
 }

@@ -1,6 +1,6 @@
 /**
  * The Windows secret store and desktop notifications, driven through the
- * `jarvis` executable as if on Windows. Windows PowerShell, which Jarvis uses
+ * `attache` executable as if on Windows. Windows PowerShell, which Attache uses
  * to reach Credential Manager and Windows notifications, is replaced by a
  * recording stand-in, so this runs on any operating system;
  * windows-desktop-real.test.ts covers the real thing on Windows.
@@ -10,7 +10,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import type { FixtureServer } from "./fixtures/fixture-server.ts";
-import { connectGithub as connect, githubAskingForReviews, jarvisCli, newStateDir, runningChildren, serveChild as serve, syncGithub, type ChildService, type ReviewRequest } from "./fixtures/jarvis-child.ts";
+import { connectGithub as connect, githubAskingForReviews, attacheCli, newStateDir, runningChildren, serveChild as serve, syncGithub, type ChildService, type ReviewRequest } from "./fixtures/attache-child.ts";
 
 // Each test starts the service from source, sometimes twice, which is slow under load.
 const SLOW = 90_000;
@@ -27,20 +27,20 @@ interface Desktop {
 }
 
 function windowsDesktop(env: Record<string, string | undefined> = {}): Desktop {
-  const dir = tempDir("jarvis-windows-");
+  const dir = tempDir("attache-windows-");
   return {
     dir,
     env: {
-      JARVIS_TEST_FAKE_PLATFORM: "win32",
-      JARVIS_CREDENTIAL_STORE: undefined,
-      JARVIS_NO_NOTIFY: undefined,
-      JARVIS_TEST_ENDPOINTS: "1",
-      JARVIS_POWERSHELL_BIN: FAKE_POWERSHELL,
-      JARVIS_ICACLS_BIN: FAKE_ICACLS,
-      JARVIS_WHOAMI_BIN: FAKE_WHOAMI,
+      ATTACHE_TEST_FAKE_PLATFORM: "win32",
+      ATTACHE_CREDENTIAL_STORE: undefined,
+      ATTACHE_NO_NOTIFY: undefined,
+      ATTACHE_TEST_ENDPOINTS: "1",
+      ATTACHE_POWERSHELL_BIN: FAKE_POWERSHELL,
+      ATTACHE_ICACLS_BIN: FAKE_ICACLS,
+      ATTACHE_WHOAMI_BIN: FAKE_WHOAMI,
       FAKE_WINDOWS_DIR: dir,
-      USERPROFILE: tempDir("jarvis-windows-home-"),
-      JARVIS_INSTANCE: "windows-test",
+      USERPROFILE: tempDir("attache-windows-home-"),
+      ATTACHE_INSTANCE: "windows-test",
       ...env,
     },
   };
@@ -83,7 +83,7 @@ describe("Windows secret store", () => {
 
       const configured = await connectGithub(svc, fx);
       expect(JSON.stringify(configured)).not.toContain(SECRET);
-      expect(vault(desktop)).toEqual([{ target: "dev.jarvis.windows-test/conn:github:token", user: "conn:github:token", secret: SECRET }]);
+      expect(vault(desktop)).toEqual([{ target: "dev.attache.windows-test/conn:github:token", user: "conn:github:token", secret: SECRET }]);
       expect(existsSync(join(stateDir, "secrets.json"))).toBe(false);
 
       // After a restart the token is read back from Credential Manager.
@@ -99,7 +99,7 @@ describe("Windows secret store", () => {
 
       // What the uninstaller runs: every secret this install stored is removed from Credential Manager.
       await svc.stop();
-      const cleared = jarvisCli(["credentials", "clear", "--state-dir", stateDir], desktop.env);
+      const cleared = attacheCli(["credentials", "clear", "--state-dir", stateDir], desktop.env);
       expect(cleared.stderr).toBe("");
       expect(JSON.parse(cleared.stdout)).toEqual({ store: "credential-manager", removed: 1 });
       expect(vault(desktop)).toEqual([]);
@@ -132,7 +132,7 @@ describe("Windows secret store", () => {
   it(
     "says Windows PowerShell is missing when it cannot be found",
     async () => {
-      const desktop = windowsDesktop({ JARVIS_POWERSHELL_BIN: join(tempDir("jarvis-no-powershell-"), "powershell.exe") });
+      const desktop = windowsDesktop({ ATTACHE_POWERSHELL_BIN: join(tempDir("attache-no-powershell-"), "powershell.exe") });
       const svc = await serve(newStateDir(), desktop.env);
       const status = await svc.api("GET", "/status");
       expect(status.credentialStore).toBe("file");
@@ -170,7 +170,7 @@ describe("Windows notifications", () => {
   };
 
   it(
-    "shows an urgent inbox item as a Windows notification from Jarvis, except in quiet hours",
+    "shows an urgent inbox item as a Windows notification from Attache, except in quiet hours",
     async () => {
       const desktop = windowsDesktop();
       const prs: ReviewRequest[] = [{ number: 7, title: "Ship <toast> & “notifications”", author: "<ada>" }];
@@ -180,7 +180,7 @@ describe("Windows notifications", () => {
       await svc.api("PATCH", "/config", { notifications: { desktop: true } });
 
       expect(await syncGithub(svc)).toBe("succeeded");
-      expect(toasts(desktop)).toEqual([{ app: "dev.jarvis.windows-test", name: "Jarvis (windows-test)", title: "Review a/b#7: Ship <toast> & “notifications”", body: "<ada> requested your review 10 days ago." }]);
+      expect(toasts(desktop)).toEqual([{ app: "dev.attache.windows-test", name: "Attache (windows-test)", title: "Review a/b#7: Ship <toast> & “notifications”", body: "<ada> requested your review 10 days ago." }]);
 
       await svc.api("PATCH", "/config", { notifications: { quietHours: { start: hhmm(-60), end: hhmm(60) } } });
       prs.push({ number: 8, title: "Quiet please" });
@@ -228,10 +228,10 @@ describe("Windows notifications", () => {
     SLOW,
   );
 
-  it("forgets Jarvis as a notification sender when asked, as the uninstaller does", () => {
+  it("forgets Attache as a notification sender when asked, as the uninstaller does", () => {
     const desktop = windowsDesktop();
-    const r = jarvisCli(["notifications", "forget"], desktop.env);
+    const r = attacheCli(["notifications", "forget"], desktop.env);
     expect(r.stderr).toBe("");
-    expect(toasts(desktop)).toEqual([{ forgot: "dev.jarvis.windows-test" }]);
+    expect(toasts(desktop)).toEqual([{ forgot: "dev.attache.windows-test" }]);
   });
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * TEST-ONLY stand-in for libnotify's `notify-send`, selected with
- * JARVIS_NOTIFY_SEND_BIN. Each notification's arguments are appended to
+ * ATTACHE_NOTIFY_SEND_BIN. Each notification's arguments are appended to
  * `$FAKE_NOTIFY_LOG` as one JSON line.
  * While a file `$FAKE_NOTIFY_LOG.down` exists it answers like a desktop whose
  * notification service is not running.

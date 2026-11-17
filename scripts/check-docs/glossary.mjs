@@ -10,22 +10,22 @@
 import { findInMarkdown } from "./markdown.mjs";
 
 /**
- * Avoided words that are also the ordinary name of something else in Jarvis.
+ * Avoided words that are also the ordinary name of something else in Attache.
  * The glossary avoids them only as a name for its own term, which a word match
  * cannot tell apart, so the check leaves them alone. Each entry says what the
  * word legitimately names. Prefer rewording over adding an entry here.
  */
 export const ORDINARY_WORDS = new Map([
-  ["vault", "Obsidian's own name for a folder of notes, which Jarvis can import"],
+  ["vault", "Obsidian's own name for a folder of notes, which Attache can import"],
   ["data folder", "the folder where one Machine keeps its copy of the Brain, as the glossary itself says"],
   ["node", "the Node.js runtime, and nodes in a model graph"],
   ["device", "hardware such as a microphone"],
-  ["instance", "the named install that `JARVIS_INSTANCE` selects"],
+  ["instance", "the named install that `ATTACHE_INSTANCE` selects"],
   ["client", "OAuth, MCP and HTTP clients"],
   ["backup", "the backup and restore of a Machine's data"],
   ["fetch", "git fetch, which Replication runs"],
   ["server", "MCP servers, OAuth authorization servers and the test fixture server"],
-  ["chat", "Claude Desktop's Chat tab, and the chat box Jarvis does not have"],
+  ["chat", "Claude Desktop's Chat tab, and the chat box Attache does not have"],
   ["app", "other applications, such as Obsidian or an OAuth app"],
   ["draft", "a drafted reply or comment waiting for approval, which is not a Proposal"],
   ["learning", "learning in its ordinary sense"],
