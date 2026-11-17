@@ -4,6 +4,7 @@ import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
+import { Logo } from "../components/Logo.tsx";
 import { JoinForm } from "./Replication.tsx";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
@@ -41,7 +42,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
   return (
     <main className="setup">
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" aria-hidden /> Attache setup
+        <Logo /> Attache setup
       </div>
       <nav aria-label="Setup progress">
         <ol className="steps">

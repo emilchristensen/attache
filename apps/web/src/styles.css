@@ -983,28 +983,20 @@ button.count-chip {
 
 /* ---- brand mark ---------------------------------------------------------------- */
 
-.orb {
-  --orb: color-mix(in srgb, var(--accent) 55%, var(--muted));
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  position: relative;
+/* The logo keeps its own colours, so a change to the theme leaves it alone. */
+.logo {
   flex-shrink: 0;
+  display: block;
 }
-.orb::before,
-.orb::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
+.logo-case {
+  fill: #ba6249;
+  stroke: #ba6249;
 }
-.orb::before {
-  border: 2px solid var(--orb);
-  opacity: 0.85;
+.logo-case rect {
+  stroke: none;
 }
-.orb::after {
-  inset: 8px;
-  background: var(--orb);
+.logo-dot {
+  fill: #c38942;
 }
 
 /* ---- evidence panel -------------------------------------------------------------- */

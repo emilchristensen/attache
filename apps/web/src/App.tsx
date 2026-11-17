@@ -3,6 +3,7 @@ import { api, post, type ApiError } from "./api.ts";
 import { hub, useLiveStatus, useResource } from "./live.ts";
 import { ErrorBoundary, Link, Loading, navigate, useLocation, ErrorState } from "./components/ui.tsx";
 import { EvidenceProvider } from "./components/Evidence.tsx";
+import { Logo } from "./components/Logo.tsx";
 import { Setup } from "./views/Setup.tsx";
 import { Home } from "./views/Home.tsx";
 import { MemoryView } from "./views/Memory.tsx";
@@ -51,7 +52,7 @@ function Pair({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="setup" style={{ maxWidth: 520 }}>
       <div className="brand" style={{ padding: 0 }}>
-        <span className="orb" aria-hidden /> Attache
+        <Logo /> Attache
       </div>
       <div className="card stack" style={{ marginTop: 24 }}>
         <h1>Pair this browser</h1>
@@ -111,7 +112,7 @@ function Shell({ children, path }: { children: ReactNode; path: string }) {
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="brand">
-          <span className="orb" aria-hidden /> Attache
+          <Logo attention={(counts.data?.items.length ?? 0) > 0} /> Attache
         </div>
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active(n.to) ? "page" : undefined} title={`g then ${n.key}`}>
