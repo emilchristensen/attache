@@ -59,7 +59,7 @@ export interface AppOptions {
 }
 
 export const VERSION = process.env.ATTACHE_VERSION ?? "0.6.0";
-/** How often housekeeping runs: stale drafts expire and snoozes end within this long of their time. */
+/** How often housekeeping runs at the latest: stale drafts expire and snoozes end within this long of their time. Approvals end on time, see `untilNextHousekeeping`. */
 const HOUSEKEEPING_EVERY_MS = 30_000;
 
 /** Everything the service owns, wired together. Clients only reach it through the HTTP API. */
@@ -478,13 +478,32 @@ export class App {
     this.db.close();
   }
 
-  /** Run housekeeping again in half a minute on the service's clock: expire stale drafts and wake snoozed items. */
+  /**
+   * Settle drafts and approvals whose time has passed, and tell clients which ones changed.
+   * Housekeeping runs it, and so does every route that reads or approves drafts, so no answer shows an approval past its end.
+   */
+  settleActions(): void {
+    const { expired, approvalsEnded } = this.actions.expireStale();
+    for (const id of [...expired, ...approvalsEnded]) this.bus.emit("event", { type: "actions.changed", id });
+    if (expired.length) this.bus.emit("event", { type: "attention.changed" });
+  }
+
+  /** Run housekeeping on the service's clock: settle drafts and approvals, and wake snoozed items. */
   private scheduleHousekeeping(): void {
     this.housekeeping = this.clock.setTimeout(() => {
-      this.scheduleHousekeeping();
-      if (this.actions.expireStale().length) this.bus.emit("event", { type: "attention.changed" });
-      this.inbox.wake();
-    }, HOUSEKEEPING_EVERY_MS);
+      try {
+        this.settleActions();
+        this.inbox.wake();
+      } finally {
+        this.scheduleHousekeeping();
+      }
+    }, this.untilNextHousekeeping());
+  }
+
+  /** Half a minute, or less when an approval ends sooner, so it goes back to needing approval at the moment it ends. */
+  private untilNextHousekeeping(): number {
+    const end = this.actions.nextApprovalEnd();
+    return end ? Math.min(HOUSEKEEPING_EVERY_MS, Math.max(0, end.getTime() - this.clock.now().getTime())) : HOUSEKEEPING_EVERY_MS;
   }
 
   connectionKinds(): ConnectionKind[] {

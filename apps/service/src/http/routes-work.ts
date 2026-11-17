@@ -108,11 +108,11 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- actions (drafts and approvals) ---------------------------------------------------
   r.get("/actions", (c) => {
     requireFeature(app, "drafts");
-    app.actions.expireStale();
+    app.settleActions();
     return app.actions.list({ ...(c.query("status") ? { status: c.query("status")!.split(",") } : {}), limit: Number(c.query("limit") ?? 100) });
   });
   r.get("/actions/:id", (c) => {
-    app.actions.expireStale();
+    app.settleActions();
     const a = app.actions.get(c.params.id!);
     if (!a) throw new HttpError(404, "not_found", "Action not found");
     return a;
@@ -126,7 +126,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   });
   r.post("/actions/:id/approve", async (c) => {
     requireFeature(app, "drafts");
-    app.actions.expireStale();
+    app.settleActions();
     const body = await c.body(ActionApproveInput);
     const out = app.actions.approve(c.params.id!, body.version, body.payloadHash, c.client!.id);
     app.bus.emit("event", { type: "actions.changed", id: out.id });
@@ -146,6 +146,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   });
   r.post("/actions/:id/execute", async (c) => {
     requireFeature(app, "drafts");
+    app.settleActions();
     const body = await c.body(ActionExecuteInput);
     const a = app.actions.beginExecution(c.params.id!, body, c.client!.id);
     const { job } = app.jobs.create({ kind: "action", title: `Execute: ${a.title}`.slice(0, 200), input: { actionId: a.id }, capability: "drafts", connectionId: a.connectionId, maxAttempts: 1, idempotencyKey: `execute:${a.id}:v${a.version}` });

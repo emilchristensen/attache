@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
-import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
 import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
@@ -271,6 +271,16 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await gh.getByRole("button", { name: "Save write permissions" }).click();
   await expect(gh.getByText("Post a comment on a pull request or issue", { exact: false }).first()).toBeVisible();
   await page.goto(`${stack.url}/drafts`);
+  // The owner steps away and the 15-minute approval ends: the draft goes back to needing approval, and approving again is one click.
+  const detail = page.locator("[data-action-id]");
+  await expect(detail).toHaveAttribute("data-status", "approved");
+  endApproval(stack, (await detail.getAttribute("data-action-id"))!);
+  await page.reload();
+  await expect(detail).toHaveAttribute("data-status", "draft");
+  await expect(page.getByRole("status").filter({ hasText: /^The approval of v2 ended at .+\. Nothing was sent\.$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Approve v2 again" }).click();
+  await expect(detail).toHaveAttribute("data-status", "approved");
   await page.getByRole("button", { name: "Send" }).click();
   const receipt = page.locator("[data-receipt]");
   await expect(receipt).toContainText("Verified", { timeout: 20_000 });

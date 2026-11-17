@@ -152,6 +152,7 @@ Events stay in *History*, which only grows, so they cannot be reverted.
 **Drafts** shows each draft with its context and evidence.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
+When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.
 **Send** is available only when the connection is authorised to write that kind of action; Attache rechecks everything on the service immediately before sending and marks the draft sent only after the other service confirms it.
 Drafts expire after 48 business hours.
 
