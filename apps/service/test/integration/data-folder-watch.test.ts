@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
@@ -39,5 +39,43 @@ describe("edits made outside the service", () => {
     mkdirSync(join(svc.dataDir, "memory/projects"), { recursive: true });
     renameSync(join(svc.dataDir, "memory/notes/quokka.md"), join(svc.dataDir, "memory/projects/quokka.md"));
     await eventually("quokka", ["memory/projects/quokka.md"]);
+  });
+});
+
+describe("a Brain folder replaced by a file", () => {
+  it("leaves the service running and still picking up edits once the folder is back", async () => {
+    // A throw from inside the file watcher reaches no error handler; Vitest also fails the run on one.
+    const uncaught: unknown[] = [];
+    const record = (e: unknown) => uncaught.push(e);
+    process.on("uncaughtException", record);
+    try {
+      const folder = join(svc.dataDir, "memory/decisions");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(join(folder, "okapi.md"), "# Okapi\n\nThe okapi budget is frozen.\n");
+      await eventually("okapi", ["memory/decisions/okapi.md"]);
+
+      // What a file sync tool can do: the folder goes, and a file of the same name takes its place.
+      rmSync(folder, { recursive: true });
+      writeFileSync(folder, "");
+      await eventually("okapi", []);
+
+      rmSync(folder);
+      mkdirSync(folder);
+      writeFileSync(join(folder, "okapi-thaw.md"), "# Okapi thaw\n\nThe okapi budget thaws in May.\n");
+      await eventually("okapi", ["memory/decisions/okapi-thaw.md"]);
+
+      // Removed and made again at once, as a sync tool restoring it does: edits inside the new folder still count.
+      rmSync(folder, { recursive: true });
+      mkdirSync(folder);
+      writeFileSync(join(folder, "okapi-review.md"), "# Okapi review\n\nThe okapi budget is reviewed in June.\n");
+      await eventually("okapi", ["memory/decisions/okapi-review.md"]);
+      writeFileSync(join(folder, "okapi-review.md"), "# Okapi review\n\nThe okapi budget review moved to July.\n");
+      await eventually("july", ["memory/decisions/okapi-review.md"]);
+
+      expect(await svc.get("/health")).toMatchObject({ ok: true });
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off("uncaughtException", record);
+    }
   });
 });
