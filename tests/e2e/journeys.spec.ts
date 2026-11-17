@@ -437,6 +437,8 @@ interface PageScroll {
   contentTop: number;
   contentRight: number;
   contentWidth: number;
+  /** The system draws overlay scrollbars (macOS with a trackpad), which take no width. */
+  overlayScrollbars: boolean;
 }
 
 /** Makes the page taller than any window, so it always scrolls, then measures where it scrolls. */
@@ -456,7 +458,12 @@ function measurePageScroll(): PageScroll {
   const scrollbarRight = box.right - parseFloat(style.borderRightWidth);
   const scrollbarLeft = el === root ? root.clientWidth : box.left + parseFloat(style.borderLeftWidth) + el.clientWidth;
   const content = column.getBoundingClientRect();
-  return { scroller: el === root ? "html" : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`, scrollbarLeft, scrollbarRight, contentLeft: content.left, contentTop: content.top, contentRight: content.right, contentWidth: content.width };
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;width:100px;height:100px;overflow:scroll";
+  document.body.append(probe);
+  const overlayScrollbars = probe.offsetWidth === probe.clientWidth;
+  probe.remove();
+  return { overlayScrollbars, scroller: el === root ? "html" : `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`, scrollbarLeft, scrollbarRight, contentLeft: content.left, contentTop: content.top, contentRight: content.right, contentWidth: content.width };
 }
 
 test("scrollbars: every page scrolls at the window's right edge, with its content in its column", async ({ playwright }) => {
@@ -473,7 +480,7 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
         await page.waitForLoadState("networkidle");
         const at = `${path} at ${viewport.width}px`;
         const s = await page.evaluate(measurePageScroll);
-        expect(s.scrollbarRight - s.scrollbarLeft, `${at}: ${s.scroller} shows a scrollbar`).toBeGreaterThan(0);
+        if (!s.overlayScrollbars) expect(s.scrollbarRight - s.scrollbarLeft, `${at}: ${s.scroller} shows a scrollbar`).toBeGreaterThan(0);
         expect(s.scrollbarRight, `${at}: ${s.scroller}'s scrollbar is at the window's right edge`).toBe(viewport.width);
         expect(s.contentRight, `${at}: content stays left of the scrollbar`).toBeLessThanOrEqual(s.scrollbarLeft);
         // Every Dashboard page starts its content at the same place, so switching pages does not shift it.
