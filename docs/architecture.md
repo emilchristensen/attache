@@ -203,7 +203,7 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
 - **Credential scan** (`replication/credential-scan.ts`, the first commit guard): scans each staged file and its name with `findSecrets` from `core/redaction.ts`, the module that also holds `redact`, so the scan and redaction share one pattern list and the runtime secrets registered with `registerSecret`.
   Only new credentials count: a match that also appears in the file's version at `HEAD` (and at `MERGE_HEAD` during a merge, `StagedFile.committed()`) is in the shared history already and does not block.
   A finding refuses with status blocked and a cause naming each file and line and what the credential looks like, never its text.
-- **Blocked and unauthorized in the inbox** (`replication/blocked-inbox.ts` `syncReplicationItems`): whenever the status changes, `App` keeps one attention item, source `replication`, fingerprinted by the cause, open while the status is blocked (key `replication:blocked`) or unauthorized (key `replication:unauthorized`, asking the owner to reconnect GitHub when the remote is GitHub over https) and resolved when it is neither.
+- **Blocked and unauthorized in the inbox** (`replication/blocked-inbox.ts` `syncReplicationItems`): whenever the status changes, `App` keeps one Inbox item, source `replication`, fingerprinted by the cause, open while the status is blocked (key `replication:blocked`) or unauthorized (key `replication:unauthorized`, asking the owner to reconnect GitHub when the remote is GitHub over https) and resolved when it is neither.
   It is this Machine's own item.
 - **Review state** is what waits for the owner's decision: Proposals (`review/proposals/`) and the inbox (`review/inbox/`).
   It lives in the Brain's top-level `review/` folder so it replicates, and recall never reads it: the files are JSON, and the indexer skips that folder of the data folder (`memory/indexer.ts`); the layout is in `review-state/files.ts`.
@@ -394,7 +394,7 @@ The attention engine follows these rules:
 - Receipts and every attempt are stored in `action_events`.
 - Revoking an approval, disabling write authority or disconnecting prevents later execution.
 - Expiry uses 48 business hours (weekends skipped); refreshing a draft keeps its original `created`.
-- A draft prepared for an attention item records the item's key (`attention_item_key`), and the item's row links to the newest one (`attention_items.action_id`).
+- A draft prepared for an Inbox item records the item's key (`attention_item_key`), and the item's row links to the newest one (`attention_items.action_id`).
   The link is never cleared: reading items joins it to `actions` (`SELECT_VIEW` in `attention/engine.ts`), so `AttentionItemView` carries `actionId` and the draft's current `actionStatus`, and `GET /attention` first marks drafts past their deadline expired, as `GET /actions` does.
   A draft in `draft`, `approved`, `revoked` or `executing` (`OPEN_ACTION_STATUSES` in the contracts) still stands for the item, and the Dashboard offers View draft; a finished one does not, so it offers Prepare draft, and `createDraft` makes a new draft and moves the link to it.
   Drafts and the link stay on the Machine (see Attention and briefings), so another Machine does not see them.

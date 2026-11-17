@@ -77,13 +77,13 @@ _Avoid_: Expiry, expiration, stale date, TTL
 
 **Inbox item**:
 Something from a connected source that may need the owner, such as a review request, a pending reply or a deadline.
-_Avoid_: Attention item, alert, notification
+_Avoid_: Attention item, alert
 
 **Draft**:
 A message Attache prepared for the owner to send through a Connection.
 Nothing is sent until the owner approves that exact version.
-_Avoid_: Action, reply, outgoing message
+_Avoid_: Outgoing message
 
 **Heads-up**:
 Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
-_Avoid_: Card, occupant, notification, suggestion, nudge
+_Avoid_: Occupant, nudge

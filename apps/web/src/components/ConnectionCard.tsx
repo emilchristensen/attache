@@ -286,7 +286,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
             {preview.credentials > 0 ? "Attache deletes the stored credentials and stops all requests." : "Attache stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
           </span>
           <span>
-            Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open attention item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
+            Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open Inbox item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
           </span>
           <div className="row">
             <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: false }).then(() => { setPreview(null); onChanged(); }), "Disconnected; data kept")}>

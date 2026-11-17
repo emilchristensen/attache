@@ -304,7 +304,7 @@ Give the fact a new Review date with a later save if it still needs one.
 Your data folder is plain Markdown, so you can open it as an Obsidian vault or in any editor.
 Attache picks up your edits within a few seconds.
 A note an editor on Windows saved with CRLF line endings reads the same as any other; whatever Attache writes uses LF line endings.
-There is no Obsidian plugin; use the Dashboard in the browser to search, review attention items and decide on Proposals.
+There is no Obsidian plugin; use the Dashboard in the browser to search, review Inbox items and decide on Proposals.
 
 ## Meaning-based search
 

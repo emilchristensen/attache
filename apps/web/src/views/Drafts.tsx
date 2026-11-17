@@ -213,7 +213,7 @@ export function DraftsView() {
           <Tabs label="Drafts to show" tabs={FILTERS} selected={filter} onSelect={setFilter} />
           {list.loading && !list.data && <Loading />}
           <ErrorState error={list.error} retry={list.reload} />
-          {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an attention item. Drafts appear here with their context.</Empty>}
+          {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an Inbox item. Drafts appear here with their context.</Empty>}
           <div className="list">
             {list.data?.map((d) => (
               <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/drafts?id=${d.id}`); revealDetail(); }}>
