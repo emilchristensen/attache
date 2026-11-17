@@ -55,6 +55,31 @@ The brass attention dot is unchanged.
 
 Kept from v3: Brain as a search-first library, nothing moving under the owner, no single-key irreversible actions, routed Settings with one "Machines and Replication" section, a bottom bar on narrow screens, and every current feature (`fable/DESIGN.md` section 12 maps where each one moves).
 
+## Decisions after the spec interview (2026-11-18)
+
+These come from the interview that turned this design into the spec, and override the design files where they differ.
+
+- **Home, not Today.**
+  The first screen is called Home and stays at `/`; "Inbox" names its section.
+  Memory becomes Brain and Drafts becomes Approvals at new routes, with no redirects from the old ones; the `g` shortcuts follow the new names.
+- **Words.**
+  `GLOSSARY.md` now defines Inbox item, Draft and Heads-up (one thing in "For you now").
+  Approvals is a page name only; "approve" keeps its narrow meaning for a Draft.
+  The status area on Home is titled "Connections", not "Connected services".
+- **Meeting prep.**
+  A meeting prep Heads-up shows from 15 minutes before the start until the meeting's scheduled end; during the meeting it reads "In progress, ends ..." and leads with Join.
+  Back to back, the next meeting's Heads-up appears 15 minutes before its start, below the one in progress; the order is the meeting in progress, the next meeting, then the briefing.
+  The card links to the event in Google Calendar and to the Meet call.
+  While it shows as a Heads-up, the item is not also listed in the Inbox, and it is counted once.
+  The calendar Connection keeps the meeting prep item open until the scheduled end and carries the start, the end and the Meet link.
+  Detecting from Google Meet when a call really ended moves to the proactive roadmap.
+- **"Got it" and "Done".**
+  The briefing's "Got it" is remembered per browser; meeting prep "Done" is the Inbox item's Done decision; "Not now" hides the Heads-up and leaves the item open.
+- **Service work in the spec.**
+  The bug fixes in PR #12 (a Draft's status on its Inbox item) and PR #13 (an ended approval returns to draft, and draft expiry is announced) cover C2, C3 and D1; the spec adds only the exact count route (C1) and the meeting prep change above.
+- **Build.**
+  One spec issue, one ticket per phase, built with `/implement-spec`, each phase merged to `main` with no feature flag, docs updated in the phase that changes them, Inter bundled and served locally.
+
 ## Bugs found in today's code
 
 Both were verified by reading the code; neither has been reproduced end to end yet.
