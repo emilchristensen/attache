@@ -117,6 +117,9 @@ Attache has no chat box: you ask the Brain from your Harness (see Using the Brai
   Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
+  While that draft waits for you or is being sent, the item offers **View draft** instead.
+  Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** on the Drafts screen.
+  Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
 Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
 

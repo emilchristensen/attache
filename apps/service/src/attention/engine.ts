@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AttentionItemView, Coverage } from "@attache/contracts";
+import type { ActionStatus, AttentionItemView, Coverage } from "@attache/contracts";
 import { type Db, json, nowIso, tx } from "../core/db.ts";
 import { fingerprint } from "./fingerprint.ts";
 import type { AttentionCandidate } from "../connectors/types.ts";
@@ -58,6 +58,12 @@ interface ItemRow {
   decision: string | null;
   machine: string | null;
 }
+
+/**
+ * An item row with the status of the draft it links to. The link is never cleared: a finished draft keeps it,
+ * and the next draft prepared for the item replaces it, so the status is read here instead of being copied onto the row.
+ */
+const SELECT_VIEW = "select i.*, a.status as action_status from attention_items i left join actions a on a.id = i.action_id";
 
 function rowByKey(db: Db, key: string): ItemRow | undefined {
   return db.prepare("select * from attention_items where item_key = ?").get(key) as unknown as ItemRow | undefined;
@@ -316,7 +322,7 @@ export function resolveConnection(db: Db, connectionId: string, ctx: InboxContex
 
 /** A source's items it has not resolved yet, whatever the owner decided about them. */
 export function unresolvedItems(db: Db, sourceKind: string): AttentionItemView[] {
-  return (db.prepare("select * from attention_items where source_kind = ? and resolved_at is null order by first_seen_at").all(sourceKind) as Array<Record<string, unknown>>).map(toView);
+  return (db.prepare(`${SELECT_VIEW} where i.source_kind = ? and i.resolved_at is null order by i.first_seen_at`).all(sourceKind) as Array<Record<string, unknown>>).map(toView);
 }
 
 /** Resolve items whose cause is gone, by key. Returns the keys of the items it resolved. */
@@ -333,14 +339,14 @@ export function deleteConnection(db: Db, connectionId: string): string[] {
 }
 
 export function getItem(db: Db, id: string): AttentionItemView | null {
-  const r = db.prepare("select * from attention_items where id = ?").get(id) as Record<string, unknown> | undefined;
+  const r = db.prepare(`${SELECT_VIEW} where i.id = ?`).get(id) as Record<string, unknown> | undefined;
   return r ? toView(r) : null;
 }
 
 export function listItems(db: Db, opts: { states?: string[]; limit?: number } = {}): AttentionItemView[] {
   const states = opts.states ?? ["open"];
   const rows = db
-    .prepare(`select * from attention_items where state in (${states.map(() => "?").join(",")}) order by priority desc, coalesce(due_at, '9999') asc, updated_at desc limit ?`)
+    .prepare(`${SELECT_VIEW} where i.state in (${states.map(() => "?").join(",")}) order by i.priority desc, coalesce(i.due_at, '9999') asc, i.updated_at desc limit ?`)
     .all(...states, opts.limit ?? 200) as Array<Record<string, unknown>>;
   return rows.map(toView);
 }
@@ -364,6 +370,7 @@ function toView(r: Record<string, unknown>): AttentionItemView {
     firstSeenAt: String(r.first_seen_at),
     updatedAt: String(r.updated_at),
     actionId: (r.action_id as string) ?? null,
+    actionStatus: (r.action_status as ActionStatus) ?? null,
     changedSinceDecision: !!r.decided_fingerprint && r.decided_fingerprint !== r.fingerprint,
     draftable: json(r.draftable, null),
   };

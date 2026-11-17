@@ -228,6 +228,26 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(await message("/connections/github/write-actions", { writeActions: ["github.merge", "github.close"], confirm: true })).toBe("2 unknown write actions: github.merge, github.close");
   });
 
+  it("an attention item carries its linked draft's status, and a finished draft leaves it free for a new one", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    // The first draft for this item was sent above.
+    const sent = await reviewItem();
+    expect(sent.actionStatus).toBe("succeeded");
+    // Rejected: the item still names the draft, so the Drafts list keeps it, and preparing again makes a new one.
+    const fresh = await prepareDraft();
+    expect(fresh.id).not.toBe(sent.actionId);
+    expect(await reviewItem()).toMatchObject({ actionId: fresh.id, actionStatus: "draft" });
+    await svc.post(`/actions/${fresh.id}/reject`, {});
+    expect(await reviewItem()).toMatchObject({ actionId: fresh.id, actionStatus: "rejected" });
+    // Expired: the item reads the expiry as soon as the deadline passes, without waiting for housekeeping.
+    const again = await prepareDraft();
+    expect(again.id).not.toBe(fresh.id);
+    expect(await reviewItem()).toMatchObject({ actionId: again.id, actionStatus: "draft" });
+    clock.skip(8 * 86_400_000);
+    expect(await reviewItem()).toMatchObject({ actionId: again.id, actionStatus: "expired" });
+    expect((await svc.get(`/actions/${fresh.id}`)).status).toBe("rejected");
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");

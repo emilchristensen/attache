@@ -398,6 +398,10 @@ The attention engine follows these rules:
 - Receipts and every attempt are stored in `action_events`.
 - Revoking an approval, disabling write authority or disconnecting prevents later execution.
 - Expiry uses 48 business hours (weekends skipped); refreshing a draft keeps its original `created`.
+- A draft prepared for an attention item records the item's key (`attention_item_key`), and the item's row links to the newest one (`attention_items.action_id`).
+  The link is never cleared: reading items joins it to `actions` (`SELECT_VIEW` in `attention/engine.ts`), so `AttentionItemView` carries `actionId` and the draft's current `actionStatus`, and `GET /attention` first marks drafts past their deadline expired, as `GET /actions` does.
+  A draft in `draft`, `approved`, `revoked` or `executing` (`OPEN_ACTION_STATUSES` in the contracts) still stands for the item, and the Dashboard offers View draft; a finished one does not, so it offers Prepare draft, and `createDraft` makes a new draft and moves the link to it.
+  Drafts and the link stay on the Machine (see Attention and briefings), so another Machine does not see them.
 
 ## Security
 

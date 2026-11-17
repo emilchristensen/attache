@@ -247,6 +247,26 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await expect(page.locator(".coverage")).toContainText("GitHub");
 });
 
+test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
+  const page = await journeys.open("/");
+  const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  await pr.getByRole("button", { name: "Prepare draft" }).click();
+  await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
+  await pr.getByRole("button", { name: "View draft" }).click();
+  const draft = page.locator("[data-action-id]");
+  await expect(draft).toHaveAttribute("data-status", "draft");
+  const rejectedId = await draft.getAttribute("data-action-id");
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(draft).toHaveAttribute("data-status", "rejected");
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
+  await expect(pr.getByRole("button", { name: "View draft" })).toHaveCount(0);
+  await page.goto(`${stack.url}/drafts?id=${rejectedId}`);
+  await page.getByRole("tab", { name: "Finished" }).click();
+  await expect(page.getByRole("button", { name: /Review acme\/web#42/ }).first()).toBeVisible();
+  await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
+});
+
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
   const page = await journeys.open("/");
   const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
@@ -285,6 +305,9 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   const receipt = page.locator("[data-receipt]");
   await expect(receipt).toContainText("Verified", { timeout: 20_000 });
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "succeeded");
+  // A sent draft is finished too: the item no longer points at it.
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
 });
 
 test("jobs: work continues after the tab closes; cancellation reports what happened", async () => {
