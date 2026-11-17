@@ -207,6 +207,8 @@ export function registerDataRoutes(r: Router, app: App) {
   r.get("/attention", (c) => {
     requireFeature(app, "attention");
     const states = (c.query("state") ?? "open").split(",").filter(Boolean);
+    // Each item carries its draft's status, so drafts past their deadline are marked expired first, as `GET /actions` does.
+    app.actions.expireStale();
     return { items: listItems(app.db, { states, limit: Number(c.query("limit") ?? 200) }) };
   });
   r.post("/attention/:id/decision", async (c) => {
