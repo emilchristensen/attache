@@ -3,9 +3,11 @@ import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { addBusinessHours } from "../../src/actions/expiry.ts";
+import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
 let fx: FixtureServer;
+const clock = new ManualClock();
 const posted: Array<{ id: number; body: string; html_url: string }> = [];
 
 function githubFixture() {
@@ -41,7 +43,7 @@ beforeAll(async () => {
   fx = await startFixtureServer();
   installFixtureModel(fx);
   githubFixture();
-  svc = await startTestService();
+  svc = await startTestService({ clock });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture" } });
   await svc.post("/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678", apiBaseUrl: `${fx.url}/gh` } });
 });
@@ -126,13 +128,16 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     // Approval expired (15 minutes)
     const r3 = mk();
     const a3 = await svc.post(`/actions/${r3.id}/approve`, { version: 1, payloadHash: r3.payloadHash });
-    const realNow = svc.app.actions.now;
-    svc.app.actions.now = () => new Date(Date.now() + 16 * 60_000);
+    await clock.advance(16 * 60_000);
     expect((await svc.call("POST", `/actions/${r3.id}/execute`, { nonce: a3.approval.nonce, version: 1, payloadHash: r3.payloadHash })).body.error.code).toBe("approval_expired");
-    // Draft expired (48 business hours)
-    svc.app.actions.now = () => new Date(Date.now() + 8 * 86_400_000);
-    svc.app.actions.expireStale();
-    svc.app.actions.now = realNow;
+    // Draft expired (48 business hours): housekeeping expires it on the service's clock, and the Dashboard hears of it.
+    const events: string[] = [];
+    const listen = (e: { type: string }) => events.push(e.type);
+    svc.app.bus.on("event", listen);
+    clock.skip(8 * 86_400_000);
+    await clock.advance(30_000);
+    svc.app.bus.off("event", listen);
+    expect(events).toContain("attention.changed");
     expect((await svc.get(`/actions/${r3.id}`)).status).toBe("expired");
     // Payload changed behind the approval's back
     const r4 = mk();

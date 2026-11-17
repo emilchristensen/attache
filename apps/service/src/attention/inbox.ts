@@ -9,6 +9,7 @@ import {
   applyCandidates,
   decide,
   deleteConnection,
+  endSnoozes,
   forgetItem,
   recordByKey,
   rederiveStates,
@@ -82,6 +83,14 @@ export class Inbox {
     if (!keys.length) return;
     this.d.log.info("worked inbox states out again from their records", { keys });
     this.d.onChange();
+  }
+
+  /**
+   * End snoozes whose time has passed. Only the state this Machine works out from each record
+   * changes; the record keeps its report time, so it never looks newer than another Machine's report.
+   */
+  wake(): void {
+    if (endSnoozes(this.d.db, this.d.ctx.now()).length) this.d.onChange();
   }
 
   /**

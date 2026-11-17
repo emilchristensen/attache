@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { ActionStatus, ActionView } from "@jarvis/contracts";
-import { type Db, json, nowIso, tx } from "../core/db.ts";
+import { type Db, json, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
 export const APPROVAL_TTL_MS = 15 * 60_000;
@@ -39,14 +39,16 @@ export interface AuthorityCheck {
 export class ActionService {
   private readonly db: Db;
   authority: AuthorityCheck = () => "No authority configured";
-  now: () => Date = () => new Date();
+  /** The service's clock: when drafts and approvals expire, and the time every change is stamped with. */
+  private readonly now: () => Date;
 
-  constructor(db: Db) {
+  constructor(db: Db, now: () => Date) {
     this.db = db;
+    this.now = now;
   }
 
   private event(id: string, event: string, actor: string, data: unknown = null) {
-    this.db.prepare("insert into action_events (action_id, event, data, at, actor) values (?,?,?,?,?)").run(id, event, data === null ? null : JSON.stringify(data), nowIso(), actor);
+    this.db.prepare("insert into action_events (action_id, event, data, at, actor) values (?,?,?,?,?)").run(id, event, data === null ? null : JSON.stringify(data), this.now().toISOString(), actor);
   }
 
   createDraft(input: { kind: string; connectionId: string | null; title: string; target: Record<string, unknown>; payload: Record<string, unknown>; context: Record<string, unknown>; attentionItemKey?: string | null; createdBy: string }): ActionView {
@@ -129,7 +131,7 @@ export class ActionService {
     const hash = payloadHash(a.kind, a.target, payload);
     const version = a.version + 1;
     tx(this.db, () => {
-      this.db.prepare("update actions set payload = ?, payload_hash = ?, version = ?, status = 'draft', approval = null, updated_at = ?" + (context ? ", context = ?" : "") + " where id = ?").run(JSON.stringify(payload), hash, version, nowIso(), ...(context ? [JSON.stringify(context)] : []), id);
+      this.db.prepare("update actions set payload = ?, payload_hash = ?, version = ?, status = 'draft', approval = null, updated_at = ?" + (context ? ", context = ?" : "") + " where id = ?").run(JSON.stringify(payload), hash, version, this.now().toISOString(), ...(context ? [JSON.stringify(context)] : []), id);
       this.event(id, "edited", actor, { version, payloadHash: hash });
       if (a.approval) this.event(id, "approval_invalidated", "service", { reason: "payload changed", previousVersion: a.version });
     });
@@ -144,7 +146,7 @@ export class ActionService {
     const nowMs = this.now().getTime();
     const approval = { version, payloadHash: hash, nonce: randomBytes(24).toString("hex"), expiresAt: new Date(Math.min(nowMs + APPROVAL_TTL_MS, Date.parse(a.expiresAt))).toISOString(), approvedAt: new Date(nowMs).toISOString() };
     tx(this.db, () => {
-      this.db.prepare("update actions set status = 'approved', approval = ?, updated_at = ? where id = ?").run(JSON.stringify(approval), nowIso(), id);
+      this.db.prepare("update actions set status = 'approved', approval = ?, updated_at = ? where id = ?").run(JSON.stringify(approval), this.now().toISOString(), id);
       this.event(id, "approved", actor, { version, payloadHash: hash, approvalExpiresAt: approval.expiresAt });
     });
     return this.get(id)!;
@@ -154,7 +156,7 @@ export class ActionService {
     const a = this.require(id);
     if (!["draft", "approved", "revoked"].includes(a.status)) throw new ActionError("not_rejectable", `A ${a.status} action cannot be rejected.`);
     tx(this.db, () => {
-      this.db.prepare("update actions set status = 'rejected', approval = null, updated_at = ? where id = ?").run(nowIso(), id);
+      this.db.prepare("update actions set status = 'rejected', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), id);
       this.event(id, "rejected", actor, reason ? { reason } : null);
     });
     return this.get(id)!;
@@ -164,7 +166,7 @@ export class ActionService {
     const a = this.require(id);
     if (a.status !== "approved") throw new ActionError("not_approved", "Only an approved action can have its approval revoked.");
     tx(this.db, () => {
-      this.db.prepare("update actions set status = 'revoked', approval = null, updated_at = ? where id = ?").run(nowIso(), id);
+      this.db.prepare("update actions set status = 'revoked', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), id);
       this.event(id, "approval_revoked", actor, { reason });
     });
     return this.get(id)!;
@@ -182,7 +184,7 @@ export class ActionService {
     const rows = this.db.prepare("select id from actions where status in ('draft','approved','revoked') and expires_at <= ?").all(now) as Array<{ id: string }>;
     for (const r of rows) {
       tx(this.db, () => {
-        this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(nowIso(), r.id);
+        this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), r.id);
         this.event(r.id, "expired", "service");
       });
     }
@@ -238,7 +240,7 @@ export class ActionService {
 
   finishExecution(id: string, outcome: { status: "succeeded" | "failed" | "unknown"; receipt: Record<string, unknown> }): ActionView {
     tx(this.db, () => {
-      this.db.prepare("update actions set status = ?, receipt = ?, updated_at = ? where id = ?").run(outcome.status, JSON.stringify(outcome.receipt), nowIso(), id);
+      this.db.prepare("update actions set status = ?, receipt = ?, updated_at = ? where id = ?").run(outcome.status, JSON.stringify(outcome.receipt), this.now().toISOString(), id);
       this.event(id, `execution_${outcome.status}`, "service", outcome.receipt);
     });
     return this.get(id)!;
