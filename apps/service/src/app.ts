@@ -58,7 +58,7 @@ export interface AppOptions {
   leaseGenerationCommits?: number;
 }
 
-export const VERSION = process.env.ATTACHE_VERSION ?? "0.1.0";
+export const VERSION = process.env.ATTACHE_VERSION ?? "0.5.0";
 /** How often housekeeping runs: stale drafts expire and snoozes end within this long of their time. */
 const HOUSEKEEPING_EVERY_MS = 30_000;
 
