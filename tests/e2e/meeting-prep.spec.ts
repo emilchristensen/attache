@@ -273,9 +273,48 @@ test("Done clears the Heads-up and decides the Inbox item, which no longer count
   await expect.poll(count).toBe(before - 1);
   const resolved = (await api<{ items: Array<{ key: string; state: string }> }>(page, "GET", "/attention?state=resolved")).items;
   expect(resolved.find((i) => i.key === "gcal:handover")?.state).toBe("resolved");
+  // The meeting moves, so its evidence changes and the service opens the item again: its Heads-up comes back, and
+  // stays while the pointer is on it (Done here applied to the item as it was, not to this one).
+  await page.mouse.move(5, 5);
+  await setCalendar(page, [{ id: "handover", summary: "Pilot handover", start: -10, end: 25, meetLink: "https://meet.google.com/abc-defg-hij" }]);
+  const back = meetingHeadsUp(page, "Pilot handover");
+  await expect(back).toBeVisible();
+  await back.hover();
+  await back.getByRole("button", { name: "Open prep" }).focus();
+  await page.waitForTimeout(500);
+  await expect(back).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+});
+
+test("hold: with focus on Join, the next meeting still comes in on time below it, and Join keeps its meeting", async ({ browser }) => {
+  // The browser clock is the whole context's, so this journey has a paired context of its own.
+  const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
+  const page = await own.newPage();
+  await page.clock.install({ time: new Date() });
+  await page.goto(stack.url);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await setCalendar(page, [
+    { id: "crit", summary: "Design crit", start: -10, end: 20, meetLink: "https://meet.google.com/cri-tic-now" },
+    { id: "hiring", summary: "Hiring sync", start: 20, end: 50, meetLink: "https://meet.google.com/hir-ing-syn" },
+  ]);
+  // Loaded afresh, so the new items are rows, not behind Show new items.
   await page.reload();
-  await expect(meetingHeadsUp(page, "Pilot handover")).toHaveCount(0);
-  await expect(rowFor(page, "handover")).toHaveCount(0);
+  const join = meetingHeadsUp(page, "Design crit").getByRole("link", { name: "Join" });
+  await join.focus();
+  // Twenty minutes before its start the next meeting is still an Inbox row.
+  await expect(rowFor(page, "hiring")).toBeVisible();
+  await expect(meetingHeadsUp(page, "Hiring sync")).toHaveCount(0);
+  // Six minutes on it is due: it comes in below the meeting the focus is on, on time, and leaves the Inbox.
+  await page.clock.fastForward("06:00");
+  const next = meetingHeadsUp(page, "Hiring sync");
+  await expect(next).toBeVisible();
+  await expect(next).toHaveJSProperty("tagName", "LI");
+  await expect(rowFor(page, "hiring")).toHaveCount(0);
+  // The focused Join is the same element, still the current meeting's call.
+  await expect(join).toBeFocused();
+  await expect(join).toHaveAttribute("href", "https://meet.google.com/cri-tic-now");
+  expect(own.consoleErrors).toEqual([]);
+  await own.close();
 });
 
 test("no call: without a Meet link the meeting in progress leads with Open in Google Calendar", async () => {
@@ -320,6 +359,17 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
     await expect(meetingHeadsUp(page, safari ? "Vendor sync" : "Partner sync")).toHaveCount(1);
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
     expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
+    // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
+    const prep = meetingHeadsUp(page, safari ? "Vendor sync" : "Partner sync").getByRole("button", { name: "Open prep" });
+    await prep.evaluate((el) => {
+      const scroller = el.closest<HTMLElement>(".page")!;
+      scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 40;
+    });
+    const at = (await prep.boundingBox())!.y;
+    await prep.click();
+    await expect(prep).toHaveAttribute("aria-expanded", "true");
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    expect(Math.abs((await prep.boundingBox())!.y - at), `Open prep ${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
     await page.close();
   }
 });

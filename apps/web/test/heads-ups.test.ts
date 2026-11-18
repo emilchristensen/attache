@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionItemView } from "@attache/contracts";
-import { forYouNow, heldSlot, HEADS_UP_KINDS, MEETING_LEAD_MS, promotedMeetings, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
+import { forYouNow, heldSlot, HEADS_UP_KINDS, MEETING_LEAD_MS, promotedMeetings, withArrivedMeetings, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
 
 const CPH = "Europe/Copenhagen";
 
@@ -417,5 +417,30 @@ describe("the meetings promoted above the Inbox", () => {
     expect([...promotedMeetings(slot)]).toEqual(["a", "b", "c", "d"]);
     expect(slot.more.map((h) => h.key)).toEqual(["meeting:d", "briefing:b1"]);
     expect(promotedMeetings(forYouNow(input("2026-11-18T07:00:00Z", { meetings })))).toEqual(new Set());
+  });
+});
+
+describe("a meeting that comes due while the Heads-ups are held", () => {
+  // Held at 10:14, while only the meeting in progress was timely; at 10:15 the next one comes due.
+  const held = forYouNow(input("2026-11-18T09:14:00Z", { meetings: [triage, handover] }));
+  const live = forYouNow(input("2026-11-18T09:15:00Z", { meetings: [triage, handover] }));
+
+  it("comes in on time below the held entry, before the briefing, and the held lead stays as it was", () => {
+    expect(keysOf(held)).toEqual(["meeting:a", "briefing:b1"]);
+    const slot = withArrivedMeetings(held, live, ["meeting:a"]);
+    expect(slot.lead).toBe(held.lead);
+    expect(keysOf(slot)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
+    expect(promotedMeetings(slot)).toEqual(new Set(["a", "b"]));
+  });
+
+  it("never comes in above what the pointer or focus is on", () => {
+    expect(keysOf(withArrivedMeetings(held, live, ["briefing:b1"]))).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
+    // Held somewhere that is no entry (between rows): it goes last, so nothing moves under the owner.
+    expect(keysOf(withArrivedMeetings(held, live, []))).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
+  });
+
+  it("brings nothing else in: a briefing or a clock change still waits", () => {
+    const later = forYouNow(input("2026-11-18T11:30:00Z", { meetings: [] }));
+    expect(withArrivedMeetings(held, later, ["meeting:a"])).toEqual(held);
   });
 });

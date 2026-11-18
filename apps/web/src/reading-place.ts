@@ -4,9 +4,9 @@ import { useEffect, type RefObject } from "react";
  * Keep the reader's place on Home when something above it grows or shrinks, as when a meeting prep Heads-up arrives
  * in For you now (and the Inbox's count line with it) while the owner reads the Inbox. Chrome and Firefox do this
  * themselves (scroll anchoring, `overflow-anchor`). Where the browser does not (Safari), this does the same for
- * Home's scroller: it remembers the first Inbox row in view and where it was, and when anything in the page changes
- * size, moves the scroller by as much as that row moved. At the top of the page nothing moves, as with the browser's
- * own anchoring.
+ * Home's scroller: while the reader is in the Inbox, it remembers the first Inbox row in view and where it was, and
+ * when anything in the page changes size, moves the scroller by as much as that row moved. With anything above the
+ * Inbox in view, or at the top of the page, nothing moves.
  */
 export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): void {
   useEffect(() => {
@@ -14,9 +14,13 @@ export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): voi
     if (!scroller || anchorsItself() || typeof ResizeObserver === "undefined") return;
     let anchor: { el: Element; top: number } | null = null;
     const remember = () => {
-      const view = scroller.getBoundingClientRect().top;
-      const el = [...scroller.querySelectorAll("[data-inbox-row]")].find((r) => r.getBoundingClientRect().bottom > view) ?? null;
-      anchor = el && scroller.scrollTop > 0 ? { el, top: el.getBoundingClientRect().top } : null;
+      const view = scroller.getBoundingClientRect();
+      // Only while the reader is in the Inbox (nothing above it in view, so a change up there is out of sight) and on a
+      // row in view: as the browser's own anchoring does, the place is what the reader sees.
+      const inbox = scroller.querySelector("#inbox");
+      const reading = !!inbox && inbox.getBoundingClientRect().top <= view.top && scroller.scrollTop > 0;
+      const el = reading ? ([...scroller.querySelectorAll("[data-inbox-row]")].find((r) => r.getBoundingClientRect().bottom > view.top && r.getBoundingClientRect().top < view.bottom) ?? null) : null;
+      anchor = el ? { el, top: el.getBoundingClientRect().top } : null;
     };
     const keep = () => {
       if (anchor?.el.isConnected) {

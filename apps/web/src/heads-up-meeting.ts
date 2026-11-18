@@ -6,7 +6,7 @@
  */
 import type { AttentionItemView, MeetingTimes } from "@attache/contracts";
 import type { BriefingRelatedNote, HeadsUp, HeadsUpAction, HeadsUpInput, HeadsUpKind, Slot } from "./heads-ups.ts";
-import { MEETING_LEAD_MS, RANK } from "./heads-up-rules.ts";
+import { byUrgency, MEETING_LEAD_MS, RANK, VISIBLE_FOLLOWERS } from "./heads-up-rules.ts";
 import { rowText } from "./inbox-rows.ts";
 import { clockTime, sameDay } from "./zoned-time.ts";
 
@@ -107,4 +107,28 @@ export const meetingPrep: HeadsUpKind = {
 /** The ids of the Inbox items the slot shows as meeting prep: the Inbox leaves them out while they are shown here. */
 export function promotedMeetings(slot: Slot): ReadonlySet<string> {
   return new Set([slot.lead, ...slot.followers, ...slot.more].flatMap((h) => (h?.meeting ? [h.meeting.itemId] : [])));
+}
+
+/**
+ * While the Heads-ups are held, the slot holds still (`heldSlot`), but a meeting is not kept waiting: the next one
+ * comes in on time. A meeting prep Heads-up in `live` that the held slot does not have goes in at its place in the
+ * order, but never above the entries the pointer or focus is on (`holding`, their keys; none known: last), so the
+ * held lead and its Join keep their place and destination. Nothing else comes in.
+ */
+export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[]): Slot {
+  const entries = [slot.lead, ...slot.followers, ...slot.more].filter((h): h is HeadsUp => h !== null);
+  const shown = new Set(entries.map((h) => h.key));
+  const arrived = [live.lead, ...live.followers, ...live.more].filter((h): h is HeadsUp => !!h?.meeting && !shown.has(h.key)).sort(byUrgency);
+  if (!arrived.length) return slot;
+  const held = entries.flatMap((h, n) => (holding.includes(h.key) ? [n] : []));
+  let next = entries;
+  let from = held.length ? Math.max(...held) + 1 : entries.length;
+  for (const h of arrived) {
+    const before = next.findIndex((e, n) => n >= from && byUrgency(h, e) < 0);
+    const at = before < 0 ? next.length : before;
+    next = [...next.slice(0, at), h, ...next.slice(at)];
+    from = at + 1;
+  }
+  const rest = slot.lead ? next.slice(1) : next;
+  return { lead: slot.lead, followers: rest.slice(0, VISIBLE_FOLLOWERS), more: rest.slice(VISIBLE_FOLLOWERS), quiet: null };
 }

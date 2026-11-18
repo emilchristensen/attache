@@ -1,3 +1,5 @@
+import type { HeadsUp } from "./heads-ups.ts";
+
 /**
  * For you now's fixed rules, as named constants: when each Heads-up kind applies and leaves, how often the slot is
  * computed again, how many followers show and each kind's urgency. `heads-ups.ts` re-exports them.
@@ -21,3 +23,8 @@ export const MEETING_LEAD_MS = 15 * MINUTE_MS;
  * Meeting prep (#26 of spec #14) takes `meeting`, so a meeting in progress, then the next one, come before briefings.
  */
 export const RANK = { meeting: 10, briefing: 20, progress: 30, earlier: 40 } as const;
+
+/** The order of Heads-ups: by rank, then the instant each is about, then its key. */
+export function byUrgency(a: HeadsUp, b: HeadsUp): number {
+  return a.rank - b.rank || a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+}

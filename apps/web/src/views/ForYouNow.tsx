@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
-import { briefingWritten, forYouNow, heldSlot, promotedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep } from "../heads-ups.ts";
+import { briefingWritten, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep } from "../heads-ups.ts";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
@@ -204,7 +204,7 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
   const schedule = useBriefingSchedule(attentionOn, clock.now);
-  const { held, holdProps } = useHold();
+  const { held, holding, holdProps } = useHold("data-heads-up-key");
   // Got it, Not now and Done pressed in this tab apply at once, even while held; another tab's wait until the hold ends.
   const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
@@ -233,7 +233,14 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
     frozen.current = live;
     handoff.current = null;
   } else if (!handoff.current && briefingWritten(frozen.current, live)) handoff.current = live;
-  const slot = held ? heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine, ...doneKeys]) }, handoff.current) : forYouNow(live);
+  // While held, a meeting that comes due still comes in on time, below what the owner is on (`withArrivedMeetings`).
+  const slot = held
+    ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine, ...doneKeys]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...mine]) }), holding)
+    : forYouNow(live);
+  // This tab's own Got it, Not now and Done only stand in for a hold's frozen input: the live input has them (stored, or decided).
+  useEffect(() => {
+    if (!held && mine.size) setMine(new Set());
+  }, [held, mine]);
 
   const above = attentionOn ? new Set([...promotedMeetings(slot), ...doneHere.done]) : NONE;
   const aboveKey = [...above].sort().join(" ");

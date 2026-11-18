@@ -112,7 +112,7 @@ function attentionFor(ev: CalendarEvent, allDay: boolean, response: string, nowM
   const count = people(ev).length;
   const end = endMs(ev, start);
   // Raised from 24 hours before the start until the scheduled end, so the prep stays at hand during the meeting.
-  if (allDay || response === "declined" || count < 2 || !Number.isFinite(start) || end <= nowMs || start >= nowMs + PREP_MS) return undefined;
+  if (allDay || response === "declined" || count < 2 || !Number.isFinite(start) || end <= nowMs || start > nowMs + PREP_MS) return undefined;
   const hours = Math.max(0, Math.round((start - nowMs) / HOUR));
   return {
     ...base,

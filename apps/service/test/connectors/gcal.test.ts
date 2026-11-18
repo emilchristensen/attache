@@ -160,6 +160,8 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
       event("running", { start: { dateTime: iso(-0.5) }, end: { dateTime: iso(0.5) }, hangoutLink: "https://meet.google.com/run-ning-now" }),
       event("ending", { start: { dateTime: iso(-1) }, end: { dateTime: iso(0) } }),
       event("nocall", { start: { dateTime: iso(5) }, end: { dateTime: iso(6) } }),
+      // Exactly 24 hours away: the window is open from that moment.
+      event("tomorrow", { start: { dateTime: iso(24) }, end: { dateTime: iso(25) } }),
     ]);
     const s = await gcalAdapter.refresh!(ctx());
     const by = Object.fromEntries(s.observations.map((o) => [o.externalId, o.attention]));
@@ -170,6 +172,7 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     // Ended at this very moment: nothing to prepare for any more.
     expect(by.ending).toBeUndefined();
     expect(by.nocall!.meeting).toMatchObject({ meetLink: null, attendees: ["Mia"] });
+    expect(by.tomorrow).toMatchObject({ kind: "meeting_prep" });
   });
 
   it("invites awaiting my response become invite_response; accepting keeps the key and changes the fingerprint", async () => {

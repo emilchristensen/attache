@@ -11,12 +11,12 @@
 import type { AttentionItemView } from "@attache/contracts";
 import { briefingLines } from "./briefing-text.ts";
 import { meetingPrep, type MeetingPrep } from "./heads-up-meeting.ts";
-import { DAILY_BRIEFING_UNTIL, RANK, REQUESTED_BRIEFING_STAYS_MS, VISIBLE_FOLLOWERS } from "./heads-up-rules.ts";
+import { byUrgency, DAILY_BRIEFING_UNTIL, RANK, REQUESTED_BRIEFING_STAYS_MS, VISIBLE_FOLLOWERS } from "./heads-up-rules.ts";
 import { atTimeOfDay, clockTime, sameDay, spokenTime, startOfDay } from "./zoned-time.ts";
 
 // The rules, as named constants, live in `heads-up-rules.ts`; meeting prep's kind in `heads-up-meeting.ts`.
 export * from "./heads-up-rules.ts";
-export { meetingPrep, promotedMeetings, type MeetingPrep } from "./heads-up-meeting.ts";
+export { meetingPrep, promotedMeetings, withArrivedMeetings, type MeetingPrep } from "./heads-up-meeting.ts";
 
 // ---- inputs ----------------------------------------------------------------------------------------------------------
 
@@ -292,10 +292,6 @@ const briefingProgress: HeadsUpKind = {
 // ---- the slot --------------------------------------------------------------------------------------------------------
 
 export const HEADS_UP_KINDS: readonly HeadsUpKind[] = [meetingPrep, dailyBriefing, requestedKind("away-summary", "away", "Away summary"), requestedKind("requested-briefing", "manual", "Briefing you asked for"), briefingProgress, earlierToday];
-
-function byUrgency(a: HeadsUp, b: HeadsUp): number {
-  return a.rank - b.rank || a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-}
 
 /** What For you now shows at `input.now`. */
 export function forYouNow(input: HeadsUpInput, kinds: readonly HeadsUpKind[] = HEADS_UP_KINDS): Slot {
