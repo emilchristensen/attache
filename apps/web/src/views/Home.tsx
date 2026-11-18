@@ -6,7 +6,6 @@ import { ForYouNow } from "./ForYouNow.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { HomeConnections, useConnectionsStatus } from "./HomeConnections.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";
-import { inboxCoverage } from "../connection-status.ts";
 
 const NOTHING_ABOVE: ReadonlySet<string> = new Set();
 
@@ -27,8 +26,8 @@ export function Home() {
       <HomeSearch recall={f.recall} />
       {cfg.data && <ForYouNow attentionOn={f.attention ?? false} onAbove={setAbove} />}
       <HomeConnections view={connections} />
-      <Inbox attentionOn={f.attention ?? false} draftsOn={f.drafts ?? false} coverage={inboxCoverage(connections.status)} above={above} />
-      {f.recall && <RecentlyAdded />}
+      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} />
+      {f.capture && <RecentlyAdded />}
     </section>
   );
 }

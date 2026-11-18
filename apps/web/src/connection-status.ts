@@ -509,19 +509,6 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   return { kind: "problems", rows: sorted, working: ctx.reading ? { sources, others } : null };
 }
 
-/**
- * What an empty Inbox may claim: `all` sources were read, only the `notes` were (no work source is connected), or
- * the list is `incomplete` because the area shows a problem or does not know yet.
- */
-export type InboxCoverage = "all" | "notes" | "incomplete";
-
-export function inboxCoverage(status: ConnectionsStatus): InboxCoverage {
-  if (status.kind === "all_good") return "all";
-  const missing = status.rows.filter((r) => r.inbox);
-  if (!missing.length) return "all";
-  return missing.every((r) => r.state === "notes_only") ? "notes" : "incomplete";
-}
-
 /** The rows that show, and the rest behind one "N more" disclosure. */
 export function splitRows(rows: StatusRow[]): { shown: StatusRow[]; more: StatusRow[] } {
   return { shown: rows.slice(0, MAX_ROWS), more: rows.slice(MAX_ROWS) };

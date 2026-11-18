@@ -427,21 +427,6 @@ button.count-chip {
   }
 }
 
-/* A group's name: a plain label, no capitals or letterspacing. */
-.section-title {
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-  font-weight: 600;
-  margin: 18px 2px 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.section-title .collapse-toggle {
-  margin-left: auto;
-}
-
-
 /* ---- Connections ---------------------------------------------------------------------- */
 
 /* One ruled line when all is good; otherwise a ruled head and one compact row per problem. */
@@ -593,9 +578,26 @@ button.conn-row-line:hover:not(:disabled) {
   }
 }
 
-/* ---- Recently added ----------------------------------------------------------------------- */
+/* ---- Recently added: one ruled line under the Inbox that opens in place ------------------------------------ */
 
-.recently-added .recent-changes.card {
-  margin: 0;
-  padding: 2px 16px;
+.recently-added {
+  margin-top: var(--s-5);
 }
+.recently-added > .disclosure {
+  border-bottom: 1px solid var(--rule);
+}
+/* Nothing to open: the same ruled line as a closed disclosure, without the chevron, flush with the column. */
+.recently-added-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 14px 0;
+  border-block: 1px solid var(--rule);
+}
+.recently-added-line .disclosure-meta {
+  grid-column: 1;
+}
+.recently-added .collapse-toggle {
+  align-self: flex-start;
+}
+

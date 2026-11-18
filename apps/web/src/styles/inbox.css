@@ -238,6 +238,50 @@ a.source-chip {
   color: var(--ink-2);
 }
 
+/* ---- the empty list: what was read and what waits elsewhere, under the list's own rule ------------------------ */
+
+.inbox-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+  padding: var(--s-4) 4px;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+.inbox-empty .logo {
+  flex: none;
+}
+.inbox-empty-words {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.inbox-empty-words p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.inbox-empty-title {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.inbox-empty-line {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.inbox-empty-words button {
+  margin-top: var(--s-2);
+}
+/* The rows kept after a failure follow the failure's own rule. */
+.group-failure + .inbox-rows {
+  margin-top: 0;
+  border-top-width: 1px;
+}
+
 /* ---- narrow: stamp and kind first, the whole subject next, then source and time ------------------------- */
 
 @media (max-width: 720px) {

@@ -116,7 +116,7 @@ The screen you are on is filled in ink.
 A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
-When some Inbox items below have a Draft waiting, a line under the heading relates the rows to the decisions, such as "3 items below need you · 1 Draft in Approvals".
+When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
 The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
 The count is exact however many decisions wait.
@@ -217,12 +217,19 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
   The **Type** menu lists every type with its count and shows one type at a time.
   The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
-  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft.
-- **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
+  When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
+  When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.
+  An empty Inbox says exactly what is known.
+  **Nothing needs you.**, beside the logo without its dot, appears only when no decision waits anywhere and every source was read, and says when they were read.
+  When a source was not read it says "Nothing found in the 4 sources that were read." and names the one that was not; with only your notes connected, "Nothing found in your notes."; when Approvals or a sign-in still wait, "No open Inbox items." and where they wait; and when the count could not be read, that Attache cannot say nothing needs you, with **Retry**.
+  With Attention and briefings switched off the Inbox says so, and that this is not a claim that nothing needs you.
+- **Recently added** is one line under the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  It is not there while Saving to memory is switched off, and it says so with **Retry** when it could not be loaded.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
   **Revert** works as in Recent saves below, and a reverted change stays listed, marked reverted.
-  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
+  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the line says so and has nothing to open.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
   While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.

@@ -42,6 +42,11 @@ export interface NavSignals {
   waitingProposals: Resource<{ proposals: ProposalView[] }>;
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
+  /**
+   * Asks again for what the count could not read, while a part is unknown because a request failed (the count route
+   * and a list it fell back to); null while nothing failed, so an unknown part is only still being asked.
+   */
+  countRetry: (() => void) | null;
 }
 
 /**
@@ -196,6 +201,14 @@ export function useNavSignals(): NavSignals {
     lastDot.current = dot;
   }, [dot]);
   const status = replication.error ? undefined : replication.data?.status;
+  const listFailed = [inputs.inbox, inputs.drafts, inputs.proposals, inputs.connections].some((a) => a.kind === "failed");
+  const { reload: reloadProposals } = proposals;
+  const { reload: reloadConnections } = connections;
+  const retryCount = useCallback(() => {
+    reloadPair();
+    reloadProposals();
+    reloadConnections();
+  }, [reloadPair, reloadProposals, reloadConnections]);
   return {
     badges: { home: badge(count.home, WORDS.home), approvals: badge(count.approvals, WORDS.approvals), connections: badge(count.connections, WORDS.connections) },
     count,
@@ -207,6 +220,7 @@ export function useNavSignals(): NavSignals {
     waitingDrafts,
     waitingProposals: proposals,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
+    countRetry: countedTotals.kind === "failed" && listFailed ? retryCount : null,
   };
 }
 

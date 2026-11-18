@@ -8,7 +8,7 @@ import type { ConnectionStatus } from "../../packages/contracts/src/features.ts"
 import { approvalRow, openApprovalRow } from "./approvals.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
-import { inboxRow, openRow } from "./inbox.ts";
+import { inboxRow, openRecentlyAdded, openRow } from "./inbox.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -349,6 +349,7 @@ test("screens", async ({ browser }) => {
     await page.goto(`${stack.url}/brain`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
     await page.goto(stack.url);
+    await openRecentlyAdded(page);
     await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
     await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added.png` });
     // Search the Brain on Home: results under the field as the owner types, then Browse open.
@@ -412,6 +413,7 @@ test("screens", async ({ browser }) => {
   await approvalsScreens(page, "narrow");
   await page.goto(stack.url);
   const recentlyAdded = page.getByRole("region", { name: "Recently added" });
+  await openRecentlyAdded(page);
   await expect(recentlyAdded.getByRole("listitem").first()).toBeVisible();
   await recentlyAdded.screenshot({ path: "test-results/screens/narrow-home-recently-added.png" });
   await page.getByRole("combobox", { name: "Search the Brain" }).fill("Priya");
