@@ -18,7 +18,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 ## Features
 
 - **Search with citations.**
-  Every hit names its file and lines, and search works without a model.
+  One field at the top of Home (or `Ctrl K` and `/`) shows passages as you type; every hit names its file and lines, and search works without a model.
 - **Meaning-based search.**
   A small multilingual model runs locally and ranks passages by meaning and keywords, so a question worded differently, or in another language, still finds the note.
 - **The Brain in your Harness.**

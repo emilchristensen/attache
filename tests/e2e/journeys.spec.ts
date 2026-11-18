@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
+import { lineStarts } from "./layout.ts";
 import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
@@ -277,17 +278,17 @@ test("service not reachable: the pairing screen's centred layout, the commands t
   await page.close();
 });
 
-test("home: the inbox only, with no chat box or chat shortcut", async () => {
+test("home: search and the inbox, with no chat box or chat shortcut", async () => {
   const page = await journeys.open("/");
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Attache" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
   await expect(page.getByRole("separator")).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Main" }).first()).not.toContainText("ask");
-  // `/` used to jump to the chat box; now it does nothing, wherever you are.
-  await page.goto(`${stack.url}/jobs`);
+  // `/` used to jump to the chat box; now it searches the Brain (home-search.spec.ts has the whole of it).
   await page.keyboard.press("/");
-  await expect(page).toHaveURL(`${stack.url}/jobs`);
+  await expect(page.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
+  await expect(page).toHaveURL(`${stack.url}/`);
 });
 
 test("connections on Home: one green line when all is read, Checking and Could not check when an answer is missing, and Not reading beside the warning", async () => {
@@ -820,7 +821,7 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Which email vendor did we decide on for 2027?");
   const hit = page.locator(".list-item", { hasText: "Email vendor" }).first();
   await expect(hit).toContainText("Postmark");
-  await expect(hit).not.toContainText("superseded");
+  await expect(hit).not.toContainText("History");
 });
 
 test("approvals: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
@@ -943,26 +944,6 @@ async function holdInter(page: Page): Promise<() => void> {
   const released = new Promise<void>((resolve) => (release = resolve));
   await page.route(/\/assets\/inter-latin-wght-normal-[\w-]+\.woff2$/, (route) => released.then(() => route.continue()), { times: 1 });
   return release;
-}
-
-/** The first character of every line an element's text runs onto. */
-function lineStarts(el: Element): string[] {
-  const starts = new Map<number, { left: number; char: string }>();
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent ?? "";
-    for (let i = 0; i < text.length; i++) {
-      if (!text[i]!.trim()) continue;
-      const range = document.createRange();
-      range.setStart(node, i);
-      range.setEnd(node, i + 1);
-      const box = range.getBoundingClientRect();
-      const line = Math.round(box.top);
-      const first = starts.get(line);
-      if (!first || box.left < first.left) starts.set(line, { left: box.left, char: text[i]! });
-    }
-  }
-  return [...starts.values()].map((s) => s.char);
 }
 
 test("narrow layout: the Connections page has one name in the masthead, the More sheet and its heading", async () => {
