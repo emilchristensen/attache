@@ -4,7 +4,7 @@ import { join } from "node:path";
 import react from "@vitejs/plugin-react";
 import { build } from "vite";
 import { describe, expect, it } from "vitest";
-import { FONT_BUDGET_BYTES, fontBudget, measureFonts } from "../build/font-budget.ts";
+import { FONT_BUDGET_BYTES, fontBudget, measureFonts } from "../tooling/font-budget.ts";
 
 const WEB = join(import.meta.dirname, "..");
 

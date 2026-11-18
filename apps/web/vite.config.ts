@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { fontBudget } from "./build/font-budget.ts";
+import { fontBudget } from "./tooling/font-budget.ts";
 
 const service = process.env.ATTACHE_DEV_SERVICE ?? "http://127.0.0.1:7427";
 
