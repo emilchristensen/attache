@@ -46,7 +46,7 @@ export function DraftRow({ d, place, open, onToggle, reject }: { d: ActionView; 
   const text = draftRowText(d);
   const noticeId = useId();
   // A send of unknown outcome leads with its warning and Check destination, as on its Inbox item.
-  const check = place === "finished" && d.status === "unknown" ? deliveryCheck({ url: null }, d) : null;
+  const check = place === "finished" && d.status === "unknown" ? deliveryCheck({ url: null, draftable: null }, d) : null;
   return (
     <ApprovalRow
       kind="draft"

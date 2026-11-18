@@ -314,6 +314,15 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(done.job.result.actionId).not.toBe(d.id);
     expect(await reviewItem()).toMatchObject({ actionId: done.job.result.actionId, actionStatus: "draft" });
     expect((await svc.get(`/actions/${d.id}`)).status).toBe("unknown");
+    // While the item's Draft is being sent, a Draft job does not replace it either.
+    const replacement = done.job.result.actionId;
+    svc.app.db.prepare("update actions set status = 'executing' where id = ?").run(replacement);
+    const during = await svc.post(`/attention/${item.id}/draft`, {});
+    const waited = await svc.waitJob(during.job.id);
+    expect(waited.job.status).toBe("blocked");
+    expect(waited.job.error).toBe("The last Draft for this item is being sent. Wait for its outcome before preparing another.");
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "executing" });
+    svc.app.db.prepare("update actions set status = 'draft' where id = ?").run(replacement);
   });
 
   it("draft expiry counts business hours only", () => {

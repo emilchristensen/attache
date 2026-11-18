@@ -1,5 +1,5 @@
 import type { ActionView, AttentionItemView } from "@attache/contracts";
-import { uncertainTargetUrl, unknownOutcomeNotice, type DraftNotice } from "./draft-state.ts";
+import { GMAIL_DRAFTS_URL, uncertainTargetUrl, unknownOutcomeNotice, type DraftNotice } from "./draft-state.ts";
 
 /**
  * Delivery unconfirmed on an Inbox item (table tests in `test/delivery.test.ts`): the item's last Draft was sent, but
@@ -25,9 +25,12 @@ export interface DeliveryCheck {
 /** Said until the Draft is read (or when it cannot be): no service or receipt to name yet. */
 const GENERAL_NOTICE: DraftNotice = { tone: "attention", warning: true, lines: ["The last send could not be verified. It may have arrived. Check the destination before you do anything else."] };
 
-/** Check destination and the warning for an item, from its Draft once read (`null` before). */
-export function deliveryCheck(item: Pick<AttentionItemView, "url">, draft: ActionView | null): DeliveryCheck {
-  if (!draft) return { href: item.url, notice: GENERAL_NOTICE };
+/**
+ * Check destination and the warning for an item, from its Draft once read (`null` before, or when it cannot be read).
+ * Without the Draft, a Gmail item's draft is looked for in Gmail's drafts, never in the thread it answers.
+ */
+export function deliveryCheck(item: Pick<AttentionItemView, "url" | "draftable">, draft: ActionView | null): DeliveryCheck {
+  if (!draft) return { href: item.draftable?.actionKind === "gmail.draft" ? GMAIL_DRAFTS_URL : item.url, notice: GENERAL_NOTICE };
   return { href: uncertainTargetUrl(draft) ?? item.url, notice: unknownOutcomeNotice(draft) };
 }
 

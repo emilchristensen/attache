@@ -40,7 +40,7 @@ describe("which item carries Delivery unconfirmed", () => {
 
 describe("Check destination and the warning on the open row", () => {
   it("goes to the receipt's own place when the send left one, and says the Draft page's words", () => {
-    expect(deliveryCheck({ url: PR }, draft())).toEqual({
+    expect(deliveryCheck({ url: PR, draftable: null }, draft())).toEqual({
       href: COMMENT,
       notice: {
         tone: "attention",
@@ -51,22 +51,27 @@ describe("Check destination and the warning on the open row", () => {
   });
 
   it("falls back to the Draft's target, then to the item's own link", () => {
-    expect(deliveryCheck({ url: "https://example.com/item" }, draft({ receipt: { error: "socket hang up" } })).href).toBe(PR);
-    expect(deliveryCheck({ url: "https://example.com/item" }, draft({ receipt: null, target: { repo: "acme/web", number: 42 }, context: {} })).href).toBe("https://example.com/item");
-    expect(deliveryCheck({ url: null }, draft({ receipt: null, target: { repo: "acme/web", number: 42 }, context: {} })).href).toBeNull();
+    expect(deliveryCheck({ url: "https://example.com/item", draftable: null }, draft({ receipt: { error: "socket hang up" } })).href).toBe(PR);
+    expect(deliveryCheck({ url: "https://example.com/item", draftable: null }, draft({ receipt: null, target: { repo: "acme/web", number: 42 }, context: {} })).href).toBe("https://example.com/item");
+    expect(deliveryCheck({ url: null, draftable: null }, draft({ receipt: null, target: { repo: "acme/web", number: 42 }, context: {} })).href).toBeNull();
   });
 
   it("a Gmail draft whose creation is unconfirmed is checked in Gmail's drafts, not in the thread it answers", () => {
     const gmail = draft({ kind: "gmail.draft", target: { threadId: "t1" }, receipt: { error: "timeout" }, context: { item: { id: "item-1", url: "https://mail.google.com/mail/u/0/#inbox/t1" } } });
-    expect(deliveryCheck({ url: "https://mail.google.com/mail/u/0/#inbox/t1" }, gmail).href).toBe("https://mail.google.com/mail/u/0/#drafts");
-    expect(deliveryCheck({ url: null }, { ...gmail, receipt: { url: "https://mail.google.com/mail/u/0/#drafts?compose=abc" } }).href).toBe("https://mail.google.com/mail/u/0/#drafts?compose=abc");
+    expect(deliveryCheck({ url: "https://mail.google.com/mail/u/0/#inbox/t1", draftable: null }, gmail).href).toBe("https://mail.google.com/mail/u/0/#drafts");
+    expect(deliveryCheck({ url: null, draftable: null }, { ...gmail, receipt: { url: "https://mail.google.com/mail/u/0/#drafts?compose=abc" } }).href).toBe("https://mail.google.com/mail/u/0/#drafts?compose=abc");
   });
 
   it("before the Draft is read (or when it cannot be), warns in general words and points at the item's link", () => {
-    expect(deliveryCheck({ url: PR }, null)).toEqual({
+    expect(deliveryCheck({ url: PR, draftable: null }, null)).toEqual({
       href: PR,
       notice: { tone: "attention", warning: true, lines: ["The last send could not be verified. It may have arrived. Check the destination before you do anything else."] },
     });
+  });
+
+  it("before a Gmail item's Draft is read, points at Gmail's drafts, never at the thread it answers", () => {
+    const item = { url: "https://mail.google.com/mail/u/0/#inbox/t1", draftable: { actionKind: "gmail.draft", target: {}, context: {} } };
+    expect(deliveryCheck(item, null).href).toBe("https://mail.google.com/mail/u/0/#drafts");
   });
 });
 
