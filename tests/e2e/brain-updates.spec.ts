@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { approvalRow, draftsGroup, openApprovalRow, proposalsGroup, waitingTab } from "./approvals.ts";
 import { api, JourneyBrowser } from "./browser.ts";
+import { openConnection } from "./connections.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -236,10 +237,10 @@ test("approvals: when the last Proposal is decided elsewhere, nothing-waits wait
 
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
   const page = await journeys.open("/connections");
-  // On the full Connections page an unconfigured card opens straight into its setup form.
-  const claudeCode = page.locator('[data-connection="claude-code"]');
+  // Not set up, Claude Code is a tile that opens in place into its setup form; connected, it is a row that works.
+  const claudeCode = await openConnection(page, "claude-code");
   await claudeCode.getByRole("button", { name: "Connect" }).click();
-  await expect(claudeCode.getByText("connected", { exact: true })).toBeVisible();
+  await expect(claudeCode).toHaveAttribute("data-state", "works");
 
   await page.goto(`${stack.url}/settings/saving`);
   const card = page.getByRole("region", { name: "Auto-accept" });

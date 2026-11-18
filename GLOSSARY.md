@@ -53,6 +53,11 @@ Search results take its place while a query is typed.
 The Brain screen's view of every change to the Brain, newest first, with where each came from and whether Revert can undo it.
 It filters to all changes, those written without review, or those reverted.
 
+**Job**:
+Background work the service runs and records, such as research, a briefing, a Draft's preparation or a Source refresh.
+It keeps running when the browser closes; the Jobs screen lists it under Running until it ends, then under Finished.
+A job that failed or is blocked is named with its reason; Cancel reports whether the work stopped or had already finished.
+
 **Search palette**:
 Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd K`, `/`, the masthead's Search or the bottom bar's Search.
 It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
@@ -85,7 +90,8 @@ _Avoid_: client, coding agent
 **Connection**:
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
-Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet.
+On that page each Connection is one row in its group (Notes, Work sources, Harnesses, Model) with its account, what it may read and write, and when Attache last read it; one not set up is a small tile, and one that needs sign-in moves to a "Needs you" group at the top, already open.
+Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet, and the page uses the same words.
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
