@@ -1,5 +1,5 @@
 /** The browser side of the journeys: one paired browser profile per spec, and the Attache API as the Dashboard calls it. */
-import type { Browser, BrowserContext, ConsoleMessage, Page } from "@playwright/test";
+import type { Browser, BrowserContext, BrowserContextOptions, ConsoleMessage, Page } from "@playwright/test";
 
 /**
  * One paired browser profile for a spec's journeys, like a real user's
@@ -16,8 +16,9 @@ export class JourneyBrowser {
     this.url = url;
   }
 
-  static async start(browser: Browser, url: string): Promise<JourneyBrowser> {
-    return new JourneyBrowser(await browser.newContext({ viewport: { width: 1360, height: 900 } }), url);
+  /** `options` adds to the defaults, such as a `timezoneId` for journeys that depend on the time of day. */
+  static async start(browser: Browser, url: string, options: BrowserContextOptions = {}): Promise<JourneyBrowser> {
+    return new JourneyBrowser(await browser.newContext({ viewport: { width: 1360, height: 900 }, ...options }), url);
   }
 
   /** Keep `page`'s console errors. Expected network failures while the service is deliberately stopped are not app errors. */
