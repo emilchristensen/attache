@@ -232,6 +232,76 @@ test("decided rows: a dismissed item whose evidence changes comes back in its pl
   await page.close();
 });
 
+/** An open item's id by the end of its title, as the service has it now. */
+async function itemId(page: Page, titleEnd: string): Promise<string> {
+  const { items } = await api<{ items: Array<{ id: string; title: string }> }>(page, "GET", "/attention?state=open");
+  return items.find((i) => i.title.endsWith(titleEnd))!.id;
+}
+
+const nextFrame = (page: Page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+test("decided rows: a refresh that lands while the decision is sent keeps the receipt and its Undo", async () => {
+  const page = await journeys.open("/");
+  const target = await itemId(page, "Prepare release note 21");
+  const other = await itemId(page, "Prepare release note 22");
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  await page.route(`**/api/v1/attention/${target}/decision`, async (route) => {
+    await held;
+    await route.continue();
+  });
+  try {
+    const row = inboxRow(page, "Prepare release note 21");
+    await openRow(row);
+    await row.getByRole("button", { name: "Dismiss" }).click();
+    // While that decision is on its way, another change makes the Dashboard ask again: the answer still has the row open.
+    const refreshed = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok());
+    await api(page, "POST", `/attention/${other}/decision`, { decision: "dismiss" });
+    await refreshed;
+    await nextFrame(page);
+    const after = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok());
+    release();
+    await expect(row).toHaveAttribute("data-decided", "dismiss");
+    // The answer after the decision leaves the item out; the receipt and Undo stay in its place.
+    await after;
+    await nextFrame(page);
+    await expect(row).toHaveAttribute("data-decided", "dismiss");
+    await row.getByRole("button", { name: "Undo" }).click();
+    await expect(row).not.toHaveAttribute("data-decided");
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await api(page, "POST", `/attention/${other}/decision`, { decision: "reopen" });
+    await page.close();
+  }
+});
+
+test("arrivals: the first answer is kept even when it is empty, so the first item waits behind Show new items", async () => {
+  const page = await journeys.newPage();
+  const open = "**/api/v1/attention?state=open*";
+  await page.route(open, (route) => route.fulfill({ json: { items: [] } }));
+  try {
+    const first = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open"));
+    await page.goto(`${stack.url}/`);
+    await first;
+    await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+    await expect(rows(page)).toHaveCount(0);
+    await page.unroute(open);
+    // Something changes on the service, so the Dashboard asks again, and the real list answers.
+    const id = await itemId(page, "Prepare release note 22");
+    await api(page, "POST", `/attention/${id}/decision`, { decision: "dismiss" });
+    await api(page, "POST", `/attention/${id}/decision`, { decision: "reopen" });
+    const showNew = page.locator("[data-show-new]");
+    await expect(showNew).toHaveText(/^Show \d+ new items$/, { timeout: 30_000 });
+    await expect(rows(page)).toHaveCount(0);
+    await expect(page.getByText("New items arrived. Show new items adds them.")).toBeVisible();
+    await showNew.click();
+    await expect(rows(page).first()).toBeVisible();
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.close();
+  }
+});
+
 test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off until switched on in the shortcut sheet", async () => {
   const page = await journeys.open("/");
   await expect(rows(page).first()).toBeVisible();

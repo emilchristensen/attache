@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { frozenList, ordered, type InboxOrder } from "../inbox-view.ts";
 import type { RowDecision } from "./InboxRow.tsx";
@@ -13,7 +13,10 @@ export interface DecidedEntry {
   item: AttentionItemView;
   decision: RowDecision;
   until: string | null;
-  /** The answer the decision was made on; a newer answer that has the item open again retires the receipt. */
+  /**
+   * The latest answer when the decision succeeded; a newer answer that has the item again retires the receipt. Any
+   * answer to a request started earlier is dropped by `useResource` once the reload after the decision starts.
+   */
   since: readonly AttentionItemView[] | null;
 }
 
@@ -48,6 +51,13 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
   const decisions = decidedIn.key === listKey ? decidedIn.map : NONE;
   const setDecisions = (change: (prev: ReadonlyMap<string, DecidedEntry>) => ReadonlyMap<string, DecidedEntry>) =>
     setDecidedIn((prev) => ({ key: listKey, map: change(prev.key === listKey ? prev.map : NONE) }));
+
+  // The latest answer, read when a decision succeeds: a refresh that landed while the decision was being sent still
+  // has the item, and must not count as the service answering with it again.
+  const latest = useRef(live);
+  useEffect(() => {
+    latest.current = live;
+  }, [live]);
 
   // Items the owner reopened from Hidden in this tab: they come straight back instead of waiting as arrivals.
   const [welcome, setWelcome] = useState<ReadonlySet<string>>(new Set());
@@ -88,7 +98,7 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
       setDecisions(() => NONE);
     },
     decided: (item, decision, until) => {
-      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, since: live }));
+      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, since: latest.current }));
       if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
     },
   };
