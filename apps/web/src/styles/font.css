@@ -2,7 +2,7 @@
  * Inter, served by Attache itself from the bundle and never fetched from the internet.
  * One variable face (weights 100 to 900), Latin subset only: the Latin-1 letters (æ, ø, å, é, ü), typographic
  * punctuation and the euro sign. Anything outside it falls back to the system sans in `--font`.
- * `build/font-budget.ts` fails the build if the font files grow past 150 KB.
+ * `tooling/font-budget.ts` fails the build if the font files grow past 150 KB.
  */
 @font-face {
   font-family: "Inter";

@@ -606,7 +606,7 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
   A component takes a hue through `hueClass()` (`theme/hues.ts`) and reads `--c`, `--c-ink`, `--c-soft` and `--c-line`, never a hue's own tokens.
   `Tag` replaced the old status pill and has no green variant: `StateTag` shows a healthy status as plain text and the rest as a tag (`state-tone.ts`).
   `TypeIcon` (an icon on a hue tile), `AttentionDot` (the logo's dot at 8 px) and `icons.tsx` (one inline SVG set, no icon package) are the other shared pieces.
-  The typeface is Inter, bundled from `@fontsource-variable/inter` (one variable face, Latin subset) and served by Attache, so the Dashboard loads nothing from the internet; `build/font-budget.ts` fails `vite build` when the font files pass 150 KB.
+  The typeface is Inter, bundled from `@fontsource-variable/inter` (one variable face, Latin subset) and served by Attache, so the Dashboard loads nothing from the internet; `tooling/font-budget.ts` fails `vite build` when the font files pass 150 KB.
   `apps/web/test/contrast.test.ts` reads `tokens.css` and checks every text pair at 4.5:1 and every graphic pair at 3:1 in both themes.
 - Obsidian: no plugin.
   The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
