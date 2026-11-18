@@ -175,6 +175,19 @@ test("each row opens its diagnostics, last read and retry in place, and the keyb
   await page.keyboard.press("Tab");
   await expect(row(page, "Gmail").getByRole("button", { name: "Retry now" })).toBeFocused();
 
+  // The partly read row: which part was not read, and when Slack was last read.
+  const slack = toggle(row(page, "Slack"));
+  await slack.focus();
+  await page.keyboard.press("Enter");
+  const partial = row(page, "Slack").locator(".conn-row-detail");
+  await expect(partial).toContainText("Slack was only partly read, so Slack replies and mentions may be missing below.");
+  await expect(partial.locator(".conn-failure")).toHaveText("Mentions were read; direct messages were not");
+  await expect(partial).toContainText(/Last read (just now|\d+ \w+ ago)\./);
+  await expect(slack).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(partial).toBeHidden();
+  await expect(slack).toBeFocused();
+
   // The sign-in row: what the service said, and when GitHub was last read. A sign-in is never retried by itself.
   const github = toggle(row(page, "GitHub"));
   await github.focus();
@@ -214,6 +227,8 @@ for (const [name, viewport] of [
     for (const subject of ["GitHub", "Gmail", "Slack", "Jira"]) expect(text, `${subject} named while closed`).toContain(subject);
     const collapsed = await inboxHeadingTop(page);
     const prefix = narrow ? "narrow-" : "";
+    // The window as the owner sees it with the area in view: on a phone it sits below For you now.
+    if (narrow) await connections(page).evaluate((e) => e.scrollIntoView({ block: "start" }));
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.waitForTimeout(200);

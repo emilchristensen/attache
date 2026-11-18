@@ -582,8 +582,10 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(bar.getByRole("link", { name: "Approvals, 1 waiting" })).toBeVisible();
 
   // The last thing on a page scrolls clear of the bar, safe area included.
-  // Settings' sections load one by one and the page grows as they do, so scroll to its end again until it settles.
+  // Settings' sections load one by one and the page grows as they do: wait for the last one, Service health, then
+  // scroll to the end again until the page settles.
   await page.goto(`${stack.url}/settings`);
+  await expect(page.locator('[data-settings-section="service"] dl.kv')).toBeVisible();
   const barTop = (await bar.boundingBox())!.y;
   await expect
     .poll(
