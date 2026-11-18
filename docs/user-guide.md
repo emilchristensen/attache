@@ -119,7 +119,9 @@ On Home itself Home carries no number; instead the Inbox heading says how many n
 When some Inbox items below have a Draft waiting, a line under the heading relates the rows to the decisions, such as "3 items below need you · 1 Draft in Approvals".
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
 The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
-When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
+The count is exact however many decisions wait.
+When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
+A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
@@ -304,7 +306,7 @@ A row you decide stays as one line in its place, such as "Applied · Email vendo
 A Draft that is being sent shows under *In progress*; it is not counted, since nothing waits for you there.
 "Nothing waits for your OK." shows only when both the Drafts and the Proposals answered with nothing.
 The Drafts and the Proposals are asked for separately, and each section answers for its own: when one cannot be loaded it says so with **Retry**, and keeps the rows it last had with the time they were loaded.
-The Waiting tab and Approvals in the navigation then show what is known as a lower bound, such as "2+".
+The Waiting tab and Approvals in the navigation still count every waiting decision; only when the count could not be read either do they show what is known as a lower bound, such as "2+".
 
 The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
 
