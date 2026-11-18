@@ -212,6 +212,11 @@ describe("noteSections: the parts of a note the reader shows as stored", () => {
     expect(noteSections(note)).toEqual({ notes: ["Example:", "```md", "## History", "- not history", "```", "~~~", "## Notes", "~~~"].join("\n"), history: ["real"] });
   });
 
+  it("the frontmatter is not read for fences, as the service skips it", () => {
+    const note = ["---", "type: note", "example: |", "  ```", "---", "# X", "## Notes", "Words", "## History", "- real"].join("\n");
+    expect(noteSections(note)).toEqual({ notes: "Words", history: ["real"] });
+  });
+
   it("a heading written in another case still counts", () => {
     expect(noteSections("# X\n## notes\nSome words\n## history\n- one\n")).toEqual({ notes: "Some words", history: ["one"] });
   });

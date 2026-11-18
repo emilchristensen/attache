@@ -163,13 +163,16 @@ export function waitingProposalWords(n: number): string {
 
 /** A line that opens or closes a fenced code block, as the service reads one (`CODE_FENCE` in its Markdown model). */
 const CODE_FENCE = /^\s*(```|~~~)/;
+/** The frontmatter at the top of a note, as the service splits it off before reading the body (`FM_RE`). */
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
 /**
  * The lines under a level-two heading (any case), up to the next level-two heading; null without the heading.
- * A heading inside a fenced code block is text, as the service reads it.
+ * The body is read as the service reads it: after the frontmatter, and a heading inside a fenced code block is text.
  */
 function section(raw: string, heading: string): string[] | null {
-  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  const text = raw.replace(/\r\n/g, "\n");
+  const lines = text.slice(FRONTMATTER.exec(text)?.[0].length ?? 0).split("\n");
   let fenced = false;
   const headings = lines.map((l) => {
     if (CODE_FENCE.test(l)) fenced = !fenced;
