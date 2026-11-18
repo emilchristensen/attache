@@ -424,7 +424,7 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const page = await journeys.open("/brain");
   const search = page.getByRole("searchbox", { name: "Search the Brain" });
   await search.fill("When is the cutover plan due for the Orion migration?");
-  const hit = page.locator(".list-item", { hasText: "Orion" }).first();
+  const hit = page.locator(".result-item", { hasText: "Orion" }).first();
   await expect(hit).toBeVisible();
   await hit.focus();
   await page.keyboard.press("Enter");
@@ -508,8 +508,16 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");
   const rejectedId = await draft.getAttribute("data-action-id");
+  const draftUrl = page.url();
   await page.getByRole("button", { name: "Reject" }).click();
   await expect(draft).toHaveAttribute("data-status", "rejected");
+  // The page stays on this Draft, says nothing was sent, and locks the text: only an explicit Restore undoes it.
+  await expect(page).toHaveURL(draftUrl);
+  await expect(page.locator(".draft-notice")).toContainText(/^You rejected v1 at \d\d:\d\d\. Nothing was sent\./);
+  await expect(page.getByRole("textbox", { name: "Text of v1" })).not.toBeEditable();
+  await expect(page.getByRole("button", { name: /^(Approve|Send)/ })).toHaveCount(0);
+  // Reject left with the state it belonged to; focus moves to the next step instead of the page's end.
+  await expect(page.getByRole("button", { name: "Restore as v2" })).toBeFocused();
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
   await expect(pr.getByRole("button", { name: "View draft" })).toHaveCount(0);
@@ -528,6 +536,31 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(page).toHaveURL(new RegExp(`/approvals/${rejectedId}$`));
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
   await expect(page.getByRole("link", { name: /^Approvals/ }).first()).toHaveAttribute("aria-current", "page");
+  // Restore brings the same words back as v2, on the same page; the item's decision is the Draft's again.
+  const words = await page.getByRole("textbox", { name: "Text of v1" }).inputValue();
+  await page.getByRole("button", { name: "Restore as v2" }).click();
+  const restored = page.locator("[data-action-id]");
+  await expect(restored).toHaveAttribute("data-status", "draft");
+  await expect(page).toHaveURL(new RegExp(`/approvals/${rejectedId}$`));
+  await expect(page.locator("[data-draft-version]")).toHaveText("v2");
+  await expect(page.locator(".draft-said")).toHaveText("Restored as v2.");
+  const box = page.getByRole("textbox", { name: "Text of v2" });
+  await expect(box).toHaveValue(words);
+  await expect(box).toBeEditable();
+  await expect(page.getByRole("button", { name: "Approve v2" })).toBeFocused();
+  // At 320 px the page keeps to the window: the step line, quote, text and buttons wrap instead of overflowing.
+  await page.setViewportSize({ width: 320, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  const steps = await page.locator(".draft-step").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+  expect(new Set(steps).size, "the three steps share one row").toBe(1);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(pr).toContainText("Draft waiting");
+  await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
+  // Reject it again, so the next journey prepares a Draft of its own.
+  await page.goto(`${stack.url}/approvals/${rejectedId}`);
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
@@ -540,8 +573,21 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   // View draft opens the Draft's own page under Approvals.
   await expect(page).toHaveURL(/\/approvals\/[^/?]+$/);
   await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
-  const box = page.getByRole("textbox", { name: "Text" });
+  const box = page.getByRole("textbox", { name: "Text of v1" });
   await expect(box).toHaveValue(/reviewed the changes/);
+  // The header names kind, destination, version and status above the step line; the message it answers is quoted above the text.
+  await expect(page.locator(".draft-destination")).toHaveText("GitHub comment on acme/web #42");
+  await expect(page.locator("[data-draft-version]")).toHaveText("v1");
+  await expect(page.locator(".draft-meta .tag")).toHaveText("Draft");
+  await expect(page.getByRole("list", { name: "Where the Draft stands" }).getByRole("listitem")).toHaveText(["1Draft v1, current step", "2Approved, not yet", "3Sent, not yet"]);
+  await expect(page.locator(".draft-quote-full")).toHaveText("Retries failed payments once.");
+  const quoteBottom = (await page.locator(".draft-quote-full").boundingBox())!;
+  expect(quoteBottom.y + quoteBottom.height).toBeLessThanOrEqual((await box.boundingBox())!.y);
+  expect(await box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+  // Send is there before approval, disabled, with its reason.
+  const send1 = page.getByRole("button", { name: "Send v1" });
+  await expect(send1).toBeDisabled();
+  await expect(send1).toHaveAccessibleDescription(/^Send unlocks after approval\./);
   // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -551,11 +597,16 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   }
   await page.emulateMedia({ colorScheme: null });
   await box.fill("Looks good. One question: does the retry respect idempotency keys?");
-  await page.getByRole("button", { name: "Save new version" }).click();
-  await expect(page.getByText("v2 ·")).toBeVisible();
+  // Unsaved text: saving is the next step and says it replaces v1; Approve and Send wait.
+  await expect(page.locator(".draft-notice")).toHaveText("Saving creates v2 and replaces the text of v1, which is not kept.");
+  await expect(page.getByRole("button", { name: "Approve v1" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Approve v1" })).toHaveAccessibleDescription("Save or discard your changes first.");
+  await page.getByRole("button", { name: "Save as v2" }).click();
+  await expect(page.locator("[data-draft-version]")).toHaveText("v2");
   await page.getByRole("button", { name: "Approve v2" }).click();
   await expect(page.getByText("Cannot send yet")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send v2" })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Open Connections" })).toHaveAttribute("target", "_blank");
   // Grant the separate write permission.
   await page.goto(`${stack.url}/connections`);
   const gh = page.locator('[data-connection="github"]');
@@ -586,14 +637,22 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   endApproval(stack, (await detail.getAttribute("data-action-id"))!);
   await page.reload();
   await expect(detail).toHaveAttribute("data-status", "draft");
-  await expect(page.getByRole("status").filter({ hasText: /^The approval of v2 ended at .+\. Nothing was sent\.$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: /^The approval of v2 ended at \d\d:\d\d\. Nothing was sent\.$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send v2" })).toBeDisabled();
+  const sendingUrl = page.url();
   await page.getByRole("button", { name: "Approve v2 again" }).click();
   await expect(detail).toHaveAttribute("data-status", "approved");
-  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".draft-notice")).toContainText("Send posts exactly v2 and cannot be undone.");
+  await page.getByRole("button", { name: "Send v2" }).click();
   const receipt = page.locator("[data-receipt]");
   await expect(receipt).toContainText("Verified", { timeout: 20_000 });
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "succeeded");
+  // Sent, on the same page: every step checked, the text locked, nothing left to press but the way to the comment.
+  await expect(page).toHaveURL(sendingUrl);
+  await expect(page.getByRole("list", { name: "Where the Draft stands" }).getByRole("listitem").last()).toHaveText(/^Sent \d\d:\d\d, verified, done$/);
+  await expect(page.getByRole("textbox", { name: "Text of v2" })).not.toBeEditable();
+  await expect(page.locator("[data-draft-actions] button")).toHaveCount(0);
+  await expect(page.locator("[data-draft-actions]").getByRole("link", { name: "Open on GitHub" })).toBeVisible();
   // A sent draft is finished too: the item no longer points at it.
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
@@ -700,7 +759,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
   const page = await journeys.open("/brain");
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
-  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator(".result-item").first()).toBeVisible();
 
   await page.locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
   const card = page.locator("[data-meaning-search]");
@@ -714,7 +773,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
   // Once the vectors are built, search ranks by meaning and no longer says it matches keywords only.
   await page.goto(`${stack.url}/brain`);
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
-  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator(".result-item").first()).toBeVisible();
   await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
 });
 
@@ -729,7 +788,7 @@ test("reconnection: service restart shows on this Machine's button in the masthe
   // The Dashboard reaches the service again without a reload.
   await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Brain" }).click();
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Priya Shah");
-  await expect(page.locator(".list-item", { hasText: "Priya" }).first()).toBeVisible();
+  await expect(page.locator(".result-item", { hasText: "Priya" }).first()).toBeVisible();
 });
 
 test("narrow screen: the bottom bar, no horizontal overflow, all views reachable", async () => {
@@ -829,18 +888,18 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
   const page = await journeys.open("/brain?tab=decision");
   await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
   await expect(page.getByRole("button", { name: /capture/i })).toHaveCount(0);
-  await page.locator(".list-item", { hasText: "Email vendor" }).click();
+  await page.locator(".note-list-item", { hasText: "Email vendor" }).click();
   const state = page.locator('[data-subject="Decision"]');
   await expect(state).toContainText("Switch to Postmark for 2027");
   await expect(page.getByText(/was "Keep Nimbus as email vendor for 2027"/)).toBeVisible();
   await expect(page.getByRole("button", { name: /correct|edit/i })).toHaveCount(0);
   // The note panel has nothing to type into.
-  await expect(page.locator(".split textarea, .split input:not([type=search])")).toHaveCount(0);
+  await expect(page.locator(".page textarea, .page input:not([type=search])")).toHaveCount(0);
 
   // Evidence and deliverables open read-only in the evidence drawer.
   for (const tab of ["Evidence", "Deliverables"]) {
-    await page.getByRole("tab", { name: tab }).click();
-    const first = page.locator(".split .list-item").first();
+    await page.getByRole("navigation", { name: "Collections" }).getByRole("link", { name: tab }).click();
+    const first = page.locator(".note-list-item").first();
     await expect(first).toBeVisible();
     await first.click();
     const drawer = page.getByRole("dialog", { name: /Evidence/ });
@@ -867,7 +926,7 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
 
   // Search finds the current value, not the superseded one.
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Which email vendor did we decide on for 2027?");
-  const hit = page.locator(".list-item", { hasText: "Email vendor" }).first();
+  const hit = page.locator(".result-item", { hasText: "Email vendor" }).first();
   await expect(hit).toContainText("Postmark");
   await expect(hit).not.toContainText("History");
 });
@@ -979,13 +1038,10 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
   await save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
 
-  const page = await journeys.open("/brain");
+  const page = await journeys.open("/brain/recent");
   const recent = page.getByRole("region", { name: "Recent saves" });
-  const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
+  const row = (text: string | RegExp) => recent.locator(".recent-change").filter({ hasText: text });
   await expect(recent).toBeVisible();
-  // The newest few show first; the rest are one click away.
-  await expect(recent.getByRole("listitem")).toHaveCount(5);
-  await recent.getByRole("button", { name: /Show all \d+/ }).click();
   const launchId = await row("21 October").getAttribute("data-change");
   const launch = recent.locator(`[data-change="${launchId}"]`);
   await expect(launch).toContainText("Launch date");
@@ -1000,7 +1056,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
 
   await launch.getByRole("button", { name: "Revert" }).click();
   await expect(page.getByText("Reverted. The revert is listed as a change of its own.")).toBeVisible();
-  const revert = recent.getByRole("listitem").first();
+  const revert = recent.locator(".recent-change").first();
   await expect(revert).toContainText("revert");
   await expect(revert).toContainText("Revert in the Dashboard");
   await expect(revert.locator("ins")).toHaveText("14 October");
@@ -1017,13 +1073,13 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await expect(page.getByText("No matches")).toBeVisible();
 });
 
-/** Where a tab sits in its tab bar: its row, and whether the bar shows all of it. */
-async function tabPlaces(tablist: Locator) {
-  return tablist.evaluate((list) => {
+/** Where each chip of a chip row sits: its row, and whether the row shows all of it. */
+async function chipPlaces(row: Locator) {
+  return row.locator("ul").evaluate((list) => {
     const bar = list.getBoundingClientRect();
-    return [...list.querySelectorAll('[role="tab"]')].map((tab) => {
-      const box = tab.getBoundingClientRect();
-      return { name: tab.textContent, top: Math.round(box.top), height: box.height, shown: box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5 };
+    return [...list.querySelectorAll("a")].map((chip) => {
+      const box = chip.getBoundingClientRect();
+      return { name: chip.textContent, top: Math.round(box.top), height: box.height, shown: box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5 };
     });
   });
 }
@@ -1064,46 +1120,27 @@ test("narrow layout: the Connections page has one name in the masthead, the More
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
 });
 
-test("narrow layout: the Brain's collection tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
+test("narrow layout: the Brain's collections are one row of chips that scrolls sideways, with the chosen one in view", async () => {
   const page = await journeys.open("/brain");
-  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 900, height: 800 }]) {
     const at = `at ${viewport.width}px`;
     await page.setViewportSize(viewport);
     await page.goto(`${stack.url}/brain?tab=person`);
-    const tablist = page.getByRole("tablist", { name: "Collection" });
-    await expect(tablist.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
-    const places = await tabPlaces(tablist);
-    expect(new Set(places.map((p) => p.top)).size, `collection tabs on one row ${at}`).toBe(1);
-    expect((await tablist.boundingBox())!.height, `the tab bar is one tab high ${at}`).toBeLessThanOrEqual(places[0]!.height + 1);
-    const box = (await tablist.boundingBox())!;
-    expect(box.x + box.width, `the tab bar stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
+    const row = page.getByRole("navigation", { name: "Collections" });
+    await expect(row.getByRole("link", { name: "People" })).toHaveAttribute("aria-current", "true");
+    const places = await chipPlaces(row);
+    expect(new Set(places.map((p) => p.top)).size, `collection chips on one row ${at}`).toBe(1);
+    const box = (await row.boundingBox())!;
+    expect(box.x + box.width, `the chip row stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `no horizontal overflow ${at}`).toBeLessThanOrEqual(0);
-    // The tabs that do not fit are one sideways scroll away, and the bar shows there are more.
-    const more = page.locator(".tabs-scroll.after");
-    const back = page.locator(".tabs-scroll.before");
-    expect(places.find((p) => p.name === "Deliverables")!.shown, `Deliverables is out of view ${at}`).toBe(false);
-    await expect(more).toBeVisible();
-    await expect(back).toBeHidden();
-    await more.click();
-    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `scrolled to Deliverables ${at}`).toBe(true);
-    await expect(back).toBeVisible();
-    await tablist.getByRole("tab", { name: "Deliverables" }).click();
-    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
-    // Opened from a link, the selected tab is in view, and stays in view when Inter arrives after the tabs were laid out in the fallback font.
+    // Opened from a link, the chosen chip is in view, and stays in view when Inter arrives after the chips were laid out in the fallback font.
     const releaseFont = await holdInter(page);
     await page.goto(`${stack.url}/brain?tab=deliverables`, { waitUntil: "commit" });
-    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
-    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the tabs are laid out before Inter arrives ${at}`).toBe(false);
+    await expect(row.getByRole("link", { name: "Deliverables" })).toHaveAttribute("aria-current", "true");
+    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the chips are laid out before Inter arrives ${at}`).toBe(false);
     releaseFont();
     await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
-    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
-    // The list follows the tabs at the same distance as the tabs follow the search box.
-    await page.goto(`${stack.url}/brain?tab=project`);
-    await expect(page.locator(".split .list-item").first()).toBeVisible();
-    const search = (await page.getByRole("searchbox", { name: "Search the Brain" }).boundingBox())!;
-    const bar = (await page.locator(".tabs-bar").filter({ has: tablist }).boundingBox())!;
-    const list = (await page.locator(".split .list-item").first().boundingBox())!;
-    expect(Math.round(list.y - (bar.y + bar.height)), `gap below the collection tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
+    await expect.poll(async () => (await chipPlaces(row)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
   }
 });
 
@@ -1113,7 +1150,7 @@ test("narrow layout: a picked note opens in view, Recent saves never start a lin
   // On a phone the note opens below the list, and picking one brings it into view.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${stack.url}/brain?tab=project`);
-  await page.locator(".split .list-item", { hasText: "Atlas launch" }).click();
+  await page.locator(".note-list-item", { hasText: "Atlas launch" }).click();
   await expect(page.getByRole("heading", { name: "Atlas launch", level: 2 })).toBeVisible();
   // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
   const noteInView = () =>
@@ -1125,7 +1162,7 @@ test("narrow layout: a picked note opens in view, Recent saves never start a lin
 
   // A wrapped Recent saves line starts with its words, never with a separator dot.
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto(`${stack.url}/brain`);
+  await page.goto(`${stack.url}/brain/recent`);
   const metas = page.getByRole("region", { name: "Recent saves" }).locator(".recent-change-meta");
   await expect(metas.first()).toBeVisible();
   for (const meta of await metas.all()) expect(await meta.evaluate(lineStarts)).not.toContain("·");
@@ -1161,7 +1198,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await expect(budget).toContainText("review was due 2026-02-01");
 
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Helix budget");
-  const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
+  const hit = page.locator(".result-item", { hasText: "40k EUR" }).first();
   await expect(hit).toContainText("unverified");
 
   // Refreshing the data folder raises one inbox item for the overdue fact, and none for the other.

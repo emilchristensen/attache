@@ -26,6 +26,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
 - **Memory with history.**
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
+  The Brain screen reads them side by side with their collections, opens each fact's source in place, and lists every recent save with its origin and one-click Revert.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
   Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
@@ -34,6 +35,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
   Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
+  A Draft's own page quotes the message it answers above its text, names the version on Approve and Send, and keeps a rejection undoable only by an explicit Restore.
 - **Replication (opt-in).**
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**

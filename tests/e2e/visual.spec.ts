@@ -127,6 +127,34 @@ async function routeBadDay(page: Page) {
  * Approvals with a Draft row and a Proposal row open in place, Finished, a group that failed beside one that loaded,
  * and the Draft's own page: `prefix` is the scheme, or "narrow".
  */
+/**
+ * The Draft's own page in the states that look most different from a plain Draft: unsaved text, an outcome that could
+ * not be verified (brass, warning glyph), and a rejected Draft locked with Restore. The last two are the service's
+ * answer for this Draft with its status changed, so nothing is sent or rejected for real.
+ */
+async function draftPageStates(page: Page, prefix: string) {
+  const box = page.getByRole("textbox", { name: /^Text of v\d+$/ });
+  await box.fill(`${await box.inputValue()}\nOne more thought before this goes out.`);
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-unsaved.png` });
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  const id = await page.locator("[data-action-id]").getAttribute("data-action-id");
+  const as = async (name: string, change: Record<string, unknown>) => {
+    await page.route(`**/api/v1/actions/${id}`, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, json: { ...(await res.json()), ...change } });
+    });
+    await page.reload();
+    await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", String(change.status));
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-${name}.png` });
+    await page.unroute(`**/api/v1/actions/${id}`);
+  };
+  await as("unknown", { status: "unknown", receipt: { error: "The request timed out after 30 s", note: "The request may have reached the service. Check the target before sending again." } });
+  await as("rejected", { status: "rejected", events: [{ event: "rejected", data: null, at: new Date().toISOString(), actor: "dashboard" }] });
+  await page.reload();
+}
+
 async function approvalsScreens(page: Page, prefix: string) {
   await page.goto(`${stack.url}/approvals`);
   const draft = approvalRow(page, "draft", "Add checkout retry");
@@ -141,6 +169,7 @@ async function approvalsScreens(page: Page, prefix: string) {
   await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-page.png` });
+  await draftPageStates(page, prefix);
   await page.goto(`${stack.url}/approvals?tab=finished`);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-finished.png` });
@@ -317,7 +346,7 @@ test("screens", async ({ browser }) => {
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
     await page.screenshot({ path: `test-results/screens/${scheme}-brain-note.png` });
-    await page.goto(`${stack.url}/brain`);
+    await page.goto(`${stack.url}/brain/recent`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
     await page.goto(stack.url);
     await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
@@ -364,7 +393,7 @@ test("screens", async ({ browser }) => {
   await meaning.screenshot({ path: "test-results/screens/dark-settings-meaning-ready.png" });
   await page.goto(`${stack.url}/brain`);
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("When is the cutover plan due for the Orion migration?");
-  await page.locator(".list-item", { hasText: "Orion" }).first().click();
+  await page.locator(".result-item", { hasText: "Orion" }).first().click();
   await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });

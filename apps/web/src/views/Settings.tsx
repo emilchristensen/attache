@@ -11,6 +11,7 @@ import { AutoAccept } from "./AutoAccept.tsx";
 import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
 import { MeaningSearchCard } from "./MeaningSearch.tsx";
+import { SearchIndexCard } from "./RebuildIndex.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -270,6 +271,7 @@ export function SettingsView() {
         </Section>
         <Section id="meaning-search">
           <MeaningSearchCard />
+          <SearchIndexCard />
         </Section>
         <Section id="clients">
           <Clients />

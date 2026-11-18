@@ -222,9 +222,33 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
 
 ### Brain
 
-The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
-Its search field shows up to 20 matching passages, not only the first six, including raw session transcripts that Home's search leaves out, and keeps your words in the address as you type.
-Each memory note has a *Current state* with one dated entry per subject.
+The **Brain** opens with a full-width search field, and under it two views, each with its own address: **Library** (`/brain`) and **Recent saves** (`/brain/recent`).
+
+**Library** puts the collections, the notes in the chosen collection and the note you are reading side by side.
+The collections are People, Projects, Decisions, Notes, Imported, Evidence and Deliverables; they show no counts.
+A person, project, decision or note opens in the reader beside the list; imported notes, evidence and deliverables open in the evidence view.
+On a narrow window the collections become one row of chips that scrolls sideways, and the note goes below the list.
+The address names the note you are reading (`/brain?root=…&path=…`), so you can bookmark it or come back to it.
+
+Type in the search field and every matching passage, up to 50, takes the Library's place, with a line saying how they were ranked (by meaning and keywords, or by keywords only and why).
+The Brain's search includes raw session transcripts that Home's search leaves out, and it keeps your words in the address as you type (`/brain?q=…`).
+A passage in a note opens that note in the reader beside the results; anything else opens in the evidence view at the cited lines.
+**Clear search** brings the Library back.
+
+The reader shows one note:
+
+- *Current state* first, one dated entry per subject, with its Review date when it has one; past that date the entry is marked **unverified**.
+- **Source** beside an entry is a button: select, tap or press it to open the source in place, exactly as the note stores it, with when it was observed and a way to open it, the cited lines in the evidence view or the web page.
+  Select it again to close it.
+- The note's *Notes*, then *History* exactly as the note stores it.
+- The **Change log**, closed until you open it: every recorded change to the note, with who made it and why.
+- On your identity record, a line saying it changes only from Settings.
+- When a Proposal waits to change the note, a line linking to it in Approvals.
+- **Markdown file** opens the file itself at its path, with line numbers.
+
+The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Search index*.
+Jobs shows its progress, and it changes no note.
+
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
@@ -237,7 +261,8 @@ With Replication on, a Proposal made on one Machine shows on every Machine, and 
 Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
 If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
-**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first.
+**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first, 50 at a time with **Show more** below.
+Its filters keep **All** changes, those **Written without review** (auto-accepted or consolidated), or those **Reverted**, each with the revert that undid it; the filter is part of the address (`/brain/recent?show=reverted`).
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, the session or meeting Consolidation read, a Proposal you approved, or you) and when.
 A change written without your review is marked auto-accepted, or consolidated when Consolidation wrote it.
 **Revert** undoes one change with one click:
@@ -276,11 +301,29 @@ The Waiting tab and Approvals in the navigation still count every waiting decisi
 
 The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
 
-A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top.
-Editing creates a new version and cancels any earlier approval.
-**Approve** binds your approval to that exact version for 15 minutes.
-When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.
-**Send** is available only when the connection is authorised to write that kind of action; Attache rechecks everything on the service immediately before sending and marks the draft sent only after the other service confirms it.
+A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top and Approvals selected in the navigation.
+Its header names the kind of Draft and where it goes, such as "GitHub comment on acme/web #42", then its version, its status and, while it can still be sent, when it expires.
+A step line under it shows where the Draft stands: Draft, Approved, then Sent.
+The message the Draft answers is quoted above its text at every width, and the text itself is the main part of the page, at reading size.
+Under the text one line says what the state means, and the buttons follow, the next step first.
+Whatever you press, the page stays on the same Draft.
+
+- **Approve vN** binds your approval to that exact version for 15 minutes.
+  **Send vN** is shown before that, switched off, with the reason; for a Gmail draft it reads **Create vN in Gmail**, which makes a draft in your Gmail and sends nothing.
+- Typing makes the text unsaved: **Save as vN+1** and **Discard changes** come first, and Approve and Send wait.
+  Saving replaces the text of the old version, which is not kept, and cancels any approval of it; the page says so before you save.
+- When the 15 minutes end before you send, the Draft says when the approval ended and that nothing was sent, and offers **Approve vN again**.
+- **Send** works only when the connection is authorised to write that kind of action.
+  Until then the page says "Cannot send yet." with the reason, and **Open Connections** when the fix is there.
+  Attache rechecks everything on the service immediately before sending and marks the Draft sent only after the other service confirms it.
+- **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
+- **Reject** locks the Draft, and nothing is sent.
+  Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
+- When the other service cannot confirm what happened, the page says the outcome is unknown, with a warning sign, and asks you to check the destination first.
+  It never offers to send that Draft again; prepare a new one from its Inbox item only after you have looked.
+- A Draft that was not sent, or expired, is finished: **Copy text** keeps its words and **Prepare a new Draft** asks Attache for a fresh one.
+- If the Draft changes elsewhere while you are typing, such as in another tab, your words stay in the box: **Copy my text** keeps them, and **Load vN** shows the current Draft.
+
 Drafts expire after 48 business hours.
 
 ### Jobs
