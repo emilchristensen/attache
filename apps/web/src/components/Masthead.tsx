@@ -18,7 +18,7 @@ export function Masthead({ current, signals }: { current: ScreenId | null; signa
       <div className="masthead-inner">
         <Link to="/" className="brand" aria-label={spokenName("Attache", [spokenTotal(signals.count.total)])}>
           <Logo size={32} attention={signals.dot} />
-          Attache
+          <span className="brand-name">Attache</span>
         </Link>
         <nav className="masthead-nav" aria-label="Main">
           {SCREENS.map((s) => (

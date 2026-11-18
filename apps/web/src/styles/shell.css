@@ -128,6 +128,7 @@
   display: flex;
   align-items: center;
   gap: var(--s-2);
+  min-width: 0;
 }
 /* As tall as a button with words, also when only the icon shows. */
 .masthead-tools button {
@@ -136,10 +137,27 @@
 
 /* ---- this Machine's disclosure ----------------------------------------------------------------- */
 
+/*
+ * The mark keeps its full width; this Machine's button gives way instead, so it never leaves the column whatever the
+ * system's Georgia makes of the mark. A long name, or on the narrowest phones the state, ends in an ellipsis; the
+ * button's accessible name and the panel still say all of it.
+ */
+.machine {
+  display: flex;
+  min-width: 0;
+}
+.machine-trigger {
+  min-width: 0;
+}
+.machine-trigger-name,
+.machine-trigger-live {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .machine-trigger-name {
   max-width: 10em;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .machine-trigger-chevron {
   transform: rotate(90deg);
@@ -174,6 +192,11 @@
   align-items: center;
   gap: var(--s-2);
   margin: 0;
+}
+/* A Machine is named after its host by default: one long word that must wrap rather than leave the panel. */
+.machine-panel-name > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .machine-panel-body .reader-line {
   margin: 0;
@@ -451,6 +474,10 @@
 }
 
 @media (max-width: 720px) {
+  /* On a phone the lost connection's button is a state beside the mark: the chevron gives its room to the state. */
+  .machine-trigger-chevron {
+    display: none;
+  }
   .page {
     padding-top: var(--s-4);
     padding-bottom: var(--s-6);
@@ -463,5 +490,20 @@
   .heading-section {
     font-size: 26px;
     line-height: 31px;
+  }
+}
+
+/*
+ * The narrowest phones (a folded phone's 280 px): while the live connection is lost, the briefcase alone is the mark
+ * and the state keeps its words. "Attache" stays the link's name for a screen reader.
+ */
+@media (max-width: 319px) {
+  .masthead-inner:has(.machine[data-lost]) .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

@@ -198,6 +198,26 @@ async function mastheadFits(page: Page): Promise<string[]> {
   });
 }
 
+/**
+ * A narrow masthead holds the mark and, while the live connection is lost, this Machine's button: neither is cut short,
+ * they do not overlap, and the button stays inside the column. Measured rather than assumed: the mark is set in the
+ * system's Georgia, which is wider on macOS and Windows than Linux's stand-in.
+ */
+async function narrowMastheadFits(page: Page): Promise<string[]> {
+  return page.locator(".masthead-inner").evaluate((inner) => {
+    const brand = inner.querySelector<HTMLElement>(".brand")!;
+    const button = inner.querySelector(".machine-trigger")!.getBoundingClientRect();
+    const live = inner.querySelector<HTMLElement>(".machine-trigger-live")!;
+    const edge = inner.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).paddingRight);
+    const problems: string[] = [];
+    if (button.right > edge + 1) problems.push(`the Machine button leaves the column (${button.right} > ${edge})`);
+    if (brand.getBoundingClientRect().right > button.left) problems.push("the mark runs under the Machine button");
+    if (brand.scrollWidth > brand.clientWidth) problems.push("the mark is cut short");
+    if (live.scrollWidth > live.clientWidth) problems.push(`the state "${live.textContent}" is cut short`);
+    return problems;
+  });
+}
+
 test("this Machine: the masthead disclosure names this Machine and the Reader, and reports a lost live connection", async () => {
   const page = await journeys.open("/jobs");
   const machine = await api<{ name: string }>(page, "GET", "/machine");
@@ -237,11 +257,15 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await trigger.click();
   await expect(panel).toContainText(/Reconnecting to the Attache service|Disconnected from the Attache service/);
   await page.keyboard.press("Escape");
-  // On a phone the button shows the state without the Machine's name, and stays inside the window.
-  await page.setViewportSize({ width: 320, height: 800 });
-  await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
-  await expect(trigger.locator(".machine-trigger-name")).toBeHidden();
-  expect((await trigger.boundingBox())!.x + (await trigger.boundingBox())!.width, "the Machine button fits at 320 px").toBeLessThanOrEqual(320 - 16);
+  // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. On
+  // the narrowest phones (280 px) the briefcase alone is the mark, and the link is still named Attache.
+  for (const width of [320, 280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
+    await expect(trigger.locator(".machine-trigger-name")).toBeHidden();
+    expect(await narrowMastheadFits(page), `masthead at ${width}px, connection lost`).toEqual([]);
+  }
+  await expect(page.getByRole("link", { name: "Attache", exact: true })).toBeVisible();
   // Just above the bottom bar, and where the masthead is widest, nothing overlaps, also with a long name and the lost state.
   for (const width of [970, 1121]) {
     await page.setViewportSize({ width, height: 800 });
@@ -253,13 +277,24 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(trigger).not.toContainText(/Reconnecting|Disconnected/, { timeout: 30_000 });
   await expect(panel).toContainText("Live updates are connected.");
   await page.keyboard.press("Escape");
-  await api(page, "PATCH", "/machine", { name: "Emil's MacBook Pro 16-inch" });
-  await expect(trigger).toContainText("Emil's MacBook Pro 16-inch");
-  for (const width of [970, 1121, 1280]) {
-    await page.setViewportSize({ width, height: 800 });
-    expect(await mastheadFits(page), `masthead at ${width}px with a long Machine name`).toEqual([]);
+  // A long name, with spaces or as one unbroken host name: the button cuts it short and still says all of it, and the
+  // panel shows all of it inside its edges.
+  for (const name of ["Emil's MacBook Pro 16-inch", "EmilsMacBookPro16inch2024WorkStation.local"]) {
+    await api(page, "PATCH", "/machine", { name });
+    await expect(trigger).toContainText(name);
+    await expect(trigger).toHaveAccessibleName(`This Machine: ${name}`);
+    for (const width of [970, 1121, 1280]) {
+      await page.setViewportSize({ width, height: 800 });
+      expect(await mastheadFits(page), `masthead at ${width}px with the Machine name ${name}`).toEqual([]);
+    }
+    const shown = trigger.locator(".machine-trigger-name");
+    expect(await shown.evaluate((el) => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow), `${name} ends in an ellipsis`).toBe("ellipsis");
+    await page.setViewportSize({ width: 1360, height: 900 });
+    await trigger.click();
+    await expect(panel).toContainText(name);
+    expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth), `the panel holds ${name}`).toBe(true);
+    await page.keyboard.press("Escape");
   }
-  await page.setViewportSize({ width: 1360, height: 900 });
   await api(page, "PATCH", "/machine", { name: machine.name });
 });
 
