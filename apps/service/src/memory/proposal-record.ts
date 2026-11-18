@@ -68,7 +68,7 @@ export function proposalStatus(record: Pick<ProposalRecord, "decisions">): Propo
   return latestDecision(record.decisions)?.decision ?? "proposed";
 }
 
-export function toProposalView(record: ProposalRecord): ProposalView {
+export function toProposalView(record: ProposalRecord): Omit<ProposalView, "noteTitle"> {
   const last = latestDecision(record.decisions);
   return {
     id: record.id,

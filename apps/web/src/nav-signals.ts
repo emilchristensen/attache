@@ -29,6 +29,15 @@ export interface NavSignals {
   inbox: Answer<AttentionItemView>;
   /** The rows behind `inbox`, as the count holds them: Home lists these, and its Retry asks the Inbox and Drafts again. */
   openInbox: Resource<{ items: AttentionItemView[] }>;
+  /** The waiting Drafts and the Proposals as the count read them, for Approvals' empty state. */
+  drafts: Answer<ActionView>;
+  proposals: Answer<ProposalView>;
+  /**
+   * The rows behind `drafts` and `proposals`, as the count holds them: Approvals lists these, so its sections, its
+   * Waiting tab and the navigation agree. The Drafts' Retry asks the Inbox and Drafts again, like Home's.
+   */
+  waitingDrafts: Resource<ActionView[]>;
+  waitingProposals: Resource<{ proposals: ProposalView[] }>;
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
 }
@@ -83,8 +92,9 @@ export function useNavSignals(): NavSignals {
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the count would show the decision twice, or not at all, for as
   // long as the slower request takes. Home's rows come from the same held answer, so they match the count.
-  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
-  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
+  const held = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, answeredAt: r.answeredAt });
+  const settled = useRef({ inbox: held(inbox), drafts: held(drafts) });
+  if (!inbox.loading && !drafts.loading) settled.current = { inbox: held(inbox), drafts: held(drafts) };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
@@ -112,6 +122,10 @@ export function useNavSignals(): NavSignals {
     dot,
     inbox: inputs.inbox,
     openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
+    drafts: inputs.drafts,
+    proposals: inputs.proposals,
+    waitingDrafts: { ...drafts, ...heldDrafts, loading: inbox.loading || drafts.loading, reload: reloadPair },
+    waitingProposals: proposals,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
@@ -121,9 +135,9 @@ export function useNavSignals(): NavSignals {
  * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
  * Drafts; the count still waits for the pair.
  */
-function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error">, reload: () => void): Resource<R> {
+function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, reload: () => void): Resource<R> {
   const failed = !inbox.loading && inbox.error ? inbox.error : null;
-  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, reload };
+  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
 }
 
 /** The shell's signals, for the screens inside it. */
