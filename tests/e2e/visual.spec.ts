@@ -214,7 +214,8 @@ test("screens", async ({ browser }) => {
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
-  await page.getByRole("button", { name: "Prepare briefing" }).click();
+  await page.getByRole("button", { name: "Briefings" }).click();
+  await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
   await page.waitForTimeout(1500);
   // Nothing written without review yet: Recently added says so in one line. A fresh load clears the toasts above.
   for (const scheme of ["light", "dark"] as const) {
