@@ -47,7 +47,10 @@ export interface ConnectionStatus {
   availableWriteActions: Array<{ id: string; label: string }>;
   settings: Record<string, unknown>;
   lastAttemptAt: string | null;
+  /** When the connection last answered: a passed sign-in test or a Source refresh that read something. */
   lastSuccessAt: string | null;
+  /** When a Source refresh of this connection last finished with something read (complete, empty or partial); null when none has. */
+  lastReadAt: string | null;
   lastError: string | null;
   coverage: Coverage | null;
   authMethod: string;

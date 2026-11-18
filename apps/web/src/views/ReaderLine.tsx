@@ -14,7 +14,7 @@ const RECHECK_MS = 30_000;
  * sends no event, so this asks again just after the current lease would lapse. A failed answer is asked again too, so
  * neither a missing warning nor a stale one waits for the next event.
  */
-function useReader() {
+export function useReader() {
   const reader = useResource<ReaderView>("/reader", READER_EVENTS);
   const { data, error, loading, reload } = reader;
   useEffect(() => {

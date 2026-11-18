@@ -111,6 +111,7 @@ export class ConnectionManager {
           settings: {},
           lastAttemptAt: null,
           lastSuccessAt: null,
+          lastReadAt: null,
           lastError: null,
           coverage: null,
           authMethod: "",
@@ -119,6 +120,12 @@ export class ConnectionManager {
       }
     }
     return out;
+  }
+
+  /** When a Source refresh last finished having read something, from the run history: a sign-in test never counts. */
+  private lastReadAt(id: string): string | null {
+    const row = this.d.db.prepare("select max(finished_at) at from sync_runs where connection_id = ? and outcome in ('complete', 'empty', 'partial')").get(id) as { at: string | null } | undefined;
+    return row?.at ?? null;
   }
 
   status(r: ConnectionRecord): ConnectionStatus {
@@ -138,6 +145,7 @@ export class ConnectionManager {
       settings: visibleSettings,
       lastAttemptAt: (row.last_attempt_at as string) ?? null,
       lastSuccessAt: (row.last_success_at as string) ?? null,
+      lastReadAt: this.lastReadAt(r.id),
       lastError: (row.last_error as string) ?? null,
       coverage: json<Coverage | null>(row.coverage, null),
       authMethod: authMethod ?? "",

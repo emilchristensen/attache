@@ -126,7 +126,7 @@ Off Home, **Search** in the masthead takes you to the Brain's search field.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
 When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
-**Connections** also opens with the Reader and its last Source refresh.
+**Connections** also opens with the Reader and its last Source refresh, and Home's Connections area turns red with **Not reading** while no Machine reads.
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
@@ -146,7 +146,7 @@ The keyboard focus is a blue ring around the control, and the selected screen or
 
 ### Home
 
-Home holds For you now, your sources, the Inbox and Recently added.
+Home holds For you now, Connections, the Inbox and Recently added.
 
 - **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
   Every Heads-up says why it is here and when it leaves.
@@ -162,10 +162,18 @@ Home holds For you now, your sources, the Inbox and Recently added.
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.
-- **Sources** names the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
-  Without Replication this Machine is its own Reader.
-  Below it, each source shows its last successful refresh and whether its last Source refresh was complete, partial or failed.
-  An item list is never shown as "nothing to do" when a source failed.
+- **Connections** says whether you can trust the list below it.
+  When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
+  Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
+  Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
+  Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
+  Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
+  Select a row to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine.
+  Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
+  Sources that could not be reached for the same recorded reason, such as the same network error, share one row; a source that failed for a reason of its own, such as an error answer from its service, has its own row.
+  At most three rows show, and the rest wait behind "1 more".
+  Only a Connection that needs you to sign in again counts toward the dot.
+  An item list is never shown as "nothing to do" while this area shows a problem.
 - Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
 - **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
@@ -497,7 +505,7 @@ Replication is in the Dashboard under **Settings → Replication**, and in the t
   Both are recorded in the Brain, in `machines/`, so every Machine reads the same; when two Machines choose differently at the same time, the later choice wins.
 - **The Reader:** the list marks the Reader, the one Machine that runs scheduled Source refresh, briefings and the inbox items for facts past their Review date, so no source is read twice.
   The Machine that switched Replication on starts as the Reader; the Preferred Reader takes the role at its next check once you choose it, and whenever it comes back online.
-  The other Machines read nothing on a schedule, and show the Reader's latest Source refresh on Home.
+  The other Machines read nothing on a schedule, and show the Reader's latest Source refresh on Connections and in the green line on Home.
   A Source refresh you start yourself with **Refresh now** still runs on the Machine you are on.
   The Reader says it is still there every 10 minutes through the repository, without adding to the Brain's history.
   A Reader that could not reach the repository for 30 minutes, because it was asleep or offline, shows as silent and reads nothing on a schedule until it is back; then it catches up once.
