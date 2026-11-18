@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { API_PREFIX } from "./api.ts";
 import { api, type ApiError } from "./api.ts";
-import { joinedRefresh } from "./refresh-timer.ts";
 
 export type LiveEvent = { type: string; [k: string]: unknown };
 type Listener = (ev: LiveEvent) => void;
@@ -100,9 +99,6 @@ export interface Resource<T> {
   setData: (d: T) => void;
 }
 
-/** How long a refetch waits after the live event that asked for it, so a burst of events costs one request. */
-const REFRESH_DELAY_MS = 120;
-
 /**
  * Fetch a resource and refetch when a matching live event arrives or the
  * stream reconnects. Loading, error and data are kept separately so views can
@@ -135,15 +131,12 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
     setData(null);
     load();
   }, [load]);
-  // Events within the delay join one refetch, which starts after them all; see `joinedRefresh`.
-  const latestLoad = useRef(load);
-  useEffect(() => {
-    latestLoad.current = load;
-  }, [load]);
-  const [refresh] = useState(() => joinedRefresh(() => latestLoad.current(), REFRESH_DELAY_MS));
-  useEffect(() => () => refresh.cancel(), [refresh]);
+  const timer = useRef<number | null>(null);
   useLiveEvent((ev) => {
-    if (ev.type === "reconnected" || refreshOn.includes(ev.type) || (ev.type === "job.event" && refreshOn.includes("job"))) refresh.request();
+    if (ev.type === "reconnected" || refreshOn.includes(ev.type) || (ev.type === "job.event" && refreshOn.includes("job"))) {
+      if (timer.current) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(load, 120);
+    }
   });
   return { data, error, loading, reload: load, setData };
 }
