@@ -78,16 +78,18 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     measure();
   }, [measure]);
 
-  // A tab changes width when the window does, or when Inter replaces the fallback font after the first layout.
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const observer = new ResizeObserver(showSelected);
-    observer.observe(list);
-    for (const tab of list.children) observer.observe(tab);
+    const bar = new ResizeObserver(measure);
+    bar.observe(list);
+    // A tab changes width when Inter replaces the fallback font after the first layout; the selected tab must stay in view.
+    const tabWidths = new ResizeObserver(showSelected);
+    for (const tab of list.children) tabWidths.observe(tab);
     list.addEventListener("scroll", measure, { passive: true });
     return () => {
-      observer.disconnect();
+      bar.disconnect();
+      tabWidths.disconnect();
       list.removeEventListener("scroll", measure);
     };
   }, [measure, showSelected, tabs]);

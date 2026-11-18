@@ -775,21 +775,11 @@ async function tabPlaces(tablist: Locator) {
 }
 
 /** Holds back the Inter font until the returned function is called, so the page lays out in the fallback font first. */
-async function holdInter(page: Page): Promise<() => Promise<void>> {
-  const font = /\/assets\/inter-latin-wght-normal-[\w-]+\.woff2$/;
+async function holdInter(page: Page): Promise<() => void> {
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
-  const held: Promise<void>[] = [];
-  await page.route(font, (route) => {
-    const sent = released.then(() => route.continue());
-    held.push(sent);
-    return sent;
-  });
-  return async () => {
-    release();
-    await Promise.all(held);
-    await page.unroute(font);
-  };
+  await page.route(/\/assets\/inter-latin-wght-normal-[\w-]+\.woff2$/, (route) => released.then(() => route.continue()), { times: 1 });
+  return release;
 }
 
 /** The first character of every line an element's text runs onto. */
@@ -865,8 +855,8 @@ test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phon
     await page.goto(`${stack.url}/memory?tab=deliverables`, { waitUntil: "commit" });
     await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
     expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the tabs are laid out before Inter arrives ${at}`).toBe(false);
-    await releaseFont();
-    await page.evaluate(() => document.fonts.ready);
+    releaseFont();
+    await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
     await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
     // The list follows the tabs at the same distance as the tabs follow the search box.
     await page.goto(`${stack.url}/memory?tab=project`);
