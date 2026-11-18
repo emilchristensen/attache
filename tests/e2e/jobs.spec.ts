@@ -264,5 +264,9 @@ test("jobs: Cancel says the job was already cancelled when an earlier cancel sto
   await expect(detail(page).getByRole("status")).toHaveText("Already cancelled: the work had stopped before this request.");
   await expect(detail(page)).toHaveAttribute("data-status", "cancelled");
   await page.unroute(`**/api/v1/jobs/${long.id}/cancel`);
+  // The other tab retries and cancels again: that new cancel is not this tab's, so its own outcome shows.
+  await api(other, "POST", `/jobs/${long.id}/retry`);
+  await api(other, "POST", `/jobs/${long.id}/cancel`);
+  await expect(detail(page).getByRole("status")).toHaveText(/^(Stopped: the work ended before it finished\.|Cancelled before it started\.)$/);
   expect(journeys.consoleErrors).toEqual([]);
 });

@@ -22,7 +22,8 @@ export function JobDetail({ id }: { id: string }) {
   const r = useResource<{ job: JobView; events: JobEvent[] }>(`/jobs/${id}`, []);
   const [job, setJob] = useState<JobView | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
-  const [answer, setAnswer] = useState<string | undefined>(undefined);
+  // This tab's Cancel answer, for the cancel request it answered (another tab may retry and cancel again later).
+  const [answer, setAnswer] = useState<{ outcome: string; requestedAt: string | null } | null>(null);
   const { busy, run } = useAction();
   useEffect(() => {
     if (!r.data) return;
@@ -46,7 +47,7 @@ export function JobDetail({ id }: { id: string }) {
       // The answer carries the job as the service left it: its outcome, or the request still waiting for the work to stop.
       const out = await post<{ job: JobView; outcome: string }>(`/jobs/${job.id}/cancel`);
       setJob(out.job);
-      setAnswer(out.outcome);
+      setAnswer({ outcome: out.outcome, requestedAt: out.job.cancelRequestedAt });
       r.reload();
     });
   const retry = () =>
@@ -55,12 +56,12 @@ export function JobDetail({ id }: { id: string }) {
       async () => {
         const out = await post<{ job: JobView }>(`/jobs/${job.id}/retry`);
         setJob(out.job);
-        setAnswer(undefined);
+        setAnswer(null);
         r.reload();
       },
       "Retrying",
     );
-  const note = cancelNote(job, answer);
+  const note = cancelNote(job, answer && answer.requestedAt === job.cancelRequestedAt ? answer.outcome : undefined);
   // The state line shows the reason's first line; the whole of it only when there is more.
   const reason = reasonBeyondSummary(job);
   const stopping = isActive(job) && job.cancelRequestedAt !== null;
