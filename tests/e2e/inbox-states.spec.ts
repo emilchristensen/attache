@@ -159,6 +159,28 @@ test("empty: when approvals could not be counted the Inbox makes no claim, and R
   await page.close();
 });
 
+test("empty: Retry asks again only for what failed, never the Inbox that answered", async () => {
+  const page = await journeys.newPage();
+  let fails = true;
+  await routeOpen(page);
+  await routeCount(page, NONE, () => fails);
+  // The count falls back to the lists; the Proposals list fails, the Inbox and Drafts answer.
+  await page.route("**/api/v1/memory/proposals?*", (route) => (fails ? route.abort() : route.continue()));
+  await page.goto(stack.url);
+  const empty = emptyState(page);
+  await expect(empty.locator(".inbox-empty-line").last()).toHaveText("Approvals could not be counted, so Attache cannot say that nothing needs you.");
+  const asked: string[] = [];
+  page.on("request", (r) => asked.push(new URL(r.url()).pathname));
+  fails = false;
+  await empty.getByRole("button", { name: "Retry" }).click();
+  await expect(empty.locator(".inbox-empty-title")).toHaveText("Nothing needs you.");
+  expect(asked).toContain("/api/v1/memory/proposals");
+  expect(asked).toContain("/api/v1/decision-count");
+  expect(asked).not.toContain("/api/v1/attention");
+  expect(asked).not.toContain("/api/v1/actions");
+  await page.close();
+});
+
 test("loading: until the feature switches answer, the Inbox loads and never says it is switched off", async () => {
   const page = await journeys.newPage();
   let release: () => void = () => undefined;
