@@ -293,13 +293,15 @@ function InboxHeading({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="inbox-head">
-        <h2 className="heading-section">Inbox</h2>
-        {needYou && (
-          <span className="need-you" data-need-you>
-            <AttentionDot decorative />
-            {needYou}
-          </span>
-        )}
+        <div className="inbox-title">
+          <h2 className="heading-section">Inbox</h2>
+          {needYou && (
+            <span className="need-you" data-need-you>
+              <AttentionDot decorative />
+              {needYou}
+            </span>
+          )}
+        </div>
         {children}
       </div>
       {line && <p className="count-line">{line}</p>}

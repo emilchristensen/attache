@@ -258,14 +258,15 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(panel).toContainText(/Reconnecting to the Attache service|Disconnected from the Attache service/);
   await page.keyboard.press("Escape");
   // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. On
-  // the narrowest phones (280 px) the briefcase alone is the mark, and the link is still named Attache.
+  // the narrowest phones (280 px) the briefcase alone is the mark, and the link is still named Attache, with the
+  // decisions that wait.
   for (const width of [320, 280]) {
     await page.setViewportSize({ width, height: 800 });
     await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
     await expect(trigger.locator(".machine-trigger-name")).toBeHidden();
     expect(await narrowMastheadFits(page), `masthead at ${width}px, connection lost`).toEqual([]);
   }
-  await expect(page.getByRole("link", { name: "Attache", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Attache, \d+ needs? you$/ })).toBeVisible();
   // Just above the bottom bar, and where the masthead is widest, nothing overlaps, also with a long name and the lost state.
   for (const width of [970, 1121]) {
     await page.setViewportSize({ width, height: 800 });

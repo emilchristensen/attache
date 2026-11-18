@@ -104,18 +104,23 @@ button.count-chip {
 /* The Inbox heading, Home's decision count beside it, and the line relating rows to decisions. */
 .inbox-head {
   display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-6);
+}
+.inbox-title {
+  display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   column-gap: var(--s-3);
-  row-gap: var(--s-1);
-  margin-top: var(--s-6);
+  min-width: 0;
 }
-.inbox-head h2 {
+.inbox-title h2 {
   margin: 0;
 }
 .inbox-head > button {
   margin-left: auto;
-  align-self: center;
+  flex-shrink: 0;
 }
 .need-you {
   display: inline-flex;
