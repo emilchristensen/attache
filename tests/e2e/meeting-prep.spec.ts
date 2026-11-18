@@ -50,8 +50,11 @@ test("before: a meeting hours away is an Inbox row, and the quiet line says when
   await page.reload();
   await expect(rowFor(page, "design")).toContainText("Design review");
   await expect(rowFor(page, "design")).toHaveAttribute("data-type", "meeting_prep");
-  const shows = await clock(page, new Date(Date.parse(times.design!.start) - 15 * MINUTE).toISOString());
-  await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing timely right now. Prep for Design review shows here at ${shows}.`);
+  const showsAt = new Date(Date.parse(times.design!.start) - 15 * MINUTE).toISOString();
+  const shows = await clock(page, showsAt);
+  // Run late in the evening, three hours ahead is tomorrow in the browser's zone, and the line says so.
+  const today = await page.evaluate((v) => new Date(v).toDateString() === new Date().toDateString(), showsAt);
+  await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing timely right now. Prep for Design review shows here ${today ? "" : "tomorrow "}at ${shows}.`);
 });
 
 test("failure: open Inbox items that could not be read say so with Try again, never that nothing is timely", async () => {
