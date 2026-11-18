@@ -178,6 +178,11 @@ export function BrainView() {
     setQ((typed) => (typed.trim() === query ? typed : query));
   }, [query]);
   const { detailRef, revealDetail } = useRevealDetail();
+  // A note opened from elsewhere (Home's search) shows in view on a phone too, as a note picked here does.
+  const arrivedWithNote = useRef(selected !== null);
+  useEffect(() => {
+    if (arrivedWithNote.current) revealDetail();
+  }, [revealDetail]);
   const searchField = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (takeSearchFocus()) searchField.current?.focus();
@@ -197,7 +202,7 @@ export function BrainView() {
           </button>
         </div>
       </div>
-      <RecentSaves />
+      <RecentSaves here={loc.path === "/brain/recent"} />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
           <input ref={searchField} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />

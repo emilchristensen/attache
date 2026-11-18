@@ -185,6 +185,50 @@ test("home: All results in Brain carries the query to the Brain screen's address
   await expect(page).toHaveURL(`${stack.url}/brain?q=zyxwvut`);
 });
 
+test("home: only the answer to what the field says now can be opened; keys follow the chosen result and Esc works from the results", async () => {
+  const page = await journeys.open("/");
+  await page.setViewportSize({ width: 1280, height: 420 });
+  const search = field(page);
+  await search.fill("Helios");
+  const options = results(page).getByRole("option");
+  await expect(options).toHaveCount(6);
+  // The chosen result stays in view as the arrow keys move past the window's edge.
+  await page.keyboard.press("ArrowUp");
+  await expect(options.nth(5)).toHaveAttribute("aria-selected", "true");
+  await expect(options.nth(5)).toBeInViewport();
+
+  // While the answer to new words is on its way, the old results cannot be opened: Enter takes the new words to the Brain.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  // The page leaves before the held answer is let go, so the request may be gone by then; that is the point.
+  await page.route(/\/api\/v1\/memory\/search\?q=Orion/, (route) => held.then(() => route.continue().catch(() => undefined)), { times: 1 });
+  await search.fill("Orion");
+  await expect(options.first()).toHaveAttribute("aria-disabled", "true");
+  await expect(search).not.toHaveAttribute("aria-activedescendant", /./);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`${stack.url}/brain?q=Orion`);
+  release();
+
+  // Esc from a link in the results closes them and puts the owner back in the field.
+  await page.goto(`${stack.url}/`);
+  await field(page).fill("Helios");
+  await expect(options).toHaveCount(6);
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".search-home [data-ranking]").getByRole("link", { name: "Settings" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(results(page)).toBeHidden();
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("Helios");
+
+  // Enter that confirms an input method's text stays with the input method.
+  await page.keyboard.press("ArrowDown");
+  await expect(results(page)).toBeVisible();
+  await field(page).evaluate((input) => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true })));
+  await expect(page).toHaveURL(`${stack.url}/`);
+  await expect(results(page)).toBeVisible();
+  await page.setViewportSize({ width: 1360, height: 900 });
+});
+
 test("keys: Ctrl K, Cmd K and / focus Home's field, and off Home they go to the Brain's search", async () => {
   const page = await journeys.open("/");
   const search = field(page);
@@ -251,6 +295,14 @@ test("narrow: the prompt fits at 320 and 375 px and at 200% zoom, and the keycap
   await page.locator(".home-head").click();
   await page.keyboard.press("Control+k");
   await expect(field(page)).toBeFocused();
+  // A note opened from Home's results shows in view on a phone, below the Brain's own results.
+  await field(page).fill("Postmark");
+  await results(page).getByRole("option", { name: /Email vendor/ }).click();
+  await expect(page).toHaveURL(/\/brain\?root=data&path=/);
+  await expect(page.locator('[data-subject="Decision"]')).toBeInViewport();
+  await page.goto(`${stack.url}/`);
+  await page.locator(".home-head").click();
+  await page.keyboard.press("Control+k");
   // The results stay inside the window.
   await page.keyboard.type("Helios");
   const list = (await results(page).boundingBox())!;

@@ -34,8 +34,12 @@ export const INLINE_RESULTS = 6;
 /** How long typing must pause before the field asks the service. */
 export const SEARCH_DEBOUNCE_MS = 150;
 
+/**
+ * What a search field asks for: passages the way recall finds them (`recall=1`), so session summaries come back
+ * but raw session transcripts and old chat archives stay out. The Brain screen's own search still covers everything.
+ */
 export function searchPath(query: string, limit: number): string {
-  return `/memory/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`;
+  return `/memory/search?q=${encodeURIComponent(query.trim())}&limit=${limit}&recall=1`;
 }
 
 /** The Brain screen with the query in its address ("All results in Brain"). */

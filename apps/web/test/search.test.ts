@@ -31,8 +31,8 @@ const meaning = (over: Partial<MeaningStatus> = {}): MeaningStatus => ({
 });
 
 describe("searchPath", () => {
-  it("asks for at most six passages of the trimmed query", () => {
-    expect(searchPath("  Orion cutover ", 6)).toBe("/memory/search?q=Orion%20cutover&limit=6");
+  it("asks for at most six passages of the trimmed query, leaving raw transcripts out", () => {
+    expect(searchPath("  Orion cutover ", 6)).toBe("/memory/search?q=Orion%20cutover&limit=6&recall=1");
   });
 });
 

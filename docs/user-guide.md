@@ -147,7 +147,7 @@ Home holds Search the Brain, the briefing, your sources, the Inbox and Recently 
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
-  As you type, up to six passages show under it, each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
+  As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
   The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
   `Esc` closes the results and keeps what you typed.
   A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
@@ -177,7 +177,7 @@ Home holds Search the Brain, the briefing, your sources, the Inbox and Recently 
 ### Brain
 
 The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
-Its search field shows every matching passage, not only the first six, and keeps your words in the address as you type.
+Its search field shows up to 20 matching passages, not only the first six, including raw session transcripts that Home's search leaves out, and keeps your words in the address as you type.
 Each memory note has a *Current state* with one dated entry per subject.
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.

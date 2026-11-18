@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { plural } from "@attache/contracts";
 import { brainResultsHref, hitDestination, hitKind, hitPlace, INLINE_RESULTS, moveActive, rankingLine, type SearchHit } from "../search.ts";
 import { shownAnswer, useSearchAnswer, type SearchState } from "../search-answer.ts";
@@ -80,12 +80,17 @@ export function SearchField({ id, className }: { id: string; className?: string 
   const { state, retry } = useSearchAnswer(text, INLINE_RESULTS);
   const answer = shownAnswer(state);
   const hits = answer?.hits ?? [];
+  // Only the answer to what the field says now can be chosen; an older one stays on screen, dimmed, to keep its place.
+  const current = state.status === "ready" && state.query === text.trim();
+  const choosable = current ? hits.length : 0;
   const listId = useId();
   const optionId = (i: number) => `${listId}-option-${i}`;
+  const input = useRef<HTMLInputElement>(null);
+  const expanded = open && text.trim() !== "";
   const openEvidence = useOpenEvidence();
 
   // Each new answer chooses its first result, so Enter opens the best match.
-  useEffect(() => setActive(answer && answer.hits.length > 0 ? 0 : -1), [answer]);
+  useEffect(() => setActive(choosable > 0 ? 0 : -1), [answer, choosable]);
 
   const openHit = (hit: SearchHit) => {
     setOpen(false);
@@ -98,30 +103,41 @@ export function SearchField({ id, className }: { id: string; className?: string 
     navigate(brainResultsHref(text));
   };
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // While an input method composes text, its keys are its own.
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
-      if (!open) setOpen(text.trim() !== "");
-      else setActive((a) => moveActive(a, hits.length, e.key as "ArrowDown" | "ArrowUp"));
+      if (!open) {
+        setOpen(text.trim() !== "");
+        return;
+      }
+      const next = moveActive(active, choosable, e.key);
+      setActive(next);
+      requestAnimationFrame(() => document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" }));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const hit = open ? hits[active] : undefined;
+      const hit = open && current ? hits[active] : undefined;
       if (hit) openHit(hit);
       else if (text.trim()) showAll();
-    } else if (e.key === "Escape" && open) {
-      // Close the results, and keep the text the browser would otherwise clear.
-      e.preventDefault();
-      setOpen(false);
     }
+  };
+  // Esc from the field or from a control in the results closes them, keeps the text the browser would otherwise
+  // clear, and puts the owner back in the field.
+  const onEscape = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Escape" || e.nativeEvent.isComposing || !expanded) return;
+    e.preventDefault();
+    setOpen(false);
+    input.current?.focus();
   };
   const onBlur = (e: FocusEvent<HTMLDivElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
   };
-  const expanded = open && text.trim() !== "";
   return (
-    <div className={`search${className ? ` ${className}` : ""}`} role="search" aria-label="Brain" onBlur={onBlur}>
+    <div className={`search${className ? ` ${className}` : ""}`} role="search" aria-label="Brain" onBlur={onBlur} onKeyDown={onEscape}>
       <div className="search-box">
         <Icon name="search" size={20} />
         <input
+          ref={input}
           id={id}
           type="search"
           role="combobox"
@@ -147,9 +163,18 @@ export function SearchField({ id, className }: { id: string; className?: string 
       </div>
       {/* The popup keeps focus in the field: a click on a result or a link still works, but the field stays focused. */}
       <div className="search-popup" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>
-        <ul id={listId} role="listbox" aria-label="Results" className="search-results" data-searching={state.status === "searching" || undefined}>
+        <ul id={listId} role="listbox" aria-label="Results" className="search-results" data-stale={!current || undefined}>
           {hits.map((hit, i) => (
-            <li key={hit.chunkId} id={optionId(i)} role="option" aria-selected={i === active} className="search-option" onMouseMove={() => setActive(i)} onClick={() => openHit(hit)}>
+            <li
+              key={hit.chunkId}
+              id={optionId(i)}
+              role="option"
+              aria-selected={current && i === active}
+              aria-disabled={!current || undefined}
+              className="search-option"
+              onMouseMove={() => current && setActive(i)}
+              onClick={() => current && openHit(hit)}
+            >
               <SearchResultRow hit={hit} />
             </li>
           ))}
