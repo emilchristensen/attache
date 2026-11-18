@@ -293,6 +293,7 @@ test("home: only the answer to what the field says now can be opened; keys follo
   expect(await field(page).evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(0);
   expect((await scrollLeft()).at).toBe(0);
   await pressAsOnMac(page, "End");
+  expect(await field(page).evaluate((input: HTMLInputElement) => input.selectionStart === input.value.length)).toBe(true);
   const end = await scrollLeft();
   expect(end.end).toBeGreaterThan(0);
   expect(end.at).toBeGreaterThanOrEqual(end.end - 1);
