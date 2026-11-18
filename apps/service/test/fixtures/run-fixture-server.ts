@@ -37,6 +37,15 @@ fx.route("POST", "/__control/gcal-events", (req) => {
   state.gcal.events = b.events as typeof state.gcal.events;
   return { json: { ok: true, events: state.gcal.events.length } };
 });
+// Journeys revoke a GitHub token, so GitHub answers 401 to it and the next read signs the Connection out, then
+// restore it (`revoke: false`).
+fx.route("POST", "/__control/github-token", (req) => {
+  const b = req.body as { token?: unknown; revoke?: unknown };
+  if (typeof b.token !== "string" || !b.token || typeof b.revoke !== "boolean") return { status: 400, json: { error: "token (string) and revoke (boolean) are required" } };
+  const others = state.revokedGithubTokens.filter((t) => t !== b.token);
+  state.revokedGithubTokens = b.revoke ? [...others, b.token] : others;
+  return { json: { ok: true, revoked: state.revokedGithubTokens.length } };
+});
 installFixtureModel(fx, "/model");
 // The meaning model a journey downloads from the Dashboard, described to the service by ATTACHE_MEANING_MODEL.
 installFixtureMeaningModel(fx, "/meaning-model");

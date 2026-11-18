@@ -346,16 +346,41 @@ Whatever you press, the page stays on the same Draft.
 
 Drafts expire after 48 business hours.
 
+### Connections
+
+**Connections** opens with the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
+Below it each Connection you set up is one row in its group: **Notes**, **Work sources**, **Harnesses** and **Model**.
+A row shows the Connection's name, its account (or folder, or the settings file a Harness was installed in), what Attache may read and write there, and when Attache last read it, each in its own column.
+A Connection that works carries no state word; one with a problem says so under its name in the same words Home uses, such as **Down**, **Offline**, **Partly read** or **Not read yet**.
+Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disconnect…**, what Attache reads and its write permissions.
+Connections you have not set up are small tiles under their group; a tile opens across the group into its setup form.
+The Notes group also has **Import a folder**, which reads a Markdown folder or Obsidian vault without changing it.
+
+When a Connection needs you to sign in again, a **Needs you** group comes first with that Connection's row already open, ready to sign in or take a new token.
+**Reconnect** on Home lands there, on that Connection's row, when the fix needs you to type something.
+
 ### Jobs
 
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
+It is a quiet table: each job's title, what it came to in a few words, and the time it started or finished.
+Work that is queued or running comes first, under **Running**; everything that ended follows under **Finished**, newest first, 50 at a time with **Show 50 more**.
+A job that succeeded carries no tag, only what it produced, such as "Answered from 3 sources" or "Draft v2 ready".
+A job that failed carries a red **Failed** tag and one that is blocked an amber **Blocked** tag, each with its reason.
+
+The detail beside the table shows a job's progress, times, result or reason, and its events.
+When you open Jobs it shows the running job, else the newest one that failed or is blocked, else the newest job.
+Live updates change the table, never which job the detail shows; picking a row changes it, and that pick stays in the address, so a reload or a link comes back to it.
+
+Type a question and press **Research** to research it across your notes; the answer is saved as a deliverable you can open from the result.
+**Diagnostics** runs a two-minute self-test that checks background work survives a restart.
+**Cancel** stops queued or running work and says what happened: it stopped, or it had already finished and its result stands.
+**Retry** starts a failed, cancelled or blocked job again.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
-Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 
 Attache remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
-Connect each one you use under Connections → *Harnesses*; the card says exactly which files change before you connect.
+Connect each one you use under Connections → *Harnesses*; its tile says exactly which files change before you connect.
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
@@ -742,12 +767,12 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
   Reinstalling repairs the service without touching data.
   Logs: `logs` in the service state folder (`~/Library/Application Support/Attache/state/logs` on macOS, `~/.local/state/attache/logs` on Linux, `%LOCALAPPDATA%\Attache\state\logs` on Windows).
 - *Pairing code expired:* run `attache pair --open`.
-- *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
-  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
+- *A connection says "Sign-in needed":* its sign-in was rejected or expired, so it moves to **Needs you** at the top of Connections, open, with a **Sign-in needed** box saying what to fix.
+  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** in its row.
   Reconnect tests the connection again and says what is still wrong if it fails.
-  Once it succeeds, Attache refreshes that source straight away so the card stops showing the failed Source refresh.
+  Once it succeeds, Attache refreshes that source straight away, so the row goes back to its group without the failed Source refresh.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
-  If you chose **Sign in with Atlassian** directly, sign in again on the card.
+  If you chose **Sign in with Atlassian** directly, sign in again in its row.
 - *Slack, Gmail or Calendar says Claude Code settings auto-approve its tools:* remove the listed `permissions.allow` rule from `~/.claude/settings.json`.
   Attache approves every connector call itself and will not run while a rule would skip that check.
