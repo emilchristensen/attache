@@ -7,7 +7,6 @@ import { Tag } from "../components/Tag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { Tabs } from "../components/Tabs.tsx";
-import { BRAIN_SEARCH_ID, takeSearchFocus } from "../search-launch.ts";
 import { hitDestination, type SearchAnswer } from "../search.ts";
 import { RankingNote, SearchResultRow } from "../components/SearchField.tsx";
 import { RecentSaves } from "./RecentSaves.tsx";
@@ -183,10 +182,6 @@ export function BrainView() {
   useEffect(() => {
     if (arrivedWithNote.current) revealDetail();
   }, [revealDetail]);
-  const searchField = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (takeSearchFocus()) searchField.current?.focus();
-  }, []);
   const select = (root: string, relPath: string) => {
     navigate(`/brain?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}${query ? `&q=${encodeURIComponent(query)}` : ""}`);
     revealDetail();
@@ -205,7 +200,7 @@ export function BrainView() {
       <RecentSaves here={loc.path === "/brain/recent"} />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
-          <input ref={searchField} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />
+          <input id="brain-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />
           {!query && (
             <Tabs label="Collection" tabs={TABS} selected={t.id} onSelect={setTab} />
           )}

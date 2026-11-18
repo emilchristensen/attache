@@ -249,3 +249,93 @@
     transition: none;
   }
 }
+
+/* ---- the search palette (off Home): the same field and results in a dialog ---------------- */
+
+/* Near the top, like the field on Home, wide enough for a result's line, and never taller than the window. */
+.sheet.palette {
+  width: min(720px, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100dvh - 2 * var(--s-6));
+  margin-top: var(--s-7);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sheet.palette[open] {
+  display: flex;
+}
+.search-palette {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--s-3);
+}
+/* The results sit in the dialog's flow under the field and scroll on their own inside it. */
+.search-palette .search-popup {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  box-shadow: none;
+}
+.search-palette .search-popup[hidden] {
+  display: none;
+}
+.search-palette .search-results {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.search-group {
+  list-style: none;
+}
+.search-group-label {
+  display: block;
+  padding: var(--s-2) var(--s-4) var(--s-1);
+  font: 600 12px/18px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--sunken);
+  border-bottom: 1px solid var(--rule);
+}
+.search-group-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.search-group[data-stale] .search-group-options {
+  opacity: 0.7;
+}
+/* A place: its glyph, its name, and where it is, quietly after it. */
+.search-place {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+  color: var(--ink-2);
+}
+.search-place-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.search-place-meta {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  text-align: right;
+}
+.palette .search-option:has(.search-place) {
+  padding-block: var(--s-2);
+}
+/* On a phone the palette takes the whole width at the top. */
+@media (max-width: 720px) {
+  .sheet.palette {
+    width: calc(100vw - 2 * var(--s-2));
+    max-width: none;
+    margin-top: var(--s-2);
+    max-height: calc(100dvh - 2 * var(--s-2));
+    padding: var(--s-3) var(--s-3) var(--s-4);
+  }
+}
