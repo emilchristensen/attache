@@ -235,7 +235,8 @@ export function ConnectionsView() {
   const groups = useMemo(() => (d ? connectionsPage(d.connections, attentionOn) : null), [d, attentionOn]);
   const { open, toggle } = useOpenRows(groups, openId);
   const tests = useTestResults();
-  useArrival(openId, open.size > 0);
+  // Ready once the linked row is open: a Back to this address reopens it only after the arrival first looks.
+  useArrival(openId, openId !== null && open.has(openId));
   return (
     <div className="page page-connections">
       <div className="page-header">

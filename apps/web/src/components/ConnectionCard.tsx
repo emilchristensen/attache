@@ -83,7 +83,9 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
   const configured = status.status !== "not_configured" && status.status !== "disconnected";
   const needsForm = repair && configured && ((status.status === "needs_auth" && reconnectMethod(status, definition) === "credentials") || status.coverage?.state === "denied" || !!status.coverage?.scopes.some((s) => s.state === "denied"));
   const [editing, setEditing] = useState((!configured && !compact) || needsForm);
-  const [method, setMethod] = useState(definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? ""));
+  // The method the Connection was saved with, else the definition's first.
+  const savedMethod = definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? "");
+  const [method, setMethod] = useState(savedMethod);
   // The saved non-secret fields of the method in use, so a new secret alone keeps the rest of what was saved.
   const savedFor = (id: string) => (configured ? savedFields(status, definition.authMethods.find((a) => a.id === id)) : {});
   const [fields, setFields] = useState<Record<string, string>>(() => savedFor(method));
@@ -284,7 +286,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
               )}
               {!builtin && (
                 <>
-                  <button className="ghost" onClick={() => { setFields(savedFor(method)); setEditing(true); }}>
+                  <button className="ghost" onClick={() => { setMethod(savedMethod); setFields(savedFor(savedMethod)); setEditing(true); }}>
                     Reconfigure
                   </button>
                   <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<DisconnectEffects>(`/connections/${status.id}/disconnect-preview`)))}>
@@ -328,10 +330,10 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
             Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open Inbox item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
           </span>
           <div className="row">
-            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: false }).then(() => { setPreview(null); onChanged(); }), "Disconnected; data kept")}>
+            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: false }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), "Disconnected; data kept")}>
               Disconnect, keep data
             </button>
-            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: true }).then(() => { setPreview(null); onChanged(); }), "Disconnected; data deleted")}>
+            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: true }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), "Disconnected; data deleted")}>
               Disconnect and delete data
             </button>
             <button className="ghost" onClick={() => setPreview(null)}>

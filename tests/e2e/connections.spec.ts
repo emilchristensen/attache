@@ -134,8 +134,13 @@ test("a row opens in place with every action the card had: Test, Refresh now, wh
 
   await detail.getByRole("button", { name: "Reconfigure" }).click();
   await expect(detail.getByRole("textbox", { name: "Token" })).toBeVisible();
+  // A method chosen and then cancelled is forgotten: Reconfigure starts again from what was saved.
+  await detail.getByRole("combobox", { name: "How to connect" }).selectOption("gh-cli");
   await detail.getByRole("button", { name: "Cancel" }).click();
   await expect(detail.getByRole("textbox", { name: "Token" })).toHaveCount(0);
+  await detail.getByRole("button", { name: "Reconfigure" }).click();
+  await expect(detail.getByRole("combobox", { name: "How to connect" })).toHaveValue("token");
+  await detail.getByRole("button", { name: "Cancel" }).click();
 
   await detail.getByRole("button", { name: "Disconnect…" }).click();
   const confirm = detail.getByRole("alertdialog", { name: "Disconnect" });
@@ -277,6 +282,19 @@ test("captures: the page in light, dark and narrow, with a row open and with a s
   const model = page.locator('[data-group="needs_you"] [data-connection="model"]');
   await expect(model.locator(":focus")).toHaveCount(1);
   await expect(model.locator(":focus")).toBeInViewport();
+  // Going Back to a link for a row that is closed on the page in between opens it again, with the keyboard in it.
+  await page.goto(`${stack.url}/connections?open=claude-code`);
+  const claudeCode = connection(page, "claude-code");
+  await expect(claudeCode.locator(":focus")).toHaveCount(1);
+  // In the page itself: the bottom bar's More sheet leads to plain Connections, and Back returns, with no reload.
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("dialog", { name: "More" }).getByRole("link", { name: /^Connections/ }).click();
+  await expect(page).toHaveURL(`${stack.url}/connections`);
+  await expect(connectionToggle(claudeCode)).toHaveAttribute("aria-expanded", "false");
+  await page.goBack();
+  await expect(page).toHaveURL(`${stack.url}/connections?open=claude-code`);
+  await expect(connectionToggle(claudeCode)).toHaveAttribute("aria-expanded", "true");
+  await expect(claudeCode.locator(":focus")).toHaveCount(1);
   await page.unroute("**/api/v1/capabilities");
   await page.setViewportSize({ width: 1360, height: 900 });
 });
