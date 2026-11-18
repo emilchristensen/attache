@@ -497,8 +497,14 @@ async function holdCloseEvents(page: Page): Promise<void> {
   });
 }
 
-/** Delivers the held `close` events; how many there were. */
-const releaseCloses = (page: Page) => page.evaluate(() => (window as unknown as { releaseCloses: () => number }).releaseCloses());
+/**
+ * Waits until `count` `close` events are held (the browser queues each a task after its dialog closed), then
+ * delivers them.
+ */
+async function releaseCloses(page: Page, count: number, message: string): Promise<void> {
+  await expect.poll(() => page.evaluate(() => (window as unknown as { heldCloses: EventTarget[] }).heldCloses.length), message).toBe(count);
+  await page.evaluate(() => (window as unknown as { releaseCloses: () => number }).releaseCloses());
+}
 
 test("sheets: a close the browser reports late gives focus back only where the owner left it, and nothing waits for it", async () => {
   const page = await journeys.open("/jobs");
@@ -520,7 +526,7 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await page.keyboard.press("Enter");
   const section = page.locator('[data-settings-section="machines"]');
   await expect(section).toBeFocused();
-  expect(await releaseCloses(page), "the sheet's close event came late").toBe(1);
+  await releaseCloses(page, 1, "the sheet's close event, held");
   await expect(section, "the late close leaves focus where the owner went").toBeFocused();
   // Asked for again right after Escape, the sheet opens again; closed, focus is back where it was when it opened.
   await page.keyboard.press("?");
@@ -532,7 +538,7 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(section).toBeFocused();
-  expect(await releaseCloses(page)).toBe(2);
+  await releaseCloses(page, 2, "both closings' events, held");
   await expect(section).toBeFocused();
   // A place chosen in the search palette opens at once, without waiting for the palette's close event.
   await page.getByRole("button", { name: "Search the Brain" }).click();
@@ -542,7 +548,7 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await page.keyboard.press("Enter");
   await expect(palette).toBeHidden();
   await expect(page).toHaveURL(`${stack.url}/jobs`);
-  expect(await releaseCloses(page), "the palette's close event came late").toBe(1);
+  await releaseCloses(page, 1, "the palette's close event, held");
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
