@@ -121,10 +121,11 @@ function ActionButton({ b, d, runner, reasonId }: { b: DraftButton; d: ActionVie
     ) : null;
   }
   if (b.id === "open-connections") {
+    // In a new tab, so this page stays on the Draft and reads the change when Connections saves it.
     return (
-      <Link to={connectionHref(d.connectionId ?? undefined)} className="btn">
+      <a className="btn" href={connectionHref(d.connectionId ?? undefined)} target="_blank" rel="noopener noreferrer">
         {b.label}
-      </Link>
+      </a>
     );
   }
   return (
@@ -192,7 +193,7 @@ function DraftBody({ d, setDraft, reload }: { d: ActionView; setDraft: (d: Actio
           className="draft-box"
           value={edit.text}
           rows={10}
-          readOnly={screen.editor === "off"}
+          readOnly={screen.editor === "off" || runner.busy !== null}
           aria-describedby={noticeId}
           onChange={(e) => edit.setText(e.target.value)}
           placeholder={preparedByModel || screen.editor === "off" ? "" : "No model prepared this Draft. Write it here."}
@@ -215,7 +216,8 @@ function DraftBody({ d, setDraft, reload }: { d: ActionView; setDraft: (d: Actio
  * navigation, and every action keeps the page on this Draft.
  */
 export function DraftPage({ id }: { id: string }) {
-  const a = useResource<ActionView>(`/actions/${id}`, ["actions.changed"]);
+  // Whether it can be sent also follows its Connection's write permission and the Drafts feature.
+  const a = useResource<ActionView>(`/actions/${id}`, ["actions.changed", "connections.changed", "config.changed"]);
   return (
     <div className="page">
       <div className="draft-page">

@@ -148,6 +148,13 @@ describe("a Draft's own page: the fourteen states", () => {
     expect(s.editor).toBe("off");
   });
 
+  it("Sent, for a Gmail draft: it was created in Gmail, never called sent", () => {
+    const s = screen(draft({ kind: "gmail.draft", target: { to: "nora@example.com" }, status: "succeeded", receipt: { verified: true, verifiedAt: "2026-11-18T16:22:00.000Z" } }));
+    expect(s.state).toBe("sent");
+    expect(s.status).toBe("Created in Gmail");
+    expect(steps(s)?.at(-1)).toBe("Created in Gmail 16:22, verified: done");
+  });
+
   it("Not sent: a red notice with the warning icon says who stopped it; the Draft is final", () => {
     const refused = screen(draft({ status: "failed", receipt: { error: "Validation failed", attempted: true, sent: false } }));
     expect(refused.state).toBe("not_sent");
@@ -196,7 +203,7 @@ describe("a Draft's own page: the fourteen states", () => {
     expect(s.status).toBe("Rejected");
     expect(s.steps).toBeNull();
     expect(s.notice).toEqual(plainNotice("You rejected v2 at 16:30. Nothing was sent.", "Restore as v3 brings it back as a Draft. It can be restored until 20/11 16:21."));
-    expect(buttons(s)).toEqual(["Restore as v3", "Copy text"]);
+    expect(buttons(s)).toEqual(["Restore as v3 [primary]", "Copy text"]);
     expect(s.editor).toBe("off");
     // A rejected Draft is never expired by the service, so past its lifetime it simply cannot come back.
     const late = rejected("2026-11-18T16:00:00.000Z");
@@ -230,6 +237,15 @@ describe("a Draft's own page: the fourteen states", () => {
     expect(s.status).toBe("Rejected");
     expect(s.notice.lines).toEqual(["This Draft changed while you were editing: it is now Rejected. Your text is not saved."]);
     expect(buttons(s)).toEqual(["Copy my text", "Load v2 [primary]"]);
+  });
+
+  it("Changed elsewhere into an unknown outcome: the delivery warning and the way to check the destination stay", () => {
+    const s = screen(draft({ status: "unknown", receipt: { error: "socket hang up" } }), EDITED);
+    expect(s.state).toBe("changed_elsewhere");
+    expect(s.notice.tone).toBe("attention");
+    expect(s.notice.warning).toBe(true);
+    expect(s.notice.lines).toEqual(["This Draft changed while you were editing: it is now Outcome unknown. Your text is not saved.", "The outcome could not be verified. The request may have reached GitHub. Check the pull request before you do anything else.", "socket hang up"]);
+    expect(buttons(s)).toEqual(["Copy my text", "Load v2 [primary]", "Open the pull request"]);
   });
 });
 

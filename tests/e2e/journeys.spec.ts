@@ -606,7 +606,7 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await page.getByRole("button", { name: "Approve v2" }).click();
   await expect(page.getByText("Cannot send yet")).toBeVisible();
   await expect(page.getByRole("button", { name: "Send v2" })).toBeDisabled();
-  await expect(page.getByRole("link", { name: "Open Connections" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Connections" })).toHaveAttribute("target", "_blank");
   // Grant the separate write permission.
   await page.goto(`${stack.url}/connections`);
   const gh = page.locator('[data-connection="github"]');

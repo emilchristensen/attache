@@ -240,7 +240,7 @@ function afterSend(d: ActionView, clock: DraftClock): DraftScreen {
   }
   if (d.status === "succeeded") {
     const at = str(receipt.verifiedAt) ?? str(receipt.at) ?? d.updatedAt;
-    return finished({ state: "sent", status: "Sent", steps: steps("done", ["Approved", "done"], [`${lastStep(d)} ${clock.time(at)}, verified`, "done"], v), notice: plain(`${lastStep(d)} at ${clock.time(at)} and verified on ${service}.`), actions: openOn });
+    return finished({ state: "sent", status: lastStep(d), steps: steps("done", ["Approved", "done"], [`${lastStep(d)} ${clock.time(at)}, verified`, "done"], v), notice: plain(`${lastStep(d)} at ${clock.time(at)} and verified on ${service}.`), actions: openOn });
   }
   const error = str(receipt.error);
   if (d.status === "failed") {
@@ -278,7 +278,7 @@ function notSentFinal(d: ActionView, now: number, clock: DraftClock): DraftScree
     status: "Rejected",
     steps: null,
     notice: plain(`You rejected ${v} at ${clock.time(at)}. Nothing was sent.`, restorable ? `${restore} brings it back as a Draft. It can be restored until ${clock.day(d.expiresAt)}.` : `It expired at ${clock.day(d.expiresAt)}, so it can no longer be restored.`),
-    actions: [...(restorable ? [button("restore", restore)] : []), button("copy", "Copy text")],
+    actions: [...(restorable ? [button("restore", restore, { primary: true })] : []), button("copy", "Copy text")],
   });
 }
 
@@ -321,7 +321,15 @@ function changedElsewhere(d: ActionView, editor: DraftEditor, base: DraftScreen)
       editor: "on",
     };
   }
-  return { ...base, state: "changed_elsewhere", notice: attention(`This Draft changed while you were editing: it is now ${base.status}. Your text is not saved.`), actions: [copy, load], editor: "on" };
+  // A warning the stored state carries (a failed or unknown send) stays, with the way to check the destination.
+  const lines = [`This Draft changed while you were editing: it is now ${base.status}. Your text is not saved.`, ...(base.notice.warning ? base.notice.lines : [])];
+  return {
+    ...base,
+    state: "changed_elsewhere",
+    notice: { tone: base.notice.tone === "danger" ? "danger" : "attention", warning: true, lines },
+    actions: [copy, load, ...base.actions.filter((b) => b.id === "open-target")],
+    editor: "on",
+  };
 }
 
 /**
