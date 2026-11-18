@@ -248,6 +248,40 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect((await svc.get(`/actions/${fresh.id}`)).status).toBe("rejected");
   });
 
+  it("a rejected draft is locked: only an explicit Restore brings it back, as vN+1 with the same text, until it expires", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const d = await prepareDraft();
+    const rejected = await svc.post(`/actions/${d.id}/reject`, {});
+    // Saving text no longer un-rejects it behind the owner's back.
+    const edit = await svc.call("PUT", `/actions/${d.id}`, { payload: { body: "typed into a rejected draft" }, expectedVersion: rejected.version });
+    expect(edit.status).toBe(409);
+    expect(edit.body.error.code).toBe("not_editable");
+    // Restore names the version it starts from, like an edit.
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: rejected.version - 1 })).body.error.code).toBe("version_conflict");
+    const events: Array<{ type: string; id?: string }> = [];
+    const listen = (e: { type: string; id?: string }) => events.push(e);
+    svc.app.bus.on("event", listen);
+    const restored = await svc.post(`/actions/${d.id}/restore`, { expectedVersion: rejected.version });
+    svc.app.bus.off("event", listen);
+    expect(restored).toMatchObject({ status: "draft", version: rejected.version + 1, payload: rejected.payload, payloadHash: rejected.payloadHash, approval: null, expiresAt: rejected.expiresAt });
+    expect(restored.events.at(-1)).toMatchObject({ event: "restored", data: { version: rejected.version + 1 } });
+    expect(events).toContainEqual({ type: "actions.changed", id: d.id });
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "draft" });
+    // Only a rejected draft restores.
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version })).body.error.code).toBe("not_restorable");
+    // A newer draft for the same item already waits: restoring the old one would make two.
+    await svc.post(`/actions/${d.id}/reject`, {});
+    const newer = await prepareDraft();
+    expect(newer.id).not.toBe(d.id);
+    const twice = await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version });
+    expect(twice.status).toBe(409);
+    expect(twice.body.error.code).toBe("superseded");
+    // Past its lifetime it stays rejected.
+    clock.skip(8 * 86_400_000);
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version })).body.error.code).toBe("expired");
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("rejected");
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");

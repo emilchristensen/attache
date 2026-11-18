@@ -508,8 +508,16 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");
   const rejectedId = await draft.getAttribute("data-action-id");
+  const draftUrl = page.url();
   await page.getByRole("button", { name: "Reject" }).click();
   await expect(draft).toHaveAttribute("data-status", "rejected");
+  // The page stays on this Draft, says nothing was sent, and locks the text: only an explicit Restore undoes it.
+  await expect(page).toHaveURL(draftUrl);
+  await expect(page.locator(".draft-notice")).toContainText(/^You rejected v1 at \d\d:\d\d\. Nothing was sent\./);
+  await expect(page.getByRole("textbox", { name: "Text of v1" })).not.toBeEditable();
+  await expect(page.getByRole("button", { name: /^(Approve|Send)/ })).toHaveCount(0);
+  // Reject left with the state it belonged to; focus moves to the next step instead of the page's end.
+  await expect(page.getByRole("button", { name: "Restore as v2" })).toBeFocused();
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
   await expect(pr.getByRole("button", { name: "View draft" })).toHaveCount(0);
@@ -528,6 +536,31 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(page).toHaveURL(new RegExp(`/approvals/${rejectedId}$`));
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
   await expect(page.getByRole("link", { name: /^Approvals/ }).first()).toHaveAttribute("aria-current", "page");
+  // Restore brings the same words back as v2, on the same page; the item's decision is the Draft's again.
+  const words = await page.getByRole("textbox", { name: "Text of v1" }).inputValue();
+  await page.getByRole("button", { name: "Restore as v2" }).click();
+  const restored = page.locator("[data-action-id]");
+  await expect(restored).toHaveAttribute("data-status", "draft");
+  await expect(page).toHaveURL(new RegExp(`/approvals/${rejectedId}$`));
+  await expect(page.locator("[data-draft-version]")).toHaveText("v2");
+  await expect(page.locator(".draft-said")).toHaveText("Restored as v2.");
+  const box = page.getByRole("textbox", { name: "Text of v2" });
+  await expect(box).toHaveValue(words);
+  await expect(box).toBeEditable();
+  await expect(page.getByRole("button", { name: "Approve v2" })).toBeFocused();
+  // At 320 px the page keeps to the window: the step line, quote, text and buttons wrap instead of overflowing.
+  await page.setViewportSize({ width: 320, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  const steps = await page.locator(".draft-step").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+  expect(new Set(steps).size, "the three steps share one row").toBe(1);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.getByRole("link", { name: "Home" }).click();
+  await expect(pr).toContainText("Draft waiting");
+  await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
+  // Reject it again, so the next journey prepares a Draft of its own.
+  await page.goto(`${stack.url}/approvals/${rejectedId}`);
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
@@ -540,8 +573,21 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   // View draft opens the Draft's own page under Approvals.
   await expect(page).toHaveURL(/\/approvals\/[^/?]+$/);
   await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
-  const box = page.getByRole("textbox", { name: "Text" });
+  const box = page.getByRole("textbox", { name: "Text of v1" });
   await expect(box).toHaveValue(/reviewed the changes/);
+  // The header names kind, destination, version and status above the step line; the message it answers is quoted above the text.
+  await expect(page.locator(".draft-destination")).toHaveText("GitHub comment on acme/web #42");
+  await expect(page.locator("[data-draft-version]")).toHaveText("v1");
+  await expect(page.locator(".draft-meta .tag")).toHaveText("Draft");
+  await expect(page.getByRole("list", { name: "Where the Draft stands" }).getByRole("listitem")).toHaveText(["1Draft v1, current step", "2Approved, not yet", "3Sent, not yet"]);
+  await expect(page.locator(".draft-quote-full")).toHaveText("Retries failed payments once.");
+  const quoteBottom = (await page.locator(".draft-quote-full").boundingBox())!;
+  expect(quoteBottom.y + quoteBottom.height).toBeLessThanOrEqual((await box.boundingBox())!.y);
+  expect(await box.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+  // Send is there before approval, disabled, with its reason.
+  const send1 = page.getByRole("button", { name: "Send v1" });
+  await expect(send1).toBeDisabled();
+  await expect(send1).toHaveAccessibleDescription(/^Send unlocks after approval\./);
   // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -551,11 +597,16 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   }
   await page.emulateMedia({ colorScheme: null });
   await box.fill("Looks good. One question: does the retry respect idempotency keys?");
-  await page.getByRole("button", { name: "Save new version" }).click();
-  await expect(page.getByText("v2 ·")).toBeVisible();
+  // Unsaved text: saving is the next step and says it replaces v1; Approve and Send wait.
+  await expect(page.locator(".draft-notice")).toHaveText("Saving creates v2 and replaces the text of v1, which is not kept.");
+  await expect(page.getByRole("button", { name: "Approve v1" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Approve v1" })).toHaveAccessibleDescription("Save or discard your changes first.");
+  await page.getByRole("button", { name: "Save as v2" }).click();
+  await expect(page.locator("[data-draft-version]")).toHaveText("v2");
   await page.getByRole("button", { name: "Approve v2" }).click();
   await expect(page.getByText("Cannot send yet")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send v2" })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Open Connections" })).toBeVisible();
   // Grant the separate write permission.
   await page.goto(`${stack.url}/connections`);
   const gh = page.locator('[data-connection="github"]');
@@ -586,14 +637,22 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   endApproval(stack, (await detail.getAttribute("data-action-id"))!);
   await page.reload();
   await expect(detail).toHaveAttribute("data-status", "draft");
-  await expect(page.getByRole("status").filter({ hasText: /^The approval of v2 ended at .+\. Nothing was sent\.$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send" })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: /^The approval of v2 ended at \d\d:\d\d\. Nothing was sent\.$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send v2" })).toBeDisabled();
+  const sendingUrl = page.url();
   await page.getByRole("button", { name: "Approve v2 again" }).click();
   await expect(detail).toHaveAttribute("data-status", "approved");
-  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".draft-notice")).toContainText("Send posts exactly v2 and cannot be undone.");
+  await page.getByRole("button", { name: "Send v2" }).click();
   const receipt = page.locator("[data-receipt]");
   await expect(receipt).toContainText("Verified", { timeout: 20_000 });
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "succeeded");
+  // Sent, on the same page: every step checked, the text locked, nothing left to press but the way to the comment.
+  await expect(page).toHaveURL(sendingUrl);
+  await expect(page.getByRole("list", { name: "Where the Draft stands" }).getByRole("listitem").last()).toHaveText(/^Sent \d\d:\d\d, verified, done$/);
+  await expect(page.getByRole("textbox", { name: "Text of v2" })).not.toBeEditable();
+  await expect(page.locator("[data-draft-actions] button")).toHaveCount(0);
+  await expect(page.locator("[data-draft-actions]").getByRole("link", { name: "Open on GitHub" })).toBeVisible();
   // A sent draft is finished too: the item no longer points at it.
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();

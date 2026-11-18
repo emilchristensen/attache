@@ -119,6 +119,8 @@ _Avoid_: Hotkeys
 **Draft**:
 A message Attache prepared for the owner to send through a Connection.
 Nothing is sent until the owner approves that exact version.
+Each Draft has its own page under Approvals; saving new text makes the next version and replaces the old text.
+A rejected Draft is locked: only Restore brings it back, as the next version, until it expires.
 _Avoid_: Outgoing message
 
 **Approvals**:

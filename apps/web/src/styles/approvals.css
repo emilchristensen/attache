@@ -249,16 +249,283 @@ button.approval-subject::after {
   border-top-width: 1px;
 }
 
-/* ---- the Draft's page (interim, until #28) ---------------------------------------------------------- */
+/* ---- a Draft's own page: header, step line, the message it answers, then the text as the reading surface ---- */
 
 .draft-page {
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+  max-width: 760px;
 }
 .back-link {
   align-self: flex-start;
   font-size: var(--fs-control);
+}
+.draft-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-width: 0;
+}
+.draft-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.draft-kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  margin: 0;
+}
+.draft-destination {
+  font-size: var(--fs-control);
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+h1.draft-title {
+  font-size: var(--fs-section);
+  line-height: var(--lh-section);
+  overflow-wrap: anywhere;
+}
+.draft-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.draft-meta [data-draft-version] {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Draft, Approved, Sent: compact, one line where it fits. */
+.draft-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.draft-step {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--ink-2);
+}
+.draft-step + .draft-step::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  margin: 0 var(--s-2);
+  background: var(--line);
+}
+.draft-step-dot {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.draft-step[data-mark="current"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.draft-step[data-mark="current"] .draft-step-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.draft-step[data-mark="done"] .draft-step-dot {
+  color: var(--ink);
+}
+.draft-step[data-mark="ended"] .draft-step-dot {
+  border-style: dashed;
+}
+.draft-step[data-mark="failed"] {
+  color: var(--danger);
+  font-weight: 600;
+}
+.draft-step[data-mark="failed"] .draft-step-dot {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.draft-step[data-mark="unknown"] {
+  color: var(--attn-ink);
+  font-weight: 600;
+}
+.draft-step[data-mark="unknown"] .draft-step-dot {
+  border-color: var(--attn);
+  color: var(--attn-ink);
+}
+
+/* The message it answers, in full, above the text at every width. */
+.draft-label {
+  display: block;
+  margin: 0 0 var(--s-1);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.draft-quote-full {
+  margin: 0;
+  padding: 2px 0 2px var(--s-3);
+  border-left: 3px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 16em;
+  overflow: auto;
+}
+/* The text is the main element: reading size, full column width. */
+.draft-editor {
+  display: flex;
+  flex-direction: column;
+}
+textarea.draft-box {
+  width: 100%;
+  min-height: 12em;
+  padding: var(--s-3);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+textarea.draft-box[readonly] {
+  background: var(--sunken);
+  color: var(--ink);
+}
+
+/* What the state means: a quiet line, or a brass/red rule with the warning glyph. */
+.draft-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+}
+.draft-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draft-notice p + p {
+  margin-top: var(--s-1);
+}
+.draft-notice[data-tone="attention"],
+.draft-notice[data-tone="danger"] {
+  padding: var(--s-1) 0 var(--s-1) var(--s-3);
+  border-left: 3px solid var(--attn);
+  color: var(--ink);
+}
+.draft-notice[data-tone="danger"] {
+  border-left-color: var(--danger);
+}
+.draft-notice-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--attn-ink);
+}
+.draft-notice[data-tone="danger"] .draft-notice-icon,
+.draft-notice[data-tone="danger"] .draft-notice-lead {
+  color: var(--danger);
+}
+.draft-notice[data-tone="attention"] .draft-notice-lead {
+  color: var(--attn-ink);
+}
+.draft-notice-lead {
+  font-weight: 600;
+}
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.draft-reason {
+  margin: calc(-1 * var(--s-2)) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.draft-said {
+  margin: 0;
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.draft-said:empty {
+  display: none;
+}
+.draft-said[data-tone="refused"] {
+  color: var(--danger);
+}
+.draft-receipt {
+  margin: 0;
+}
+
+/* Below the decision: what it was prepared from, then details and history. */
+.draft-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule);
+}
+.draft-context p {
+  margin: 0;
+}
+h2.draft-section-title {
+  font-size: var(--fs-detail);
+  line-height: var(--lh-detail);
+}
+.draft-files {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--fs-meta);
+}
+.draft-history .kv {
+  margin-bottom: var(--s-3);
+}
+
+/* Narrow: the three steps share the width evenly, each dot above its words, so no connector is left dangling. */
+@media (max-width: 720px) {
+  .draft-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--s-2);
+  }
+  .draft-step {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
+  }
+  .draft-step + .draft-step::before {
+    display: none;
+  }
+  .draft-step-label {
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
 }
 
 /* ---- narrow: kind first, the whole subject next, then the meta line and time --------------------------- */

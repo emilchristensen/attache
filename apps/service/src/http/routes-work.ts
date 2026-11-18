@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ActionRestoreInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -163,6 +163,14 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     requireFeature(app, "drafts");
     const body = await c.body(z.object({ reason: z.string().max(500).optional() }));
     const out = app.actions.reject(c.params.id!, c.client!.id, body.reason);
+    app.bus.emit("event", { type: "actions.changed", id: out.id });
+    return out;
+  });
+  r.post("/actions/:id/restore", async (c) => {
+    requireFeature(app, "drafts");
+    app.settleActions();
+    const body = await c.body(ActionRestoreInput);
+    const out = app.actions.restore(c.params.id!, body.expectedVersion, c.client!.id);
     app.bus.emit("event", { type: "actions.changed", id: out.id });
     return out;
   });

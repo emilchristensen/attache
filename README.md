@@ -34,6 +34,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
   Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
+  A Draft's own page quotes the message it answers above its text, names the version on Approve and Send, and keeps a rejection undoable only by an explicit Restore.
 - **Replication (opt-in).**
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**
