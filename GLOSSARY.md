@@ -15,9 +15,13 @@ A computer that runs Attache and holds a copy of the Brain.
 _Avoid_: Node, device, instance, client
 
 **Replication**:
-Keeping every Machine's copy of the Brain the same.
+Keeping every Machine's copy of the Brain, and the owner's Preferences, the same.
 It is opt-in, and a Brain that lives on one Machine does not need it.
 _Avoid_: Sync, backup
+
+**Preferences**:
+The owner's choices about how Attache looks and behaves, such as how Home is arranged, which follow the owner to every Machine.
+What belongs to one Machine, such as its sign-ins or whether it is the Reader, is that Machine's configuration and not a Preference.
 
 **Source refresh**:
 Reading new activity from connected sources such as Slack, Gmail and Jira into the Brain.
@@ -39,6 +43,10 @@ Attache's own screen, which shows the Brain and the Inbox and takes the owner's 
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
+**Widget**:
+One area of Home that the owner can place, resize, add and remove, such as the Inbox or Your day.
+_Avoid_: Gadget, applet
+
 **Harness**:
 The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex or Antigravity.
 It is where the owner asks about the Brain and adds to it.
@@ -47,6 +55,7 @@ _Avoid_: client, coding agent
 **Connection**:
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
+Disabling a Connection takes that access away, sign-in included, until the owner sets it up again.
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
@@ -84,6 +93,12 @@ A message Attache prepared for the owner to send through a Connection.
 Nothing is sent until the owner approves that exact version.
 _Avoid_: Outgoing message
 
+**Daily Briefing**:
+The summary Attache writes each morning of what needs the owner, what changed and what the day holds.
+Every place that shows it titles it "The Daily Briefing".
+_Avoid_: Morning briefing, Wednesday Brief
+
 **Heads-up**:
-Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
+Something Attache suggests the owner do now, before they would have thought of it, such as answering a reply that is nearly late or reading the prep for a meeting about to start.
+It is shown while it is timely.
 _Avoid_: Occupant, nudge
