@@ -4,6 +4,7 @@ import { countDecisions, dotAfter, shownCount, spokenCount, withRows, type Answe
 import type { ApiError } from "./api.ts";
 import { REFRESH_DELAY_MS, useLiveEvent, useResource, type Resource } from "./live.ts";
 import { pairFailure } from "./pair.ts";
+import type { CountFailures } from "./inbox-empty.ts";
 import type { ScreenId } from "./routes.ts";
 
 /**
@@ -44,10 +45,13 @@ export interface NavSignals {
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
   /**
-   * Asks again for what the count could not read, while a part is unknown because a request failed (the count route
-   * and a list it fell back to); null while nothing failed, so an unknown part is only still being asked.
+   * Asks again for what the count could not read, while a part is unknown because a request failed: the count route
+   * and only the lists it fell back to that failed (`reloadPair` for the Inbox/Drafts pair); null while nothing failed,
+   * so an unknown part is only still being asked.
    */
   countRetry: (() => void) | null;
+  /** Which parts of the count a failed request left inexact; all false while nothing failed. */
+  countFailures: CountFailures;
 }
 
 /**
@@ -207,13 +211,25 @@ export function useNavSignals(): NavSignals {
     lastDot.current = dot;
   }, [dot]);
   const status = replication.error ? undefined : replication.data?.status;
+  // Only while the count route has failed do the lists stand in for it, so only then can a list failure lose a part.
+  const routeFailed = countedTotals.kind === "failed";
+  const countFailures: CountFailures = {
+    approvals: routeFailed && (inputs.drafts.kind === "failed" || inputs.proposals.kind === "failed"),
+    signIns: routeFailed && inputs.connections.kind === "failed",
+  };
   const listFailed = [inputs.inbox, inputs.drafts, inputs.proposals, inputs.connections].some((a) => a.kind === "failed");
   const { reload: reloadConnections } = connections;
+  // Retry asks again only for what failed: the count route, and the lists that failed beside it. The Inbox and Drafts
+  // are one pair (asked together, settled together), so a failure of either asks both.
+  const pairFailed = inputs.inbox.kind === "failed" || inputs.drafts.kind === "failed";
+  const proposalsFailed = inputs.proposals.kind === "failed";
+  const connectionsFailed = inputs.connections.kind === "failed";
   const retryCount = useCallback(() => {
-    reloadPair();
-    reloadProposalsList();
-    reloadConnections();
-  }, [reloadPair, reloadProposalsList, reloadConnections]);
+    if (pairFailed) reloadPair();
+    else reloadTotals();
+    if (proposalsFailed) reloadProposalsList();
+    if (connectionsFailed) reloadConnections();
+  }, [pairFailed, proposalsFailed, connectionsFailed, reloadPair, reloadTotals, reloadProposalsList, reloadConnections]);
   return {
     badges: { home: badge(count.home, WORDS.home), approvals: badge(count.approvals, WORDS.approvals), connections: badge(count.connections, WORDS.connections) },
     count,
@@ -225,7 +241,8 @@ export function useNavSignals(): NavSignals {
     waitingDrafts,
     waitingProposals: { ...proposals, reload: reloadProposals },
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
-    countRetry: countedTotals.kind === "failed" && listFailed ? retryCount : null,
+    countRetry: routeFailed && listFailed ? retryCount : null,
+    countFailures,
   };
 }
 

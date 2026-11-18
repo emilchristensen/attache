@@ -159,6 +159,28 @@ test("empty: when approvals could not be counted the Inbox makes no claim, and R
   await page.close();
 });
 
+test("empty: Retry asks again only for what failed, never the Inbox that answered", async () => {
+  const page = await journeys.newPage();
+  let fails = true;
+  await routeOpen(page);
+  await routeCount(page, NONE, () => fails);
+  // The count falls back to the lists; the Proposals list fails, the Inbox and Drafts answer.
+  await page.route("**/api/v1/memory/proposals?*", (route) => (fails ? route.abort() : route.continue()));
+  await page.goto(stack.url);
+  const empty = emptyState(page);
+  await expect(empty.locator(".inbox-empty-line").last()).toHaveText("Approvals could not be counted, so Attache cannot say that nothing needs you.");
+  const asked: string[] = [];
+  page.on("request", (r) => asked.push(new URL(r.url()).pathname));
+  fails = false;
+  await empty.getByRole("button", { name: "Retry" }).click();
+  await expect(empty.locator(".inbox-empty-title")).toHaveText("Nothing needs you.");
+  expect(asked).toContain("/api/v1/memory/proposals");
+  expect(asked).toContain("/api/v1/decision-count");
+  expect(asked).not.toContain("/api/v1/attention");
+  expect(asked).not.toContain("/api/v1/actions");
+  await page.close();
+});
+
 test("loading: until the feature switches answer, the Inbox loads and never says it is switched off", async () => {
   const page = await journeys.newPage();
   let release: () => void = () => undefined;
@@ -188,11 +210,15 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await expect(rows(page)).toHaveCount(0);
   await expect(inbox(page).getByRole("combobox", { name: "Type" })).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
+  // The count route still answers, and the total stays on the tab; beside a failed list the heading claims nothing.
+  await expect(page).toHaveTitle(/^\(\d+\) Attache$/);
+  await expect(page.locator("[data-need-you]")).toHaveCount(0);
   fails = false;
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(rows(page).first()).toBeVisible();
   await expect(failure(page)).toHaveCount(0);
   await expect(inbox(page).getByRole("combobox", { name: "Type" })).toBeVisible();
+  await expect(page.locator("[data-need-you]")).toBeVisible();
   await page.close();
 });
 
@@ -212,6 +238,7 @@ test("failed: after a good load the Inbox keeps its rows, says how old they are,
   await expect(step).toBeVisible();
   await expect(emptyState(page)).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
+  await expect(page.locator("[data-need-you]")).toHaveCount(0);
   fails = false;
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(failure(page)).toHaveCount(0);
