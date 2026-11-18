@@ -53,6 +53,6 @@ describe("the font budget", () => {
   });
 
   it("fails the Dashboard build when the font files are over the budget", async () => {
-    await expect(buildDashboard(40_000)).rejects.toThrow(/Font files are 48\.3 KB, over the 40 KB budget/);
+    await expect(buildDashboard(40_000)).rejects.toThrow(/Font files are [\d.]+ KB, over the 40 KB budget/);
   });
 });

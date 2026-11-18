@@ -102,7 +102,7 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
   return (
     <div className="stack">
       <div className="row">
-        <h2 style={{ flex: 1 }}>{d.title}</h2>
+        <h2 className="detail-title" style={{ flex: 1 }}>{d.title}</h2>
         <Tag>{d.area}</Tag>
         {d.protected && <StateTag state="partial" label="protected" />}
       </div>

@@ -221,36 +221,36 @@ test("look: the Dashboard sets its text in Inter, served by Attache itself, and 
   await page.close();
 });
 
+/** WCAG contrast of an element's outline or border colour against the opaque surface behind it, as rendered. */
+const measure = (target: Locator, what: "outline" | "border") =>
+  target.evaluate((el, what) => {
+    const parse = (c: string) => {
+      const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c);
+      if (!m) throw new Error(`Unreadable colour ${c}`);
+      return { r: +m[1]!, g: +m[2]!, b: +m[3]!, a: m[4] === undefined ? 1 : +m[4] };
+    };
+    // The surface behind the element: its parents' backgrounds painted from the page down.
+    const layers: string[] = [];
+    for (let n = el.parentElement; n; n = n.parentElement) layers.push(getComputedStyle(n).backgroundColor);
+    let bg = { r: 255, g: 255, b: 255 };
+    for (const c of layers.reverse()) {
+      const t = parse(c);
+      bg = { r: t.r * t.a + bg.r * (1 - t.a), g: t.g * t.a + bg.g * (1 - t.a), b: t.b * t.a + bg.b * (1 - t.a) };
+    }
+    const style = getComputedStyle(el);
+    const fg = parse(what === "outline" ? style.outlineColor : style.borderTopColor);
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x) as [number, number];
+    return { ratio: (hi + 0.05) / (lo + 0.05), width: what === "outline" ? parseFloat(style.outlineWidth) : parseFloat(style.borderTopWidth), style: what === "outline" ? style.outlineStyle : style.borderTopStyle };
+  }, what);
+
 test("look: focus rings, control edges and healthy states, measured on the surfaces they render on, in light and dark", async () => {
   const page = await journeys.newPage();
   await page.goto(`${stack.url}/`);
   await expect(page.getByText("Needs your attention")).toBeVisible();
-  /** WCAG contrast of an element's outline or border colour against the opaque surface behind it, as rendered. */
-  const measure = (target: Locator, what: "outline" | "border") =>
-    target.evaluate((el, what) => {
-      const parse = (c: string) => {
-        const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c);
-        if (!m) throw new Error(`Unreadable colour ${c}`);
-        return { r: +m[1]!, g: +m[2]!, b: +m[3]!, a: m[4] === undefined ? 1 : +m[4] };
-      };
-      // The surface behind the element: its parents' backgrounds painted from the page down.
-      const layers: string[] = [];
-      for (let n = el.parentElement; n; n = n.parentElement) layers.push(getComputedStyle(n).backgroundColor);
-      let bg = { r: 255, g: 255, b: 255 };
-      for (const c of layers.reverse()) {
-        const t = parse(c);
-        bg = { r: t.r * t.a + bg.r * (1 - t.a), g: t.g * t.a + bg.g * (1 - t.a), b: t.b * t.a + bg.b * (1 - t.a) };
-      }
-      const style = getComputedStyle(el);
-      const fg = parse(what === "outline" ? style.outlineColor : style.borderTopColor);
-      const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
-        const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-      };
-      const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x) as [number, number];
-      return { ratio: (hi + 0.05) / (lo + 0.05), width: what === "outline" ? parseFloat(style.outlineWidth) : parseFloat(style.borderTopWidth), style: what === "outline" ? style.outlineStyle : style.borderTopStyle };
-    }, what);
-
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const onFeature = page.locator(".briefing").getByRole("button", { name: "Away summary" });
@@ -346,6 +346,12 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await expect(page.getByRole("heading", { name: "Drafts and approvals" })).toBeVisible();
   const box = page.getByRole("textbox", { name: "Text" });
   await expect(box).toHaveValue(/reviewed the changes/);
+  // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect((await measure(page.locator(".source-chip").first(), "border")).ratio, `${scheme} citation edge`).toBeGreaterThanOrEqual(3);
+  }
+  await page.emulateMedia({ colorScheme: null });
   await box.fill("Looks good. One question: does the retry respect idempotency keys?");
   await page.getByRole("button", { name: "Save new version" }).click();
   await expect(page.getByText("v2 ·")).toBeVisible();

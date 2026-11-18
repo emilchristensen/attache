@@ -17,10 +17,12 @@
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Type scale (size / line height). */
-  --fs-title: 29px;
-  --lh-title: 35px;
-  --fs-section: 22px;
-  --lh-section: 28px;
+  --fs-page: 36px;
+  --lh-page: 42px;
+  --fs-section: 29px;
+  --lh-section: 35px;
+  --fs-detail: 22px;
+  --lh-detail: 28px;
   --fs-body: 16px;
   --lh-body: 23px;
   --fs-control: 14px;

@@ -89,7 +89,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           <div className="stack-sm" style={{ flex: 1, minWidth: 0 }}>
             <div className="row">
               {target.marker && <span className="cite">{target.marker}</span>}
-              <h2 style={{ overflowWrap: "anywhere" }}>{d?.title ?? target.title ?? target.relPath}</h2>
+              <h2 className="detail-title" style={{ overflowWrap: "anywhere" }}>{d?.title ?? target.title ?? target.relPath}</h2>
             </div>
             <div className="row small muted">
               {d && <Tag>{d.area === "memory" ? "curated memory" : d.area === "import" ? "imported note" : d.area}</Tag>}

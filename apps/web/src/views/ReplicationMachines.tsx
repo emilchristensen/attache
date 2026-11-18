@@ -11,7 +11,7 @@ function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMa
       <div className="machine-head">
         <strong className="machine-name">{m.name}</strong>
         {m.thisMachine && <Tag hue="blue">this Machine</Tag>}
-        {reader === "active" && <Tag>Reader</Tag>}
+        {reader === "active" && <span className="state-text">Reader</span>}
         {reader === "silent" && <Tag hue="amber">Reader, silent</Tag>}
         {preferred && <Tag>Preferred Reader</Tag>}
         {m.standby && <Tag>standby</Tag>}

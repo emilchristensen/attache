@@ -37,7 +37,7 @@ function DraftDetail({ id }: { id: string }) {
   return (
     <div className="stack" data-action-id={d.id} data-status={d.status}>
       <div className="row">
-        <h2 style={{ flex: 1 }}>{d.title}</h2>
+        <h2 className="detail-title" style={{ flex: 1 }}>{d.title}</h2>
         <StateTag state={d.status} />
       </div>
       <dl className="kv">

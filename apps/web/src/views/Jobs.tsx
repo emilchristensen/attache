@@ -71,7 +71,7 @@ function JobDetail({ id }: { id: string }) {
   return (
     <div className="stack" data-job-id={job.id} data-status={job.status}>
       <div className="row">
-        <h2 style={{ flex: 1 }}>{job.title}</h2>
+        <h2 className="detail-title" style={{ flex: 1 }}>{job.title}</h2>
         <StateTag state={job.status} />
       </div>
       <div className="progress" aria-label="Progress" aria-valuenow={Math.round(job.progress * 100)} role="progressbar">

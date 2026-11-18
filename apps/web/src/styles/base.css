@@ -38,7 +38,10 @@ p a,
   text-decoration-thickness: 1px;
 }
 
-/* Page and section headings in Georgia; card and field headings in the sans. */
+/*
+ * Georgia for the page title (h1), section headings (h2) and the title of the one thing a detail pane shows
+ * (`.detail-title`); the sans for card and field headings (h3, h4).
+ */
 h1,
 h2,
 h3,
@@ -53,14 +56,18 @@ h2,
   font-weight: 500;
   letter-spacing: -0.02em;
 }
-h1,
-.heading-section {
-  font-size: var(--fs-title);
-  line-height: var(--lh-title);
+h1 {
+  font-size: var(--fs-page);
+  line-height: var(--lh-page);
 }
-h2 {
+h2,
+.heading-section {
   font-size: var(--fs-section);
   line-height: var(--lh-section);
+}
+h2.detail-title {
+  font-size: var(--fs-detail);
+  line-height: var(--lh-detail);
 }
 h3 {
   font-size: 16px;

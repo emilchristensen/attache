@@ -112,7 +112,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
           <dd>{status.account ?? "—"}</dd>
           <dt>Last success</dt>
           <dd>
-            <Time iso={status.lastSuccessAt} />
+            <Time iso={status.lastSuccessAt} standalone />
           </dd>
           {status.lastError && (
             <>

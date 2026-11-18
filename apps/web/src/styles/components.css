@@ -356,9 +356,10 @@ svg.icon {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* A button: the control outline, not the decorative rule. */
 .source-chip {
   font-size: var(--fs-meta);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--line);
   background: var(--paper);
   border-radius: var(--r-sm);
   padding: 4px 9px;

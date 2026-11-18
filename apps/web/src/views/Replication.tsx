@@ -178,13 +178,13 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
         <dt>Repository</dt>
         <dd className="mono">{view.remote}</dd>
         <dt>Last up to date</dt>
-        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} /> : "not yet"}</dd>
+        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} standalone /> : "not yet"}</dd>
         <dt>Last checked</dt>
         <dd>
-          <Time iso={view.lastCheckedAt} />
+          <Time iso={view.lastCheckedAt} standalone />
         </dd>
         <dt>Last sent</dt>
-        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} /> : "nothing sent from this Machine yet"}</dd>
+        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} standalone /> : "nothing sent from this Machine yet"}</dd>
       </dl>
       <Problem view={view} />
       <div className="row">
