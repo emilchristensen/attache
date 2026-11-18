@@ -389,17 +389,18 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    const onFeature = page.locator(".briefing").getByRole("button", { name: "Away summary" });
+    // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
     const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
     const onCanvas = page.getByRole("button", { name: "Show dismissed" });
-    // Control edges: a secondary button on the amber briefing and on a card.
-    for (const control of [onFeature, onCard]) {
+    const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
+    // Control edges: a secondary button on a card and on the canvas.
+    for (const control of [onCard, onQuiet]) {
       const edge = await measure(control, "border");
       expect(edge, `${scheme} control edge`).toMatchObject({ width: 1, style: "solid" });
       expect(edge.ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
     }
     // The focus ring: a 3 px outline (never a fill like a selection), at 3:1 or better on every surface it lands on.
-    for (const control of [onFeature, onCard, onCanvas]) {
+    for (const control of [onCard, onCanvas, onQuiet]) {
       await control.focus();
       const ring = await measure(control, "outline");
       expect(ring, `${scheme} focus ring`).toMatchObject({ width: 3, style: "solid" });
@@ -440,8 +441,13 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await cutover.getByRole("button", { name: "Snooze" }).click();
   await cutover.getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
   await expect(cutover).toBeHidden();
-  await page.getByRole("button", { name: "Prepare briefing" }).click();
-  await expect(page.locator(".briefing-lines li").first()).toBeVisible({ timeout: 30_000 });
+  const forYou = page.getByRole("region", { name: "For you now" });
+  await forYou.getByRole("button", { name: "Briefings" }).click();
+  await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
+  // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
+  // leading); Read briefing opens its points and linked counts.
+  await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
+  await expect(page.locator(".briefing-lines li").first()).toBeVisible();
   await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
   await expect(page.getByRole("region", { name: "Review queue" })).toBeInViewport();
   await page.reload();
