@@ -730,7 +730,7 @@ test("feature switches: turning attention off changes the product and the backen
   await serviceSchedules(page);
   await expect(page.getByText("Source refresh: off")).toBeVisible();
   await page.goto(stack.url);
-  await expect(page.getByText("Attention and briefings is off")).toBeVisible();
+  await expect(page.locator('#inbox [data-inbox-empty="off"]')).toContainText(/Attention and briefings is off\.\s*Nothing is read for the Inbox, so this is not a claim that nothing needs you\./);
   await page.goto(`${stack.url}/settings/features`);
   await page.getByRole("checkbox", { name: /^Drafts and approvals/ }).click();
   await page.getByRole("button", { name: "Turn on what it needs too" }).click();

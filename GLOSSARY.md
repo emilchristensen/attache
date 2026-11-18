@@ -185,4 +185,9 @@ _Avoid_: unread count, badge count
 **Open item**:
 An Inbox item in the open state, whether or not its Draft waits.
 Open items and the Decision count differ by the items whose Draft waits in Approvals, so the Dashboard says "need you" only of decisions.
+The count line under the Inbox heading relates the two when they differ.
+
+**Recently added**:
+The line under Home's Inbox that opens into every change written to the Brain without the owner's review in the last 7 days: saves a Harness wrote with auto-accept on, and Consolidation's changes, each with Revert where allowed.
+Nothing there is a decision, so it never counts toward the Decision count.
 _Avoid_: Unread item

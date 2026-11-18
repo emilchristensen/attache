@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { approvalRow, draftsGroup, openApprovalRow, proposalsGroup, waitingTab } from "./approvals.ts";
 import { api, JourneyBrowser } from "./browser.ts";
 import { openConnection } from "./connections.ts";
+import { openRecentlyAdded } from "./inbox.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -55,7 +56,9 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section.getByRole("listitem")).toHaveCount(0);
   // With no work source only the notes are read: Connections says Notes only, the empty Inbox says what was read, and the logo shows no dot.
   await expect(page.getByRole("status", { name: "Connections" }).locator('[data-state="notes_only"] .conn-row-line')).toHaveText("Notes · Notes only · Only your notes are read");
-  await expect(page.getByText("Nothing needs your attention in your notes")).toBeVisible();
+  const empty = page.locator("#inbox [data-inbox-empty]");
+  await expect(empty.locator(".inbox-empty-title")).toHaveText("Nothing found in your notes.");
+  await expect(empty).toContainText("No work source is connected, so only your notes were read.");
   await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(0);
 });
 
@@ -341,6 +344,10 @@ test("home: Recently added lists each change written without review with its sou
 
   await page.reload();
   const section = page.getByRole("region", { name: "Recently added" });
+  // One line, closed: it says how many changes reached the Brain without review, and opens into them.
+  await expect(section.locator("summary")).toHaveText(/^Recently added\s*\d+ changes? written without your review in the last 7 days$/);
+  await expect(section.getByRole("listitem")).toHaveCount(0);
+  await openRecentlyAdded(page);
   const entries = section.getByRole("listitem");
   await expect(entries.first()).toContainText("Ines Ortega");
   await expect(entries.first()).toContainText("Created the note");
@@ -373,6 +380,7 @@ test("home: a change Consolidation wrote from a meeting shows beside an auto-acc
   await harnessSave(stack, [{ action: "create", type: "person", title: "Odile Marchand", facts: [{ subject: "Role", value: "Lyra launch manager" }] }], { agent: "claude-code", session: "sess-lyra" });
 
   await page.reload();
+  await openRecentlyAdded(page);
   const entries = page.getByRole("region", { name: "Recently added" }).getByRole("listitem");
   const saved = entries.filter({ hasText: "Odile Marchand" });
   const consolidated = entries.filter({ hasText: "Lyra launch review" });
@@ -403,6 +411,7 @@ test("home: an entry leaves Recently added when it turns 7 days old, while Home 
   });
   await page.goto(`${stack.url}/`);
   const section = page.getByRole("region", { name: "Recently added" });
+  await openRecentlyAdded(page);
   await expect(section.getByRole("listitem").first()).toBeVisible();
 
   // A week passes with Home open, and nothing else changes in the Brain.

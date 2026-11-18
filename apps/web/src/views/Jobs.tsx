@@ -6,7 +6,7 @@ import { Loading, navigate, useAction, useLocation } from "../components/ui.tsx"
 import { usePageRoom, useRevealDetail } from "../components/reveal-detail.ts";
 import { useHeadsUpClock, type HeadsUpClock } from "../heads-up-clock.ts";
 import { ACTIVE_STATUSES, ENDED_STATUSES, initialJobId, jobSummary, jobTime, runningOrder } from "../jobs.ts";
-import { GroupFailure } from "./ApprovalRow.tsx";
+import { GroupFailure } from "../components/GroupFailure.tsx";
 import { JobDetail, JobTag } from "./JobDetail.tsx";
 
 /** How many ended jobs Finished shows at first, and how many more each "Show more" adds. */

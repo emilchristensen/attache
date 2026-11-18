@@ -30,6 +30,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
   Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
+  It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
   Home's For you now brings the daily briefing forward in the morning, meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), and the briefings you ask for, each saying why it is there and when it leaves.
   Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
 - **Approvals.**
