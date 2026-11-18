@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useResource } from "../live.ts";
-import { forYouNow, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId } from "../heads-ups.ts";
+import { forYouNow, heldSlot, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId } from "../heads-ups.ts";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
@@ -138,8 +138,8 @@ function useLatestBriefing(enabled: boolean) {
 /**
  * For you now: Home's second area. The Heads-ups that are timely, the most urgent leading and the rest as compact
  * lines, or one quiet line when nothing is. While the pointer or focus is on a Heads-up, the Heads-ups hold still:
- * none moves or leaves until the owner moves away, not even for a briefing they asked for. The owner's own Got it
- * applies at once; the heading and the briefing actions are outside the hold.
+ * none moves or leaves until the owner moves away (`heldSlot`). The owner's own Got it applies at once, and a progress
+ * line gives way, in place, to the briefing it wrote; the heading and the briefing actions are outside the hold.
  */
 export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   const headingId = useId();
@@ -166,8 +166,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   };
   const frozen = useRef(live);
   if (!held) frozen.current = live;
-  const input: HeadsUpInput = held ? { ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) } : frozen.current;
-  const slot = forYouNow(input);
+  const slot = held ? heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) }, live) : forYouNow(live);
 
   if (!attentionOn)
     return (

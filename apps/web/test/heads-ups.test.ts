@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forYouNow, HEADS_UP_KINDS, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
+import { forYouNow, heldSlot, HEADS_UP_KINDS, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
 
 const CPH = "Europe/Copenhagen";
 
@@ -225,5 +225,51 @@ describe("the lead's development", () => {
   it("keeps the summary's own first sentence otherwise", () => {
     expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "Nothing needs your attention right now." }) })).lead).toMatchObject({ title: "Nothing needs your attention right now.", explanation: null });
     expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "2 deadlines.", sections: [] }) })).lead).toMatchObject({ title: "2 deadlines." });
+  });
+});
+
+describe("a held slot", () => {
+  const asked = briefing({ id: "b2", kind: "manual", createdAt: "2026-11-18T09:31:00Z" });
+  const job = { id: "j1", progress: 0.75, note: "Composing briefing" };
+  const keys = (slot: ReturnType<typeof forYouNow>) => [slot.lead, ...slot.followers, ...slot.more].map((h) => h?.key ?? null);
+
+  it("holds still: a newer briefing waits, and so do the clock and another tab's Got it", () => {
+    const held = input("2026-11-18T09:30:00Z");
+    const live = input("2026-11-18T11:30:00Z", { briefing: asked, settled: new Set(["briefing:b1"]) });
+    expect(heldSlot(held, live)).toEqual(forYouNow(held));
+  });
+
+  it("lets the briefing a progress line was writing take that line's place, as a line, so nothing else moves", () => {
+    // Asked for with nothing else timely: the progress line came up under the pointer resting where the menu was.
+    const held = input("2026-11-18T09:30:00Z", { briefing: null, briefingJob: job });
+    const slot = heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked }));
+    expect(slot.lead).toBeNull();
+    expect(slot.followers).toMatchObject([{ key: "briefing:b2", kind: "requested-briefing", actions: ["read-briefing", "got-it"] }]);
+    expect(slot.quiet).toBeNull();
+    // The held entries around it stay where they were, the briefing they came from too.
+    const beside = heldSlot(input("2026-11-18T09:30:00Z", { briefingJob: job }), input("2026-11-18T09:31:00Z", { briefing: asked }));
+    expect(keys(beside)).toEqual(["briefing:b1", "briefing:b2"]);
+  });
+
+  it("keeps the progress line while its job runs, or until the briefing it wrote is here", () => {
+    const held = input("2026-11-18T09:30:00Z", { briefing: null, briefingJob: job });
+    expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: null, briefingJob: { ...job, progress: 0.9 } })))).toEqual([null, "progress:j1"]);
+    expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: null })))).toEqual([null, "progress:j1"]);
+    // A briefing that came while the job still runs is not the one it writes.
+    expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked, briefingJob: job })))).toEqual([null, "progress:j1"]);
+    // Once it has ended, a later job does not keep it.
+    expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked, briefingJob: { id: "j2", progress: 0, note: null } })))).toEqual([null, "briefing:b2"]);
+  });
+
+  it("never lets a briefing in without a progress line in its place", () => {
+    const held = input("2026-11-18T09:30:00Z", { briefing: briefing({ id: "b0", kind: "manual", createdAt: "2026-11-18T09:00:00Z" }) });
+    expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked })))).toEqual(["briefing:b0"]);
+  });
+
+  it("leaves the place empty when the owner put the briefing away here, and says so once nothing is left", () => {
+    const held = input("2026-11-18T09:30:00Z", { briefing: null, briefingJob: job, settled: new Set(["briefing:b2"]) });
+    const slot = heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked }));
+    expect(keys(slot)).toEqual([null]);
+    expect(slot.quiet).toBe("Nothing timely right now. The next daily briefing is scheduled for 08:00 tomorrow.");
   });
 });

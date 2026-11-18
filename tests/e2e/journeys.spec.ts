@@ -396,7 +396,8 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   const forYou = page.getByRole("region", { name: "For you now" });
   await forYou.getByRole("button", { name: "Briefings" }).click();
   await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
-  // The briefing asked for leads For you now; Read briefing opens its points and linked counts.
+  // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
+  // leading); Read briefing opens its points and linked counts.
   await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
   await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();

@@ -270,6 +270,35 @@ test("hold: a new briefing waits while the keyboard focus or the pointer is on t
   await expect(asked).toHaveCount(0);
 });
 
+test("hold: a briefing asked for takes its progress line's place under the pointer, and its own place once the pointer leaves", async () => {
+  const page = await journeys.open("/");
+  const forYou = area(page);
+  const away = forYou.locator('[data-heads-up="away-summary"]');
+  if (await away.count()) await away.getByRole("button", { name: "Got it" }).click();
+  await expect(forYou).toHaveAttribute("data-for-you-now", "quiet");
+  // A briefing is being written: its progress line comes up where the Briefings menu was, under the resting pointer.
+  const running = { id: "job-under-the-pointer", kind: "briefing", title: "Briefing", status: "running", progress: 0.75, progressNote: "Composing briefing", attempts: 1, maxAttempts: 3, result: null, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: null, cancelRequestedAt: null, cancelOutcome: null, capability: "attention", connectionId: null };
+  await page.route("**/api/v1/jobs?status=queued,running*", (route) => route.fulfill({ json: [running] }));
+  await page.reload();
+  const progress = forYou.locator('[data-heads-up="briefing-progress"]');
+  await progress.hover();
+  await page.unroute("**/api/v1/jobs?status=queued,running*");
+  // The job ends and its briefing is written while the pointer rests there: the briefing takes the line's place, as
+  // a line, so nothing else moves, and it opens in place.
+  await writeBriefing(page, "manual");
+  const asked = forYou.locator('li.heads-up-line[data-heads-up="requested-briefing"]');
+  await expect(asked).toBeVisible();
+  await expect(progress).toHaveCount(0);
+  await asked.getByRole("button", { name: "Read briefing" }).click();
+  await expect(asked.locator(".briefing-lines li").first()).toBeVisible();
+  // Pointer and focus leave: the briefing takes its own place, leading.
+  await page.mouse.move(5, 5);
+  await expect(asked).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(forYou.locator('article.heads-up-lead[data-heads-up="requested-briefing"]')).toBeVisible();
+  await expect(asked).toHaveCount(0);
+});
+
 test("narrow: the lead and its lines fit a phone with no sideways scrolling", async () => {
   const page = await journeys.open("/");
   await writeBriefing(page, "daily");

@@ -314,3 +314,32 @@ function quietLine(input: HeadsUpInput, kinds: readonly HeadsUpKind[]): string |
     .sort((a, b) => a.at - b.at)[0];
   return next ? `Nothing timely right now. ${next.text}` : "Nothing timely right now.";
 }
+
+// ---- the hold --------------------------------------------------------------------------------------------------------
+
+/**
+ * What For you now shows while the pointer or focus is inside the Heads-ups: the slot of `held`, the input when the
+ * hold began (with the owner's own Got it added), so nothing moves or leaves under the owner. A newer briefing, the
+ * clock and another tab's Got it all wait until the hold ends.
+ *
+ * One thing comes through: a progress line is a promise of the briefing it writes, so once its job has ended and that
+ * briefing is here (`live`), the briefing takes the line's place, as a line, and nothing around it moves. It takes its
+ * own place in the order when the hold ends. Without this, a briefing the owner just asked for would wait behind its
+ * own finished progress line for as long as the pointer happened to rest where the Briefings menu was.
+ */
+export function heldSlot(held: HeadsUpInput, live: HeadsUpInput, kinds: readonly HeadsUpKind[] = HEADS_UP_KINDS): Slot {
+  const slot = forYouNow(held, kinds);
+  const written = knownBriefing(live);
+  const before = knownBriefing(held);
+  if (!written || written.id === before?.id) return slot;
+  const entries = [...slot.followers, ...slot.more];
+  const at = entries.findIndex((h) => h.kind === "briefing-progress");
+  // Still running: the briefing that came is not the one it writes.
+  if (at < 0 || entries[at]!.job?.id === live.briefingJob?.id) return slot;
+  // Settled as held: the owner's own Got it applies at once, another tab's waits.
+  const now = forYouNow({ ...live, settled: held.settled }, kinds);
+  const arrived = [now.lead, ...now.followers, ...now.more].filter((h): h is HeadsUp => h?.briefing?.id === written.id);
+  const next = [...entries.slice(0, at), ...arrived, ...entries.slice(at + 1)];
+  const empty = !slot.lead && !next.length;
+  return { lead: slot.lead, followers: next.slice(0, VISIBLE_FOLLOWERS), more: next.slice(VISIBLE_FOLLOWERS), quiet: empty ? quietLine(held, kinds) : null };
+}
