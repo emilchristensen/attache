@@ -183,7 +183,6 @@ function mount(fx: FixtureServer, method: string, pattern: string, handler: Hand
 }
 
 const unauthorized: FixtureResponse = { status: 401, json: { message: "Missing or invalid credentials" } };
-const authed = (h: Handler): Handler => (req, p) => (req.headers.authorization ? h(req, p) : unauthorized);
 const json = (data: unknown, status = 200): FixtureResponse => ({ status, json: data });
 const id = (s: ScenarioState) => String(++s.nextId);
 

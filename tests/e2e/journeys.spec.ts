@@ -680,18 +680,20 @@ test("jobs: work continues after the tab closes; cancellation reports what happe
 
 test("wording: counts read as words in the right number, never with (s)", async () => {
   const page = await journeys.open("/connections");
+  await page.getByRole("button", { name: /^Import a folder/ }).click();
   await page.getByRole("textbox", { name: "Folder path" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Reads 2 Markdown files · changes 0 files")).toBeVisible();
 
-  await page.locator('[data-connection="github"]').getByRole("button", { name: "Disconnect…" }).click();
+  await (await openConnection(page, "github")).getByRole("button", { name: "Disconnect…" }).click();
   const disconnect = page.getByRole("alertdialog", { name: "Disconnect" });
   await expect(disconnect).toContainText("Attache deletes the stored credentials and stops all requests.");
   await expect(disconnect).toContainText(/\d+ queued jobs? will be cancelled and approvals for \d+ drafts? revoked\./);
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
   // A notes folder has no credentials to delete, and its indexed files are counted too.
-  const notes = page.locator(".card", { has: page.getByRole("heading", { name: basename(stack.vaultDir), exact: true }) });
+  const notes = page.locator('[data-group="notes"] .connection-row', { has: page.getByRole("button", { name: basename(stack.vaultDir), exact: true }) });
+  await notes.getByRole("button", { name: basename(stack.vaultDir), exact: true }).click();
   await notes.getByRole("button", { name: "Disconnect…" }).click();
   await expect(disconnect).toContainText("Attache stops reading from it.");
   await expect(disconnect).not.toContainText("credentials");
@@ -869,9 +871,9 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
         home ??= s;
         if (path !== "/setup") expect([s.contentLeft, s.contentTop], `${at}: content starts where Home's does`).toEqual([home.contentLeft, home.contentTop]);
         if (viewport.width < 1280) continue;
-        // Wide windows keep the reading columns: Settings and Connections, Home's column centred beside the scrollbar, and the centred Setup steps.
-        if (path === "/connections" || path === "/settings") expect(s.contentWidth, `${at}: content column`).toBe(824);
-        if (path === "/") {
+        // Wide windows keep the reading columns: Settings, Home's and Connections' columns centred beside the scrollbar, and the centred Setup steps.
+        if (path === "/settings") expect(s.contentWidth, `${at}: content column`).toBe(824);
+        if (path === "/" || path === "/connections") {
           expect(s.contentWidth, `${at}: reading column`).toBeLessThanOrEqual(1072);
           expect(Math.abs(s.contentLeft - (s.scrollbarLeft - s.contentRight)), `${at}: the reading column is centred`).toBeLessThanOrEqual(1);
         }
@@ -1205,7 +1207,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
 
   // Refreshing the data folder raises one inbox item for the overdue fact, and none for the other.
   await page.goto(`${stack.url}/connections`);
-  await page.locator('[data-connection="vault-data"]').getByRole("button", { name: "Refresh now" }).click();
+  await (await openConnection(page, "vault-data")).getByRole("button", { name: "Refresh now" }).click();
   await expect(page.getByText("Refresh started")).toBeVisible();
   await page.goto(`${stack.url}/`);
   // A fact to check is its own type in the Inbox: a dated page, the words "Fact to check", from the Brain.
