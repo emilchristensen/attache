@@ -1,5 +1,5 @@
 import { briefingLines } from "../briefing-text.ts";
-import type { BriefingView } from "../heads-ups.ts";
+import type { BriefingRelatedNote, BriefingView } from "../heads-ups.ts";
 import { clockTime, spokenTime } from "../zoned-time.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { navigate } from "../components/ui.tsx";
@@ -14,12 +14,16 @@ function jumpTo(sectionId: string) {
   (document.getElementById(`attention-${sectionId}`) ?? document.getElementById("inbox"))?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/** Every point of a briefing, its linked counts and its file in the Brain: what Read briefing opens in place. */
-export function BriefingDetail({ briefing }: { briefing: BriefingView }) {
+/**
+ * Every point of a briefing, its linked counts and its file in the Brain: what Read briefing opens in place. `why`
+ * leads it when the briefing is a one-line follower, whose why is not on its line.
+ */
+export function BriefingDetail({ briefing, why = null }: { briefing: BriefingView; why?: string | null }) {
   const open = useOpenEvidence();
   const fresh = [briefing.counts.new && `${briefing.counts.new} new`, briefing.counts.changed && `${briefing.counts.changed} changed`].filter(Boolean).join(" · ");
   return (
     <div className="briefing-detail">
+      {why && <p className="heads-up-why">{why}</p>}
       <ul className="briefing-lines">
         {briefingLines(briefing.summary).map((l, n) => (
           <li key={n} className={l.caveat ? "caveat" : undefined}>
@@ -47,12 +51,25 @@ export function BriefingDetail({ briefing }: { briefing: BriefingView }) {
   );
 }
 
+/** One chip per related note a briefing found, opening the note at the lines it matched. */
+export function RelatedNoteChips({ related }: { related: readonly BriefingRelatedNote[] }) {
+  const open = useOpenEvidence();
+  return (
+    <div className="row">
+      {related.map((r) => (
+        <button key={`${r.relPath}:${r.lines.join("-")}`} className="source-chip" onClick={() => open({ root: "data", relPath: r.relPath, lines: r.lines, title: r.title })}>
+          {r.title}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The meetings in the latest briefing and the notes from the Brain it found for each, labelled with when that
  * briefing looked: they are what the briefing found, not fresh research.
  */
 export function MeetingContext({ briefing, now, timeZone, onClose }: { briefing: BriefingView; now: number; timeZone: string; onClose: () => void }) {
-  const open = useOpenEvidence();
   const meetings = briefing.sections.filter((s) => s.id === "meetings").flatMap((s) => s.items);
   const made = Date.parse(briefing.createdAt);
   return (
@@ -72,13 +89,7 @@ export function MeetingContext({ briefing, now, timeZone, onClose }: { briefing:
             <li key={m.id}>
               <strong>{m.title}</strong>
               {(m.related ?? []).length > 0 ? (
-                <div className="row">
-                  {m.related!.map((r) => (
-                    <button key={`${r.relPath}:${r.lines.join("-")}`} className="source-chip" onClick={() => open({ root: "data", relPath: r.relPath, lines: r.lines, title: r.title })}>
-                      {r.title}
-                    </button>
-                  ))}
-                </div>
+                <RelatedNoteChips related={m.related!} />
               ) : (
                 <span className="meeting-context-empty">No related notes were found.</span>
               )}

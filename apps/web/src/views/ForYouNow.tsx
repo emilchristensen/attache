@@ -1,16 +1,19 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { briefingWritten, forYouNow, heldSlot, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId } from "../heads-ups.ts";
+import { useSignals } from "../nav-signals.ts";
+import { briefingWritten, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed } from "../heads-ups.ts";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
 import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
-import { Link } from "../components/ui.tsx";
+import { Link, useAction } from "../components/ui.tsx";
 import { BriefingActions } from "./BriefingActions.tsx";
 import { BriefingDetail, MeetingContext } from "./BriefingParts.tsx";
 import { useBriefingJob } from "./briefing-job.ts";
+import { MeetingLead, MeetingLine, type MeetingHandlers } from "./MeetingHeadsUp.tsx";
 
 const ICON: Record<HeadsUpKindId, IconName> = {
   "daily-briefing": "sun",
@@ -18,6 +21,7 @@ const ICON: Record<HeadsUpKindId, IconName> = {
   "away-summary": "calendar",
   "requested-briefing": "document",
   "briefing-progress": "clock",
+  "meeting-prep": "calendar-notes",
 };
 
 /** What one Heads-up offers, drawn from its actions. */
@@ -44,6 +48,23 @@ interface EntryProps {
   open: boolean;
   onRead: () => void;
   onGotIt: () => void;
+  /** Meeting prep's Done and Not now. */
+  meeting: Omit<MeetingHandlers, "onOpenPrep">;
+  clock: { now: number; timeZone: string };
+}
+
+const isMeeting = (h: HeadsUp): h is HeadsUp & { meeting: MeetingPrep } => !!h.meeting;
+
+/** The lead, drawn as its kind needs. */
+function Lead(props: EntryProps) {
+  const { headsUp, open, onRead, meeting, clock } = props;
+  return isMeeting(headsUp) ? <MeetingLead headsUp={headsUp} open={open} clock={clock} onOpenPrep={onRead} {...meeting} /> : <LeadCard {...props} />;
+}
+
+/** A follower, drawn as its kind needs. */
+function Follower(props: EntryProps) {
+  const { headsUp, open, onRead, meeting, clock } = props;
+  return isMeeting(headsUp) ? <MeetingLine headsUp={headsUp} open={open} clock={clock} onOpenPrep={onRead} {...meeting} /> : <Line {...props} />;
 }
 
 /** The lead: the one Heads-up shown whole. Only a lead morning briefing is the amber spread with the low sun. */
@@ -72,11 +93,14 @@ function LeadCard({ headsUp, open, onRead, onGotIt }: EntryProps) {
 }
 
 /**
- * A follower: one compact line, its why under it, opening in place. A briefing that takes a progress line's place
- * (`inPlaceOf`, the same row) keeps at least that line's height while held, so the lines below it stay put.
+ * A follower: one compact line, opening in place. A line kind (progress, Earlier today) keeps its why under it; a card
+ * that follows (a briefing under a meeting) stays one line, with its why inside what Read briefing opens. A briefing
+ * that takes a progress line's place (`inPlaceOf`, the same row) keeps at least that line's height while held, so the
+ * lines below it stay put.
  */
 function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
   const job = headsUp.job;
+  const oneLine = headsUp.form === "card";
   const row = useRef<HTMLLIElement>(null);
   const progressHeight = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -96,7 +120,7 @@ function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
           <span className="heads-up-line-timing"> · {headsUp.timing}</span>
           <span className="heads-up-line-title"> · {headsUp.title}</span>
         </p>
-        <p className="heads-up-why">{headsUp.why}</p>
+        {!oneLine && <p className="heads-up-why">{headsUp.why}</p>}
         {job && (
           <div className="progress" role="progressbar" aria-label="Briefing progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(job.progress * 100)}>
             <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
@@ -104,7 +128,7 @@ function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
         )}
       </div>
       <Actions headsUp={headsUp} lead={false} open={open} onRead={onRead} onGotIt={onGotIt} />
-      {open && headsUp.briefing && <BriefingDetail briefing={headsUp.briefing} />}
+      {open && headsUp.briefing && <BriefingDetail briefing={headsUp.briefing} why={oneLine ? headsUp.why : null} />}
     </li>
   );
 }
@@ -146,13 +170,33 @@ function useLatestBriefing(enabled: boolean) {
   return { value, failed: !!r.error, retry: r.reload };
 }
 
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * The meeting prep items decided Done here, until the open list no longer has them: their Heads-up goes at once and
+ * the Inbox does not list them while the list catches up. One that comes back later (its evidence changed) is not
+ * held back.
+ */
+function useDoneHere(items: readonly { id: string }[] | null) {
+  const [done, setDone] = useState<ReadonlySet<string>>(NONE);
+  useEffect(() => {
+    if (!items || !done.size) return;
+    const open = new Set(items.map((i) => i.id));
+    if ([...done].every((id) => open.has(id))) return;
+    setDone((prev) => new Set([...prev].filter((id) => open.has(id))));
+  }, [items, done]);
+  return { done, add: (id: string) => setDone((prev) => new Set([...prev, id])) };
+}
+
 /**
  * For you now: Home's second area. The Heads-ups that are timely, the most urgent leading and the rest as compact
  * lines, or one quiet line when nothing is. While the pointer or focus is on a Heads-up, the Heads-ups hold still:
- * none moves or leaves until the owner moves away (`heldSlot`). The owner's own Got it applies at once, and a progress
- * line gives way, in place, to the briefing it wrote; the heading and the briefing actions are outside the hold.
+ * none moves or leaves until the owner moves away (`heldSlot`). The owner's own Got it, Not now and Done apply at
+ * once, and a progress line gives way, in place, to the briefing it wrote; the heading and the briefing actions are
+ * outside the hold. `onAbove` hears the ids of the Inbox items shown here as meeting prep (and those decided Done here
+ * until the list catches up), so the Inbox leaves them out: each is one item, shown once.
  */
-export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
+export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAbove: (ids: ReadonlySet<string>) => void }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const clock = useHeadsUpClock();
@@ -160,12 +204,18 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
   const schedule = useBriefingSchedule(attentionOn, clock.now);
-  const { held, holdProps } = useHold();
-  // Got it pressed in this tab applies at once, even while held; another tab's waits until the hold ends.
+  const { held, holding, holdProps } = useHold("data-heads-up-key");
+  // Got it, Not now and Done pressed in this tab apply at once, even while held; another tab's wait until the hold ends.
   const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [context, setContext] = useState(false);
   const [said, setSaid] = useState("");
+  // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
+  const openInbox = useSignals().openInbox;
+  const items = openInbox.data?.items ?? null;
+  const doneHere = useDoneHere(items);
+  const doneKeys = useMemo(() => [...doneHere.done].map((id) => `meeting:${id}`), [doneHere.done]);
+  const { busy, run } = useAction();
 
   const live = {
     now: clock.now,
@@ -173,16 +223,38 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
     briefing: latest.value,
     briefingJob: job,
     schedule,
-    settled,
+    settled: doneKeys.length ? new Set([...settled, ...doneKeys]) : settled,
+    meetings: items ?? ("unknown" as const),
   };
   const frozen = useRef(live);
   // The first briefing to take a progress line's place stays as it came until the hold ends: a later one waits too.
   const handoff = useRef<HeadsUpInput | null>(null);
+  // Where meetings that came due during this hold went, so each stays there until the hold ends.
+  const placed = useRef<Placed>(new Map());
   if (!held) {
     frozen.current = live;
     handoff.current = null;
+    placed.current = new Map();
   } else if (!handoff.current && briefingWritten(frozen.current, live)) handoff.current = live;
-  const slot = held ? heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) }, handoff.current) : forYouNow(live);
+  // While held, a meeting that comes due still comes in on time, below what the owner is on (`withArrivedMeetings`).
+  const own = new Set([...mine, ...doneKeys]);
+  const arrived = held ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...own]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...own]) }), holding, placed.current, own) : null;
+  if (arrived) placed.current = arrived.placed;
+  const slot = arrived ? arrived.slot : forYouNow(live);
+  // This tab's own Got it, Not now and Done only stand in for a hold's frozen input: the live input has them (stored, or decided).
+  useEffect(() => {
+    if (!held && mine.size) setMine(new Set());
+  }, [held, mine]);
+
+  const above = attentionOn ? new Set([...promotedMeetings(slot), ...doneHere.done]) : NONE;
+  const aboveKey = [...above].sort().join(" ");
+  const told = useRef<string | null>(null);
+  // Before paint, so a meeting never shows both here and as an Inbox row.
+  useLayoutEffect(() => {
+    if (told.current === aboveKey) return;
+    told.current = aboveKey;
+    onAbove(above);
+  });
 
   if (!attentionOn)
     return (
@@ -205,11 +277,29 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
     setSaid(h.kind === "daily-briefing" ? "Briefing put away. It stays under Earlier today until midnight." : "Briefing put away.");
     heading.current?.focus();
   };
-  const entry = (h: HeadsUp) => ({
+  const notNow = (h: HeadsUp) => {
+    settle(h.key);
+    setMine((m) => new Set([...m, h.key]));
+    setSaid(`${h.title} moved to the Inbox. It stays open there.`);
+    heading.current?.focus();
+  };
+  const done = (h: HeadsUp & { meeting: MeetingPrep }) =>
+    void run(h.key, async () => {
+      await post(`/attention/${h.meeting.itemId}/decision`, { decision: "done" });
+      doneHere.add(h.meeting.itemId);
+      // A held slot keeps the input from before Done, item included: this tab's own decision applies to it at once.
+      setMine((m) => new Set([...m, h.key]));
+      setSaid(`${h.title} marked done, on every Machine.`);
+      heading.current?.focus();
+      openInbox.reload();
+    });
+  const entry = (h: HeadsUp): EntryProps => ({
     headsUp: h,
     open: open.has(h.key),
     onRead: () => toggle(h.key),
     onGotIt: () => gotIt(h),
+    meeting: { onDone: () => isMeeting(h) && done(h), onNotNow: () => notNow(h), busy: busy === h.key },
+    clock,
   });
   const actions = <BriefingActions running={!!job} hasBriefing={typeof latest.value === "object" && latest.value !== null} start={start} onMeetingContext={() => setContext(true)} />;
   const meetingContext = context && typeof latest.value === "object" && latest.value !== null && (
@@ -223,6 +313,13 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
     <>
       Could not check for a briefing.{" "}
       <button className="small" onClick={latest.retry}>
+        Try again
+      </button>
+    </>
+  ) : openInbox.error ? (
+    <>
+      Could not check your meetings.{" "}
+      <button className="small" onClick={openInbox.reload}>
         Try again
       </button>
     </>
@@ -244,11 +341,11 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
         {actions}
       </div>
       <div className="heads-ups" {...holdProps}>
-        {slot.lead && <LeadCard key={slot.lead.key} {...entry(slot.lead)} />}
+        {slot.lead && <Lead key={slot.lead.key} {...entry(slot.lead)} />}
         {slot.followers.length > 0 && (
           <ul className="heads-up-lines" aria-label={slot.lead ? "Also timely" : "Timely"}>
             {slot.followers.map((h) => (
-              <Line key={h.inPlaceOf ?? h.key} {...entry(h)} />
+              <Follower key={h.inPlaceOf ?? h.key} {...entry(h)} />
             ))}
           </ul>
         )}
@@ -256,7 +353,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
           <Disclosure className="heads-up-more" title={plural(slot.more.length, "more Heads-up")}>
             <ul className="heads-up-lines">
               {slot.more.map((h) => (
-                <Line key={h.inPlaceOf ?? h.key} {...entry(h)} />
+                <Follower key={h.inPlaceOf ?? h.key} {...entry(h)} />
               ))}
             </ul>
           </Disclosure>

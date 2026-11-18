@@ -8,27 +8,15 @@
  * Pure: the clock, the time zone and what the owner settled in this browser come in as input, so every rule is a
  * table test against a fixed clock.
  */
+import type { AttentionItemView } from "@attache/contracts";
 import { briefingLines } from "./briefing-text.ts";
+import { meetingPrep, type MeetingPrep } from "./heads-up-meeting.ts";
+import { byUrgency, DAILY_BRIEFING_UNTIL, RANK, REQUESTED_BRIEFING_STAYS_MS, VISIBLE_FOLLOWERS } from "./heads-up-rules.ts";
 import { atTimeOfDay, clockTime, sameDay, spokenTime, startOfDay } from "./zoned-time.ts";
 
-// ---- the rules, as named constants -------------------------------------------------------------------------------
-
-export const MINUTE_MS = 60_000;
-export const HOUR_MS = 60 * MINUTE_MS;
-/** The daily briefing leads until this time of day, in the current zone on the briefing's day. */
-export const DAILY_BRIEFING_UNTIL = "12:00";
-/** How long an away summary or a briefing the owner asked for stays, from when it was made. */
-export const REQUESTED_BRIEFING_STAYS_MS = 4 * HOUR_MS;
-/** How often the slot is computed again; it is also computed again when the page becomes visible. */
-export const HEADS_UP_TICK_MS = MINUTE_MS;
-/** Followers shown under the lead; any further ones open from a disclosure, in order. */
-export const VISIBLE_FOLLOWERS = 2;
-
-/**
- * Urgency, most urgent first: a kind's place in the order. Within one rank, Heads-ups go by their time, then key.
- * Meeting prep (#26 of spec #14) takes `meeting`, so a meeting in progress, then the next one, come before briefings.
- */
-export const RANK = { meeting: 10, briefing: 20, progress: 30, earlier: 40 } as const;
+// The rules, as named constants, live in `heads-up-rules.ts`; meeting prep's kind in `heads-up-meeting.ts`.
+export * from "./heads-up-rules.ts";
+export { meetingPrep, promotedMeetings, withArrivedMeetings, type MeetingPrep, type Placed } from "./heads-up-meeting.ts";
 
 // ---- inputs ----------------------------------------------------------------------------------------------------------
 
@@ -85,14 +73,23 @@ export interface HeadsUpInput {
    * it runs next. `null` when not known.
    */
   schedule: { enabled: boolean; nextRunAt: string | null } | null;
+  /**
+   * The open Inbox items (only meeting prep with a meeting counts here), `"unknown"` while the Inbox has not answered.
+   * Meeting prep is a view of its Inbox item: Done is the item's decision, and the item is not listed below while shown.
+   */
+  meetings: readonly AttentionItemView[] | "unknown";
 }
 
 // ---- outputs ---------------------------------------------------------------------------------------------------------
 
-export type HeadsUpKindId = "daily-briefing" | "away-summary" | "requested-briefing" | "earlier-today" | "briefing-progress";
+export type HeadsUpKindId = "daily-briefing" | "away-summary" | "requested-briefing" | "earlier-today" | "briefing-progress" | "meeting-prep";
 
-/** What the owner can do with a Heads-up; the view draws each one. */
-export type HeadsUpAction = "read-briefing" | "got-it";
+/**
+ * What the owner can do with a Heads-up, in the order offered; the view draws each one. Meeting prep: `open-prep`
+ * opens the attendees and related notes in place, `calendar` opens the event in Google Calendar, `join` the call,
+ * `done` is the Inbox item's Done decision and `not-now` hides the Heads-up while the item stays open.
+ */
+export type HeadsUpAction = "read-briefing" | "got-it" | "open-prep" | "calendar" | "join" | "done" | "not-now";
 
 export interface HeadsUp {
   /** One occurrence: what Got it remembers and what the view keys by, so a re-render keeps focus in place. */
@@ -118,6 +115,7 @@ export interface HeadsUp {
   job?: BriefingJob;
   /** While held: the key of the progress line whose place this briefing took (`heldSlot`). */
   inPlaceOf?: string;
+  meeting?: MeetingPrep;
 }
 
 export interface HeadsUpKind {
@@ -293,11 +291,7 @@ const briefingProgress: HeadsUpKind = {
 
 // ---- the slot --------------------------------------------------------------------------------------------------------
 
-export const HEADS_UP_KINDS: readonly HeadsUpKind[] = [dailyBriefing, requestedKind("away-summary", "away", "Away summary"), requestedKind("requested-briefing", "manual", "Briefing you asked for"), briefingProgress, earlierToday];
-
-function byUrgency(a: HeadsUp, b: HeadsUp): number {
-  return a.rank - b.rank || a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-}
+export const HEADS_UP_KINDS: readonly HeadsUpKind[] = [meetingPrep, dailyBriefing, requestedKind("away-summary", "away", "Away summary"), requestedKind("requested-briefing", "manual", "Briefing you asked for"), briefingProgress, earlierToday];
 
 /** What For you now shows at `input.now`. */
 export function forYouNow(input: HeadsUpInput, kinds: readonly HeadsUpKind[] = HEADS_UP_KINDS): Slot {
@@ -309,7 +303,7 @@ export function forYouNow(input: HeadsUpInput, kinds: readonly HeadsUpKind[] = H
 
 /** Nothing is timely: say so, and what comes next soonest. Null while an input is not known, so it never claims too much. */
 function quietLine(input: HeadsUpInput, kinds: readonly HeadsUpKind[]): string | null {
-  if (input.briefing === "unknown") return null;
+  if (input.briefing === "unknown" || input.meetings === "unknown") return null;
   const next = kinds
     .map((k) => k.next?.(input) ?? null)
     .filter((n) => n !== null)

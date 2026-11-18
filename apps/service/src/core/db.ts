@@ -240,6 +240,10 @@ export const MIGRATIONS: readonly string[] = [
   `
   alter table memory_changes add column capture text;
   `,
+  // A meeting prep item carries its meeting's start, end, call and attendees (JSON), and stays open until the end.
+  `
+  alter table attention_items add column meeting text;
+  `,
 ];
 
 const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);
