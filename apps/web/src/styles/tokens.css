@@ -1,20 +1,47 @@
 /*
- * Design tokens: zinc neutrals, indigo as the one accent, the brass attention dot, and twelve hues with four steps each.
- * The theme follows the system (prefers-color-scheme); light is the default.
- * `apps/web/test/contrast.test.ts` reads this file and measures every text pair (4.5:1) and graphic pair (3:1) in both themes,
- * so values change here and nowhere else.
+ * Design tokens: warm paper with blue-black ink in light, deep green slate with pale ink in dark, four role hues,
+ * amber, red and slate for states, and the brass attention dot. Values come from
+ * `docs/design/dashboard-blind-astra/DESIGN.md`; the theme follows the system (prefers-color-scheme), light by default.
+ * `apps/web/test/contrast.test.ts` reads this file and measures every text pair (4.5:1) and non-text pair (3:1) in
+ * both themes on the surfaces they actually sit on, so values change here and nowhere else.
  */
 
 /* ---- theme-independent ---------------------------------------------------- */
 
 :root {
+  /* Subjects, controls and body text: Inter served by Attache (font.css), then the system sans. */
   --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* Page and section headings: the system's own Georgia, never downloaded. */
+  --serif: Georgia, "Times New Roman", "DejaVu Serif", serif;
+  /* Short times, dates, keys and paths. */
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  /* Radius: 8 controls, 6 tags, 12 lists and cards, 16 the search field, panels and empty states. */
-  --r-sm: 8px;
-  --r-tag: 6px;
-  --r: 12px;
-  --r-lg: 16px;
+
+  /* Type scale (size / line height). */
+  --fs-title: 29px;
+  --lh-title: 35px;
+  --fs-section: 22px;
+  --lh-section: 28px;
+  --fs-body: 16px;
+  --lh-body: 23px;
+  --fs-control: 14px;
+  --fs-meta: 13px;
+  --lh-meta: 19px;
+
+  /* Spacing on a 4 px base. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 36px;
+  --s-7: 48px;
+
+  /* Radius: 6 controls, 4 tags, 10 cards and the feature spread. List rows are flat. */
+  --r-sm: 6px;
+  --r-tag: 4px;
+  --r: 10px;
+  --r-lg: 10px;
+
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --nav-w: 212px;
   /* The logo keeps the shipped mark's colours in both themes; they are never used for text. */
@@ -27,86 +54,56 @@
 :root {
   color-scheme: light;
 
-  /* Neutrals */
-  --paper: #fcfcfc;
-  --side: #f7f7f8;
-  --surface: #ffffff;
-  --raised: #ffffff;
-  --sunken: #f4f4f5;
-  --row-hover: rgba(24, 24, 27, 0.045);
-  --row-on: rgba(24, 24, 27, 0.08);
-  --line: #e4e4e7;
-  --line-btn: #d4d4d8;
-  /* One step darker than the design's #8f8f98, which is 2.99:1 on --side (Setup's left pane, the sidebar). */
-  --line-strong: #8d8d96;
-  --ink: #18181b;
-  --ink-2: #3f3f46;
-  --ink-3: #66666e;
+  /* Surfaces: the page, then paper for cards, fields and the frame, a sunken step for code and keys,
+     and the amber feature spread for the lead briefing. */
+  --canvas: #f7f6ef;
+  --paper: #fffef8;
+  --sunken: #ecece6;
+  --feature: #f7dfaf;
+  --row-hover: rgba(25, 45, 50, 0.04);
+  --row-on: rgba(25, 45, 50, 0.08);
 
-  /* The accent: links, the primary button, focus, selection, Drafts */
-  --accent: #4338ca;
-  --accent-solid: #4f46e5;
-  --on-accent: #ffffff;
-  --accent-soft: rgba(79, 70, 229, 0.14);
+  /* Ink: the strongest text, secondary text, and metadata. */
+  --ink: #192d32;
+  --ink-2: #46595b;
+  --ink-3: #526466;
 
-  /* The attention dot and what counts beside it */
-  --attn: #c2780e;
-  --attn-ink: #8a5206;
-  --attn-soft: rgba(217, 145, 38, 0.16);
+  /* Edges: decorative 1 px rules between rows, the outline of a secondary control, the edge of a field. */
+  --rule: #d3d8d0;
+  --line: #798482;
+  --key: #204d57;
 
-  --danger: #b12f25;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 16px 40px -8px rgba(0, 0, 0, 0.16);
+  /* Actions: links, the solid ink primary button, the focus ring (an outline, never a fill like selection). */
+  --link: #204d57;
+  --primary: #192d32;
+  --on-primary: #f7f6ef;
+  --focus: #164d84;
+  --highlight: rgba(22, 77, 132, 0.12);
 
-  /* Hues: solid, ink, soft, line. `--on-c` is text on a solid. */
-  --on-c: #ffffff;
-  --indigo: #625ad8;
-  --indigo-ink: #3b30cf;
-  --indigo-soft: #e7e6f9;
-  --indigo-line: #bbb8ea;
-  --green: #218355;
-  --green-ink: #1d724a;
-  --green-soft: #e7f9f0;
-  --green-line: #b8ead3;
-  --amber: #a5680d;
-  --amber-ink: #8e5a0b;
-  --amber-soft: #faf2e5;
-  --amber-line: #ead6b8;
-  --red: #d44035;
-  --red-ink: #b12f25;
-  --red-soft: #fae7e6;
-  --red-line: #eabbb8;
-  --rose: #dd2c67;
-  --rose-ink: #b81e51;
-  --rose-soft: #fae5ec;
-  --rose-line: #eab8c9;
-  --purple: #ae46ce;
-  --purple-ink: #9630b5;
-  --purple-soft: #f4e7f9;
-  --purple-line: #dfb8ea;
-  --sky: #1679ca;
-  --sky-ink: #1366aa;
-  --sky-soft: #e5f1fa;
-  --sky-line: #b8d4ea;
-  --teal: #138086;
-  --teal-ink: #116f74;
-  --teal-soft: #e5f9fa;
-  --teal-line: #b8e8ea;
-  --moss: #4e8321;
-  --moss-ink: #426e1c;
-  --moss-soft: #eff9e7;
-  --moss-line: #cfeab8;
-  --orange: #c15710;
-  --orange-ink: #a0480d;
-  --orange-soft: #faeee5;
-  --orange-line: #eaccb8;
-  --gold: #926e0c;
-  --gold-ink: #7f600a;
-  --gold-soft: #faf5e5;
-  --gold-line: #eaddb8;
-  --slate: #67778e;
-  --slate-ink: #566376;
-  --slate-soft: #edeff2;
-  --slate-line: #cad0d8;
+  /* The attention dot and the count beside it. */
+  --attn: #a8701f;
+  --attn-ink: #7a4d00;
+  --attn-soft: rgba(168, 112, 31, 0.14);
+
+  --danger: #a3261c;
+  --shadow: 0 1px 2px rgba(25, 45, 50, 0.06), 0 16px 40px -8px rgba(25, 45, 50, 0.18);
+  --backdrop: rgba(16, 36, 38, 0.6);
+
+  /* Hues: the word and glyph, then the stamp's tint (12% of the hue on paper). */
+  --blue: #164d84;
+  --blue-soft: #e3e9ea;
+  --rust: #8a3d22;
+  --rust-soft: #f1e7de;
+  --plum: #713760;
+  --plum-soft: #eee6e6;
+  --green: #215b48;
+  --green-soft: #e4eae3;
+  --amber: #7a4d00;
+  --amber-soft: #efe9da;
+  --red: #a3261c;
+  --red-soft: #f4e4de;
+  --slate: #4d5e66;
+  --slate-soft: #eaebe6;
 }
 
 /* ---- dark ------------------------------------------------------------------ */
@@ -115,112 +112,76 @@
   :root {
     color-scheme: dark;
 
-    --paper: #09090b;
-    --side: #0c0c0e;
-    --surface: #111113;
-    --raised: #18181b;
-    --sunken: #1c1c1f;
-    --row-hover: rgba(255, 255, 255, 0.05);
-    --row-on: rgba(255, 255, 255, 0.09);
-    --line: #26262a;
-    --line-btn: #34343a;
-    --line-strong: #6b6b74;
-    --ink: #f4f4f5;
-    --ink-2: #c9c9cf;
-    --ink-3: #a1a1aa;
+    --canvas: #192628;
+    --paper: #202f32;
+    --sunken: #263233;
+    --feature: #43351e;
+    --row-hover: rgba(246, 243, 222, 0.05);
+    --row-on: rgba(246, 243, 222, 0.1);
 
-    --accent: #a5a0f0;
-    --accent-solid: #8d87e3;
-    --on-accent: #09090b;
-    --accent-soft: rgba(141, 135, 227, 0.2);
+    --ink: #f6f3de;
+    --ink-2: #c0d0c9;
+    --ink-3: #a9bab4;
 
-    --attn: #e0a03a;
-    --attn-ink: #ebb65c;
-    --attn-soft: rgba(224, 160, 58, 0.15);
+    --rule: #435554;
+    --line: #91aaa3;
+    --key: #b4ded9;
 
-    --danger: #e27b74;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 44px -8px rgba(0, 0, 0, 0.7);
+    --link: #b4ded9;
+    --primary: #f6f3de;
+    --on-primary: #192628;
+    --focus: #a1cdff;
+    --highlight: rgba(161, 205, 255, 0.16);
 
-    --on-c: #09090b;
-    --indigo: #766edd;
-    --indigo-ink: #8d87e3;
-    --indigo-soft: #171537;
-    --indigo-line: #2f2b64;
-    --green: #33cc85;
-    --green-ink: #5cd69d;
-    --green-soft: #153727;
-    --green-line: #2b6449;
-    --amber: #d99126;
-    --amber-ink: #eba947;
-    --amber-soft: #372a15;
-    --amber-line: #644d2b;
-    --red: #d85046;
-    --red-ink: #e27b74;
-    --red-soft: #371715;
-    --red-line: #642f2b;
-    --rose: #dd4075;
-    --rose-ink: #e8739a;
-    --rose-soft: #371521;
-    --rose-line: #642b3e;
-    --purple: #b352d1;
-    --purple-ink: #c57adc;
-    --purple-soft: #2f1537;
-    --purple-line: #572b64;
-    --sky: #2688d9;
-    --sky-ink: #4ca4eb;
-    --sky-soft: #152837;
-    --sky-line: #2b4a64;
-    --teal: #26d0d9;
-    --teal-ink: #4cdee6;
-    --teal-soft: #153637;
-    --teal-line: #2b6164;
-    --moss: #7acc33;
-    --moss-ink: #95d65c;
-    --moss-soft: #253715;
-    --moss-line: #45642b;
-    --orange: #d96e26;
-    --orange-ink: #eb8947;
-    --orange-soft: #372315;
-    --orange-line: #64422b;
-    --gold: #d9a926;
-    --gold-ink: #ebbf47;
-    --gold-soft: #372e15;
-    --gold-line: #64552b;
-    --slate: #6e7f96;
-    --slate-ink: #8f9cae;
-    --slate-soft: #20252c;
-    --slate-line: #3c4553;
+    --attn: #d9a55a;
+    --attn-ink: #f3c97a;
+    --attn-soft: rgba(217, 165, 90, 0.16);
+
+    --danger: #ffaca3;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 18px 44px -8px rgba(0, 0, 0, 0.6);
+    --backdrop: rgba(5, 12, 13, 0.66);
+
+    /* 16% of the hue on paper. */
+    --blue: #a1cdff;
+    --blue-soft: #354853;
+    --rust: #ffbb96;
+    --rust-soft: #444542;
+    --plum: #f2b6dc;
+    --plum-soft: #42454d;
+    --green: #a4ddc0;
+    --green-soft: #354b49;
+    --amber: #f3c97a;
+    --amber-soft: #42483e;
+    --red: #ffaca3;
+    --red-soft: #444344;
+    --slate: #bccacc;
+    --slate-soft: #39484b;
   }
 }
 
 /* ---- one hue for a subtree --------------------------------------------------- */
 
-/* `hueClass()` in theme/hues.ts names these. Components inside read --c, --c-ink, --c-soft and --c-line. */
-.c-indigo { --c: var(--indigo); --c-ink: var(--indigo-ink); --c-soft: var(--indigo-soft); --c-line: var(--indigo-line); }
-.c-green { --c: var(--green); --c-ink: var(--green-ink); --c-soft: var(--green-soft); --c-line: var(--green-line); }
-.c-amber { --c: var(--amber); --c-ink: var(--amber-ink); --c-soft: var(--amber-soft); --c-line: var(--amber-line); }
-.c-red { --c: var(--red); --c-ink: var(--red-ink); --c-soft: var(--red-soft); --c-line: var(--red-line); }
-.c-rose { --c: var(--rose); --c-ink: var(--rose-ink); --c-soft: var(--rose-soft); --c-line: var(--rose-line); }
-.c-purple { --c: var(--purple); --c-ink: var(--purple-ink); --c-soft: var(--purple-soft); --c-line: var(--purple-line); }
-.c-sky { --c: var(--sky); --c-ink: var(--sky-ink); --c-soft: var(--sky-soft); --c-line: var(--sky-line); }
-.c-teal { --c: var(--teal); --c-ink: var(--teal-ink); --c-soft: var(--teal-soft); --c-line: var(--teal-line); }
-.c-moss { --c: var(--moss); --c-ink: var(--moss-ink); --c-soft: var(--moss-soft); --c-line: var(--moss-line); }
-.c-orange { --c: var(--orange); --c-ink: var(--orange-ink); --c-soft: var(--orange-soft); --c-line: var(--orange-line); }
-.c-gold { --c: var(--gold); --c-ink: var(--gold-ink); --c-soft: var(--gold-soft); --c-line: var(--gold-line); }
-.c-slate { --c: var(--slate); --c-ink: var(--slate-ink); --c-soft: var(--slate-soft); --c-line: var(--slate-line); }
+/* `hueClass()` in theme/hues.ts names these. Components inside read --c and --c-soft. */
+.c-blue { --c: var(--blue); --c-soft: var(--blue-soft); }
+.c-rust { --c: var(--rust); --c-soft: var(--rust-soft); }
+.c-plum { --c: var(--plum); --c-soft: var(--plum-soft); }
+.c-green { --c: var(--green); --c-soft: var(--green-soft); }
+.c-amber { --c: var(--amber); --c-soft: var(--amber-soft); }
+.c-red { --c: var(--red); --c-soft: var(--red-soft); }
+.c-slate { --c: var(--slate); --c-soft: var(--slate-soft); }
 
 /* ---- old names ----------------------------------------------------------------- */
 
 /*
- * The names the screens used before the redesign, mapped onto the new tokens so every screen takes the new look
- * before its layout changes. Only inline styles in the screens still use them; new code uses the new names, and a
- * screen's later phase moves it off these. Remove an alias with its last use.
+ * The names the screens' inline styles still use from before the redesign, mapped onto the new tokens so every
+ * screen takes the new look before its layout changes. New code uses the new names; a screen's later phase moves
+ * it off these. Remove an alias with its last use (`apps/web/test/tokens-used.test.ts` fails on a missing one).
  */
 :root {
   --text: var(--ink);
   --text-2: var(--ink-2);
   --muted: var(--ink-3);
-  --warn: var(--amber-ink);
-  --border: var(--line);
-  --border-strong: var(--line-btn);
+  --warn: var(--amber);
+  --border: var(--rule);
+  --border-strong: var(--line);
 }

@@ -12,7 +12,7 @@ svg.icon {
   stroke-linejoin: round;
 }
 
-/* `components/Tag.tsx`. No green: a healthy state is `.state-text`. */
+/* `components/Tag.tsx`: a plain exception label. No green: a healthy state is `.state-text`. */
 .tag {
   display: inline-flex;
   align-items: center;
@@ -22,7 +22,7 @@ svg.icon {
   border-radius: var(--r-tag);
   background: var(--sunken);
   color: var(--ink-2);
-  font: 500 11.5px/1 var(--font);
+  font: 600 12px/1 var(--font);
   white-space: nowrap;
 }
 .tag.attention {
@@ -35,21 +35,21 @@ svg.icon {
 }
 .tag.outline {
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--line-btn);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .tag.hue {
   background: var(--c-soft);
-  color: var(--c-ink);
+  color: var(--c);
 }
 
 /* `components/StateTag.tsx`: a healthy state, in words and nothing else, quieter than the name beside it. */
 .state-text {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--ink-3);
   white-space: nowrap;
 }
 
-/* `components/AttentionDot.tsx`: the logo's dot inside the Dashboard. */
+/* `components/AttentionDot.tsx`: the logo's brass dot inside the Dashboard. */
 .attention-dot {
   display: inline-block;
   flex: none;
@@ -59,26 +59,30 @@ svg.icon {
   background: var(--attn);
 }
 
-/* `components/TypeIcon.tsx`: an icon on a tile in one hue's solid step. */
+/* `components/TypeIcon.tsx`: a 19 px stroked glyph in its hue, stamped on that hue's tint. */
 .type-icon {
   display: inline-grid;
   place-items: center;
   flex: none;
-  border-radius: 7px;
-  background: var(--c);
-  color: var(--on-c);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--c-soft);
+  color: var(--c);
 }
-.type-icon.md {
-  width: 24px;
-  height: 24px;
-}
-.type-icon.lg {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+.type-icon.sm {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
 }
 .type-icon svg.icon {
-  stroke-width: 1.9;
+  stroke-width: 1.8;
+}
+/* Forced colours drop the tint: the stamp keeps an edge so it still reads as one. */
+@media (forced-colors: active) {
+  .type-icon {
+    border: 1px solid CanvasText;
+  }
 }
 
 /* ---- the logo -------------------------------------------------------------------- */
@@ -102,8 +106,8 @@ svg.icon {
 /* ---- surfaces ---------------------------------------------------------------------- */
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--rule);
   border-radius: var(--r);
   padding: 14px 16px;
 }
@@ -117,7 +121,7 @@ svg.icon {
   margin-top: 10px;
 }
 .card h4 {
-  font-size: 13px;
+  font-size: var(--fs-control);
   font-weight: 600;
   color: var(--ink-2);
   margin-top: 6px;
@@ -125,8 +129,8 @@ svg.icon {
 
 /* One thing in a list of cards: an Inbox item, a Proposal, a Connection that is not set up. */
 .item {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--rule);
   border-radius: var(--r);
   padding: 11px 13px;
   display: flex;
@@ -137,16 +141,17 @@ svg.icon {
   margin-top: 8px;
 }
 .item .title {
-  font-weight: 550;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: var(--fs-body);
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 .item .summary {
-  font-size: 13px;
+  font-size: var(--fs-control);
   color: var(--ink-2);
 }
 .item .meta {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-3);
   display: flex;
   gap: 8px;
@@ -183,7 +188,7 @@ svg.icon {
 }
 .list > .list-item {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -203,16 +208,17 @@ svg.icon {
 .list > .list-item:hover {
   background: var(--row-hover);
 }
+/* Selected: a fill and an ink bar, never an outline, so it cannot be mistaken for focus. */
 .list > .list-item[aria-current="true"] {
   background: var(--row-on);
-  box-shadow: inset 2px 0 0 var(--accent-solid);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .kv {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 4px 14px;
-  font-size: 13px;
+  font-size: var(--fs-control);
 }
 .kv dt {
   color: var(--ink-3);
@@ -229,11 +235,11 @@ svg.icon {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
 }
 .timeline li {
   display: grid;
-  grid-template-columns: 76px 1fr;
+  grid-template-columns: 112px 1fr;
   gap: 10px;
   color: var(--ink-2);
 }
@@ -251,14 +257,14 @@ svg.icon {
 .progress > span {
   display: block;
   height: 100%;
-  background: var(--accent-solid);
+  background: var(--primary);
   transition: width 0.4s ease;
 }
 
 /* ---- loading, empty, error ------------------------------------------------------------ */
 
 .state {
-  border: 1px dashed var(--line-btn);
+  border: 1px dashed var(--line);
   border-radius: var(--r);
   padding: 20px;
   text-align: center;
@@ -270,7 +276,7 @@ svg.icon {
 }
 .state.error {
   border-style: solid;
-  border-color: var(--red-line);
+  border-color: var(--red);
   color: var(--ink-2);
   text-align: left;
   align-items: flex-start;
@@ -280,26 +286,17 @@ svg.icon {
 }
 .state.partial {
   border-style: solid;
-  border-color: var(--amber-line);
+  border-color: var(--amber);
   color: var(--ink-2);
   text-align: left;
   align-items: flex-start;
 }
 
+/* A still placeholder: no shimmer or pulse. */
 .skeleton {
-  background: linear-gradient(90deg, var(--sunken) 0%, var(--surface) 50%, var(--sunken) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite linear;
-  border-radius: 6px;
+  background: var(--sunken);
+  border-radius: var(--r-tag);
   height: 14px;
-}
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
 }
 
 .toast-host {
@@ -314,21 +311,21 @@ svg.icon {
   width: min(520px, calc(100vw - 24px));
 }
 .toast {
-  background: var(--raised);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--rule);
   border-radius: var(--r);
   padding: 10px 14px;
   box-shadow: var(--shadow);
-  font-size: 13.5px;
+  font-size: var(--fs-control);
   display: flex;
   gap: 10px;
   align-items: flex-start;
 }
 .toast.error {
-  border-color: var(--red-line);
+  border-color: var(--red);
 }
 .toast.ok {
-  border-color: var(--green-line);
+  border-color: var(--green);
 }
 .toast button {
   margin-left: auto;
@@ -344,15 +341,15 @@ svg.icon {
   padding: 0 5px;
   margin: 0 1px;
   border-radius: 5px;
-  background: var(--indigo-soft);
-  color: var(--indigo-ink);
+  background: var(--blue-soft);
+  color: var(--blue);
   border: none;
   cursor: pointer;
   vertical-align: 1px;
   line-height: 1.6;
 }
 .cite:hover:not(:disabled) {
-  background: var(--indigo-line);
+  background: var(--highlight);
 }
 .sources {
   display: flex;
@@ -360,9 +357,9 @@ svg.icon {
   gap: 6px;
 }
 .source-chip {
-  font-size: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  font-size: var(--fs-meta);
+  border: 1px solid var(--rule);
+  background: var(--paper);
   border-radius: var(--r-sm);
   padding: 4px 9px;
   cursor: pointer;
@@ -373,7 +370,7 @@ svg.icon {
   max-width: 100%;
 }
 .source-chip b {
-  color: var(--accent);
+  color: var(--link);
 }
 .source-chip .path {
   color: var(--ink-3);
@@ -388,7 +385,7 @@ svg.icon {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--backdrop);
   z-index: 40;
 }
 .drawer {
@@ -397,8 +394,8 @@ svg.icon {
   right: 0;
   bottom: 0;
   width: min(720px, 100vw);
-  background: var(--surface);
-  border-left: 1px solid var(--line);
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
   box-shadow: var(--shadow);
   z-index: 41;
   display: flex;
@@ -406,7 +403,7 @@ svg.icon {
 }
 .drawer-head {
   padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--rule);
   display: flex;
   gap: 10px;
   align-items: flex-start;
@@ -419,10 +416,10 @@ svg.icon {
 
 .source-view {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   line-height: 1.6;
   background: var(--sunken);
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: var(--r-sm);
   overflow-x: auto;
 }
@@ -437,16 +434,16 @@ svg.icon {
   text-align: right;
   padding-right: 12px;
   user-select: none;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--rule);
 }
 .source-view .tx {
   padding-left: 12px;
 }
 .source-view .line.hl {
-  background: var(--accent-soft);
+  background: var(--highlight);
 }
 .source-view .line.hl .ln {
-  color: var(--accent);
+  color: var(--link);
   font-weight: 700;
 }
 
@@ -459,7 +456,7 @@ svg.icon {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .proposal-parts li {
   display: grid;
@@ -469,7 +466,7 @@ svg.icon {
   overflow-wrap: anywhere;
 }
 .proposal-parts .part-kind {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: var(--ink-3);
 }
@@ -488,10 +485,10 @@ svg.icon {
   grid-template-columns: 84px minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .proposal-evidence figcaption {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   color: var(--ink-3);
 }
@@ -499,7 +496,7 @@ svg.icon {
 .proposal-evidence blockquote {
   margin: 0;
   padding-left: 8px;
-  border-left: 2px solid var(--line-strong);
+  border-left: 2px solid var(--key);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -516,7 +513,7 @@ svg.icon {
   align-items: center;
   gap: 12px;
   padding: 9px 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--rule);
 }
 .recent-change:first-child {
   border-top: none;
@@ -539,7 +536,7 @@ svg.icon {
   overflow-wrap: anywhere;
 }
 .recent-change-what {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--ink-2);
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -565,12 +562,12 @@ svg.icon {
   color: var(--ink);
 }
 .recent-change-meta {
-  font-size: 12px;
+  font-size: var(--fs-meta);
   color: var(--ink-3);
 }
 .recent-change-why {
-  font-size: 12px;
-  color: var(--amber-ink);
+  font-size: var(--fs-meta);
+  color: var(--amber);
 }
 
 @media (max-width: 900px) {

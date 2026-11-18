@@ -221,6 +221,58 @@ test("look: the Dashboard sets its text in Inter, served by Attache itself, and 
   await page.close();
 });
 
+test("look: focus rings, control edges and healthy states, measured on the surfaces they render on, in light and dark", async () => {
+  const page = await journeys.newPage();
+  await page.goto(`${stack.url}/`);
+  await expect(page.getByText("Needs your attention")).toBeVisible();
+  /** WCAG contrast of an element's outline or border colour against the opaque surface behind it, as rendered. */
+  const measure = (target: Locator, what: "outline" | "border") =>
+    target.evaluate((el, what) => {
+      const parse = (c: string) => {
+        const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c);
+        if (!m) throw new Error(`Unreadable colour ${c}`);
+        return { r: +m[1]!, g: +m[2]!, b: +m[3]!, a: m[4] === undefined ? 1 : +m[4] };
+      };
+      // The surface behind the element: its parents' backgrounds painted from the page down.
+      const layers: string[] = [];
+      for (let n = el.parentElement; n; n = n.parentElement) layers.push(getComputedStyle(n).backgroundColor);
+      let bg = { r: 255, g: 255, b: 255 };
+      for (const c of layers.reverse()) {
+        const t = parse(c);
+        bg = { r: t.r * t.a + bg.r * (1 - t.a), g: t.g * t.a + bg.g * (1 - t.a), b: t.b * t.a + bg.b * (1 - t.a) };
+      }
+      const style = getComputedStyle(el);
+      const fg = parse(what === "outline" ? style.outlineColor : style.borderTopColor);
+      const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+        const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      };
+      const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x) as [number, number];
+      return { ratio: (hi + 0.05) / (lo + 0.05), width: what === "outline" ? parseFloat(style.outlineWidth) : parseFloat(style.borderTopWidth), style: what === "outline" ? style.outlineStyle : style.borderTopStyle };
+    }, what);
+
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const onFeature = page.locator(".briefing").getByRole("button", { name: "Away summary" });
+    const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
+    const onCanvas = page.getByRole("button", { name: "Show dismissed" });
+    // Control edges: a secondary button on the amber briefing and on a card.
+    for (const control of [onFeature, onCard]) expect((await measure(control, "border")).ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
+    // The focus ring: a 3 px outline (never a fill like a selection), at 3:1 or better on every surface it lands on.
+    for (const control of [onFeature, onCard, onCanvas]) {
+      await control.focus();
+      const ring = await measure(control, "outline");
+      expect(ring, `${scheme} focus ring`).toMatchObject({ width: 3, style: "solid" });
+      expect(ring.ratio, `${scheme} focus ring`).toBeGreaterThanOrEqual(3);
+    }
+    // A healthy state is plain words, never a coloured pill.
+    const healthy = page.locator(".coverage").getByText("complete", { exact: true }).first();
+    await expect(healthy).toBeVisible();
+    expect(await healthy.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  }
+  await page.close();
+});
+
 test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const page = await journeys.open("/memory");
   const search = page.getByRole("searchbox", { name: "Search memory" });

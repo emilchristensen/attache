@@ -601,13 +601,13 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
 
 - Browser: React.
   Home is the attention inbox, followed by Recently added (what reached the Brain without review in the last 7 days); Memory, People, Projects, Decisions, Drafts, Jobs, Connections and Settings are views linked to it.
-  The look is defined once, in `apps/web/src/styles/`: `tokens.css` holds zinc neutrals, indigo as the one accent, the brass attention dot and twelve hues with four steps each (solid, ink, soft, line) for light and dark; `base.css`, `controls.css` and `components.css` style elements, controls and shared components; `shell.css` the frame; and one file per screen the rest, imported in that order by `index.css`.
+  The look is defined once, in `apps/web/src/styles/`, following `docs/design/dashboard-blind-astra/DESIGN.md`: `tokens.css` holds the surfaces (`--canvas`, `--paper`, `--sunken`, `--feature` for the lead briefing), ink (`--ink`, `--ink-2`, `--ink-3`), edges (`--rule` decorative, `--line` control outline, `--key` field edge), actions (`--link`, `--primary` solid ink with `--on-primary`, `--focus`), the brass attention dot (`--attn`), the type scale (`--serif` Georgia headings, `--font` Inter, `--mono`) and seven role hues (blue, rust, plum, green, amber, red, slate), each a word-and-glyph step and a `-soft` tint, for light and dark; `base.css`, `controls.css` and `components.css` style elements, controls and shared components; `shell.css` the frame; and one file per screen the rest, imported in that order by `index.css`.
   The theme follows the system's light or dark setting.
-  A component takes a hue through `hueClass()` (`theme/hues.ts`) and reads `--c`, `--c-ink`, `--c-soft` and `--c-line`, never a hue's own tokens.
+  A component takes a hue through `hueClass()` (`theme/hues.ts`) and reads `--c` and `--c-soft`, never a hue's own tokens.
   `Tag` replaced the old status pill and has no green variant: `StateTag` shows a healthy status as plain text and the rest as a tag (`state-tone.ts`).
-  `TypeIcon` (an icon on a hue tile), `AttentionDot` (the logo's dot at 8 px) and `icons.tsx` (one inline SVG set, no icon package) are the other shared pieces.
+  `TypeIcon` (a 19 px glyph stamped on its hue's tint, 34 px), `AttentionDot` (the logo's dot at 8 px) and `icons.tsx` (one inline SVG set, no icon package) are the other shared pieces.
   The typeface is Inter, bundled from `@fontsource-variable/inter` (one variable face, Latin subset) and served by Attache, so the Dashboard loads nothing from the internet; `tooling/font-budget.ts` fails `vite build` when the font files pass 150 KB.
-  `apps/web/test/contrast.test.ts` reads `tokens.css` and checks every text pair at 4.5:1 and every graphic pair at 3:1 in both themes.
+  `apps/web/test/contrast.test.ts` reads `tokens.css`, checks that canvas, paper, ink and the design's foreground pairs ship as approved, and measures every text pair at 4.5:1 and every non-text pair (stamped glyphs, control edges, the focus ring, the attention dot) at 3:1 on the surfaces they sit on, in both themes; `tokens-used.test.ts` fails when a stylesheet or screen uses a token that is not set.
 - Obsidian: no plugin.
   The data folder is Obsidian-compatible Markdown, and edits made there are picked up by the file watcher.
   (A desktop plugin shipped until 0.2.x and was removed on 2026-10-30.)

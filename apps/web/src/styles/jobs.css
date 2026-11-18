@@ -12,8 +12,8 @@
 
 /* A research claim no source supports. */
 .unsupported {
-  font-size: 12.5px;
-  color: var(--amber-ink);
+  font-size: var(--fs-meta);
+  color: var(--amber);
   background: var(--amber-soft);
   border-radius: var(--r-sm);
   padding: 6px 10px;

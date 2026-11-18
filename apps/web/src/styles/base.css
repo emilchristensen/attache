@@ -12,9 +12,9 @@ body,
 
 body {
   margin: 0;
-  background: var(--paper);
+  background: var(--canvas);
   color: var(--ink);
-  font: 14px/1.5 var(--font);
+  font: var(--fs-body) / var(--lh-body) var(--font);
   /* Inter's single-storey a and open digits, as T3 Code sets them. */
   font-feature-settings: "cv11", "ss03";
   font-synthesis: none;
@@ -23,32 +23,53 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--link);
   text-decoration: none;
 }
 a:hover {
   text-decoration: underline;
 }
+/* Links inside running text are underlined, so colour is not the only sign. */
+p a,
+.md a,
+.help a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
 
+/* Page and section headings in Georgia; card and field headings in the sans. */
 h1,
 h2,
 h3,
 h4 {
   margin: 0;
-  line-height: 1.25;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
-h1 {
-  font-size: 22px;
+h1,
+h2,
+.heading-section {
+  font-family: var(--serif);
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
+h1,
+.heading-section {
+  font-size: var(--fs-title);
+  line-height: var(--lh-title);
+}
 h2 {
-  font-size: 17px;
-  letter-spacing: -0.015em;
+  font-size: var(--fs-section);
+  line-height: var(--lh-section);
 }
 h3 {
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+}
+h4 {
+  font-size: var(--fs-control);
+  line-height: 20px;
 }
 
 p {
@@ -59,14 +80,33 @@ code,
 pre,
 .mono {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
-/* The accent ring is an outline; a selected row is a fill, so focus never looks like selection. */
+/* Times line up: tabular figures everywhere, 13 px wherever a time stands on its own. */
+time {
+  font-variant-numeric: tabular-nums;
+}
+.time {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+/*
+ * The focus ring is a 3 px blue outline around the control; a selection is an ink fill or bar, so focus never looks
+ * like selection. Forced colours keep the outline in the system's highlight.
+ */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 4px;
+}
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 .sr-only {
@@ -81,19 +121,21 @@ pre,
 }
 
 kbd {
-  font: 500 11px/1 var(--mono);
-  padding: 3px 5px;
-  border-radius: 5px;
-  background: var(--sunken);
-  color: var(--ink-3);
+  font: 500 12px/1 var(--mono);
+  padding: 3px 6px;
+  border-radius: var(--r-tag);
+  background: var(--paper);
+  color: var(--ink-2);
   box-shadow: inset 0 0 0 1px var(--line);
+  white-space: nowrap;
 }
 
 .muted {
   color: var(--ink-3);
 }
 .small {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
 }
 .error-text {
   color: var(--danger);
@@ -153,7 +195,7 @@ kbd {
 .md blockquote {
   margin: 8px 0;
   padding-left: 12px;
-  border-left: 2px solid var(--line-strong);
+  border-left: 2px solid var(--key);
   color: var(--ink-2);
 }
 .md pre {

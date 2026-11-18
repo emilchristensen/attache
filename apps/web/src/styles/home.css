@@ -7,12 +7,16 @@
 
 /* ---- the briefing ------------------------------------------------------------------ */
 
+/* The briefing is the lead timely item: the amber feature spread. */
 .briefing {
-  background: var(--indigo-soft);
-  border: 1px solid var(--indigo-line);
+  background: var(--feature);
   border-radius: var(--r-lg);
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  padding: 18px 24px;
+  margin-bottom: var(--s-5);
+}
+/* The plain control outline is under 3:1 on amber, so controls on the spread take the field's stronger edge. */
+.briefing button:not(.ghost):not(.primary) {
+  border-color: var(--key);
 }
 .briefing-head {
   display: flex;
@@ -30,11 +34,11 @@
   align-self: center;
 }
 button.count-chip {
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   font-weight: 500;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--paper);
   color: var(--ink-2);
   gap: 6px;
 }
@@ -55,8 +59,8 @@ button.count-chip {
 .briefing-lines li {
   position: relative;
   padding-left: 16px;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   color: var(--ink);
   text-wrap: pretty;
 }
@@ -68,7 +72,7 @@ button.count-chip {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--indigo-ink);
+  background: var(--rust);
 }
 .briefing-lines li:only-child {
   padding-left: 0;
@@ -78,7 +82,7 @@ button.count-chip {
 }
 .briefing-lines li.caveat {
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: var(--fs-meta);
 }
 .briefing-lines li.caveat::before {
   background: var(--amber);
@@ -89,11 +93,11 @@ button.count-chip {
   gap: 12px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px solid var(--indigo-line);
+  border-top: 1px solid var(--line);
 }
 .briefing-empty {
   color: var(--ink-2);
-  font-size: 14px;
+  font-size: var(--fs-body);
   margin-top: 6px;
 }
 
@@ -104,8 +108,8 @@ button.count-chip {
 }
 /* A group's name: a plain label, no capitals or letterspacing. */
 .section-title {
-  font-size: 12.5px;
-  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
   font-weight: 600;
   margin: 18px 2px 8px;
   display: flex;
@@ -128,7 +132,7 @@ button.count-chip {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-meta);
   color: var(--ink-2);
 }
 .coverage .src .when {
@@ -140,7 +144,7 @@ button.count-chip {
   color: var(--ink-3);
 }
 .reader-line.silent {
-  color: var(--amber-ink);
+  color: var(--amber);
 }
 
 /* ---- Recently added ----------------------------------------------------------------------- */

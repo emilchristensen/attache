@@ -150,7 +150,7 @@ function BriefingOverview({ briefing }: { briefing: Briefing }) {
           {s.title}
         </button>
       ))}
-      {fresh && <Tag hue="indigo">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</Tag>}
+      {fresh && <Tag hue="blue">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</Tag>}
     </div>
   );
 }
