@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FINISHED_ACTION_STATUSES, type ActionView, type ProposalView } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
-import { GroupFailure } from "./ApprovalRow.tsx";
+import { GroupFailure } from "../components/GroupFailure.tsx";
 import { Loading } from "../components/ui.tsx";
 import { finishedRows } from "../approvals.ts";
 import { DraftRow } from "./DraftRow.tsx";

@@ -138,11 +138,13 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     await page.reload();
     const failure = page.getByRole("alert").filter({ hasText: "busy" });
     await expect(failure).toBeVisible();
-    await expect(failure.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(failure).toContainText("The Inbox could not be loaded. This is not an empty list");
+    await expect(page.locator("#inbox [data-inbox-empty]")).toHaveCount(0);
+    await expect(failure.getByRole("button", { name: "Retry" })).toBeVisible();
     await page.unroute(inbox);
     releaseAgain();
     await page.unroute(drafts);
-    await failure.getByRole("button", { name: "Try again" }).click();
+    await failure.getByRole("button", { name: "Retry" }).click();
     await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
   } finally {
     await page.unrouteAll({ behavior: "ignoreErrors" });

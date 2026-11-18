@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backFromAbove, frozenList, groupRows, listedBelow, ordered, PAGE_SIZE, pageLabel, PREVIEWS, typeOptions, withType, type ViewItem } from "../src/inbox-view.ts";
+import { backFromAbove, frozenList, groupRows, listedBelow, ordered, PAGE_SIZE, pageLabel, PREVIEWS, revealRow, typeOptions, withType, type ViewItem } from "../src/inbox-view.ts";
 
 // The Inbox list's rules: order, the frozen snapshot and its arrivals, pages, the type picker and Group by type.
 
@@ -153,5 +153,25 @@ describe("meeting prep and For you now", () => {
     expect(backFromAbove(new Set(["shown", "put-away"]), new Set(["shown"]), items, now)).toEqual(["put-away"]);
     // Gone from the open list (Done), or ended: nothing to bring back.
     expect(backFromAbove(new Set(["gone", "ended"]), new Set(), items, now)).toEqual([]);
+  });
+});
+
+describe("coming back to a row: it is shown, so its place can be kept", () => {
+  const many = Array.from({ length: 45 }, (_, i) => it_(`d${i}`));
+  it("asks for nothing when the row is on the shown pages", () => {
+    expect(revealRow("d19", many, { grouped: false, shown: 20, expanded: [] })).toBeNull();
+  });
+  it("shows the page the row moved onto", () => {
+    expect(revealRow("d20", many, { grouped: false, shown: 20, expanded: [] })).toEqual({ shown: 40 });
+    expect(revealRow("d44", many, { grouped: false, shown: 20, expanded: [] })).toEqual({ shown: 60 });
+  });
+  it("opens the row's family when it moved past the preview", () => {
+    const rows = [it_("d1"), it_("d2"), it_("d3"), it_("d4"), it_("r1", { kind: "review_request", sourceKind: "github" })];
+    expect(revealRow("d4", rows, { grouped: true, shown: 20, expanded: [] })).toEqual({ expanded: ["deadlines"] });
+    expect(revealRow("d3", rows, { grouped: true, shown: 20, expanded: [] })).toBeNull();
+    expect(revealRow("d4", rows, { grouped: true, shown: 20, expanded: ["deadlines"] })).toBeNull();
+  });
+  it("asks for nothing when the row is gone", () => {
+    expect(revealRow("gone", many, { grouped: false, shown: 20, expanded: [] })).toBeNull();
   });
 });

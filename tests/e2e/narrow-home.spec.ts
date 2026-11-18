@@ -8,7 +8,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { SELF, setCalendar } from "./calendar.ts";
-import { openRow } from "./inbox.ts";
+import { openRecentlyAdded, openRow } from "./inbox.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
@@ -96,7 +96,7 @@ async function routeUnbrokenNote(page: Page) {
   });
 }
 
-/** Home on a phone with both meetings' prep open and the mixed Connections rows. */
+/** Home on a phone with both meetings' prep open, Recently added open and the mixed Connections rows. */
 async function phoneHome(): Promise<Page> {
   const page = await journeys.open("/");
   await routeMixedHealth(page);
@@ -107,6 +107,8 @@ async function phoneHome(): Promise<Page> {
   await openPrep(meetingHeadsUp(page, "Pilot handover"));
   await openPrep(meetingHeadsUp(page, "Billing triage"));
   await expect(meetingHeadsUp(page, "Pilot handover").locator(".meeting-prep-notes button").first()).toBeVisible();
+  // Recently added starts closed: open it, so its note link and Revert are measured with the rest.
+  await openRecentlyAdded(page);
   return page;
 }
 
