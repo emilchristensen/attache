@@ -351,8 +351,20 @@ When a Connection needs you to sign in again, a **Needs you** group comes first 
 ### Jobs
 
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
+It is a quiet table: each job's title, what it came to in a few words, and the time it started or finished.
+Work that is queued or running comes first, under **Running**; everything that ended follows under **Finished**, newest first, 50 at a time with **Show 50 more**.
+A job that succeeded carries no tag, only what it produced, such as "Answered from 3 sources" or "Draft v2 ready".
+A job that failed carries a red **Failed** tag and one that is blocked an amber **Blocked** tag, each with its reason.
+
+The detail beside the table shows a job's progress, times, result or reason, and its events.
+When you open Jobs it shows the running job, else the newest one that failed or is blocked, else the newest job.
+Live updates change the table, never which job the detail shows; picking a row changes it, and that pick stays in the address, so a reload or a link comes back to it.
+
+Type a question and press **Research** to research it across your notes; the answer is saved as a deliverable you can open from the result.
+**Diagnostics** runs a two-minute self-test that checks background work survives a restart.
+**Cancel** stops queued or running work and says what happened: it stopped, or it had already finished and its result stands.
+**Retry** starts a failed, cancelled or blocked job again.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
-Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 

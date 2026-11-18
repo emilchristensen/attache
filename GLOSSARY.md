@@ -53,6 +53,11 @@ Search results take its place while a query is typed.
 The Brain screen's view of every change to the Brain, newest first, with where each came from and whether Revert can undo it.
 It filters to all changes, those written without review, or those reverted.
 
+**Job**:
+Background work the service runs and records, such as research, a briefing, a Draft's preparation or a Source refresh.
+It keeps running when the browser closes; the Jobs screen lists it under Running until it ends, then under Finished.
+A job that failed or is blocked is named with its reason; Cancel reports whether the work stopped or had already finished.
+
 **Search palette**:
 Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd K`, `/`, the masthead's Search or the bottom bar's Search.
 It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
