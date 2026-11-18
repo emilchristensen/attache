@@ -152,7 +152,7 @@ Home holds For you now, your sources, the Inbox and Recently added.
     Yesterday's briefing never shows as today's.
   - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
   - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
-  - When nothing is timely, the area is one quiet line that says when the next daily briefing is scheduled.
+  - When nothing is timely, the area is one quiet line that says when the Reader's next daily briefing is scheduled.
   - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
   - Got it is remembered in this browser only, so another browser or Machine still shows the Heads-up.
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.

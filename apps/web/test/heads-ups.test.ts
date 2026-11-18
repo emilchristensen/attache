@@ -200,3 +200,25 @@ describe("the quiet line", () => {
     expect(slot).toEqual({ lead: null, followers: [], more: [], quiet: null });
   });
 });
+
+describe("the lead's development", () => {
+  const item = (id: string, title: string, over: object = {}) => ({ id, title, summary: `About ${title}.`, url: null, isNew: false, changed: false, ...over });
+
+  it("leads with a concrete item when the summary only counts, as the no-model summary does", () => {
+    const counted = briefing({
+      summary: "2 deadlines, 1 review request. 1 new and 0 changed since the last briefing.",
+      sections: [
+        { id: "deadlines", title: "Deadlines", items: [item("i1", "Overdue: Review rollback runbook")] },
+        { id: "reviews", title: "Review queue", items: [item("i2", "Review acme/web#42", { isNew: true })] },
+      ],
+    });
+    expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: counted })).lead).toMatchObject({ title: "Review acme/web#42", explanation: "About Review acme/web#42." });
+    const nothingNew = briefing({ summary: "1 deadline.", sections: [{ id: "deadlines", title: "Deadlines", items: [item("i1", "Overdue: Review rollback runbook")] }] });
+    expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: nothingNew })).lead).toMatchObject({ title: "Overdue: Review rollback runbook" });
+  });
+
+  it("keeps the summary's own first sentence otherwise", () => {
+    expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "Nothing needs your attention right now." }) })).lead).toMatchObject({ title: "Nothing needs your attention right now.", explanation: null });
+    expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "2 deadlines.", sections: [] }) })).lead).toMatchObject({ title: "2 deadlines." });
+  });
+});

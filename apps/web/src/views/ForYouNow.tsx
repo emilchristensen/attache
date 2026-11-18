@@ -4,7 +4,7 @@ import { forYouNow, type BriefingView, type HeadsUp, type HeadsUpInput, type Hea
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
-import { plural } from "@attache/contracts";
+import { plural, type ReaderView } from "@attache/contracts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { Link } from "../components/ui.tsx";
@@ -98,10 +98,25 @@ function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
   );
 }
 
-/** The scheduler's daily briefing row (`/status`), or null while not known or when there is none. */
-function useBriefingSchedule(enabled: boolean): HeadsUpInput["schedule"] {
-  const r = useResource<{ schedules: Array<{ jobKind: string; enabled: boolean; nextRunAt: string | null }> }>(enabled ? "/status" : null, ["config.changed", "briefing.created", "service.resumed"]);
-  const row = r.data?.schedules.find((x) => x.jobKind === "briefing");
+interface StatusView {
+  reader: Pick<ReaderView, "replicated" | "thisMachine" | "silent">;
+  schedules: Array<{ jobKind: string; enabled: boolean; nextRunAt: string | null }>;
+}
+
+/**
+ * The scheduler's daily briefing row (`/status`), or null while not known. Only the Reader runs scheduled briefings,
+ * so another Machine's own row says nothing about when the next one comes: null there too. Asked again once its
+ * next run has passed (the clock ticks every minute and on wake), since a run that wrote no briefing sends no event.
+ */
+function useBriefingSchedule(enabled: boolean, now: number): HeadsUpInput["schedule"] {
+  const r = useResource<StatusView>(enabled ? "/status" : null, ["config.changed", "briefing.created", "reader.changed", "service.resumed"]);
+  const reader = r.data?.reader;
+  const row = reader && (!reader.replicated || (reader.thisMachine && !reader.silent)) ? r.data?.schedules.find((x) => x.jobKind === "briefing") : undefined;
+  const due = !!row?.nextRunAt && Date.parse(row.nextRunAt) <= now;
+  const { reload, loading } = r;
+  useEffect(() => {
+    if (due && !loading) reload();
+  }, [due, loading, now, reload]);
   return row ? { enabled: row.enabled, nextRunAt: row.nextRunAt } : null;
 }
 
@@ -116,8 +131,8 @@ function useLatestBriefing(enabled: boolean) {
 /**
  * For you now: Home's second area. The Heads-ups that are timely, the most urgent leading and the rest as compact
  * lines, or one quiet line when nothing is. While the pointer or focus is on a Heads-up, the Heads-ups hold still:
- * none moves or leaves until the owner moves away. The owner's own Got it applies at once, and the heading and the
- * briefing actions are outside the hold, so a briefing asked for there shows as soon as it is written.
+ * none moves or leaves until the owner moves away, not even for a briefing they asked for. The owner's own Got it
+ * applies at once; the heading and the briefing actions are outside the hold.
  */
 export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   const headingId = useId();
@@ -126,18 +141,10 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
-  const schedule = useBriefingSchedule(attentionOn);
-  const { held, focused, holdProps } = useHold();
+  const schedule = useBriefingSchedule(attentionOn, clock.now);
+  const { held, holdProps } = useHold();
   // Got it pressed in this tab applies at once, even while held; another tab's waits until the hold ends.
   const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
-  // A briefing the owner asked for here: until it arrives, it and its progress show even while the pointer holds the
-  // Heads-ups still, since asking was the owner's own action and the menu that asks opens over them. Keyboard focus
-  // on a Heads-up still holds it. The value is the latest briefing's id when they asked.
-  const [askedOver, setAskedOver] = useState<string | null | undefined>(undefined);
-  const latestId = typeof latest.value === "object" && latest.value !== null ? latest.value.id : null;
-  useEffect(() => {
-    if (askedOver !== undefined && latest.value !== "unknown" && latestId !== askedOver) setAskedOver(undefined);
-  }, [askedOver, latest.value, latestId]);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [context, setContext] = useState(false);
   const [said, setSaid] = useState("");
@@ -152,7 +159,6 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   };
   const frozen = useRef(live);
   if (!held) frozen.current = live;
-  else if (askedOver !== undefined && !focused) frozen.current = { ...frozen.current, briefing: live.briefing, briefingJob: live.briefingJob };
   const input: HeadsUpInput = held ? { ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) } : frozen.current;
   const slot = forYouNow(input);
 
@@ -183,17 +189,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
     onRead: () => toggle(h.key),
     onGotIt: () => gotIt(h),
   });
-  const actions = (
-    <BriefingActions
-      running={!!job}
-      hasBriefing={typeof latest.value === "object" && latest.value !== null}
-      start={(kind, since) => {
-        setAskedOver(latestId);
-        return start(kind, since);
-      }}
-      onMeetingContext={() => setContext(true)}
-    />
-  );
+  const actions = <BriefingActions running={!!job} hasBriefing={typeof latest.value === "object" && latest.value !== null} start={start} onMeetingContext={() => setContext(true)} />;
   const meetingContext = context && typeof latest.value === "object" && latest.value !== null && (
     <MeetingContext briefing={latest.value} now={clock.now} timeZone={clock.timeZone} onClose={() => setContext(false)} />
   );

@@ -142,10 +142,20 @@ function knownBriefing(input: HeadsUpInput): BriefingView | null {
   return input.briefing === "unknown" ? null : input.briefing;
 }
 
-/** The first sentence of a briefing and the one after it: the concrete development and its short explanation. */
+/** A sentence that only counts, as the summary written without a model opens: "2 deadlines, 1 review request." */
+const COUNTS_ONLY = /^\d+ [^,.\d]+(?:, \d+ [^,.\d]+)*\.$/;
+
+/**
+ * The concrete development and its short explanation: the summary's first sentence and the one after it. A first
+ * sentence that only counts is no development, so then the first new or changed item leads (else the first item),
+ * with its own summary; the counts stay in the full briefing.
+ */
 function headline(b: BriefingView): { title: string; explanation: string | null } {
   const lines = briefingLines(b.summary);
   const first = lines[0]?.text ?? "Your briefing is ready.";
+  const items = b.sections.flatMap((s) => s.items);
+  const item = COUNTS_ONLY.test(first) ? (items.find((i) => i.isNew || i.changed) ?? items[0]) : undefined;
+  if (item) return { title: item.title, explanation: item.summary || null };
   return { title: first, explanation: lines[1]?.text ?? null };
 }
 

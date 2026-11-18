@@ -209,6 +209,8 @@ test("asked for: an Away summary leads on paper, without the amber spread, until
   await forYou.getByRole("button", { name: "Briefings" }).click();
   await forYou.getByRole("button", { name: /^Away summary/ }).click();
   await expect(page.getByText("Writing an Away summary in the background")).toBeVisible();
+  // The menu opened over the Heads-ups; the pointer moves off them, so nothing holds them still.
+  await page.mouse.move(5, 5);
   const lead = forYou.locator('[data-heads-up="away-summary"]');
   await expect(lead).toBeVisible({ timeout: 30_000 });
   await expect(lead.locator(".heads-up-eyebrow")).toHaveText(/^Away summary · Until \d\d:\d\d$/);
@@ -241,7 +243,7 @@ test("failure: a briefing that could not be checked says so with Try again, neve
   await page.close();
 });
 
-test("hold: a briefing written elsewhere waits while the keyboard focus is on the lead", async () => {
+test("hold: a new briefing waits while the keyboard focus or the pointer is on the lead", async () => {
   const page = await journeys.open("/");
   await writeBriefing(page, "daily");
   const daily = area(page).locator('[data-heads-up="daily-briefing"]');
@@ -253,8 +255,19 @@ test("hold: a briefing written elsewhere waits while the keyboard focus is on th
   await expect(daily.getByRole("button", { name: "Read briefing" })).toBeFocused();
   // Focus leaves: the briefing asked for takes the lead.
   await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-  await expect(area(page).locator('[data-heads-up="requested-briefing"]')).toBeVisible();
+  const asked = area(page).locator('[data-heads-up="requested-briefing"]');
+  await expect(asked).toBeVisible();
   await expect(daily).toHaveCount(0);
+  // Asked for here, from the menu that opens over the lead: the pointer rests on the lead when it closes, so the
+  // Away summary waits until the pointer moves away, even though the owner asked for it.
+  await area(page).getByRole("button", { name: "Briefings" }).click();
+  await area(page).getByRole("button", { name: /^Away summary/ }).click();
+  await expect.poll(async () => (await api<{ briefing: { kind: string } }>(page, "GET", "/briefings/latest")).briefing.kind, { timeout: 30_000 }).toBe("away");
+  await page.waitForTimeout(1500);
+  await expect(asked).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(area(page).locator('[data-heads-up="away-summary"]')).toBeVisible();
+  await expect(asked).toHaveCount(0);
 });
 
 test("narrow: the lead and its lines fit a phone with no sideways scrolling", async () => {
