@@ -278,6 +278,58 @@ test("decided rows: a refresh that lands while the decision is sent keeps the re
   }
 });
 
+test("decided rows: an older answer Home publishes after a failed reload keeps the receipt and its Undo", async () => {
+  const page = await journeys.open("/");
+  await expect(rows(page).first()).toBeVisible();
+  const target = await itemId(page, "Prepare release note 11");
+  const other = await itemId(page, "Prepare release note 22");
+  const hold = () => {
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    return { held, release };
+  };
+  const decision = hold();
+  const drafts = hold();
+  const inbox = "**/api/v1/attention?state=open*";
+  await page.route(`**/api/v1/attention/${target}/decision`, async (route) => {
+    await decision.held;
+    await route.continue();
+  });
+  try {
+    const row = inboxRow(page, "Prepare release note 11");
+    await openRow(row);
+    await row.getByRole("button", { name: "Dismiss" }).click();
+    // Drafts is slow, so the Inbox's next answer (asked before the decision, with the row still open) waits in the pair.
+    await page.route("**/api/v1/actions?*", async (route) => {
+      await drafts.held;
+      await route.continue().catch(() => undefined);
+    });
+    const early = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok(), { timeout: 15_000 });
+    await api(page, "POST", `/attention/${other}/decision`, { decision: "dismiss" });
+    await early;
+    // The decision succeeds, and the Inbox reload after it fails.
+    await page.route(inbox, (route) => route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }));
+    const failed = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.status() === 503, { timeout: 15_000 });
+    decision.release();
+    await failed;
+    // Drafts answers, so Home publishes the pair: the older answer that still has the row, beside the failure.
+    drafts.release();
+    await expect(page.getByRole("alert").filter({ hasText: "busy" })).toBeVisible();
+    await nextFrame(page);
+    await expect(row).toHaveAttribute("data-decided", "dismiss");
+    await expect(row.getByRole("button", { name: "Undo" })).toBeVisible();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await row.getByRole("button", { name: "Undo" }).click();
+    await expect(row).not.toHaveAttribute("data-decided");
+  } finally {
+    decision.release();
+    drafts.release();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await api(page, "POST", `/attention/${other}/decision`, { decision: "reopen" });
+    await page.close();
+  }
+});
+
 test("arrivals: the first answer is kept even when it is empty, so the first item waits behind Show new items", async () => {
   const page = await journeys.newPage();
   const open = "**/api/v1/attention?state=open*";

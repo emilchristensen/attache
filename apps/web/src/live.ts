@@ -97,8 +97,18 @@ export interface Resource<T> {
   loading: boolean;
   reload: () => void;
   setData: (d: T) => void;
-  /** When the request behind `data` was asked (`performance.now()`), so a newer answer can be told from an older one. */
+  /** When the request behind `data` was asked, as an `orderMark()`, so a newer answer can be told from an older one. */
   askedAt: number | null;
+}
+
+let marks = 0;
+
+/**
+ * A strictly increasing number, shared by every request start and anything that must be ordered against them (an
+ * Inbox decision): unlike a clock reading, two marks are never equal.
+ */
+export function orderMark(): number {
+  return ++marks;
 }
 
 /**
@@ -115,7 +125,7 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   const load = useCallback(() => {
     if (!path) return;
     const mine = ++seq.current;
-    const asked = performance.now();
+    const asked = orderMark();
     setLoading(true);
     api<T>(path)
       .then((d) => {

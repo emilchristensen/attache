@@ -94,7 +94,6 @@ function slackText(text: string): string {
     .replace(/<@[A-Z0-9]+>/g, "@someone")
     .replace(/<#[A-Z0-9]+\|([^>]+)>/g, "#$1")
     .replace(/<!(here|channel|everyone)>/g, "@$1")
-    .replace(/<![^|>]+\|([^>]+)>/g, "$1")
     .replace(/<[^|>]+\|([^>]+)>/g, "$1")
     .replace(/<([^>]+)>/g, "$1")
     .replace(/&lt;/g, "<")

@@ -10,6 +10,7 @@ export function inboxRow(page: Page, text: string | RegExp): Locator {
 /** Opens a row in place (its subject is the toggle); does nothing when it is already open. */
 export async function openRow(row: Locator): Promise<void> {
   const toggle = row.locator("[data-row-toggle]");
+  await toggle.waitFor({ timeout: 15_000 });
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { frozenList, ordered, type InboxOrder } from "../inbox-view.ts";
 import type { RowDecision } from "./InboxRow.tsx";
+import { orderMark } from "../live.ts";
 
 /**
  * The Inbox's frozen list. The rows the owner sees keep their order while the live list changes underneath: an
@@ -13,7 +14,7 @@ export interface DecidedEntry {
   item: AttentionItemView;
   decision: RowDecision;
   until: string | null;
-  /** When the decision succeeded (`performance.now()`): only an answer asked later can retire the receipt. */
+  /** When the decision succeeded, as an `orderMark()`: only an answer asked later can retire the receipt. */
   decidedAt: number;
 }
 
@@ -97,7 +98,9 @@ export function useInboxList(live: readonly AttentionItemView[] | null, askedAt:
       setDecisions(() => NONE);
     },
     decided: (item, decision, until) => {
-      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, decidedAt: performance.now() }));
+      // Marked now, before any reload is asked, and outside the updater, which React may run later or twice.
+      const decidedAt = orderMark();
+      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, decidedAt }));
       if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
     },
   };
