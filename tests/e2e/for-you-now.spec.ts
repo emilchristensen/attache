@@ -296,7 +296,11 @@ test("hold: a briefing asked for takes its progress line's place under the point
   await expect(asked.locator(".briefing-lines li").first()).toBeVisible();
   // Another briefing comes while focus is on this one: once the Dashboard has it (its own request, without the
   // client header the test's calls send), it waits, and this one stays as it came.
-  const dashboardHasIt = page.waitForResponse(async (r) => r.url().endsWith("/api/v1/briefings/latest") && !r.request().headers()["x-attache-client"] && ((await r.json()) as { briefing: { id: string } | null }).briefing?.id !== first);
+  const dashboardHasIt = page.waitForResponse(async (r) => {
+    if (!r.url().endsWith("/api/v1/briefings/latest") || r.request().headers()["x-attache-client"] || !r.ok()) return false;
+    const id = ((await r.json()) as { briefing: { id: string } | null }).briefing?.id;
+    return !!id && id !== first;
+  });
   const second = await writeBriefing(page, "manual");
   await dashboardHasIt;
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
