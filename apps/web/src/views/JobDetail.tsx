@@ -68,6 +68,7 @@ export function JobDetail({ id }: { id: string }) {
         {job.title}
       </h2>
       <JobState job={job} />
+      {r.error && <ErrorState error={r.error} retry={r.reload} title="This job could not be refreshed. What shows here may be out of date." />}
       {isActive(job) && (
         <div className="progress job-progress" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(job.progress * 100)}>
           <span style={{ width: `${Math.round(job.progress * 100)}%` }} />

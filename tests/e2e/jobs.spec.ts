@@ -75,7 +75,9 @@ test("jobs: running work first under Running, a quiet success, a failure and a b
   await expect.poll(async () => (await rowIds(group(page, "Finished"))).filter((id) => mine.includes(id))).toEqual(mine);
   // Running: its progress in words, the time it started.
   await expect(row(page, running.id)).toContainText(/\d+% · Step \d+ of 120/);
-  await expect(row(page, running.id).locator("time")).toHaveAttribute("title", /^Started at \d\d:\d\d$/);
+  const started = (await api<{ job: JobView }>(page, "GET", `/jobs/${running.id}`)).job.startedAt!;
+  await expect(row(page, running.id).locator("time")).toHaveAttribute("datetime", started);
+  await expect(row(page, running.id).locator("time")).toHaveAttribute("title", /^Started (yesterday )?at \d\d:\d\d$/);
   // A success has no badge, only what it produced.
   await expect(row(page, research.id).locator(".tag")).toHaveCount(0);
   await expect(row(page, research.id)).toContainText(/Answered from \d+ sources?|No supporting evidence found/);
@@ -211,5 +213,36 @@ test("jobs captures: the table with every state, a failure open, light, dark and
     await page.screenshot({ path: `${shots}/${scheme}-jobs-blocked.png` });
   }
   await api(page, "POST", `/jobs/${long.id}/cancel`);
+  expect(journeys.consoleErrors).toEqual([]);
+});
+
+test("jobs: a failure behind a full page of newer successes is still the one the detail opens on", async () => {
+  const page = await journeys.open("/jobs");
+  // Fifty quick successes, newer than every failure: Finished's first page holds only them.
+  for (let i = 0; i < 50; i++) await createJob(page, { kind: "demo-long", title: `Diagnostics: quick run ${i + 1}`, input: { steps: 1, stepMs: 1, effectAtStep: -1 } });
+  await expect.poll(async () => (await api<JobView[]>(page, "GET", "/jobs?status=queued,running&limit=100")).length, { timeout: 60_000 }).toBe(0);
+  await page.goto(`${stack.url}/jobs`);
+  await expect.poll(async () => (await rowIds(group(page, "Finished"))).length).toBe(50);
+  await expect(row(page, later.id)).toHaveCount(0);
+  await expect(detail(page)).toHaveAttribute("data-job-id", later.id);
+  // Finished pages back to it.
+  await group(page, "Finished").getByRole("button", { name: "Show 50 more" }).click();
+  await expect(row(page, later.id).locator(".tag")).toHaveText("Failed");
+  expect(journeys.consoleErrors).toEqual([]);
+});
+
+test("jobs: a refresh of the open job that fails says so beside what it still shows, and Try again recovers", async () => {
+  const page = await journeys.open(`/jobs?id=${blocked.id}`);
+  await expect(detail(page)).toHaveAttribute("data-status", "blocked");
+  const job = `**/api/v1/jobs/${blocked.id}`;
+  await page.route(job, (route) => (route.request().method() === "GET" ? route.abort() : route.continue()));
+  await detail(page).getByRole("button", { name: "Retry" }).click();
+  const failure = detail(page).getByRole("alert");
+  await expect(failure).toContainText("This job could not be refreshed. What shows here may be out of date.");
+  await expect(detail(page).getByRole("heading", { level: 2, name: "Draft for a removed item" })).toBeVisible();
+  await page.unroute(job);
+  await failure.getByRole("button", { name: "Try again" }).click();
+  await expect(failure).toHaveCount(0);
+  await expect(detail(page)).toHaveAttribute("data-status", "blocked");
   expect(journeys.consoleErrors).toEqual([]);
 });

@@ -21,16 +21,19 @@ const DIAGNOSTICS = { kind: "demo-long", input: { steps: 60, stepMs: 2000 } };
 const jobsHref = (id: string) => `/jobs?id=${encodeURIComponent(id)}`;
 
 /**
- * The detail the screen opens on, chosen once: when both lists have first answered (or failed), from what they hold.
- * Live updates change the lists, never this choice; only the owner's pick (`?id=`) changes what the pane shows.
+ * The detail the screen opens on, chosen once: when both lists and the newest failure have first answered (or
+ * failed), from what they hold. The newest failure is asked for on its own, since it can be older than Finished's
+ * first page. Live updates change the lists, never this choice; only the owner's pick (`?id=`) changes what the pane
+ * shows.
  */
 function useInitialJob(active: Resource<JobView[]>, ended: Resource<JobView[]>): string | null {
   const [chosen, setChosen] = useState<{ id: string | null } | null>(null);
+  const failure = useResource<JobView[]>(chosen === null ? "/jobs?status=failed,blocked&limit=1" : null);
   const answered = (r: Resource<JobView[]>) => r.data !== null || r.error !== null;
-  const ready = answered(active) && answered(ended);
+  const ready = answered(active) && answered(ended) && answered(failure);
   useEffect(() => {
-    if (chosen === null && ready) setChosen({ id: initialJobId(active.data ?? [], ended.data ?? []) });
-  }, [chosen, ready, active.data, ended.data]);
+    if (chosen === null && ready) setChosen({ id: initialJobId(active.data ?? [], [...(ended.data ?? []), ...(failure.data ?? [])]) });
+  }, [chosen, ready, active.data, ended.data, failure.data]);
   return chosen?.id ?? null;
 }
 
@@ -84,6 +87,7 @@ export function JobsView() {
                   Show {FINISHED_PAGE} more
                 </button>
               )}
+              {endedRows !== null && endedRows.length >= FINISHED_MAX && <p className="jobs-none">These are the newest {FINISHED_MAX}; older jobs are kept but not listed here.</p>}
             </JobGroup>
           </div>
           <div ref={detailRef} className="split-detail jobs-detail sticky-detail">
