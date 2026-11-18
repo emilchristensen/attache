@@ -1,31 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import type { MeaningStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, Time, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Loading, navigate, Time, useLocation } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { Tabs } from "../components/Tabs.tsx";
 import { BRAIN_SEARCH_ID, takeSearchFocus } from "../search-launch.ts";
+import { hitDestination, type SearchAnswer } from "../search.ts";
+import { RankingNote, SearchResultRow } from "../components/SearchField.tsx";
 import { RecentSaves } from "./RecentSaves.tsx";
 
-interface Hit {
-  chunkId: number;
-  root: string;
-  relPath: string;
-  area: string;
-  docType: string | null;
-  title: string;
-  heading: string | null;
-  section: string;
-  startLine: number;
-  endLine: number;
-  snippet: string;
-  review: string | null;
-  unverified: boolean;
-}
 interface DocListItem {
   id: string;
   root: string;
@@ -161,45 +147,48 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
   );
 }
 
-/** Why search results match keywords only, for as long as search does not rank by meaning on this Machine. */
-function KeywordsOnly({ meaning }: { meaning: MeaningStatus }) {
-  if (meaning.ranking === "meaning" || meaning.state === "ready") return null;
-  const why: Record<Exclude<MeaningStatus["state"], "ready">, string> = {
-    missing: "the meaning model is not downloaded",
-    downloading: "the meaning model is downloading",
-    failed: "meaning-based search stopped with an error",
-    building: `search vectors are being built (${meaning.vectors.embedded} of ${meaning.vectors.chunks})`,
-  };
-  const reason = why[meaning.state];
-  return (
-    <p className="small muted" data-keywords-only>
-      Matching keywords only: {reason}. <Link to="/settings">Settings</Link>
-    </p>
-  );
-}
-
 export function BrainView() {
   const loc = useLocation();
   const [tab, setTab] = useState(loc.search.get("tab") ?? "decision");
-  const [q, setQ] = useState("");
-  const [query, setQuery] = useState("");
+  // The query lives in the address (`/brain?q=`), so "All results in Brain" and the back button carry it.
+  const query = (loc.search.get("q") ?? "").trim();
+  const [q, setQ] = useState(query);
   const selected = loc.search.get("path");
   const selectedRoot = loc.search.get("root") ?? "data";
   const t = TABS.find((x) => x.id === tab) ?? TABS[0]!;
   const list = useResource<DocListItem[]>(query ? null : `/memory/documents?${t.query}`, ["memory.changed"]);
-  const results = useResource<{ hits: Hit[]; meaning: MeaningStatus }>(query ? `/memory/search?q=${encodeURIComponent(query)}` : null, ["memory.changed"]);
+  const results = useResource<SearchAnswer>(query ? `/memory/search?q=${encodeURIComponent(query)}` : null, ["memory.changed"]);
   const open = useOpenEvidence();
+  // Typing writes the query to the address after a pause; an address that changes on its own (back, a link) fills the field.
   useEffect(() => {
-    const h = setTimeout(() => setQuery(q.trim()), 250);
+    if (q.trim() === query) return;
+    const h = setTimeout(() => {
+      const params = new URLSearchParams(location.search);
+      if (q.trim()) params.set("q", q.trim());
+      else params.delete("q");
+      const search = params.toString();
+      navigate(`${location.pathname}${search ? `?${search}` : ""}`, { replace: true });
+    }, 250);
     return () => clearTimeout(h);
-  }, [q]);
+  }, [q, query]);
+  const shownQuery = useRef(query);
+  useEffect(() => {
+    if (shownQuery.current === query) return;
+    shownQuery.current = query;
+    setQ((typed) => (typed.trim() === query ? typed : query));
+  }, [query]);
   const { detailRef, revealDetail } = useRevealDetail();
+  // A note opened from elsewhere (Home's search) shows in view on a phone too, as a note picked here does.
+  const arrivedWithNote = useRef(selected !== null);
+  useEffect(() => {
+    if (arrivedWithNote.current) revealDetail();
+  }, [revealDetail]);
   const searchField = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (takeSearchFocus()) searchField.current?.focus();
   }, []);
   const select = (root: string, relPath: string) => {
-    navigate(`/brain?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
+    navigate(`/brain?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}${query ? `&q=${encodeURIComponent(query)}` : ""}`);
     revealDetail();
   };
   return (
@@ -213,7 +202,7 @@ export function BrainView() {
           </button>
         </div>
       </div>
-      <RecentSaves />
+      <RecentSaves here={loc.path === "/brain/recent"} />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
           <input ref={searchField} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />
@@ -224,24 +213,17 @@ export function BrainView() {
             <>
               {results.loading && !results.data && <Loading />}
               <ErrorState error={results.error} retry={results.reload} />
-              {results.data && <KeywordsOnly meaning={results.data.meaning} />}
+              {results.data && <RankingNote meaning={results.data.meaning} />}
               {results.data?.hits.length === 0 && <Empty title="No matches">Try other words. Search looks at titles, headings and text.</Empty>}
               <div className="list">
-                {results.data?.hits.map((h) => (
-                  <button key={h.chunkId} className="list-item" onClick={() => (h.root === "data" && h.relPath.startsWith("memory/") ? select(h.root, h.relPath) : open({ root: h.root, relPath: h.relPath, lines: [h.startLine, h.endLine], title: h.title }))}>
-                    <div className="stack-sm" style={{ minWidth: 0 }}>
-                      <span className="row">
-                        <strong>{h.title}</strong>
-                        {h.unverified && <StateTag state="partial" label="unverified" />}
-                      </span>
-                      <span className="small muted">{h.snippet}</span>
-                      <span className="small mono muted">
-                        {h.relPath}:{h.startLine} · {h.area}
-                        {h.section === "history" ? " · superseded" : ""}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                {results.data?.hits.map((h) => {
+                  const to = hitDestination(h, query);
+                  return (
+                    <button key={h.chunkId} className="list-item" onClick={() => (to.kind === "brain" ? select(h.root, h.relPath) : open(to.target))}>
+                      <SearchResultRow hit={h} />
+                    </button>
+                  );
+                })}
               </div>
             </>
           ) : (

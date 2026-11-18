@@ -122,7 +122,7 @@ The numbers beside Home, Approvals and Connections always add up to the one in t
 When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
-Off Home, **Search** in the masthead takes you to the Brain's search field.
+Off Home, **Search** in the masthead takes you to the Brain's search field; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
 When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
@@ -132,8 +132,9 @@ On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Searc
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
 
 Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
+Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere in the Brain's.
 Press `?` for the list of keyboard shortcuts.
-Shortcuts do nothing while you type in a field or while a dialog is open.
+Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
 
 ### Look
@@ -146,8 +147,17 @@ The keyboard focus is a blue ring around the control, and the selected screen or
 
 ### Home
 
-Home holds For you now, Connections, the Inbox and Recently added.
+Home holds Search the Brain, For you now, Connections, the Inbox and Recently added.
 
+- **Search the Brain** sits under a short line with the word Home and today's date.
+  The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
+  As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
+  The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
+  `Esc` closes the results and keeps what you typed.
+  A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
+  **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
+  Searching starts no job and changes nothing.
+- **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
 - **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
   Every Heads-up says why it is here and when it leaves.
   - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
@@ -190,6 +200,7 @@ Home holds For you now, Connections, the Inbox and Recently added.
 ### Brain
 
 The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
+Its search field shows up to 20 matching passages, not only the first six, including raw session transcripts that Home's search leaves out, and keeps your words in the address as you type.
 Each memory note has a *Current state* with one dated entry per subject.
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.

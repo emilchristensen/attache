@@ -1,0 +1,251 @@
+/*
+ * Search the Brain: the field, its results and their rows (components/SearchField.tsx), shared by Home and the
+ * Brain, and by the search palette later. Home's own head and Browse are at the end.
+ */
+
+/* ---- the field ------------------------------------------------------------------- */
+
+.search {
+  position: relative;
+  min-width: 0;
+}
+/* The field is the page's first obvious action: about 54 px, the key colour's edge and a ruled shadow under it. */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 0 var(--s-4);
+  min-height: 54px;
+  background: var(--paper);
+  color: var(--key);
+  border: 1.5px solid var(--key);
+  border-radius: var(--r);
+  box-shadow: 0 3px 0 var(--rule);
+}
+.search-box:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.search-box > svg {
+  flex: none;
+}
+.search-box input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  height: 51px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 24px;
+  color: var(--ink);
+}
+.search-box input[type="search"]::placeholder {
+  color: var(--ink-2);
+}
+/* The box shows the focus ring; the input inside it does not draw a second one. */
+.search-box input[type="search"]:focus-visible {
+  outline: none;
+}
+.search-box input[type="search"]::-webkit-search-cancel-button,
+.search-box input[type="search"]::-webkit-search-decoration {
+  appearance: none;
+}
+.search-key {
+  flex: none;
+}
+/* The visible keycap goes when the field is too narrow for it; the shortcut keeps working. */
+@container search-field (max-width: 360px) {
+  .search-key {
+    display: none;
+  }
+}
+.search {
+  container: search-field / inline-size;
+}
+
+/* ---- the results ------------------------------------------------------------------- */
+
+/* Under the field, over the page: the results never push Home's other areas down. */
+.search-popup {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--s-2));
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.search-popup[hidden] {
+  display: none;
+}
+/* Its max-height is set from the room left in the page (useResultsFit), so it scrolls on its own. */
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* An older query's results, kept for their height while the new answer comes: dimmed and not choosable. */
+.search-results[data-stale] {
+  opacity: 0.7;
+}
+.search-option[aria-disabled="true"] {
+  cursor: default;
+}
+.search-option {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+.search-option[aria-selected="true"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+
+/* One result: title, a snippet of at most two lines, then kind · part · file and lines. */
+.search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+.search-hit-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.search-hit-name {
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.search-hit-snippet {
+  font-size: var(--fs-control);
+  line-height: 20px;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.search-hit-meta {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.search-hit-kind {
+  font-weight: 600;
+}
+.search-hit-place {
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.search-status {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule);
+}
+.search-foot {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  background: var(--sunken);
+}
+.search-ranking {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.search-all {
+  margin-left: auto;
+  font-size: var(--fs-control);
+  font-weight: 600;
+}
+
+/* ---- Home: the compact heading, the date and Browse ----------------------------------- */
+
+.home-search {
+  margin-bottom: var(--s-5);
+}
+.home-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-3);
+  font: 600 12px/18px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+/* A compact page heading: the date beside it says where the owner is; the field below is the first action. */
+.home-head .home-title {
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--ink);
+  margin: 0;
+}
+.home-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+.search-home {
+  flex: 1 1 16rem;
+}
+.browse-toggle .icon {
+  transition: transform 0.15s ease;
+}
+.browse-toggle[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
+}
+.browse-links {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-5);
+  list-style: none;
+  margin: var(--s-2) 0 0;
+  padding: 0;
+}
+.browse-links[hidden] {
+  display: none;
+}
+.browse-links a {
+  display: inline-block;
+  padding: var(--s-1) 0;
+  font-weight: 600;
+}
+.home-search-off {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+@media (max-width: 720px) {
+  .search-box input[type="search"] {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .browse-toggle .icon {
+    transition: none;
+  }
+}

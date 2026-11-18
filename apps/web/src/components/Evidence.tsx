@@ -74,6 +74,13 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   const doc = useResource<DocView>(`/memory/document?root=${encodeURIComponent(target.root)}&path=${encodeURIComponent(target.relPath)}`, ["memory.changed"]);
   const [mode, setMode] = useState<EvidenceMode>("source");
   const closeRef = useRef<HTMLButtonElement>(null);
+  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
   useEffect(() => {
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
