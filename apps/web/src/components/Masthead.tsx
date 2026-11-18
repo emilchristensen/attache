@@ -1,10 +1,10 @@
-import { navBadge, type NavSignals } from "../nav-signals.ts";
+import { navBadge, spokenTotal, type NavSignals } from "../nav-signals.ts";
 import { SCREENS, type ScreenId } from "../routes.ts";
 import { launchSearch } from "../search-launch.ts";
 import { Icon } from "./icons.tsx";
 import { Logo } from "./Logo.tsx";
 import { MachineDisclosure } from "./MachinePanel.tsx";
-import { ScreenLink } from "./ScreenLink.tsx";
+import { ScreenLink, spokenName } from "./ScreenLink.tsx";
 import { Link } from "./ui.tsx";
 
 /**
@@ -16,8 +16,8 @@ export function Masthead({ current, signals }: { current: ScreenId | null; signa
   return (
     <header className="masthead">
       <div className="masthead-inner">
-        <Link to="/" className="brand">
-          <Logo size={32} attention={signals.total > 0} />
+        <Link to="/" className="brand" aria-label={spokenName("Attache", [spokenTotal(signals.count.total)])}>
+          <Logo size={32} attention={signals.dot} />
           Attache
         </Link>
         <nav className="masthead-nav" aria-label="Main">

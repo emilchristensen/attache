@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { AttentionItemView, ConnectionStatus, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
@@ -8,6 +8,9 @@ import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
 import { openDraftId } from "../linked-draft.ts";
+import { homeLine } from "../count.ts";
+import { useSignals } from "../nav-signals.ts";
+import { AttentionDot } from "../components/AttentionDot.tsx";
 import { ReaderLine } from "./ReaderLine.tsx";
 
 interface Briefing {
@@ -275,6 +278,35 @@ export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
   );
 }
 
+/** Nothing is promoted above the Inbox yet; the Heads-ups (#25, #26 of spec #14) fill this with meeting prep items. */
+const NOTHING_PROMOTED: ReadonlySet<string> = new Set();
+
+/**
+ * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
+ * number out, and the line that relates the rows to the decisions when they differ.
+ */
+function InboxHeading({ children }: { children: ReactNode }) {
+  const signals = useSignals();
+  const home = signals?.count.home;
+  const needYou = home && home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
+  const line = signals && home ? homeLine(signals.inbox, home, NOTHING_PROMOTED) : null;
+  return (
+    <>
+      <div className="inbox-head">
+        <h2 className="heading-section">Inbox</h2>
+        {needYou && (
+          <span className="need-you" data-need-you>
+            <AttentionDot decorative />
+            {needYou}
+          </span>
+        )}
+        {children}
+      </div>
+      {line && <p className="count-line">{line}</p>}
+    </>
+  );
+}
+
 export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsOn: boolean }) {
   const [showHidden, setShowHidden] = useState(false);
   const items = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=${showHidden ? "dismissed,snoozed" : "open"}` : null, ["attention.changed", "briefing.created", "actions.changed"]);
@@ -309,12 +341,12 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
           <span>{failed.map((f) => `${f.label}: ${f.status !== "connected" ? f.status.replace(/_/g, " ") : f.coverage?.state}`).join(" · ")}. Items from these sources may be missing below.</span>
         </div>
       )}
-      <div className="section-title">
-        {showHidden ? "Dismissed and snoozed" : "Needs your attention"}
-        <button className="small ghost" style={{ marginLeft: "auto" }} onClick={() => setShowHidden(!showHidden)}>
+      <InboxHeading>
+        <button className="small ghost" onClick={() => setShowHidden(!showHidden)}>
           {showHidden ? "Show open" : "Show dismissed"}
         </button>
-      </div>
+      </InboxHeading>
+      {showHidden && <div className="section-title">Dismissed and snoozed</div>}
       {items.loading && !items.data && <Loading />}
       <ErrorState error={items.error} retry={items.reload} />
       {items.data && items.data.items.length === 0 && (

@@ -101,6 +101,36 @@ button.count-chip {
 .attention-group {
   scroll-margin-top: 12px;
 }
+/* The Inbox heading, Home's decision count beside it, and the line relating rows to decisions. */
+.inbox-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--s-3);
+  row-gap: var(--s-1);
+  margin-top: var(--s-6);
+}
+.inbox-head h2 {
+  margin: 0;
+}
+.inbox-head > button {
+  margin-left: auto;
+  align-self: center;
+}
+.need-you {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--ink);
+}
+.count-line {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
 /* A group's name: a plain label, no capitals or letterspacing. */
 .section-title {
   font-size: var(--fs-meta);

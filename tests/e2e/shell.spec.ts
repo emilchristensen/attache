@@ -84,6 +84,31 @@ test("masthead: one line names every screen above a centred reading column, and 
   await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
 });
 
+/** The number a link or heading shows, or 0 when it shows none. */
+async function shownNumber(locator: ReturnType<Page["locator"]>): Promise<number> {
+  if (!(await locator.count())) return 0;
+  return Number((await locator.first().textContent())!.match(/\d+/)![0]);
+}
+
+test("count: Home's number beside its Inbox heading, Approvals and Connections add up to the tab title and the mark's name", async () => {
+  const page = await journeys.open("/");
+  await expect(page).toHaveTitle(/^\(\d+\) Attache$/, { timeout: 30_000 });
+  await expect(page.locator("[data-need-you]")).toHaveText(/^\d+ needs? you here$/);
+  const nav = mainNav(page);
+  const home = await shownNumber(page.locator("[data-need-you]"));
+  const approvals = await shownNumber(nav.getByRole("link", { name: /^Approvals/ }).locator(".count"));
+  const connections = await shownNumber(nav.getByRole("link", { name: /^Connections/ }).locator(".count"));
+  expect(approvals, "the waiting Proposal").toBe(1);
+  const total = home + approvals + connections;
+  await expect(page).toHaveTitle(`(${total}) Attache`);
+  await expect(page.getByRole("link", { name: `Attache, ${total} need you` })).toBeVisible();
+  await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  // Off Home the same number is Home's badge.
+  await nav.getByRole("link", { name: /^Jobs/ }).click();
+  await expect(nav.getByRole("link", { name: /^Home/ }).locator(".count")).toHaveText(String(home));
+});
+
 test("skip link: the first Tab offers Skip to content, which moves focus to the page", async () => {
   const page = await journeys.open("/jobs");
   await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
