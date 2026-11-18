@@ -243,7 +243,7 @@ export function SettingsView() {
               <dd>{status.data.version}</dd>
               <dt>Running since</dt>
               <dd>
-                <Time iso={status.data.startedAt} /> (pid {status.data.pid}, Node {status.data.node})
+                <Time iso={status.data.startedAt} standalone /> (pid {status.data.pid}, Node {status.data.node})
               </dd>
               <dt>Data folder</dt>
               <dd className="mono">{status.data.dataFolder}</dd>

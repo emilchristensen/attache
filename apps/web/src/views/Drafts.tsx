@@ -51,13 +51,23 @@ function DraftDetail({ id }: { id: string }) {
         </dd>
         <dt>Expires</dt>
         <dd>
-          {new Date(d.expiresAt).toLocaleString()} (<Time iso={d.expiresAt} />)
+          <time className="time" dateTime={d.expiresAt}>
+            {new Date(d.expiresAt).toLocaleString()}
+          </time>{" "}
+          (<Time iso={d.expiresAt} standalone />)
         </dd>
         {d.approval && (
           <>
             <dt>Approved</dt>
             <dd>
-              v{d.approval.version} at {new Date(d.approval.approvedAt).toLocaleTimeString()}, valid until {new Date(d.approval.expiresAt).toLocaleTimeString()}
+              v{d.approval.version} at{" "}
+              <time className="time" dateTime={d.approval.approvedAt}>
+                {new Date(d.approval.approvedAt).toLocaleTimeString()}
+              </time>
+              , valid until{" "}
+              <time className="time" dateTime={d.approval.expiresAt}>
+                {new Date(d.approval.expiresAt).toLocaleTimeString()}
+              </time>
             </dd>
           </>
         )}

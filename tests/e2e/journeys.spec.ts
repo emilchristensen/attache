@@ -232,13 +232,13 @@ const measure = (target: Locator, what: "outline" | "border") =>
     // The surface behind the element: its parents' backgrounds painted from the page down.
     const layers: string[] = [];
     for (let n = el.parentElement; n; n = n.parentElement) layers.push(getComputedStyle(n).backgroundColor);
-    let bg = { r: 255, g: 255, b: 255 };
-    for (const c of layers.reverse()) {
-      const t = parse(c);
-      bg = { r: t.r * t.a + bg.r * (1 - t.a), g: t.g * t.a + bg.g * (1 - t.a), b: t.b * t.a + bg.b * (1 - t.a) };
-    }
+    type Rgb = { r: number; g: number; b: number };
+    const over = (t: Rgb & { a: number }, below: Rgb): Rgb => ({ r: t.r * t.a + below.r * (1 - t.a), g: t.g * t.a + below.g * (1 - t.a), b: t.b * t.a + below.b * (1 - t.a) });
+    let bg: Rgb = { r: 255, g: 255, b: 255 };
+    for (const c of layers.reverse()) bg = over(parse(c), bg);
     const style = getComputedStyle(el);
-    const fg = parse(what === "outline" ? style.outlineColor : style.borderTopColor);
+    // A translucent edge is measured as it is painted, over the surface behind it.
+    const fg = over(parse(what === "outline" ? style.outlineColor : style.borderTopColor), bg);
     const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
       const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
       return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
@@ -257,7 +257,11 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
     const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
     const onCanvas = page.getByRole("button", { name: "Show dismissed" });
     // Control edges: a secondary button on the amber briefing and on a card.
-    for (const control of [onFeature, onCard]) expect((await measure(control, "border")).ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
+    for (const control of [onFeature, onCard]) {
+      const edge = await measure(control, "border");
+      expect(edge, `${scheme} control edge`).toMatchObject({ width: 1, style: "solid" });
+      expect(edge.ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
+    }
     // The focus ring: a 3 px outline (never a fill like a selection), at 3:1 or better on every surface it lands on.
     for (const control of [onFeature, onCard, onCanvas]) {
       await control.focus();
@@ -349,7 +353,9 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    expect((await measure(page.locator(".source-chip").first(), "border")).ratio, `${scheme} citation edge`).toBeGreaterThanOrEqual(3);
+    const edge = await measure(page.locator(".source-chip").first(), "border");
+    expect(edge, `${scheme} citation edge`).toMatchObject({ width: 1, style: "solid" });
+    expect(edge.ratio, `${scheme} citation edge`).toBeGreaterThanOrEqual(3);
   }
   await page.emulateMedia({ colorScheme: null });
   await box.fill("Looks good. One question: does the retry respect idempotency keys?");

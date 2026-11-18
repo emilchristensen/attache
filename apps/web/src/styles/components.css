@@ -232,15 +232,19 @@ svg.icon {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  /*
+   * The time column keeps its 76 px and grows only as far as the longest time needs, the same for every row,
+   * so "15 seconds ago" never wraps and the descriptions stay aligned.
+   */
+  display: grid;
+  grid-template-columns: minmax(76px, max-content) minmax(0, 1fr);
+  gap: 6px 10px;
   font-size: var(--fs-meta);
 }
 .timeline li {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 112px 1fr;
-  gap: 10px;
+  grid-template-columns: subgrid;
   color: var(--ink-2);
 }
 .timeline time {
