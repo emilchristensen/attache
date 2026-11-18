@@ -1,0 +1,151 @@
+/* Home: the briefing, the Inbox and Recently added. */
+
+/* Long lines get hard to read once the column is wide. */
+.page-inbox > * {
+  max-width: 920px;
+}
+
+/* ---- the briefing ------------------------------------------------------------------ */
+
+.briefing {
+  background: var(--indigo-soft);
+  border: 1px solid var(--indigo-line);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.briefing-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.briefing-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.briefing-counts .tag {
+  align-self: center;
+}
+button.count-chip {
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  gap: 6px;
+}
+.count-chip b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.briefing-lines {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-width: 72ch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.briefing-lines li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.briefing-lines li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--indigo-ink);
+}
+.briefing-lines li:only-child {
+  padding-left: 0;
+}
+.briefing-lines li:only-child::before {
+  display: none;
+}
+.briefing-lines li.caveat {
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.briefing-lines li.caveat::before {
+  background: var(--amber);
+}
+.briefing-meetings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--indigo-line);
+}
+.briefing-empty {
+  color: var(--ink-2);
+  font-size: 14px;
+  margin-top: 6px;
+}
+
+/* ---- the Inbox ------------------------------------------------------------------------ */
+
+.attention-group {
+  scroll-margin-top: 12px;
+}
+/* A group's name: a plain label, no capitals or letterspacing. */
+.section-title {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-weight: 600;
+  margin: 18px 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title .collapse-toggle {
+  margin-left: auto;
+}
+.item.priority-high {
+  border-left: 3px solid var(--amber);
+}
+
+.coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.coverage .src {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.coverage .src .when {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+.reader-line {
+  margin: 0 0 8px;
+  color: var(--ink-3);
+}
+.reader-line.silent {
+  color: var(--amber-ink);
+}
+
+/* ---- Recently added ----------------------------------------------------------------------- */
+
+.recently-added .recent-changes.card {
+  margin: 0;
+  padding: 2px 16px;
+}

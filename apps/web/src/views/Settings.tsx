@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@attache/contracts";
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
+import { Tag } from "../components/Tag.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
 import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
@@ -162,12 +164,12 @@ function Clients() {
         {clients.data?.map((c) => (
           <div key={c.id} className="client-row">
             <span className="client-name">
-              {c.name} <span className="pill">{c.kind}</span>
+              {c.name} <Tag>{c.kind}</Tag>
             </span>
             <span className="small muted">
               last seen <Time iso={c.lastSeenAt} />
             </span>
-            {c.revokedAt ? <StatusPill state="expired" label="revoked" /> : <button className="small ghost danger" onClick={() => run("rv", () => del(`/clients/${c.id}`).then(clients.reload), "Client revoked")}>Revoke</button>}
+            {c.revokedAt ? <StateTag state="expired" label="revoked" /> : <button className="small ghost danger" onClick={() => run("rv", () => del(`/clients/${c.id}`).then(clients.reload), "Client revoked")}>Revoke</button>}
           </div>
         ))}
       </div>

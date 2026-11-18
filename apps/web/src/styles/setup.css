@@ -1,0 +1,86 @@
+/* Setup and pairing: the centred column, the steps and the final checks. */
+
+/* Setup scrolls the page: keep the scrollbar's room, so the centred steps do not shift between a short step and a long one. */
+html:has(.setup) {
+  scrollbar-gutter: stable;
+}
+
+.setup {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 24px 60px;
+}
+.steps {
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  margin: 16px 0 24px;
+  flex-wrap: wrap;
+}
+.steps li {
+  list-style: none;
+  font-size: 12.5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+}
+.steps li[aria-current="step"] {
+  border-color: var(--accent-solid);
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+/* A finished step is told by its word and its place, not by colour. */
+.steps li.done {
+  color: var(--ink-2);
+}
+.steps ol {
+  display: contents;
+}
+
+/* Setup's last step: one row per feature or connection, with the labels, states and notes each in a column. */
+.check-list {
+  display: grid;
+  grid-template-columns: minmax(190px, max-content) max-content minmax(0, 1fr);
+  column-gap: 10px;
+}
+.check-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  justify-items: start;
+  padding: 7px 0;
+}
+.check-row + .check-row {
+  border-top: 1px solid var(--line);
+}
+
+.join-brain summary {
+  cursor: pointer;
+  list-style-position: outside;
+  margin-left: 16px;
+}
+.join-brain summary::marker {
+  color: var(--ink-3);
+}
+.join-brain-body {
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  /* The state beside its label, and the note below both. */
+  .check-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .check-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    row-gap: 4px;
+  }
+  .check-row > :nth-child(2) {
+    justify-self: end;
+  }
+  .check-row > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}

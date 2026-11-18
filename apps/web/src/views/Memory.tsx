@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import type { MeaningStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, Time, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
+import { Tag } from "../components/Tag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
 import { ProposalReview } from "../components/ProposalReview.tsx";
@@ -57,7 +59,7 @@ function ReviewDate({ entry }: { entry: StateEntry }) {
     );
   return (
     <span className="row state-review" data-review={entry.review} title={`Its Review date ${entry.review} has passed. Check it, then save the current value with a new Review date.`}>
-      <StatusPill state="partial" label="unverified" />
+      <StateTag state="partial" label="unverified" />
       <span className="small">review was due {entry.review}</span>
     </span>
   );
@@ -101,8 +103,8 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
     <div className="stack">
       <div className="row">
         <h2 style={{ flex: 1 }}>{d.title}</h2>
-        <StatusPill state={d.area === "memory" ? "ready" : "draft"} label={d.area} />
-        {d.protected && <StatusPill state="partial" label="protected" />}
+        <Tag>{d.area}</Tag>
+        {d.protected && <StateTag state="partial" label="protected" />}
       </div>
       <p className="small muted mono">{root !== "data" ? `${root} › ` : ""}{relPath}</p>
       {d.state.length > 0 && (
@@ -144,7 +146,7 @@ function DocPanel({ root, relPath }: { root: string; relPath: string }) {
                 <span>
                   {c.change} {c.subject ? `“${c.subject}”` : ""} by {c.actor}
                   {c.beforeValue ? ` — was “${c.beforeValue}”` : ""}
-                  {c.reason ? ` (${c.reason})` : ""} <StatusPill state={c.status} />
+                  {c.reason ? ` (${c.reason})` : ""} <StateTag state={c.status} />
                 </span>
               </li>
             ))}
@@ -227,7 +229,7 @@ export function MemoryView() {
                     <div className="stack-sm" style={{ minWidth: 0 }}>
                       <span className="row">
                         <strong>{h.title}</strong>
-                        {h.unverified && <StatusPill state="partial" label="unverified" />}
+                        {h.unverified && <StateTag state="partial" label="unverified" />}
                       </span>
                       <span className="small muted">{h.snippet}</span>
                       <span className="small mono muted">

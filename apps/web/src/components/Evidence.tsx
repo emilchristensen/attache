@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useResource } from "../live.ts";
-import { ErrorState, Link, Loading, Markdown, StatusPill, Time } from "./ui.tsx";
+import { ErrorState, Link, Loading, Markdown, Time } from "./ui.tsx";
+import { Tag } from "./Tag.tsx";
 import { Tabs, type TabItem } from "./Tabs.tsx";
 
 export interface EvidenceTarget {
@@ -91,7 +92,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
               <h2 style={{ overflowWrap: "anywhere" }}>{d?.title ?? target.title ?? target.relPath}</h2>
             </div>
             <div className="row small muted">
-              {d && <StatusPill state={d.area === "memory" ? "ready" : "draft"} label={d.area === "memory" ? "curated memory" : d.area === "import" ? "imported note" : d.area} />}
+              {d && <Tag>{d.area === "memory" ? "curated memory" : d.area === "import" ? "imported note" : d.area}</Tag>}
               <span className="mono" style={{ overflowWrap: "anywhere" }}>
                 {target.root !== "data" ? `${d?.rootLabel ?? target.root} › ` : ""}
                 {target.relPath}

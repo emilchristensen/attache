@@ -84,22 +84,6 @@ export function ErrorState({ error, retry, title }: { error: ApiError | Error | 
   );
 }
 
-export function StatusPill({ state, label }: { state: string; label?: string }) {
-  const cls = ["ready", "connected", "complete", "empty", "succeeded", "ok", "applied", "open"].includes(state)
-    ? "ok"
-    : ["partial", "needs_setup", "needs_auth", "queued", "running", "draft", "approved", "snoozed", "proposed", "executing", "blocked", "revoked", "unknown", "never_run"].includes(state)
-      ? "warn"
-      : ["error", "failed", "unavailable", "denied", "unauthorized", "offline", "expired", "rejected"].includes(state)
-        ? "danger"
-        : "";
-  return (
-    <span className={`pill ${cls}`}>
-      <span className="dot" aria-hidden />
-      {label ?? state.replace(/_/g, " ")}
-    </span>
-  );
-}
-
 // ---- time --------------------------------------------------------------------------
 
 export function relTime(iso: string | null | undefined): string {

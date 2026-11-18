@@ -203,6 +203,24 @@ test("home: the inbox only, with no chat box or chat shortcut", async () => {
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
+test("look: the Dashboard sets its text in Inter, served by Attache itself, and loads nothing from the internet", async () => {
+  const page = await journeys.newPage();
+  const requests: string[] = [];
+  const fonts: Array<{ url: string; type: string | undefined }> = [];
+  page.on("request", (r) => requests.push(r.url()));
+  page.on("response", (r) => {
+    if (r.request().resourceType() === "font") fonts.push({ url: r.url(), type: r.headers()["content-type"] });
+  });
+  await page.goto(`${stack.url}/`);
+  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Inter"?,/);
+  expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.replace(/"/g, "") === "Inter" && f.status === "loaded"))).toBe(true);
+  expect(fonts).toEqual([{ url: expect.stringMatching(new RegExp(`^${stack.url}/assets/inter-latin-wght-normal-[\\w-]+\\.woff2$`)), type: "font/woff2" }]);
+  expect(requests.filter((u) => !u.startsWith(`${stack.url}/`) && !u.startsWith("data:"))).toEqual([]);
+  await page.close();
+});
+
 test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const page = await journeys.open("/memory");
   const search = page.getByRole("searchbox", { name: "Search memory" });
@@ -944,7 +962,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await expect(problem).toHaveCount(0);
 
     // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
-    await expect(card.locator('[data-machine="Home PC"] .pill', { hasText: /^Reader$/ })).toBeVisible();
+    await expect(card.locator('[data-machine="Home PC"]').getByText("Reader", { exact: true })).toBeVisible();
     await second.goto(`${other.url}/`);
     const readerLine = second.locator(".reader-line");
     await expect(readerLine).toHaveAttribute("data-reader", "other");
