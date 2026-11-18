@@ -5,7 +5,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
-import { lineStarts } from "./layout.ts";
+import { lineStarts, placeholderFit } from "./layout.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -69,12 +69,7 @@ async function resultsFit(page: Page): Promise<{ top: boolean; bottom: boolean }
 
 /** The placeholder's width in the field's own font, against the room the field gives it. */
 async function promptFits(page: Page): Promise<{ text: number; room: number }> {
-  return field(page).evaluate((input: HTMLInputElement) => {
-    const style = getComputedStyle(input);
-    const ctx = document.createElement("canvas").getContext("2d")!;
-    ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    return { text: ctx.measureText(input.placeholder).width, room: input.clientWidth };
-  });
+  return field(page).evaluate(placeholderFit);
 }
 
 test("home: a compact heading and today's date over one search field, not focused on arrival and with no repeated headline", async () => {
