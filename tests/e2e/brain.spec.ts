@@ -170,6 +170,18 @@ test("brain: search results replace the Library with every result, say how they 
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(`${stack.url}/brain/recent`);
   await expect(search(page)).toHaveValue("");
+  // Back before the words reach the address takes the owner back, with Forward still there.
+  await page.getByRole("tab", { name: "Library" }).click();
+  await expect(page).toHaveURL(`${stack.url}/brain`);
+  await search(page).pressSequentially("He");
+  await page.goBack();
+  await expect(page).toHaveURL(`${stack.url}/brain/recent`);
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(`${stack.url}/brain/recent`);
+  await expect(search(page)).toHaveValue("");
+  await page.goForward();
+  await expect(page).toHaveURL(`${stack.url}/brain`);
+  await page.goBack();
   // Choosing it again keeps its filter.
   await page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Reverted" }).click();
   await page.getByRole("tab", { name: "Recent saves" }).click();
@@ -185,6 +197,15 @@ test("brain: a note picked far down a long list opens in view beside it, and the
   await last.click();
   await expect(reader(page).getByRole("heading", { level: 2, name: title })).toBeInViewport();
   await expect(last).toBeInViewport();
+
+  // Pinned beside a long list with the bottom bar showing, the reader ends above the bar.
+  await page.setViewportSize({ width: 900, height: 560 });
+  await page.goto(`${stack.url}/brain?q=Helios&root=data&path=${encodeURIComponent(NORA)}`);
+  await expect(reader(page)).toBeVisible();
+  await expect.poll(() => page.locator(".result-item").count()).toBeGreaterThanOrEqual(HELIOS.length);
+  await page.locator(".page").evaluate((p) => p.scrollTo(0, 600));
+  const bar = await box(page.locator(".bottom-bar"));
+  await expect.poll(async () => (await box(page.locator(".library-reader"))).y + (await box(page.locator(".library-reader"))).height, "the reader ends above the bottom bar").toBeLessThanOrEqual(bar.y);
 });
 
 test("brain: a fact's source is a button that opens in place with pointer, keyboard and touch", async ({ browser }) => {

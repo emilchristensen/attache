@@ -161,12 +161,23 @@ export function waitingProposalWords(n: number): string {
   return n === 1 ? "A change to this note waits for your OK." : `${n} changes to this note wait for your OK.`;
 }
 
-/** The lines under a level-two heading (any case), up to the next level-two heading; null without the heading. */
+/** A line that opens or closes a fenced code block, as the service reads one (`CODE_FENCE` in its Markdown model). */
+const CODE_FENCE = /^\s*(```|~~~)/;
+
+/**
+ * The lines under a level-two heading (any case), up to the next level-two heading; null without the heading.
+ * A heading inside a fenced code block is text, as the service reads it.
+ */
 function section(raw: string, heading: string): string[] | null {
   const lines = raw.replace(/\r\n/g, "\n").split("\n");
-  const start = lines.findIndex((l) => new RegExp(`^##\\s+${heading}\\s*$`, "i").test(l));
+  let fenced = false;
+  const headings = lines.map((l) => {
+    if (CODE_FENCE.test(l)) fenced = !fenced;
+    return !fenced && /^##\s/.test(l);
+  });
+  const start = lines.findIndex((l, i) => headings[i] && new RegExp(`^##\\s+${heading}\\s*$`, "i").test(l));
   if (start < 0) return null;
-  const end = lines.findIndex((l, i) => i > start && /^##\s/.test(l));
+  const end = headings.findIndex((h, i) => h && i > start);
   return lines.slice(start + 1, end < 0 ? undefined : end);
 }
 

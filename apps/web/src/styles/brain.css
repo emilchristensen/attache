@@ -195,14 +195,16 @@ h2.brain-results-title {
 
 /*
  * Beside the list, the reader stays in view and scrolls on its own, so a note picked far down a long list opens
- * where the owner is looking and the list keeps its place. The room is the window less the masthead (74 px) and a
- * margin above and below.
+ * where the owner is looking and the list keeps its place. Its room is the page's visible height below its top
+ * padding (`--page-room`, set by the Library from the page itself) less a margin above and below.
  */
 @media (min-width: 721px) {
   .library-reader {
+    /* Until the Library has measured the page. */
+    --page-room: 100dvh;
     position: sticky;
     top: var(--s-4);
-    max-height: calc(100dvh - 74px - 2 * var(--s-4));
+    max-height: calc(var(--page-room) - 2 * var(--s-4));
     overflow-y: auto;
     overscroll-behavior: contain;
   }

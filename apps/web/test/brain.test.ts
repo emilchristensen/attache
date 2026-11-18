@@ -207,6 +207,11 @@ describe("noteSections: the parts of a note the reader shows as stored", () => {
     expect(noteSections("# Bare\n\n## Current State\n- **A** (2026-01-01): b\n")).toEqual({ notes: null, history: [] });
   });
 
+  it("a heading inside a fenced example is text, as the service reads it", () => {
+    const note = ["# X", "## Notes", "Example:", "```md", "## History", "- not history", "```", "~~~", "## Notes", "~~~", "## History", "- real"].join("\n");
+    expect(noteSections(note)).toEqual({ notes: ["Example:", "```md", "## History", "- not history", "```", "~~~", "## Notes", "~~~"].join("\n"), history: ["real"] });
+  });
+
   it("a heading written in another case still counts", () => {
     expect(noteSections("# X\n## notes\nSome words\n## history\n- one\n")).toEqual({ notes: "Some words", history: ["one"] });
   });

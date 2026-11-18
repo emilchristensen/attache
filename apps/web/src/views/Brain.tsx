@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, useLocation } from "../components/ui.tsx";
 import { ChipNav } from "../components/ChipNav.tsx";
@@ -182,6 +182,24 @@ function Results({ place, onPick, onClear }: { place: LibraryPlace; onPick: () =
 }
 
 /**
+ * Gives `el` the room a sticky child has in the page it scrolls in, as `--page-room`: the page's visible height below
+ * its top padding (where sticky positions start), kept up to date as the window changes, so the reader beside the
+ * list fits whatever the masthead, banner or bottom bar take.
+ */
+function usePageRoom(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const page = el?.closest<HTMLElement>(".page");
+    if (!el || !page) return;
+    const measure = () => el.style.setProperty("--page-room", `${page.clientHeight - parseFloat(getComputedStyle(page).paddingTop)}px`);
+    measure();
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(page);
+    return () => sizes.disconnect();
+  }, [ref]);
+}
+
+/**
  * The Library: collections, a collection's notes and the note reader side by side; with a query, every result
  * replaces the collections and the list. On a narrow screen the collections are a row of chips and the reader goes
  * below the list.
@@ -198,6 +216,7 @@ function Library({ place, onClear }: { place: LibraryPlace; onClear: () => void 
   useEffect(() => {
     if (detailRef.current) detailRef.current.scrollTop = 0;
   }, [detailRef, place.root, place.path]);
+  usePageRoom(detailRef);
   return (
     <div className={`library${searching ? " searching" : ""}`}>
       {!searching && <Collections place={place} />}
@@ -221,8 +240,9 @@ export function BrainView() {
   // The query lives in the address (`/brain?q=`), so "All results in Brain" and the back button carry it.
   const query = place.view === "library" ? place.q : "";
   const [q, setQ] = useState(query);
-  // Typing writes the query to the address after a pause, in the Library; an address that changes on its own (back,
-  // a link) fills the field.
+  const address = `${loc.path}?${loc.search.toString()}`;
+  // Typing writes the query to the address after a pause, in the Library. An address that changes before then (Back,
+  // a link, a tab) cancels that write and fills the field with its own query.
   useEffect(() => {
     if (q.trim() === query) return;
     const h = setTimeout(() => {
@@ -235,13 +255,13 @@ export function BrainView() {
       navigate(`/brain${search ? `?${search}` : ""}`, { replace: library });
     }, QUERY_TO_ADDRESS_MS);
     return () => clearTimeout(h);
-  }, [q, query]);
-  const shownQuery = useRef(query);
+  }, [q, query, address]);
+  const shownAddress = useRef(address);
   useEffect(() => {
-    if (shownQuery.current === query) return;
-    shownQuery.current = query;
+    if (shownAddress.current === address) return;
+    shownAddress.current = address;
     setQ((typed) => (typed.trim() === query ? typed : query));
-  }, [query]);
+  }, [address, query]);
   const clear = () => {
     setQ("");
     if (place.view === "library") navigate(brainHref({ ...place, q: "" }), { replace: true });
@@ -250,8 +270,6 @@ export function BrainView() {
   const selectView = (view: "library" | "recent") => {
     // The view shown already keeps its collection, note and filter.
     if (view === place.view) return;
-    // Words typed but not yet in the address stay behind: they must not take the owner back to the Library.
-    setQ(query);
     navigate(view === "recent" ? brainHref({ view }) : brainHref({ view, q: query }));
   };
   return (
