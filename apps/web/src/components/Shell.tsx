@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { useNavSignals } from "../nav-signals.ts";
+import { SignalsContext, useNavSignals } from "../nav-signals.ts";
 import { screenAt } from "../routes.ts";
 import { useShortcuts } from "../shortcuts.ts";
+import { useTabSignal } from "../tab-signal.ts";
 import { ReaderWarning } from "../views/ReaderLine.tsx";
 import { BottomBar } from "./BottomBar.tsx";
 import { Masthead } from "./Masthead.tsx";
@@ -17,7 +18,8 @@ function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
 
 /**
  * The frame around every screen: the masthead (desktop) or the bottom bar (narrow), the silent-Reader warning that
- * stays in view, the page in a centred reading column, and the More and shortcut sheets.
+ * stays in view, the page in a centred reading column, and the More and shortcut sheets. It asks for the count once
+ * and shares it with the screens (`useSignals()`), and the browser tab's title and favicon follow it.
  */
 export function Shell({ children, path }: { children: ReactNode; path: string }) {
   const current = screenAt(path);
@@ -27,7 +29,9 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
   const close = useCallback(() => setSheet(null), []);
   const openShortcuts = useCallback(() => setSheet("shortcuts"), []);
   useShortcuts(openShortcuts);
+  useTabSignal(signals.count.total, signals.dot);
   return (
+    <SignalsContext.Provider value={signals}>
     <div className="shell">
       <a className="skip-link" href="#main" onClick={skipToContent}>
         Skip to content
@@ -41,5 +45,6 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <MoreSheet open={sheet === "more"} onClose={close} current={current} signals={signals} opener={moreButton} />
       <ShortcutSheet open={sheet === "shortcuts"} onClose={close} />
     </div>
+    </SignalsContext.Provider>
   );
 }

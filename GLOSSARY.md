@@ -42,6 +42,7 @@ _Avoid_: Chat, app, UI, web client
 
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
+It follows the Decision count, also on the favicon; a part that could not be read never turns it on or off.
 It never means new, unread, changed or offline.
 _Avoid_: badge, notification dot, unread dot
 
@@ -117,3 +118,15 @@ _Avoid_: Proactive area
 A short summary Attache writes of what changed, what needs the owner and what is prepared: the daily briefing on a schedule, or an Away summary or a briefing the owner asked for.
 The daily briefing is a Heads-up until noon; one the owner asked for, for four hours.
 _Avoid_: Digest
+
+**Decision count**:
+The number of decisions that wait for the owner on this Machine, behind the Attention dot, the tab title and the numbers in the navigation.
+It has three parts: open Inbox items whose Draft does not wait (Home), Proposals and waiting Drafts (Approvals), and Connections that need sign-in (Connections).
+Each decision counts once, so an Inbox item whose Draft waits counts as the Draft.
+A part that could not be read fully makes the count a lower bound, written "12+".
+_Avoid_: unread count, badge count
+
+**Open item**:
+An Inbox item in the open state, whether or not its Draft waits.
+Open items and the Decision count differ by the items whose Draft waits in Approvals, so the Dashboard says "need you" only of decisions.
+_Avoid_: Unread item
