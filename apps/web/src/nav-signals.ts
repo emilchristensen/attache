@@ -94,14 +94,13 @@ export function useNavSignals(): NavSignals {
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
 
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
-  // lists and the count route are always asked together (the same live events, and one Retry for all three), and a
-  // new answer from one is held until the others have answered too; otherwise the fallback count would show the
-  // decision twice, or not at all, and Home's rows and its count would disagree, for as long as the slower request
-  // takes. Home's rows come from the same held answer, so they match the count.
-  const answerOf = <R>(r: Resource<R>) => ({ data: r.data, error: r.error });
-  const settled = useRef({ inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) });
-  if (!inbox.loading && !drafts.loading && !totals.loading) settled.current = { inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) };
-  const { inbox: heldInbox, drafts: heldDrafts, totals: heldTotals } = settled.current;
+  // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
+  // held until the other has answered too; otherwise the fallback count would show the decision twice, or not at
+  // all, for as long as the slower request takes. Home's rows come from the same held answer. The count route
+  // deduplicates in one query, so its answer counts as soon as it arrives.
+  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
+  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
+  const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const { reload: reloadTotals } = totals;
@@ -116,7 +115,7 @@ export function useNavSignals(): NavSignals {
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
-  const count = countDecisions(totalsAnswer(heldTotals), inputs);
+  const count = countDecisions(totalsAnswer(totals), inputs);
   // The dot remembers its last state, because an unknown part must not turn it on or off.
   const lastDot = useRef(false);
   const dot = dotAfter(lastDot.current, count.total);
@@ -129,7 +128,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: homeRows(inbox, drafts.loading || totals.loading, heldInbox, reloadPair),
+    openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
