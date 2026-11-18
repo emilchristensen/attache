@@ -29,6 +29,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
   Home's For you now brings the daily briefing forward in the morning, and the briefings you ask for, each saying why it is there and when it leaves.
+  Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
 - **Replication (opt-in).**

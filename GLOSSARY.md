@@ -68,6 +68,7 @@ _Avoid_: client, coding agent
 **Connection**:
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
+Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet.
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.

@@ -21,8 +21,10 @@ button,
   line-height: 20px;
   white-space: nowrap;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+.btn:hover {
   background: var(--sunken);
+  text-decoration: none;
 }
 button:disabled {
   opacity: 0.55;
@@ -51,7 +53,8 @@ button.ghost:hover:not(:disabled) {
 button.ghost.danger {
   color: var(--danger);
 }
-button.small {
+button.small,
+.btn.small {
   padding: 3px 9px;
   font-size: var(--fs-meta);
   line-height: 18px;
