@@ -233,6 +233,10 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
   While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
   Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
+  When a send's outcome could not be verified, the item stays open and says **Delivery unconfirmed**, after a reload too.
+  Open it and **Check destination** comes first: it opens where the message went, in a new tab, and changes nothing.
+  **View the Draft** shows the original Draft and its receipt.
+  Only if the message did not arrive, **Prepare a replacement** and confirm it to prepare a new Draft; mark the item **Done** if it did arrive.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
 ### Brain

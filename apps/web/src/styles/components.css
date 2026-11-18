@@ -771,3 +771,44 @@ button.menu-item:hover:not(:disabled) {
   font-weight: 400;
   color: var(--ink-2);
 }
+
+/* ---- a Draft notice: what a Draft's state means (its own page, and Delivery unconfirmed on an Inbox row) ---- */
+
+.draft-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+}
+.draft-notice p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draft-notice p + p {
+  margin-top: var(--s-1);
+}
+.draft-notice[data-tone="attention"],
+.draft-notice[data-tone="danger"] {
+  padding: var(--s-1) 0 var(--s-1) var(--s-3);
+  border-left: 3px solid var(--attn);
+  color: var(--ink);
+}
+.draft-notice[data-tone="danger"] {
+  border-left-color: var(--danger);
+}
+.draft-notice-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--attn-ink);
+}
+.draft-notice[data-tone="danger"] .draft-notice-icon,
+.draft-notice[data-tone="danger"] .draft-notice-lead {
+  color: var(--danger);
+}
+.draft-notice[data-tone="attention"] .draft-notice-lead {
+  color: var(--attn-ink);
+}
+.draft-notice-lead {
+  font-weight: 600;
+}

@@ -24,6 +24,11 @@ fx.route("POST", "/__control/claude-server", (req) => {
   s.status = b.status;
   return { json: { ok: true } };
 });
+// A journey makes GitHub's read-back of a posted comment fail, so a real send ends with an unknown outcome.
+fx.route("POST", "/__control/github-read-back", (req) => {
+  state.github.readBackFails = (req.body as { fails: boolean }).fails;
+  return { json: { ok: true } };
+});
 // Journeys set the calendar to meetings at times relative to now (meeting prep, back-to-back meetings); a Source
 // refresh of Google Calendar reads them.
 fx.route("POST", "/__control/gcal-events", (req) => {

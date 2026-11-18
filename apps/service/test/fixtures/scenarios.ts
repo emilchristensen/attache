@@ -65,7 +65,8 @@ interface CalendarEvent {
 
 export interface ScenarioState {
   selfEmail: string;
-  github: { login: string; prs: GithubPr[]; comments: Map<string, Array<{ id: number; body: string; html_url: string }>> };
+  /** `readBackFails`: a posted comment cannot be read back (500), so a send ends with an unknown outcome. */
+  github: { login: string; prs: GithubPr[]; comments: Map<string, Array<{ id: number; body: string; html_url: string }>>; readBackFails?: boolean };
   jira: { issues: JiraIssue[]; comments: Map<string, Array<{ id: string; body: string; author: { accountId: string } }>> };
   confluence: { pages: ConfluencePage[]; comments: Array<{ id: string; pageId: string; body: { storage: { value: string } }; version: { authorId: string } }> };
   slack: { selfId: string; messages: SlackFixtureMessage[] };
@@ -216,6 +217,7 @@ function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
     return json(c, 201);
   }));
   mount(fx, "GET", `${P}/repos/:owner/:repo/issues/comments/:id`, authed((_req, [, , cid]) => {
+    if (s().github.readBackFails) return json({ message: "Server Error" }, 500);
     const c = [...s().github.comments.values()].flat().find((x) => String(x.id) === cid);
     return c ? json(c) : json({ message: "Not Found" }, 404);
   }));

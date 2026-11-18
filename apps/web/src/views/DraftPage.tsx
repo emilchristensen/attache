@@ -4,7 +4,7 @@ import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Link, Loading, useNow } from "../components/ui.tsx";
 import { draftBodyKey } from "../approvals.ts";
-import { draftScreen, draftTargetUrl, type DraftActionId, type DraftButton, type DraftScreen } from "../draft-state.ts";
+import { draftScreen, draftTargetUrl, uncertainTargetUrl, type DraftActionId, type DraftButton, type DraftScreen } from "../draft-state.ts";
 import { connectionHref } from "../reconnect.ts";
 import { approvalsHref } from "../routes.ts";
 import { storedText, useDraftEditor, type DraftEditorState } from "./draft-editor.ts";
@@ -113,7 +113,8 @@ function useRunner(d: ActionView, setDraft: (d: ActionView) => void, reload: () 
 /** One button as the state decided it; links for the two that leave the page (the destination, Connections). */
 function ActionButton({ b, d, runner, reasonId }: { b: DraftButton; d: ActionView; runner: Runner; reasonId: string | undefined }) {
   if (b.id === "open-target") {
-    const url = draftTargetUrl(d);
+    // A send of unknown outcome is checked where it may have landed (a Gmail draft: Gmail's drafts).
+    const url = d.status === "unknown" ? uncertainTargetUrl(d) : draftTargetUrl(d);
     return url ? (
       <a className="btn" href={url} target="_blank" rel="noopener noreferrer">
         {b.label}
