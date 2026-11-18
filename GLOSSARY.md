@@ -106,6 +106,16 @@ _Avoid_: Expiry, expiration, stale date, TTL
 Something from a connected source that may need the owner, such as a review request, a pending reply or a deadline.
 _Avoid_: Attention item, alert
 
+**Inbox type**:
+What an Inbox row shows an item to be: an explicit word such as "Review request", a glyph and a colour, from the item's kind and, where the kind alone is not enough, its source (a Slack DM against a Gmail reply).
+Types belong to families (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System) for Group by type; a kind the Dashboard does not know shows under Other with a readable word.
+_Avoid_: Item category
+
+**Decision keys**:
+The single keys that decide on the focused Inbox row: `d` Done, `s` Snooze, `x` Dismiss.
+They are off until the owner switches them on in the shortcut sheet, and no key ever applies, approves, sends, rejects, reverts or disconnects.
+_Avoid_: Hotkeys
+
 **Draft**:
 A message Attache prepared for the owner to send through a Connection.
 Nothing is sent until the owner approves that exact version.

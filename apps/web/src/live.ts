@@ -97,6 +97,18 @@ export interface Resource<T> {
   loading: boolean;
   reload: () => void;
   setData: (d: T) => void;
+  /** When the request behind `data` was asked, as an `orderMark()`, so a newer answer can be told from an older one. */
+  askedAt: number | null;
+}
+
+let marks = 0;
+
+/**
+ * A strictly increasing number, shared by every request start and anything that must be ordered against them (an
+ * Inbox decision): unlike a clock reading, two marks are never equal.
+ */
+export function orderMark(): number {
+  return ++marks;
 }
 
 /**
@@ -108,15 +120,18 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(!!path);
+  const [askedAt, setAskedAt] = useState<number | null>(null);
   const seq = useRef(0);
   const load = useCallback(() => {
     if (!path) return;
     const mine = ++seq.current;
+    const asked = orderMark();
     setLoading(true);
     api<T>(path)
       .then((d) => {
         if (mine !== seq.current) return;
         setData(d);
+        setAskedAt(asked);
         setError(null);
       })
       .catch((e: ApiError) => {
@@ -138,5 +153,5 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
       timer.current = window.setTimeout(load, 120);
     }
   });
-  return { data, error, loading, reload: load, setData };
+  return { data, error, loading, reload: load, setData, askedAt };
 }

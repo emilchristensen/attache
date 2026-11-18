@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { inboxRow, openRow } from "./inbox.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -212,8 +213,10 @@ test("screens", async ({ browser }) => {
   await expect(page.locator('[data-feature-status="attention"]')).toBeVisible();
   await setupScreens(page, "finish");
   await page.getByRole("button", { name: "Finish setup" }).click();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
-  await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
+  const pr = inboxRow(page, "Add checkout retry");
+  await expect(pr).toBeVisible({ timeout: 20_000 });
+  await openRow(pr);
+  await pr.getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Briefings" }).click();
   await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
   await page.waitForTimeout(1500);

@@ -88,7 +88,7 @@ describe("A07 attention: dismissals persist, changes resurface, failed sources a
 
 describe("attention engine rules", () => {
   const cov = (state: string) => ({ state, scopes: [], items: 0, at: new Date().toISOString() }) as any;
-  const cand = (key: string, fp: string) => ({ key, kind: "deadline", title: key, summary: "", why: "", priority: 1, sourceKind: "x", connectionId: "c1", fingerprint: fp, evidence: [] });
+  const cand = (key: string, fp: string) => ({ key, kind: "deadline" as const, title: key, summary: "", why: "", priority: 1, sourceKind: "x", connectionId: "c1", fingerprint: fp, evidence: [] });
 
   it("never resolves an item from a source that was not fully covered on both runs", () => {
     const db = openDb(":memory:");

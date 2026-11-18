@@ -125,9 +125,9 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     await page.goto(`${stack.url}/`);
     await answered;
     await expect(page.getByRole("status", { name: "Loading the Inbox" })).toBeVisible();
-    await expect(page.locator(".attention-group")).toHaveCount(0);
+    await expect(page.locator("#inbox [data-inbox-row]")).toHaveCount(0);
     release();
-    await expect(page.locator(".attention-group").first()).toBeVisible();
+    await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
     await page.unroute(drafts);
 
     // The Inbox fails while Drafts is held: the failure and its Retry show without waiting for Drafts.
@@ -143,7 +143,7 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     releaseAgain();
     await page.unroute(drafts);
     await failure.getByRole("button", { name: "Try again" }).click();
-    await expect(page.locator(".attention-group").first()).toBeVisible();
+    await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
   } finally {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await page.close();
