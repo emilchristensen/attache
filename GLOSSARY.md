@@ -106,4 +106,14 @@ _Avoid_: Drafts page
 
 **Heads-up**:
 Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
+Every Heads-up says why it is here and when it leaves; "Got it" puts it away in this browser.
 _Avoid_: Occupant, nudge
+
+**For you now**:
+The area on Home that shows the Heads-ups that are timely now, the most urgent one leading, or one quiet line when none is.
+_Avoid_: Proactive area
+
+**Briefing**:
+A short summary Attache writes of what changed, what needs the owner and what is prepared: the daily briefing on a schedule, or an Away summary or a briefing the owner asked for.
+The daily briefing is a Heads-up until noon; one the owner asked for, for four hours.
+_Avoid_: Digest

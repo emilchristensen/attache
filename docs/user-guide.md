@@ -106,7 +106,7 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 
 ## Everyday use
 
-**Home** shows the attention inbox.
+**Home** shows what is timely now, under **For you now**, and the Inbox.
 Attache has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
 ### Getting around
@@ -135,18 +135,29 @@ The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Ap
 ### Look
 
 The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
-Headings are set in Georgia, and the briefing sits on an amber page of its own.
+Headings are set in Georgia, and the morning briefing leads Home on an amber page of its own.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
 The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
 
 ### Home
 
-Home holds the briefing, your sources, the Inbox and Recently added.
+Home holds For you now, your sources, the Inbox and Recently added.
 
-- The briefing summarises what changed, what needs your judgment and what Attache has prepared, one point per line.
-  The counts under it jump to each group; Drafts and changes to the Brain open Approvals.
-  **Away summary** covers the last three days.
+- **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
+  Every Heads-up says why it is here and when it leaves.
+  - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
+    **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
+    **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
+    Yesterday's briefing never shows as today's.
+  - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
+  - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
+  - When nothing is timely, the area is one quiet line that says when the next daily briefing is scheduled.
+  - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
+  - Got it is remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
+  - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
+  - With Attention and briefings switched off, the area says so, with a link to Settings.
 - **Sources** names the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
   Without Replication this Machine is its own Reader.
   Below it, each source shows its last successful refresh and whether its last Source refresh was complete, partial or failed.

@@ -1,25 +1,13 @@
 import { useMemo, useState } from "react";
 import type { AttentionItemView, ConnectionStatus, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
-import { useLiveEvent, useResource } from "../live.ts";
+import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
-import { briefingLines } from "../briefing-text.ts";
 import { openDraftId } from "../linked-draft.ts";
 import { ReaderLine } from "./ReaderLine.tsx";
-
-interface Briefing {
-  id: string;
-  kind: string;
-  createdAt: string;
-  since: string | null;
-  summary: string;
-  sections: Array<{ id: string; title: string; items: Array<{ id: string; title: string; summary: string; url: string | null; isNew: boolean; changed: boolean; related?: Array<{ title: string; relPath: string; lines: [number, number] }> }> }>;
-  counts: { open: number; new: number; changed: number; drafts: number; proposals: number; failedSources: number };
-  deliverablePath: string | null;
-}
 
 const SOURCE_LABEL: Record<string, string> = { vault: "Notes", github: "GitHub", jira: "Jira", confluence: "Confluence", slack: "Slack", gmail: "Gmail", gcal: "Calendar", replication: "Replication", replication_merge: "Replication" };
 const GROUPS: Array<{ id: string; title: string; match: (k: string) => boolean }> = [
@@ -130,127 +118,6 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
   );
 }
 
-const KIND_LABEL: Record<string, string> = { daily: "Daily", away: "Away summary", manual: "On demand" };
-// Briefing sections that live on another screen instead of in the attention list below.
-const SECTION_ROUTE: Record<string, string> = { prepared: "/approvals", memory: "/approvals" };
-
-function jumpTo(sectionId: string) {
-  const route = SECTION_ROUTE[sectionId];
-  if (route) return navigate(route);
-  document.getElementById(`attention-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function BriefingOverview({ briefing }: { briefing: Briefing }) {
-  const fresh = [briefing.counts.new && `${briefing.counts.new} new`, briefing.counts.changed && `${briefing.counts.changed} changed`].filter(Boolean).join(" · ");
-  return (
-    <div className="briefing-counts" role="group" aria-label="Briefing at a glance">
-      {briefing.sections.map((s) => (
-        <button key={s.id} className="count-chip" onClick={() => jumpTo(s.id)} title={SECTION_ROUTE[s.id] ? `Open ${s.title.toLowerCase()}` : `Jump to ${s.title.toLowerCase()}`}>
-          <b>{s.items.length}</b>
-          {s.title}
-        </button>
-      ))}
-      {fresh && <Tag hue="blue">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</Tag>}
-    </div>
-  );
-}
-
-function BriefingCard({ canRun }: { canRun: boolean }) {
-  const b = useResource<{ briefing: Briefing | null }>("/briefings/latest", ["briefing.created"]);
-  const [job, setJob] = useState<{ id: string; progress: number; note: string | null; status: string } | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const open = useOpenEvidence();
-  const { run } = useAction();
-  useLiveEvent((ev) => {
-    if (ev.type !== "job.event" || !job) return;
-    const e = ev.event as { jobId: string; type: string; data: { progress?: number; note?: string; error?: string } };
-    if (e.jobId !== job.id) return;
-    if (e.type === "progress") setJob({ ...job, progress: e.data.progress ?? job.progress, note: e.data.note ?? job.note });
-    if (["succeeded", "failed", "cancelled", "blocked"].includes(e.type)) setJob({ ...job, status: e.type, note: e.data.error ?? null });
-  });
-  const start = (kind: string, since?: string) =>
-    run("brief", async () => {
-      const r = await post<{ job: JobView }>("/briefings", { kind, ...(since ? { since } : {}) });
-      setJob({ id: r.job.id, progress: 0, note: "Queued", status: "queued" });
-    });
-  const br = b.data?.briefing;
-  const running = job && !["succeeded", "failed", "cancelled", "blocked"].includes(job.status);
-  return (
-    <div className="briefing" aria-live="polite">
-      <div className="briefing-head">
-        <h2>Briefing</h2>
-        {br && (
-          <span className="small muted">
-            {KIND_LABEL[br.kind] ?? br.kind} · <Time iso={br.createdAt} />
-          </span>
-        )}
-      </div>
-      {b.loading && !b.data && <Loading lines={2} />}
-      {br ? (
-        <>
-          <ul className="briefing-lines">
-            {briefingLines(br.summary).map((l, n) => (
-              <li key={n} className={l.caveat ? "caveat" : undefined}>
-                {l.text}
-              </li>
-            ))}
-          </ul>
-          {br.sections.length > 0 && <BriefingOverview briefing={br} />}
-        </>
-      ) : (
-        !b.loading && <p className="briefing-empty">No briefing yet. Prepare one to see what changed across your sources.</p>
-      )}
-      {running && (
-        <div className="stack-sm" style={{ marginTop: 8 }}>
-          <div className="progress" aria-label="Briefing progress">
-            <span style={{ width: `${Math.round(job!.progress * 100)}%` }} />
-          </div>
-          <span className="small muted">{job!.note ?? "Working…"} — keeps running if you close this tab.</span>
-        </div>
-      )}
-      {job?.status === "failed" && <p className="small error-text">Briefing failed: {job.note}</p>}
-      {br && expanded && (
-        <div className="briefing-meetings" aria-label="Meeting context">
-          {br.sections.filter((s) => s.id === "meetings").flatMap((s) => s.items).map((i) => (
-            <div key={i.id} className="small">
-              <strong>{i.title}</strong>
-              {(i.related ?? []).length > 0 ? (
-                <div className="row" style={{ marginTop: 4 }}>
-                  {i.related!.map((r) => (
-                    <button key={`${r.relPath}:${r.lines.join("-")}`} className="source-chip" onClick={() => open({ root: "data", relPath: r.relPath, lines: r.lines, title: r.title })}>
-                      {r.title}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="muted">No related notes found.</div>
-              )}
-            </div>
-          ))}
-          {br.deliverablePath && (
-            <button className="small ghost" style={{ alignSelf: "flex-start" }} onClick={() => open({ root: "data", relPath: br.deliverablePath!, title: "Full briefing" })}>
-              Open the full briefing
-            </button>
-          )}
-        </div>
-      )}
-      <div className="row" style={{ marginTop: 10 }}>
-        <button className="small primary" disabled={!canRun || !!running} onClick={() => start("manual")}>
-          {running ? "Preparing…" : "Prepare briefing"}
-        </button>
-        <button className="small" disabled={!canRun || !!running} onClick={() => start("away", new Date(Date.now() - 3 * 86_400_000).toISOString())} title="Summarise what changed in the last three days">
-          Away summary
-        </button>
-        {br && (
-          <button className="small ghost" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
-            {expanded ? "Less" : "Meeting context"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
   const sources = connections.filter((c) => c.kind in SOURCE_LABEL && c.status !== "not_configured");
   if (!sources.length) return <p className="small muted">No sources connected beyond your notes. <Link to="/connections">Connect sources</Link></p>;
@@ -295,8 +162,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
     );
   const failed = (conns.data ?? []).filter((c) => c.status !== "not_configured" && c.status !== "disconnected" && (c.status !== "connected" || (c.coverage && !["complete", "empty"].includes(c.coverage.state))));
   return (
-    <div>
-      <BriefingCard canRun={attentionOn} />
+    <div id="inbox">
       <div className="section-title">
         Sources
         <Link to="/connections">manage</Link>
