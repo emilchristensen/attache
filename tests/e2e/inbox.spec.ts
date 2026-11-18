@@ -304,6 +304,7 @@ test("decided rows: an older answer Home publishes after a failed reload keeps t
       await drafts.held;
       await route.continue().catch(() => undefined);
     });
+    await expect(inboxRow(page, "Prepare release note 22")).toBeVisible();
     const early = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok(), { timeout: 15_000 });
     await api(page, "POST", `/attention/${other}/decision`, { decision: "dismiss" });
     await early;
@@ -315,6 +316,8 @@ test("decided rows: an older answer Home publishes after a failed reload keeps t
     // Drafts answers, so Home publishes the pair: the older answer that still has the row, beside the failure.
     drafts.release();
     await expect(page.getByRole("alert").filter({ hasText: "busy" })).toBeVisible();
+    // The older answer is published once the other dismissed row has left the list.
+    await expect(inboxRow(page, "Prepare release note 22")).toHaveCount(0);
     await nextFrame(page);
     await expect(row).toHaveAttribute("data-decided", "dismiss");
     await expect(row.getByRole("button", { name: "Undo" })).toBeVisible();
