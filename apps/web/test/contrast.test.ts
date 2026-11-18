@@ -77,6 +77,10 @@ const PAIRS: Pair[] = [
   // Each hue: its kind word on its own stamp, on every surface and on a selected row.
   ...HUES.flatMap((h) => text([`--${h}`], [`--${h}-soft`, ...SURFACES])),
   ...HUES.flatMap((h) => text([`--${h}`], ["--row-on"], "--paper")),
+  // Connections' rows sit on the canvas: an open or hovered row keeps its meta words and a problem's state word.
+  ...text(["--ink", "--ink-2", "--ink-3"], ["--row-hover"], "--canvas"),
+  ...(["amber", "red", "slate"] as const).flatMap((h) => text([`--${h}`], ["--row-hover"], "--canvas")),
+  ...graphic(["--focus"], ["--row-hover"], "--canvas"),
   // Stamped glyphs: the 19 px icon on its tint.
   ...HUES.flatMap((h) => graphic([`--${h}`], [`--${h}-soft`])),
   // Control edges: the outline of a secondary button and the edge of a field, on every surface they sit on.

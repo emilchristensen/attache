@@ -48,6 +48,7 @@ The logo's dot, the tab's icon and its title, such as "(14) Attache", show how m
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.
+The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect on Home lands on it.
 
 ## Install
 

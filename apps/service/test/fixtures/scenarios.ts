@@ -71,6 +71,8 @@ export interface ScenarioState {
   slack: { selfId: string; messages: SlackFixtureMessage[] };
   gmail: { threads: Map<string, GmailMessage[]>; drafts: Array<{ id: string; threadId: string; body: string }> };
   gcal: { events: CalendarEvent[] };
+  /** GitHub tokens revoked since they were saved: GitHub answers 401 to them, as it does after the owner revokes a token. */
+  revokedGithubTokens: string[];
   nextId: number;
 }
 
@@ -153,6 +155,7 @@ export function createScenarioState(opts: { selfEmail?: string; now?: number } =
         { id: "evt3", summary: "Company holiday", start: { date: localDate(now + 24 * HOUR) }, end: { date: localDate(now + 48 * HOUR) }, attendees: [] },
       ],
     },
+    revokedGithubTokens: [],
     nextId: 1000,
   };
 }
@@ -189,6 +192,8 @@ const id = (s: ScenarioState) => String(++s.nextId);
 
 function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
   const P = FIXTURE_PREFIX["https://api.github.com"];
+  const revoked = (req: FixtureRequest) => s().revokedGithubTokens.some((t) => req.headers.authorization?.includes(t));
+  const authed = (h: Handler): Handler => (req, p) => (req.headers.authorization && !revoked(req) ? h(req, p) : unauthorized);
   mount(fx, "GET", `${P}/user`, authed(() => ({ json: { login: s().github.login }, headers: { "x-oauth-scopes": "repo" } })));
   mount(fx, "GET", `${P}/search/issues`, authed((req) => {
     const q = req.query.get("q") ?? "";

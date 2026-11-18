@@ -47,7 +47,34 @@ interface Props {
   repair?: boolean;
 }
 
-export function ConnectionCard({ status, definition, onChanged, compact, repair = false }: Props) {
+/** What a Connection is for, in one sentence: the data folder says what Attache keeps there. */
+export function connectionDescription(status: ConnectionStatus, definition: ConnectionDefinition): string {
+  return status.settings.builtin === true ? "Where Attache keeps your memory, evidence and deliverables as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description;
+}
+
+/** One Connection as a card with its name, description and state above its controls: Setup's Connections and Model steps. */
+export function ConnectionCard(props: Props) {
+  const { status, definition } = props;
+  return (
+    <div className="card stack" data-connection={status.id}>
+      <div className="row">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h3>{status.label}</h3>
+          <p className="small muted">{connectionDescription(status, definition)}</p>
+        </div>
+        <StateTag state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
+      </div>
+      <ConnectionControls {...props} />
+    </div>
+  );
+}
+
+/**
+ * Everything the owner can see and do for one Connection: its details, last Source refresh, setup form, sign-in,
+ * Test, Refresh now, Reconfigure, Disconnect, what it reads and what it may write. `inRow`: the Connections page's
+ * row already shows the account and what it reads and writes in its columns, so they are not repeated.
+ */
+export function ConnectionControls({ status, definition, onChanged, compact, repair = false, inRow = false }: Props & { inRow?: boolean }) {
   const { busy, run } = useAction();
   const configured = status.status !== "not_configured" && status.status !== "disconnected";
   const needsForm = repair && configured && ((status.status === "needs_auth" && reconnectMethod(status, definition) === "credentials") || status.coverage?.state === "denied" || !!status.coverage?.scopes.some((s) => s.state === "denied"));
@@ -103,19 +130,15 @@ export function ConnectionCard({ status, definition, onChanged, compact, repair 
   };
 
   return (
-    <div className="card stack" data-connection={status.id}>
-      <div className="row">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3>{status.label}</h3>
-          <p className="small muted">{builtin ? "Where Attache keeps your memory, evidence and deliverables as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description}</p>
-        </div>
-        <StateTag state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
-      </div>
-
+    <>
       {configured && (
         <dl className="kv">
-          <dt>Account</dt>
-          <dd>{status.account ?? "—"}</dd>
+          {!inRow && (
+            <>
+              <dt>Account</dt>
+              <dd>{status.account ?? "—"}</dd>
+            </>
+          )}
           <dt>Last success</dt>
           <dd>
             <Time iso={status.lastSuccessAt} standalone />
@@ -126,13 +149,13 @@ export function ConnectionCard({ status, definition, onChanged, compact, repair 
               <dd className="error-text">{status.lastError}</dd>
             </>
           )}
-          {definition.scopes.length > 0 && (
+          {!inRow && definition.scopes.length > 0 && (
             <>
               <dt>Reading</dt>
               <dd>{status.readScopes.map((s) => definition.scopes.find((d) => d.id === s)?.label ?? s).join(", ") || "nothing selected"}</dd>
             </>
           )}
-          {definition.writeActions.length > 0 && (
+          {!inRow && definition.writeActions.length > 0 && (
             <>
               <dt>May write</dt>
               <dd>{status.writeActions.length ? status.writeActions.map((a) => definition.writeActions.find((d) => d.id === a)?.label ?? a).join(", ") : "Nothing (read-only)"}</dd>
@@ -308,7 +331,7 @@ export function ConnectionCard({ status, definition, onChanged, compact, repair 
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

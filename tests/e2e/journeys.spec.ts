@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
+import { connection, openConnection } from "./connections.ts";
 import { approvalRow, approvalRowById, draftsGroup, openApprovalRow, proposalsGroup } from "./approvals.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
 import { lineStarts } from "./layout.ts";
@@ -609,12 +610,13 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await expect(page.getByRole("link", { name: "Open Connections" })).toHaveAttribute("target", "_blank");
   // Grant the separate write permission.
   await page.goto(`${stack.url}/connections`);
-  const gh = page.locator('[data-connection="github"]');
+  const gh = await openConnection(page, "github");
   await gh.getByText(/Write permissions/).click();
   await gh.getByRole("checkbox", { name: /Post a comment/ }).check();
   await gh.getByRole("checkbox", { name: /I understand/ }).check();
   await gh.getByRole("button", { name: "Save write permissions" }).click();
-  await expect(gh.getByText("Post a comment on a pull request or issue", { exact: false }).first()).toBeVisible();
+  // The row's permission column names the write as soon as it is saved.
+  await expect(gh.locator(".connection-permission")).toContainText("Writes post a comment on a pull request or issue");
   // Approvals lists the approved Draft under Drafts to send with its destination, version and first line. It opens in
   // place read-only, offers no Approve or Send, and leads to its own page for them.
   await page.goto(`${stack.url}/approvals`);
@@ -1220,16 +1222,20 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   // Connect, Test and Reconnect each start the fake Claude Code CLI, which is slow while other suites load the Machine.
   const cliRun = { timeout: 30_000 };
   const page = await journeys.open("/connections");
-  const slack = page.locator('[data-connection="slack"]');
-  // On the full Connections page an unconfigured card opens straight into its setup form.
-  await expect(slack.getByText("not connected", { exact: true })).toBeVisible();
+  const slack = connection(page, "slack");
+  // Not set up, Slack is a tile under Work sources that opens in place into its setup form.
+  await expect(slack.locator(".connection-tile-meta")).toHaveText("Not set up");
+  await openConnection(page, "slack");
   await slack.getByRole("button", { name: "Connect" }).click();
-  await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
+  // Connected, it is a row in Work sources, still open.
+  await expect(page.locator('[data-group="work"] .connection-row[data-connection="slack"]')).toBeVisible(cliRun);
+  await expect(slack.getByRole("button", { name: "Test" })).toBeVisible();
 
-  // The connector is signed out in claude.ai: the card says so and offers Reconnect, not just Reconfigure.
+  // The connector is signed out in claude.ai: the row moves to Needs you, open, and offers Reconnect, not just Reconfigure.
   await setServer("needs-auth");
   await slack.getByRole("button", { name: "Test" }).click();
-  await expect(slack.getByText("needs auth", { exact: true })).toBeVisible(cliRun);
+  const needsYou = page.locator('[data-group="needs_you"]');
+  await expect(needsYou.locator('[data-connection="slack"] [data-connection-state="sign_in"]')).toHaveText("Sign-in needed", cliRun);
   const callout = slack.getByRole("status", { name: "Sign-in needed" });
   await expect(callout).toContainText("claude.ai → Settings → Connectors");
   // The masthead counts the sign-in beside Connections.
@@ -1240,7 +1246,7 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   // Reconnecting before the sign-in is fixed says what is still wrong.
   await callout.getByRole("button", { name: "Reconnect" }).click();
   await expect(page.getByText(/Still not signed in: Slack is not connected in claude.ai/)).toBeVisible(cliRun);
-  await expect(slack.getByText("needs auth", { exact: true })).toBeVisible();
+  await expect(needsYou.locator('[data-connection="slack"]')).toBeVisible();
 
   // Home names the sign-in in one amber line with its impact and Reconnect, and no green line.
   await page.goto(`${stack.url}/`);
@@ -1272,8 +1278,9 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(area).toContainText("All good");
   await expect(connectionsLink).toHaveAccessibleName("Connections");
   await page.goto(`${stack.url}/connections`);
-  await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
-  await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
+  await expect(page.locator('[data-group="work"] [data-connection="slack"]')).toBeVisible(cliRun);
+  await expect(needsYou).toHaveCount(0);
+  await expect(slack.locator('[data-connection-state="sign_in"]')).toHaveCount(0);
 });
 
 /** Select Check now and wait until the check has finished: the button reads "Checking…" meanwhile. */
@@ -1401,7 +1408,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
 
 test("wording: no view says sync for reading sources; a source offers Refresh now", async () => {
   const page = await journeys.open("/connections");
-  const gh = page.locator('[data-connection="github"]');
+  const gh = await openConnection(page, "github");
   await expect(gh.getByRole("button", { name: "Refresh now" })).toBeVisible();
   await gh.getByRole("button", { name: "Refresh now" }).click();
   await expect(page.getByText("Refresh started")).toBeVisible();
@@ -1416,7 +1423,7 @@ test("wording: no view says sync for reading sources; a source offers Refresh no
 
 test("wording: connection help shows commands as code and addresses as links", async () => {
   const page = await journeys.open("/connections");
-  const jira = page.locator('[data-connection="jira"]');
+  const jira = await openConnection(page, "jira");
   await expect(jira.locator("label", { hasText: "Connector name in Claude Code" }).locator("code")).toHaveText("claude mcp list");
   await jira.getByRole("combobox", { name: "How to connect" }).selectOption("api-token");
   const link = jira.locator("label", { hasText: /^API token/ }).getByRole("link");
@@ -1433,6 +1440,7 @@ test("wording: on Linux and Windows no view names macOS, and example folders are
   await expect(page.getByRole("textbox", { name: /Empty folder for the Brain/ })).toHaveAttribute("placeholder", join(DOCUMENTS, "Brain"));
   await expectNoMacWording(page, "/settings");
   await page.goto(`${stack.url}/connections`);
+  await page.getByRole("button", { name: /^Import a folder/ }).click();
   await expect(page.getByRole("textbox", { name: "Folder path" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
   await expectNoMacWording(page, "/connections");
 });
