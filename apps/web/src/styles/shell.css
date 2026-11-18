@@ -226,7 +226,13 @@
   background: var(--canvas);
 }
 
+/*
+ * The one scroller. It is also the containing block of what is placed inside it (the screen-reader-only lines among
+ * them): placed against the window instead, a line far down a long page would stretch the document, and on a phone the
+ * whole window would then scroll, taking the masthead off the top and leaving a strip below the bottom bar.
+ */
 .page {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding-top: var(--s-5);
