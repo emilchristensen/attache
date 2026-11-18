@@ -137,6 +137,7 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
       event("midnight", { start: { dateTime: "2026-10-01T00:00:00+02:00" }, end: { dateTime: "2026-10-02T00:00:00+02:00" } }),
       event("solo", { attendees: [me()] }),
       event("noattendees", { attendees: undefined }),
+      event("nostart", { start: { dateTime: "soon" } }),
       event("declined", { attendees: [me("declined"), guest("Mia")] }),
       event("later", { start: { dateTime: iso(30) }, end: { dateTime: iso(31) } }),
       event("cancelled", { status: "cancelled" }),
@@ -151,6 +152,27 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     expect(by.prep!.fingerprintParts).toEqual([iso(2), iso(3), "accepted", 9]);
     expect(by.midnight!.data.allDay).toBe(true);
     expect(by.declined!.data.selfResponseStatus).toBe("declined");
+  });
+
+  it("meeting prep stays raised until the scheduled end and carries the meeting's start, end, Meet link and attendees", async () => {
+    events([
+      event("soon", { start: { dateTime: "2026-09-30T14:00:00+02:00" }, end: { dateTime: "2026-09-30T14:30:00+02:00" }, conferenceUrl: "https://meet.google.com/abc-defg-hij", attendees: [me(), guest("Mia"), guest("Ben")] }),
+      event("running", { start: { dateTime: iso(-0.5) }, end: { dateTime: iso(0.5) }, hangoutLink: "https://meet.google.com/run-ning-now" }),
+      event("ending", { start: { dateTime: iso(-1) }, end: { dateTime: iso(0) } }),
+      event("nocall", { start: { dateTime: iso(5) }, end: { dateTime: iso(6) } }),
+      // Exactly 24 hours away: the window is open from that moment.
+      event("tomorrow", { start: { dateTime: iso(24) }, end: { dateTime: iso(25) } }),
+    ]);
+    const s = await gcalAdapter.refresh!(ctx());
+    const by = Object.fromEntries(s.observations.map((o) => [o.externalId, o.attention]));
+    // Times are instants: Google's local offset is kept out of the item, so every Machine compares them alike.
+    expect(by.soon).toMatchObject({ kind: "meeting_prep", meeting: { start: "2026-09-30T12:00:00.000Z", end: "2026-09-30T12:30:00.000Z", meetLink: "https://meet.google.com/abc-defg-hij", attendees: ["Mia", "Ben"] } });
+    // Started half an hour ago: still meeting prep, so the item stays open through the meeting.
+    expect(by.running).toMatchObject({ key: "gcal:running", kind: "meeting_prep", meeting: { meetLink: "https://meet.google.com/run-ning-now" } });
+    // Ended at this very moment: nothing to prepare for any more.
+    expect(by.ending).toBeUndefined();
+    expect(by.nocall!.meeting).toMatchObject({ meetLink: null, attendees: ["Mia"] });
+    expect(by.tomorrow).toMatchObject({ kind: "meeting_prep" });
   });
 
   it("invites awaiting my response become invite_response; accepting keeps the key and changes the fingerprint", async () => {

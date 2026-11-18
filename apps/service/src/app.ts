@@ -191,6 +191,7 @@ export class App {
       claude: createClaudeConnectorRunner(this.log),
       selfEmail: () => this.config.get().identity?.email ?? null,
       isReader: () => this.reader.isReader(),
+      now: () => this.clock.now(),
     });
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
@@ -488,7 +489,7 @@ export class App {
     if (expired.length) this.bus.emit("event", { type: "attention.changed" });
   }
 
-  /** Run housekeeping on the service's clock: settle drafts and approvals, and wake snoozed items. */
+  /** Run housekeeping on the service's clock: settle drafts and approvals, wake snoozed items and resolve meeting prep whose meeting ended. */
   private scheduleHousekeeping(): void {
     this.housekeeping = this.clock.setTimeout(() => {
       try {
@@ -500,10 +501,14 @@ export class App {
     }, this.untilNextHousekeeping());
   }
 
-  /** Half a minute, or less when an approval ends sooner, so it goes back to needing approval at the moment it ends. */
+  /**
+   * Half a minute, or less when an approval or a meeting ends sooner: an approval goes back to needing
+   * approval, and a meeting's prep item leaves the Inbox, at the moment it ends.
+   */
   private untilNextHousekeeping(): number {
-    const end = this.actions.nextApprovalEnd();
-    return end ? Math.min(HOUSEKEEPING_EVERY_MS, Math.max(0, end.getTime() - this.clock.now().getTime())) : HOUSEKEEPING_EVERY_MS;
+    const now = this.clock.now().getTime();
+    const ends = [this.actions.nextApprovalEnd(), this.inbox.nextMeetingEnd()].filter((d): d is Date => d !== null).map((d) => Math.max(0, d.getTime() - now));
+    return Math.min(HOUSEKEEPING_EVERY_MS, ...ends);
   }
 
   connectionKinds(): ConnectionKind[] {
