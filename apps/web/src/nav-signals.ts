@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { DECISION_COUNT_PATH, WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type DecisionTotals, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
-import { countDecisions, dotAfter, shownCount, spokenCount, type Answer, type DecisionCount, type Tally, type Totals } from "./count.ts";
+import { countDecisions, dotAfter, shownCount, spokenCount, withRows, type Answer, type DecisionCount, type Tally, type Totals } from "./count.ts";
 import { useResource, type Resource } from "./live.ts";
 import type { ScreenId } from "./routes.ts";
 
@@ -97,15 +97,15 @@ export function useNavSignals(): NavSignals {
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the fallback count would show the decision twice, or not at
   // all, for as long as the slower request takes. Home's rows come from the same held answer.
-  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
-  const pairLoading = inbox.loading || drafts.loading;
-  if (!pairLoading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
-  const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
-  // The count route deduplicates in one query, so its first answer counts at once, whatever the lists are doing. A
-  // later answer waits while Home's rows are being asked again, so the rows and the number beside them change together
-  // (a new item never shows as "1 needs you here" over the empty list it is not in yet).
-  const shownTotals = useRef({ data: totals.data, error: totals.error });
-  if (!(pairLoading && heldInbox.data && shownTotals.current.data)) shownTotals.current = { data: totals.data, error: totals.error };
+  // The count route deduplicates in one query, so its first answer counts at once, whatever the lists are doing.
+  // Once rows are on screen, a refresh holds the rows and the route's answer until all three have answered, and the
+  // Inbox and Drafts parts are counted from that held answer (`withRows`): the rows and the number beside them change
+  // together, whichever answers first. Proposals and sign-ins count from the latest answer.
+  const answerOf = <R>(r: Resource<R>) => ({ data: r.data, error: r.error });
+  const settled = useRef({ inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) });
+  const rowsShown = settled.current.inbox.data !== null;
+  if (!inbox.loading && !drafts.loading && !(rowsShown && totals.loading)) settled.current = { inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) };
+  const { inbox: heldInbox, drafts: heldDrafts, totals: heldTotals } = settled.current;
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const { reload: reloadTotals } = totals;
@@ -120,7 +120,7 @@ export function useNavSignals(): NavSignals {
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
-  const count = countDecisions(totalsAnswer(shownTotals.current), inputs);
+  const count = countDecisions(withRows(totalsAnswer(totals), totalsAnswer(heldTotals)), inputs);
   // The dot remembers its last state, because an unknown part must not turn it on or off.
   const lastDot = useRef(false);
   const dot = dotAfter(lastDot.current, count.total);
@@ -133,7 +133,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
+    openInbox: homeRows(inbox, drafts.loading || (rowsShown && totals.loading), heldInbox, reloadPair),
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }

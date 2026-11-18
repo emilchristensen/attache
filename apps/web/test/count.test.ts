@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionStatus, ConnectionStatus, DecisionTotals } from "@attache/contracts";
-import { countDecisions as countFrom, dotAfter, homeLine, shownCount, spokenCount, tabTitle, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
+import { countDecisions as countFrom, dotAfter, homeLine, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
 
 /** Answers as the Dashboard gets them. */
 const rows = <T>(list: T[], limit: number | null = 100): Answer<T> => ({ kind: "rows", rows: list, limit });
@@ -96,6 +96,22 @@ describe("countDecisions from the count route", () => {
       connections: { state: "known", count: 3 },
       total: { state: "known", count: 3, exact: true },
     });
+  });
+});
+
+describe("withRows", () => {
+  const shown = totals({ inbox: 4, drafts: 1, proposals: 2, signIns: 0 });
+  const fresh = totals({ inbox: 3, drafts: 2, proposals: 5, signIns: 1 });
+  it("keeps the Inbox and Drafts parts of the answer held with the rows on screen, and takes Proposals and sign-ins as they arrive", () => {
+    expect(withRows(fresh, shown)).toEqual(totals({ inbox: 4, drafts: 1, proposals: 5, signIns: 1 }));
+  });
+  it("takes the fresh answer whole when no answer is held with the rows yet (first load)", () => {
+    expect(withRows(fresh, { kind: "waiting" })).toEqual(fresh);
+    expect(withRows(fresh, failed)).toEqual(fresh);
+  });
+  it("falls back, or waits, as the fresh answer does", () => {
+    expect(withRows(failed, shown)).toEqual(failed);
+    expect(withRows({ kind: "waiting" }, shown)).toEqual({ kind: "waiting" });
   });
 });
 

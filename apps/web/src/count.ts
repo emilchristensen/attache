@@ -94,6 +94,17 @@ export function countDecisions(totals: Totals, lists: CountInputs): DecisionCoun
   return { home, approvals, connections, total: sum([home, approvals, connections]) };
 }
 
+/**
+ * The totals to count from while Home's rows are asked again. `fresh` is the route's latest answer; `withShownRows`
+ * the answer held with the Inbox and Drafts rows on screen. The Inbox and Drafts parts change with those rows, so a
+ * number never disagrees with the list beside it; Proposals and sign-ins count as they arrive. With no answer held
+ * yet (first load), the fresh one counts whole; a fresh failure or wait stands as it is.
+ */
+export function withRows(fresh: Totals, withShownRows: Totals): Totals {
+  if (fresh.kind !== "totals" || withShownRows.kind !== "totals") return fresh;
+  return { kind: "totals", totals: { ...fresh.totals, inbox: withShownRows.totals.inbox, drafts: withShownRows.totals.drafts } };
+}
+
 function fromLists(inputs: CountInputs): DecisionCount {
   const home = source(inputs.inbox, (i) => !draftWaits(i));
   const approvals = sum([source(inputs.proposals, () => true), source(inputs.drafts, (d) => WAITING.has(d.status))]);
