@@ -36,6 +36,8 @@ describe("dataFolderProblems", () => {
     ["a preview of another folder", { folder: "/home/alex/Brain" }, [["folder", "Preview this folder to see what Attache will create in it."]]],
     ["a folder Attache cannot write to", { preview: { folder: READY.folder, writable: false } }, [["folder", "Attache cannot write here. Choose another folder."]]],
     ["a folder to import that was not previewed", { importFolder: "/home/alex/Notes" }, [["import", "Preview the import, or clear this field."]]],
+    // The service is asked about the path exactly as typed, so a preview counts only for that exact text.
+    ["a folder changed by a space since its preview", { folder: `${READY.folder} ` }, [["folder", "Preview this folder to see what Attache will create in it."]]],
     ["an import preview of another folder", { importFolder: "/home/alex/Notes", importPreview: { folder: "/home/alex/Vault" } }, [["import", "Preview the import, or clear this field."]]],
     ["an email without a name", { email: "alex@example.com" }, [["name", "Add your name, or clear the email."]]],
     [
@@ -57,7 +59,7 @@ describe("dataFolderProblems", () => {
     ["a name and an email", { name: "Alex", email: "alex@example.com" }],
     // The service keeps any email it is given, so Setup does not judge its form.
     ["an email on a local host", { name: "Alex", email: "alex@localhost" }],
-    ["paths with spaces around them", { folder: ` ${READY.folder} `, importFolder: " /home/alex/Notes ", importPreview: { folder: "/home/alex/Notes" } }],
+    ["paths with spaces around them, previewed as typed", { folder: ` ${READY.folder} `, preview: { folder: ` ${READY.folder} `, writable: true }, importFolder: " /home/alex/Notes ", importPreview: { folder: " /home/alex/Notes " } }],
   ])("accepts %s", (_, change) => {
     expect(dataFolderProblems({ ...READY, ...change })).toEqual([]);
   });
@@ -86,7 +88,7 @@ describe("joinErrorField", () => {
     expect(joinErrorField(code)).toBe("repository");
   });
 
-  it.each(["invalid_path", "not_writable", "not_empty", "needs_data_folder", "already_a_repository"])("puts the service's %s on the folder", (code) => {
+  it.each(["invalid_path", "not_a_folder", "not_writable", "not_empty", "needs_data_folder", "already_a_repository"])("puts the service's %s on the folder", (code) => {
     expect(joinErrorField(code)).toBe("folder");
   });
 

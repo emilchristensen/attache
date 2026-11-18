@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type Ref } from "react";
+import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
@@ -101,9 +101,13 @@ export function JoinForm({ onDone, folder: fixedFolder, onFolderProblem, intro, 
   const examples = useFolderExamples(fixedFolder === undefined);
   const target = fixedFolder ?? folder;
   const fields = { repository: useRef<HTMLInputElement>(null), folder: useRef<HTMLInputElement>(null) };
+  // What the fields hold now, so a refusal that arrives after the owner changed a field is not pinned on the new value.
+  const latest = useRef({ repository: remote, folder: target });
+  useEffect(() => {
+    latest.current = { repository: remote, folder: target };
+  });
   const problems = attempted ? joinProblems({ repository: remote, folder: target }) : [];
   const message = (f: "repository" | "folder") => problems.find((p) => p.field === f)?.message ?? (refused?.field === f ? refused.message : undefined);
-  // Setup's data folder sits above this form, so it is the first field to fix.
   const point = (field: "repository" | "folder", text: string) => (field === "folder" && fixedFolder !== undefined ? onFolderProblem?.(text) : focusField(fields[field].current));
   const join = (e: FormEvent) => {
     e.preventDefault();
@@ -111,13 +115,17 @@ export function JoinForm({ onDone, folder: fixedFolder, onFolderProblem, intro, 
     setAttempted(true);
     setRefused(null);
     setError(null);
-    if (found.length) return point(found[0]!.field, found[0]!.message);
+    // Setup's data folder sits above this form, so it is the first field to fix.
+    const first = (fixedFolder !== undefined && found.find((p) => p.field === "folder")) || found[0];
+    if (first) return point(first.field, first.message);
+    const sent = { repository: remote, folder: target };
     setBusy(true);
     post<ReplicationView>("/replication/join", { remote, path: target })
       .then(onDone)
       .catch((err: ApiError) => {
         const field = joinErrorField(err.code);
         if (!field) return setError(err);
+        if (latest.current[field] !== sent[field]) return;
         if (field === "repository" || fixedFolder === undefined) setRefused({ field, message: err.message });
         point(field, err.message);
       })

@@ -1079,9 +1079,16 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     const second = await otherCtx.newPage();
     journeys.watch(second);
     await second.goto(other.pairUrl());
-    await second.getByRole("textbox", { name: /Data folder/ }).fill(other.dataDir);
+    const dataFolder = second.getByRole("textbox", { name: /Data folder/ });
     await second.getByText("Already use Attache on another Machine?").click();
     const repository = second.getByRole("textbox", { name: "Repository" });
+    // With both empty, Setup's data folder comes first: it sits above the Join form.
+    await dataFolder.fill("");
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(dataFolder).toBeFocused();
+    await expect(dataFolder).toHaveAccessibleDescription(/Enter an empty folder for the Brain\./);
+    await expect(repository).toHaveAttribute("aria-invalid", "true");
+    await dataFolder.fill(other.dataDir);
     await second.getByRole("button", { name: "Join into this folder" }).click();
     await expect(repository).toBeFocused();
     await expect(repository).toHaveAccessibleDescription(/Enter the repository your other Machine replicates to\./);

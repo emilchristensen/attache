@@ -56,8 +56,8 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
   const problems = attempted ? dataFolderProblems(form) : [];
   const message = (f: DataFolderField) => problems.find((p) => p.field === f)?.message ?? (f === "folder" ? joinFolderProblem : undefined);
   // A preview counts only while its field still holds the folder it was asked for: a late answer for a changed field is dropped.
-  const currentPreview = preview && preview.folder.trim() === path.trim() ? preview : null;
-  const currentImport = importPreview && importPath.trim() && importPreview.folder.trim() === importPath.trim() ? importPreview : null;
+  const currentPreview = preview && preview.folder === path ? preview : null;
+  const currentImport = importPreview && importPath.trim() && importPreview.folder === importPath ? importPreview : null;
   const doPreview = async () => {
     setErr(null);
     const folder = path;

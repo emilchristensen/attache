@@ -221,7 +221,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
           <div className="card grid-2">
             <label className="field">
               Refresh sources every (minutes)
-              <input type="number" min={5} max={1440} value={sched.refreshEveryMinutes} onChange={(e) => setSched({ ...sched, refreshEveryMinutes: Math.min(1440, Math.max(5, Number(e.target.value) || 30)) })} />
+              <input type="number" min={5} max={1440} value={sched.refreshEveryMinutes} onChange={(e) => setSched({ ...sched, refreshEveryMinutes: Math.min(1440, Math.max(5, Math.round(Number(e.target.value)) || 30)) })} />
             </label>
             <label className="field">
               Daily briefing at

@@ -21,7 +21,7 @@ export function pairingCodeProblem(code: string): string | null {
 /** Setup's first step: the data folder and its preview, then the optional import and identity. */
 export interface DataFolderForm {
   folder: string;
-  /** The last preview, with the folder as it was typed when previewed: the service answers with the path resolved. */
+  /** The last preview, with the folder exactly as typed when previewed: the service answers with the path resolved. */
   preview: { folder: string; writable: boolean } | null;
   importFolder: string;
   importPreview: { folder: string } | null;
@@ -35,10 +35,10 @@ export function dataFolderProblems(form: DataFolderForm): Array<FieldProblem<Dat
   const problems: Array<FieldProblem<DataFolderField>> = [];
   const folder = form.folder.trim();
   if (!folder) problems.push({ field: "folder", message: "Enter a folder for your Brain." });
-  else if (form.preview?.folder.trim() !== folder) problems.push({ field: "folder", message: "Preview this folder to see what Attache will create in it." });
+  else if (form.preview?.folder !== form.folder) problems.push({ field: "folder", message: "Preview this folder to see what Attache will create in it." });
   else if (!form.preview.writable) problems.push({ field: "folder", message: "Attache cannot write here. Choose another folder." });
   const importFolder = form.importFolder.trim();
-  if (importFolder && form.importPreview?.folder.trim() !== importFolder) problems.push({ field: "import", message: "Preview the import, or clear this field." });
+  if (importFolder && form.importPreview?.folder !== form.importFolder) problems.push({ field: "import", message: "Preview the import, or clear this field." });
   const name = form.name.trim();
   const email = form.email.trim();
   // The service keeps an identity only with a name, and any email beside it; an email alone would be lost.
@@ -63,6 +63,7 @@ const JOIN_ERROR_FIELDS: Record<string, "repository" | "folder"> = {
   remote_unreachable: "repository",
   remote_has_brain: "repository",
   invalid_path: "folder",
+  not_a_folder: "folder",
   not_writable: "folder",
   not_empty: "folder",
   needs_data_folder: "folder",
