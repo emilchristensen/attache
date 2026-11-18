@@ -376,6 +376,21 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
       await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
       expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring, reading at ${place}`).toBeLessThanOrEqual(1);
     }
+    // The first row in view is a meeting that comes due: it moves up into For you now, and the row after it stays put.
+    // Room below the Inbox, so the page can scroll that row to the top edge.
+    await page.addStyleTag({ content: "#inbox { padding-bottom: 1200px; }" });
+    await scrollTo(`#inbox [data-item-key="gcal:later-${safari}"]`, -2);
+    const after = page.locator(`#inbox [data-item-key="gcal:later-${safari}"] + [data-inbox-row]`);
+    const afterKey = await after.getAttribute("data-item-key");
+    const kept = page.locator(`#inbox [data-item-key="${afterKey}"]`);
+    const was = (await kept.boundingBox())!.y;
+    await setCalendar(page, [
+      { id: `later-${safari}`, summary: "Quarterly planning", start: 12, end: 40 },
+      ...[0, 1].map((n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
+    ]);
+    await expect(meetingHeadsUp(page, "Quarterly planning")).toHaveCount(1);
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    expect(Math.abs((await kept.boundingBox())!.y - was), `${safari ? "without" : "with"} scroll anchoring, the row after the promoted one`).toBeLessThanOrEqual(1);
     // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
     const prep = meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync 1`).getByRole("button", { name: "Open prep" });
     await prep.evaluate((el) => {
