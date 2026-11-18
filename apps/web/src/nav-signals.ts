@@ -65,16 +65,21 @@ function badge(t: Tally, words: (n: number) => string): Badge | undefined {
 
 const PROBLEM_WORDS: Partial<Record<ReplicationStatus, string>> = { blocked: "Replication blocked", unauthorized: "Replication unauthorized" };
 
+/**
+ * The events the Inbox and Drafts lists both refresh on. A Draft's status shows on its Inbox item, housekeeping
+ * announces an expired Draft on both events, and either list's read can expire a Draft, so neither is asked alone.
+ */
+const PAIR_EVENTS = ["attention.changed", "actions.changed", "briefing.created"];
+
 /** Asks the lists behind the count. Called once, by the shell; screens read the result with `useSignals()`. */
 export function useNavSignals(): NavSignals {
   const cfg = useResource<{ features: Record<string, boolean> }>("/config", ["config.changed"]);
   const feature = (id: string) => (cfg.data ? (cfg.data.features[id] ?? false) : null);
   const attentionOn = feature("attention");
   const draftsOn = feature("drafts");
-  // A Draft's status shows on its Inbox item, so the Inbox follows Draft changes too; housekeeping announces an
-  // expired Draft on both events.
-  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null, ["attention.changed", "actions.changed", "briefing.created"]);
-  const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null, ["actions.changed", "attention.changed"]);
+  // A Draft's status shows on its Inbox item, so the Inbox and Drafts lists are always asked together (`PAIR_EVENTS`).
+  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null, PAIR_EVENTS);
+  const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null, PAIR_EVENTS);
   const proposals = useResource<{ proposals: ProposalView[] }>(`/memory/proposals?status=proposed&limit=${COUNT_LIMITS.proposals}`, ["memory.changed"]);
   const connections = useResource<ConnectionStatus[]>("/connections", ["connections.changed"]);
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
@@ -111,7 +116,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: { ...inbox, data: heldInbox.data, error: heldInbox.error, reload: reloadPair },
+    openInbox: { ...inbox, data: heldInbox.data, error: heldInbox.error, loading: inbox.loading || drafts.loading, reload: reloadPair },
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
