@@ -104,7 +104,9 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
   // The count route counts every waiting decision, whatever these lists answer; only while the count is on the lists
   // (the route failed) does a failed group drop out of it, and then the Approvals part is a lower bound.
   const leftOut = !signals.count.approvals.exact;
-  const empty = nothingWaits(signals.drafts, signals.proposals) && visit.drafts.decisions.size === 0 && visit.proposals.decisions.size === 0;
+  // The lists and the count route answer apart: nothing waits only once the count agrees, so the empty state never
+  // shows beside a Waiting tab that still counts a decision.
+  const empty = nothingWaits(signals.drafts, signals.proposals) && signals.count.approvals.count === 0 && visit.drafts.decisions.size === 0 && visit.proposals.decisions.size === 0;
   const sendingRows = sending.data ?? [];
 
   const draftsGroup = draftsOff ? (

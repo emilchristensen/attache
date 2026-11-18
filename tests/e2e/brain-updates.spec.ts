@@ -205,6 +205,32 @@ test("approvals: each group answers for its own request, the Waiting tab and nav
   expect(proposal.id).toBeTruthy();
 });
 
+test("approvals: when the last Proposal is decided elsewhere, nothing-waits waits until the count agrees", async () => {
+  const page = await journeys.open("/approvals");
+  const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
+  const row = approvalRow(proposalsGroup(page), "proposal", "Lena Berg");
+  await expect(row).toBeVisible();
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
+
+  // The Proposals list answers while the count route is still held: the row goes, but the count still has it.
+  const route = "**/api/v1/decision-count";
+  let release!: () => void;
+  const holding = new Promise<void>((r) => (release = r));
+  try {
+    await page.route(route, (r) => holding.then(() => r.continue()).catch(() => undefined));
+    await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
+    await expect(row).toHaveCount(0);
+    await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
+    await expect(page.getByText("Nothing waits for your OK.")).toHaveCount(0);
+    release();
+    await expect(page.getByText("Nothing waits for your OK.")).toBeVisible();
+    await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
+});
+
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
   const page = await journeys.open("/connections");
   // On the full Connections page an unconfigured card opens straight into its setup form.

@@ -214,14 +214,13 @@ test("count: a count asked for another reason just before the Inbox changes wait
     // A new Proposal changes nothing on Home, but its event asks the count again.
     const counting = page.waitForRequest((r) => r.url().includes("/api/v1/decision-count"));
     proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: "Count-only change", facts: [{ subject: "Status", value: "Open" }] }, reason: "count journey" });
-    await counting;
+    const firstCount = await counting;
     // While that count is asked, the item is done elsewhere, and the count answers with it gone before the Inbox is
     // asked again: Home's number must not move ahead of its rows.
-    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
     const listAsked = page.waitForRequest((r) => r.url().includes("/api/v1/attention?state=open"));
-    const counted = page.waitForResponse((r) => r.url().includes("/api/v1/decision-count"));
+    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
     releaseCount();
-    await counted;
+    await firstCount.response();
     await listAsked;
     await expect(needYou).toHaveText(words(before));
     await expect(row).toBeVisible();
@@ -234,6 +233,38 @@ test("count: a count asked for another reason just before the Inbox changes wait
     releaseList();
     await page.unrouteAll({ behavior: "ignoreErrors" });
     if (proposal) await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
+  }
+  await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
+  await expect(row).toBeVisible();
+  await expect(needYou).toHaveText(words(before));
+});
+
+test("count: a stream of count-only events does not keep Home's rows from being asked again", async () => {
+  const page = await journeys.open("/");
+  const needYou = page.locator("[data-need-you]");
+  await expect(needYou).toHaveText(/^\d+ needs? you here$/, { timeout: 30_000 });
+  const before = await shownNumber(needYou);
+  const words = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you here`;
+  const item = (await api<{ items: Array<{ id: string; key: string; actionStatus: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.actionStatus === null)!;
+  const row = page.locator(`[data-item-key="${item.key}"]`);
+  await expect(row).toBeVisible();
+
+  // New Proposals arrive one after another, faster than a refresh waits, the whole time the item is done.
+  const made: string[] = [];
+  let streaming = true;
+  const propose = () => api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: `Streamed note ${made.length}`, facts: [{ subject: "Status", value: "Open" }] }, reason: "count journey" });
+  const stream = (async () => {
+    while (streaming) made.push((await propose()).id);
+  })();
+  try {
+    await expect.poll(() => made.length).toBeGreaterThan(2);
+    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
+    await expect(row).toHaveCount(0, { timeout: 2_000 });
+    await expect(needYou).toHaveText(words(before - 1));
+  } finally {
+    streaming = false;
+    await stream;
+    for (const id of made) await api(page, "POST", `/memory/proposals/${id}/reject`);
   }
   await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
   await expect(row).toBeVisible();

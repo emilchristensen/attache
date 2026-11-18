@@ -91,8 +91,8 @@ const COUNT_EVENTS = [...ROW_EVENTS, "memory.changed", "connections.changed", "c
  * Asks the Inbox, Drafts and the count route again after live events, on one timer instead of one each: an event that
  * changes the rows asks all three together, also when a count asked for another reason (a Proposal) was due a moment
  * earlier. Otherwise that count could start up to `REFRESH_DELAY_MS` before the rows and answer with a change they
- * do not show yet. Returns whether such an event waits for its requests to start, so a count answered meanwhile is
- * held with the rows. A reconnect still asks each resource again on its own (`useResource`).
+ * do not show yet. Row events put the refresh off as `useResource` does; count-only events join it as it stands.
+ * Returns whether a row event waits for its requests to start, so a count answered meanwhile is held with the rows. A reconnect still asks each resource again on its own (`useResource`).
  */
 function useRowsAndCountRefresh(reloadRows: () => void, reloadCount: () => void): { readonly current: boolean } {
   const reload = useRef({ rows: reloadRows, count: reloadCount });
@@ -101,7 +101,11 @@ function useRowsAndCountRefresh(reloadRows: () => void, reloadCount: () => void)
   const timer = useRef<number | null>(null);
   useLiveEvent((ev) => {
     if (!COUNT_EVENTS.includes(ev.type)) return;
-    if (ROW_EVENTS.includes(ev.type)) rowsDue.current = true;
+    const rowEvent = ROW_EVENTS.includes(ev.type);
+    // A count-only event joins a row refresh already due without putting it off: a stream of them (Proposals) would
+    // otherwise keep the rows from ever being asked again.
+    if (!rowEvent && rowsDue.current && timer.current !== null) return;
+    if (rowEvent) rowsDue.current = true;
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       timer.current = null;
