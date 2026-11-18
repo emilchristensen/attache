@@ -17,8 +17,8 @@ export type RowDecision = "done" | "dismiss" | "snooze" | "reopen";
 export interface RowActions {
   decide: (item: AttentionItemView, decision: RowDecision, until?: string) => void;
   prepareDraft: (item: AttentionItemView) => void;
-  /** The owner's explicit choice to replace a Draft whose send has an unknown outcome. */
-  prepareReplacement: (item: AttentionItemView) => void;
+  /** The owner's explicit choice to replace `draftId`, the item's Draft whose send has an unknown outcome. */
+  prepareReplacement: (item: AttentionItemView, draftId: string) => void;
   viewDraft: (draftId: string) => void;
   busy: boolean;
 }

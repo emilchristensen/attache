@@ -124,8 +124,8 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     if (!item) throw new HttpError(404, "not_found", "Attention item not found");
     if (!item.draftable) throw new HttpError(409, "not_draftable", "Attache cannot draft a response for this kind of item.");
     // The last send may have arrived: a replacement only on the owner's explicit choice, never as a routine new Draft.
-    if (item.actionStatus === "unknown" && !body.replaceUnconfirmed) throw new HttpError(409, "delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
-    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}), ...(body.replaceUnconfirmed ? { replaceUnconfirmed: true } : {}) }, capability: "drafts", connectionId: item.connectionId });
+    if (item.actionStatus === "unknown" && body.replaceUnconfirmed !== item.actionId) throw new HttpError(409, "delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
+    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}), ...(body.replaceUnconfirmed ? { replaceUnconfirmed: body.replaceUnconfirmed } : {}) }, capability: "drafts", connectionId: item.connectionId });
     return { __status: 201, body: { job } };
   });
   r.post("/briefings", async (c) => {

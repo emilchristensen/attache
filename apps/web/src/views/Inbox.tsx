@@ -277,7 +277,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above }: { attention
     decide,
     busy: busy !== null,
     prepareDraft: (item) => prepare(item, {}),
-    prepareReplacement: (item) => prepare(item, { replaceUnconfirmed: true }),
+    prepareReplacement: (item, draftId) => prepare(item, { replaceUnconfirmed: draftId }),
     viewDraft: (draftId) => {
       // Coming back from the Draft finds the open row where it stood.
       setPlace({ anchor: place.openId ? anchorOf(place.openId) : null });

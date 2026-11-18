@@ -6,7 +6,7 @@ import { DraftNoticeLine } from "./DraftParts.tsx";
 
 /** What the open row of an item with Delivery unconfirmed needs from the Inbox. */
 export interface DeliveryRowActions {
-  prepareReplacement: (item: AttentionItemView) => void;
+  prepareReplacement: (item: AttentionItemView, draftId: string) => void;
   viewDraft: (draftId: string) => void;
   busy: boolean;
 }
@@ -61,7 +61,7 @@ export function DeliveryUnconfirmed({ item, draftId, sourceName, canReplace, act
                 disabled={actions.busy}
                 onClick={() => {
                   close();
-                  actions.prepareReplacement(item);
+                  actions.prepareReplacement(item, draftId);
                 }}
               >
                 Prepare a replacement Draft
