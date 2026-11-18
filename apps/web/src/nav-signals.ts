@@ -36,7 +36,8 @@ export interface NavSignals {
   proposals: Answer<ProposalView>;
   /**
    * The rows behind `drafts` and `proposals`, as the count holds them: Approvals lists these, so its sections, its
-   * Waiting tab and the navigation agree. The Drafts' Retry asks the Inbox, the Drafts and the count again, like Home's.
+   * Waiting tab and the navigation agree. The Drafts' Retry asks the Inbox, the Drafts and the count again, like Home's;
+   * the Proposals' Retry asks the Proposals and the count again.
    */
   waitingDrafts: Resource<ActionView[]>;
   waitingProposals: Resource<{ proposals: ProposalView[] }>;
@@ -155,6 +156,11 @@ export function useNavSignals(): NavSignals {
     reloadTotals();
   }, [reloadRows, reloadTotals]);
   const rowsDue = useRowsAndCountRefresh(reloadRows, reloadTotals);
+  const { reload: reloadProposalsList } = proposals;
+  const reloadProposals = useCallback(() => {
+    reloadProposalsList();
+    reloadTotals();
+  }, [reloadProposalsList, reloadTotals]);
 
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
@@ -205,7 +211,7 @@ export function useNavSignals(): NavSignals {
     drafts: inputs.drafts,
     proposals: inputs.proposals,
     waitingDrafts,
-    waitingProposals: proposals,
+    waitingProposals: { ...proposals, reload: reloadProposals },
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
