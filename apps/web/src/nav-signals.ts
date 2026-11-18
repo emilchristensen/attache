@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
 import { countDecisions, dotAfter, shownCount, spokenCount, type Answer, type DecisionCount, type Tally } from "./count.ts";
 import { useResource, type Resource } from "./live.ts";
@@ -27,7 +27,7 @@ export interface NavSignals {
   dot: boolean;
   /** The open Inbox items as the count read them, for Home's line relating rows to decisions. */
   inbox: Answer<AttentionItemView>;
-  /** The request behind `inbox`: Home lists these rows and retries this request, so the rows and the count agree. */
+  /** The rows behind `inbox`, as the count holds them: Home lists these, and its Retry asks the Inbox and Drafts again. */
   openInbox: Resource<{ items: AttentionItemView[] }>;
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
@@ -50,7 +50,7 @@ export const spokenTotal = (total: Tally) => spokenCount(total, needYou);
  * A list as the count reads it. `on` is the feature switch from `/config`: null while that has not answered, false
  * when the feature is off (the list is not asked for). A `feature_disabled` refusal is off too, not a failure.
  */
-function answer<R, T>(r: Resource<R>, on: boolean | null, rows: (data: R) => readonly T[], limit: number | null): Answer<T> {
+function answer<R, T>(r: Pick<Resource<R>, "data" | "error">, on: boolean | null, rows: (data: R) => readonly T[], limit: number | null): Answer<T> {
   if (on === false || r.error?.code === "feature_disabled") return { kind: "off" };
   if (r.error) return { kind: "failed" };
   if (on === null || !r.data) return { kind: "waiting" };
@@ -80,13 +80,21 @@ export function useNavSignals(): NavSignals {
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
 
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
-  // lists refresh on the same events, so a new answer from one is held until the other has answered too; otherwise
-  // the count would show the decision twice, or not at all, for as long as the slower request takes.
-  const fresh = { inbox: answer(inbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox), drafts: answer(drafts, draftsOn, (d) => d, COUNT_LIMITS.drafts) };
-  const settledPair = useRef(fresh);
-  if (!inbox.loading && !drafts.loading) settledPair.current = fresh;
+  // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
+  // held until the other has answered too; otherwise the count would show the decision twice, or not at all, for as
+  // long as the slower request takes. Home's rows come from the same held answer, so they match the count.
+  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
+  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
+  const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
+  const { reload: reloadInbox } = inbox;
+  const { reload: reloadDrafts } = drafts;
+  const reloadPair = useCallback(() => {
+    reloadInbox();
+    reloadDrafts();
+  }, [reloadInbox, reloadDrafts]);
   const inputs = {
-    ...settledPair.current,
+    inbox: answer(heldInbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
+    drafts: answer(heldDrafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
@@ -103,7 +111,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: inbox,
+    openInbox: { ...inbox, data: heldInbox.data, error: heldInbox.error, reload: reloadPair },
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
