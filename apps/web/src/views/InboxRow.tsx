@@ -8,6 +8,8 @@ import { hueClass } from "../theme/hues.ts";
 import { inboxType } from "../inbox-types.ts";
 import { draftTag, rowText, rowTime, snoozeChoices, untilText } from "../inbox-rows.ts";
 import { openDraftId } from "../linked-draft.ts";
+import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
+import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
 
 /** What the owner decided in a row; Undo reopens the item. */
 export type RowDecision = "done" | "dismiss" | "snooze" | "reopen";
@@ -15,6 +17,8 @@ export type RowDecision = "done" | "dismiss" | "snooze" | "reopen";
 export interface RowActions {
   decide: (item: AttentionItemView, decision: RowDecision, until?: string) => void;
   prepareDraft: (item: AttentionItemView) => void;
+  /** The owner's explicit choice to replace a Draft whose send has an unknown outcome. */
+  prepareReplacement: (item: AttentionItemView) => void;
   viewDraft: (draftId: string) => void;
   busy: boolean;
 }
@@ -106,11 +110,13 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
   );
 }
 
-/** The open row: summary, why it is here, evidence, then the main action first and the decisions after it. */
+/**
+ * The open row: summary, why it is here, evidence, then the main action first and the decisions after it. An item
+ * whose last send has an unknown outcome leads with its warning and Check destination instead.
+ */
 function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: string; actions: RowActions; draftsOn: boolean }) {
-  const draftId = openDraftId(item);
+  const unconfirmed = unconfirmedDraftId(item);
   const canDraft = draftsOn && item.draftable !== null && item.state === "open";
-  const primary = draftId ? "view" : canDraft ? "prepare" : item.state === "open" ? "done" : null;
   return (
     <div className="inbox-detail" id={id}>
       {item.summary && <p className="inbox-summary">{item.summary}</p>}
@@ -121,39 +127,56 @@ function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: 
         </p>
       )}
       <Evidence item={item} />
-      <div className="inbox-actions">
-        {primary === "view" && (
-          <button className="primary" onClick={() => actions.viewDraft(draftId!)}>
-            View draft
-          </button>
-        )}
-        {primary === "prepare" && (
-          <button className="primary" disabled={actions.busy} onClick={() => actions.prepareDraft(item)}>
-            Prepare draft
-          </button>
-        )}
-        {primary === "done" && (
-          <button className="primary" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
-            Done
-          </button>
-        )}
-        {item.url && (
-          <a className="btn" href={item.url} target="_blank" rel="noopener noreferrer">
-            Open in {rowText(item).source.split(" · ")[0]}
-          </a>
-        )}
-        <Decisions item={item} actions={actions} primaryDone={primary === "done"} />
-      </div>
+      {unconfirmed ? (
+        <DeliveryUnconfirmed item={item} draftId={unconfirmed} sourceName={sourceName(item)} canReplace={canDraft} actions={actions} decisions={<Decisions item={item} actions={actions} primaryDone={false} />} />
+      ) : (
+        <MainActions item={item} canDraft={canDraft} actions={actions} />
+      )}
     </div>
   );
 }
 
-/** Plain exception labels on the source line: a Draft that stands for the item, a change since a decision, a hidden state. */
+/** The service an item comes from, as its source line names it ("GitHub"). */
+const sourceName = (item: AttentionItemView) => rowText(item).source.split(" · ")[0]!;
+
+/** The main action first (View draft, Prepare draft or Done), the item's own link, then the decisions. */
+function MainActions({ item, canDraft, actions }: { item: AttentionItemView; canDraft: boolean; actions: RowActions }) {
+  const draftId = openDraftId(item);
+  const primary = draftId ? "view" : canDraft ? "prepare" : item.state === "open" ? "done" : null;
+  return (
+    <div className="inbox-actions">
+      {primary === "view" && (
+        <button className="primary" onClick={() => actions.viewDraft(draftId!)}>
+          View draft
+        </button>
+      )}
+      {primary === "prepare" && (
+        <button className="primary" disabled={actions.busy} onClick={() => actions.prepareDraft(item)}>
+          Prepare draft
+        </button>
+      )}
+      {primary === "done" && (
+        <button className="primary" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+          Done
+        </button>
+      )}
+      {item.url && (
+        <a className="btn" href={item.url} target="_blank" rel="noopener noreferrer">
+          Open in {sourceName(item)}
+        </a>
+      )}
+      <Decisions item={item} actions={actions} primaryDone={primary === "done"} />
+    </div>
+  );
+}
+
+/** Plain exception labels on the source line: a Draft that stands for the item, a send of unknown outcome, a change since a decision, a hidden state. */
 function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
   const draft = draftTag(item.actionStatus);
   return (
     <>
       {draft && <Tag hue="blue">{draft}</Tag>}
+      {unconfirmedDraftId(item) && <Tag tone="attention">{DELIVERY_UNCONFIRMED}</Tag>}
       {item.changedSinceDecision && item.state === "open" && <Tag tone="attention">Changed since your decision</Tag>}
       {item.state === "snoozed" && item.snoozeUntil && <Tag tone="outline">Snoozed until {untilText(item.snoozeUntil, clock.now, clock.timeZone)}</Tag>}
       {item.state === "dismissed" && <Tag tone="outline">Dismissed</Tag>}

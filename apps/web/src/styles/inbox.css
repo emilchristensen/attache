@@ -189,6 +189,26 @@ a.source-chip {
   gap: var(--s-2);
 }
 
+/* Delivery unconfirmed: the warning above the actions, and the separate choice to prepare a replacement. */
+.inbox-detail .draft-notice {
+  max-width: 68ch;
+  margin-top: var(--s-3);
+}
+.inbox-replace {
+  flex-basis: 100%;
+  max-width: 68ch;
+}
+.inbox-replace-warning {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-control);
+  color: var(--ink);
+}
+.inbox-replace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
 /* ---- a decided row: one line with Undo, in the row's place ---------------------------------------- */
 
 .inbox-decided {

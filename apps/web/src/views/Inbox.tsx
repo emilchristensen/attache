@@ -1,6 +1,6 @@
 import { draftHref } from "../routes.ts";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { plural, type AttentionItemView, type JobView } from "@attache/contracts";
+import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, useAction } from "../components/ui.tsx";
@@ -215,18 +215,20 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
       focusAfter(e.item.id, "row");
       reload();
     });
+  const prepare = (item: AttentionItemView, body: AttentionDraftBody) =>
+    void run(
+      "draft",
+      async () => {
+        await post<{ job: JobView }>(`/attention/${item.id}/draft`, body);
+        reload();
+      },
+      body.replaceUnconfirmed ? "Preparing a replacement Draft in the background" : "Preparing a draft in the background",
+    );
   const actions: RowActions = {
     decide,
     busy: busy !== null,
-    prepareDraft: (item) =>
-      void run(
-        "draft",
-        async () => {
-          await post<{ job: JobView }>(`/attention/${item.id}/draft`, {});
-          reload();
-        },
-        "Preparing a draft in the background",
-      ),
+    prepareDraft: (item) => prepare(item, {}),
+    prepareReplacement: (item) => prepare(item, { replaceUnconfirmed: true }),
     viewDraft: (draftId) => navigate(draftHref(draftId)),
   };
   useInboxKeys(live, decide, busy !== null);

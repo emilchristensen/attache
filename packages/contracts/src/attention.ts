@@ -63,3 +63,14 @@ export const AttentionDecision = z.object({
   decision: z.enum(["dismiss", "snooze", "reopen", "done"]),
   until: z.string().datetime().optional(),
 });
+
+/**
+ * `POST /attention/:id/draft`. While the item's last Draft has a send of unknown outcome (`actionStatus` "unknown"),
+ * the service refuses a new Draft (`delivery_unconfirmed`) unless `replaceUnconfirmed` says the owner chose to replace it.
+ */
+export const AttentionDraftInput = z.object({
+  instructions: z.string().max(2000).optional(),
+  replaceUnconfirmed: z.boolean().optional(),
+});
+
+export type AttentionDraftBody = z.infer<typeof AttentionDraftInput>;

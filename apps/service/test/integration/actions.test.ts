@@ -282,6 +282,34 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect((await svc.get(`/actions/${d.id}`)).status).toBe("rejected");
   });
 
+  it("after a send of unknown outcome the item is not drafted again unless the owner explicitly asks for a replacement", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const d = await prepareDraft();
+    const ap = await svc.post(`/actions/${d.id}/approve`, { version: d.version, payloadHash: d.payloadHash });
+    // The comment is posted, but reading it back fails: nobody knows whether it arrived.
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const exec = await svc.post(`/actions/${d.id}/execute`, { nonce: ap.approval.nonce, version: d.version, payloadHash: d.payloadHash });
+    await svc.waitJob(exec.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
+    const item = await reviewItem();
+    expect(item).toMatchObject({ state: "open", actionId: d.id, actionStatus: "unknown" });
+    // Asking for a Draft as usual is refused, and nothing is queued.
+    const jobsBefore = (await svc.get("/jobs?limit=200")).length;
+    const plain = await svc.call("POST", `/attention/${item.id}/draft`, {});
+    expect(plain.status).toBe(409);
+    expect(plain.body.error.code).toBe("delivery_unconfirmed");
+    expect(plain.body.error.message).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect((await svc.get("/jobs?limit=200")).length).toBe(jobsBefore);
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // The explicit choice prepares a new Draft; the uncertain one keeps its outcome.
+    const { job } = await svc.post(`/attention/${item.id}/draft`, { replaceUnconfirmed: true });
+    const done = await svc.waitJob(job.id);
+    expect(done.job.status).toBe("succeeded");
+    expect(done.job.result.actionId).not.toBe(d.id);
+    expect(await reviewItem()).toMatchObject({ actionId: done.job.result.actionId, actionStatus: "draft" });
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("unknown");
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");
