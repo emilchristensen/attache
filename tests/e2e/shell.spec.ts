@@ -121,7 +121,7 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));
     await page.route(drafts, (route) => held.then(() => route.continue()).catch(() => undefined));
-    const answered = Promise.all([page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open")), page.waitForResponse((r) => r.url().endsWith("/api/v1/connections"))]);
+    const answered = Promise.all([page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open")), page.waitForResponse((r) => r.url().endsWith("/api/v1/decision-count"))]);
     await page.goto(`${stack.url}/`);
     await answered;
     await expect(page.getByRole("status", { name: "Loading the Inbox" })).toBeVisible();
@@ -148,6 +148,130 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await page.close();
   }
+});
+
+test("count: when the Inbox is asked again, Home's rows and its number change together, whichever answers first", async () => {
+  const page = await journeys.open("/");
+  const needYou = page.locator("[data-need-you]");
+  await expect(needYou).toHaveText(/^\d+ needs? you here$/, { timeout: 30_000 });
+  const before = await shownNumber(needYou);
+  const words = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you here`;
+  const item = (await api<{ items: Array<{ id: string; key: string; actionStatus: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.actionStatus === null)!;
+  const row = page.locator(`[data-item-key="${item.key}"]`);
+  await expect(row).toBeVisible();
+
+  // The item is done elsewhere while one of the two answers is held; the other has arrived.
+  for (const [held, answered] of [
+    ["**/api/v1/attention?state=open*", "/api/v1/decision-count"],
+    ["**/api/v1/decision-count", "/api/v1/attention?state=open"],
+  ] as const) {
+    let release!: () => void;
+    const holding = new Promise<void>((r) => (release = r));
+    try {
+      await page.route(held, (route) => holding.then(() => route.continue()).catch(() => undefined));
+      const arrived = page.waitForResponse((r) => r.url().includes(answered));
+      await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
+      await arrived;
+      await expect(needYou, `with ${held} held`).toHaveText(words(before));
+      await expect(row, `with ${held} held`).toBeVisible();
+      // The held answer arrives: the row goes and the number follows with it.
+      release();
+      await expect(row).toHaveCount(0);
+      await expect(needYou).toHaveText(words(before - 1));
+    } finally {
+      release();
+      await page.unroute(held);
+    }
+    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
+    await expect(row).toBeVisible();
+    await expect(needYou).toHaveText(words(before));
+  }
+});
+
+test("count: a count asked for another reason just before the Inbox changes waits for Home's rows", async () => {
+  const page = await journeys.open("/");
+  const needYou = page.locator("[data-need-you]");
+  await expect(needYou).toHaveText(/^\d+ needs? you here$/, { timeout: 30_000 });
+  const before = await shownNumber(needYou);
+  const words = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you here`;
+  const item = (await api<{ items: Array<{ id: string; key: string; actionStatus: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.actionStatus === null)!;
+  const row = page.locator(`[data-item-key="${item.key}"]`);
+  await expect(row).toBeVisible();
+
+  const count = "**/api/v1/decision-count";
+  const list = "**/api/v1/attention?state=open*";
+  let releaseCount!: () => void;
+  let releaseList!: () => void;
+  const countHeld = new Promise<void>((r) => (releaseCount = r));
+  const listHeld = new Promise<void>((r) => (releaseList = r));
+  let proposal: { id: string } | null = null;
+  try {
+    // Only the count asked after the Proposal waits for the test; the Inbox list waits once it is asked again.
+    let first = true;
+    await page.route(count, (route) => {
+      if (!first) return route.continue();
+      first = false;
+      return countHeld.then(() => route.continue()).catch(() => undefined);
+    });
+    await page.route(list, (route) => listHeld.then(() => route.continue()).catch(() => undefined));
+    // A new Proposal changes nothing on Home, but its event asks the count again.
+    const counting = page.waitForRequest((r) => r.url().includes("/api/v1/decision-count"));
+    proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: "Count-only change", facts: [{ subject: "Status", value: "Open" }] }, reason: "count journey" });
+    const firstCount = await counting;
+    // While that count is asked, the item is done elsewhere, and the count answers with it gone before the Inbox is
+    // asked again: Home's number must not move ahead of its rows.
+    const listAsked = page.waitForRequest((r) => r.url().includes("/api/v1/attention?state=open"));
+    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
+    releaseCount();
+    await firstCount.response();
+    await listAsked;
+    await expect(needYou).toHaveText(words(before));
+    await expect(row).toBeVisible();
+    // The Inbox answers: the row goes and the number follows with it.
+    releaseList();
+    await expect(row).toHaveCount(0);
+    await expect(needYou).toHaveText(words(before - 1));
+  } finally {
+    releaseCount();
+    releaseList();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    if (proposal) await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
+  }
+  await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
+  await expect(row).toBeVisible();
+  await expect(needYou).toHaveText(words(before));
+});
+
+test("count: a stream of count-only events does not keep Home's rows from being asked again", async () => {
+  const page = await journeys.open("/");
+  const needYou = page.locator("[data-need-you]");
+  await expect(needYou).toHaveText(/^\d+ needs? you here$/, { timeout: 30_000 });
+  const before = await shownNumber(needYou);
+  const words = (n: number) => `${n} ${n === 1 ? "needs" : "need"} you here`;
+  const item = (await api<{ items: Array<{ id: string; key: string; actionStatus: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.actionStatus === null)!;
+  const row = page.locator(`[data-item-key="${item.key}"]`);
+  await expect(row).toBeVisible();
+
+  // New Proposals arrive one after another, faster than a refresh waits, the whole time the item is done.
+  const made: string[] = [];
+  let streaming = true;
+  const propose = () => api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: `Streamed note ${made.length}`, facts: [{ subject: "Status", value: "Open" }] }, reason: "count journey" });
+  const stream = (async () => {
+    while (streaming) made.push((await propose()).id);
+  })();
+  try {
+    await expect.poll(() => made.length).toBeGreaterThan(2);
+    await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
+    await expect(row).toHaveCount(0, { timeout: 2_000 });
+    await expect(needYou).toHaveText(words(before - 1));
+  } finally {
+    streaming = false;
+    await stream;
+    for (const id of made) await api(page, "POST", `/memory/proposals/${id}/reject`);
+  }
+  await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
+  await expect(row).toBeVisible();
+  await expect(needYou).toHaveText(words(before));
 });
 
 test("skip link: the first Tab offers Skip to content, which moves focus to the page", async () => {

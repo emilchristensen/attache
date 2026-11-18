@@ -108,17 +108,48 @@ test("the dot: a request that fails leaves the dot as it was and shows no number
   const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
   await expectTab(page, { dot: true, title: "(1) Attache" });
 
-  // The Proposals list stops answering, and the Proposal is decided elsewhere: the count cannot tell, so the dot
-  // keeps its last state and no number is claimed.
+  // The count route and the Proposals list it falls back to stop answering, and the Proposal is decided elsewhere:
+  // the count cannot tell, so the dot keeps its last state and no number is claimed.
+  await page.route("**/api/v1/decision-count", (route) => route.abort());
   await page.route("**/api/v1/memory/proposals?*", (route) => route.abort());
   await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
   await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
   await expectTab(page, { dot: true, title: "Attache" });
 
   // Read again, the exact zero puts it out.
+  await page.unroute("**/api/v1/decision-count");
   await page.unroute("**/api/v1/memory/proposals?*");
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expectTab(page, { dot: false, title: "Attache" });
+});
+
+test("count: above the lists' limits the count route keeps every number exact, and when it fails the full list shows a lower bound", async () => {
+  const page = await journeys.open("/");
+  const approvals = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Approvals/ });
+  // One more Proposal than the Proposals list returns (its limit is 100).
+  const made: string[] = [];
+  try {
+    for (let i = 0; i < 101; i++) made.push((await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: `Counted note ${i}`, facts: [{ subject: "Status", value: `Draft ${i}` }] }, reason: "count journey" })).id);
+    await expectTab(page, { dot: true, title: "(101) Attache" });
+    await expect(approvals).toHaveAccessibleName("Approvals, 101 waiting");
+    await expect(approvals.locator(".count")).toHaveText("101");
+
+    // The count route fails: the count falls back to the lists, and a full list is a lower bound.
+    await page.route("**/api/v1/decision-count", (route) => route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }));
+    await page.reload();
+    await expectTab(page, { dot: true, title: "(100+) Attache" });
+    await expect(approvals).toHaveAccessibleName("Approvals, at least 100 waiting");
+    await expect(approvals.locator(".count")).toHaveText("100+");
+
+    // It answers again: exact once more.
+    await page.unroute("**/api/v1/decision-count");
+    await page.reload();
+    await expectTab(page, { dot: true, title: "(101) Attache" });
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    for (const id of made) await api(page, "POST", `/memory/proposals/${id}/reject`);
+  }
   await expectTab(page, { dot: false, title: "Attache" });
 });
 
@@ -129,10 +160,12 @@ test("approvals: each group answers for its own request, the Waiting tab and nav
   await expect(page.getByText("Nothing waits for your OK.")).toBeVisible();
   await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
 
-  // The waiting Drafts stop answering while a Proposal waits: the Drafts group says it does not know, the Proposal
-  // still shows, and the tab and navigation give the known part as a lower bound.
+  // The waiting Drafts and the count route stop answering while a Proposal waits: the Drafts group says it does not
+  // know, the Proposal still shows, and the tab and navigation give the known part as a lower bound.
   const drafts = "**/api/v1/actions?status=draft,approved,revoked*";
-  await page.route(drafts, (route) => route.abort());
+  const route = "**/api/v1/decision-count";
+  await page.route(drafts, (r) => r.abort());
+  await page.route(route, (r) => r.abort());
   const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
   await page.reload();
   await expect(draftsGroup(page).getByRole("alert")).toContainText("Drafts could not be loaded. This is not an empty list");
@@ -144,24 +177,61 @@ test("approvals: each group answers for its own request, the Waiting tab and nav
 
   // Retry reads them again: nothing waits there, and the count is exact.
   await page.unroute(drafts);
+  await page.unroute(route);
   await draftsGroup(page).getByRole("button", { name: "Retry" }).click();
   await expect(draftsGroup(page)).toContainText("No Drafts wait.");
   await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
 
-  // After a good load the Proposals stop answering: the row stays, with when it was loaded, beside the failure.
+  // After a good load the Proposals stop answering: the row stays, with when it was loaded, beside the failure. The
+  // count route still counts the new one, so the count stays exact and the failure does not say it leaves them out.
   const proposals = "**/api/v1/memory/proposals?*";
-  await page.route(proposals, (route) => route.abort());
+  await page.route(proposals, (r) => r.abort());
   await api(page, "POST", "/memory/proposals", { ...lenaBerg, item: { ...lenaBerg.item, title: "Ola Berg" } });
-  await expect(proposalsGroup(page).getByRole("alert")).toContainText(/^Proposals could not be refreshed\. These are the rows from \d\d:\d\d\. They may have changed, and the count leaves them out\./);
+  await expect(proposalsGroup(page).getByRole("alert")).toContainText(/^Proposals could not be refreshed\. These are the rows from \d\d:\d\d\. They may have changed\. /);
   await expect(approvalRow(proposalsGroup(page), "proposal", "Lena Berg")).toBeVisible();
-  await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
-  await page.unroute(proposals);
-  await proposalsGroup(page).getByRole("button", { name: "Retry" }).click();
   await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 2 waiting");
+  // While the count is on the lists as well, the failed group drops out of it, and the failure says so.
+  await page.route(route, (r) => r.abort());
+  await api(page, "POST", "/memory/proposals", { ...lenaBerg, item: { ...lenaBerg.item, title: "Mia Berg" } });
+  await expect(proposalsGroup(page).getByRole("alert")).toContainText(/^Proposals could not be refreshed\. These are the rows from \d\d:\d\d\. They may have changed, and the count leaves them out\./);
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
+  await page.unroute(route);
+  await page.unroute(proposals);
+  // Retry asks the count again too, so the count is the route's once more, not the lists'.
+  const recount = page.waitForResponse((r) => r.url().includes("/api/v1/decision-count") && r.ok(), { timeout: 5_000 });
+  await proposalsGroup(page).getByRole("button", { name: "Retry" }).click();
+  await recount;
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 3 waiting");
 
   // Clear them for the journeys after this one.
   for (const p of (await api<{ proposals: Array<{ id: string }> }>(page, "GET", "/memory/proposals")).proposals) await api(page, "POST", `/memory/proposals/${p.id}/reject`);
   expect(proposal.id).toBeTruthy();
+});
+
+test("approvals: when the last Proposal is decided elsewhere, nothing-waits waits until the count agrees", async () => {
+  const page = await journeys.open("/approvals");
+  const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
+  const row = approvalRow(proposalsGroup(page), "proposal", "Lena Berg");
+  await expect(row).toBeVisible();
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
+
+  // The Proposals list answers while the count route is still held: the row goes, but the count still has it.
+  const route = "**/api/v1/decision-count";
+  let release!: () => void;
+  const holding = new Promise<void>((r) => (release = r));
+  try {
+    await page.route(route, (r) => holding.then(() => r.continue()).catch(() => undefined));
+    await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
+    await expect(row).toHaveCount(0);
+    await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
+    await expect(page.getByText("Nothing waits for your OK.")).toHaveCount(0);
+    release();
+    await expect(page.getByText("Nothing waits for your OK.")).toBeVisible();
+    await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
+  } finally {
+    release();
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  }
 });
 
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
