@@ -198,6 +198,50 @@
   margin-top: var(--s-1);
 }
 
+/* Meeting prep: the calendar-and-notes glyph in the meeting hue; Open prep opens below the line or the card. */
+.heads-up-lead.meeting .heads-up-eyebrow svg,
+.heads-up-line.meeting .heads-up-line-icon {
+  color: var(--c);
+}
+/* A follower meeting's subject and interval wrap rather than lose words on a narrow screen. */
+.heads-up-eyebrow-parts > span {
+  white-space: nowrap;
+}
+.heads-up-line.meeting .heads-up-line-head {
+  white-space: normal;
+}
+.meeting-prep-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+.heads-up-line .meeting-prep-detail {
+  grid-column: 2 / -1;
+}
+.meeting-prep-who,
+.meeting-prep-notes-none {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.meeting-prep-label {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink);
+}
+.meeting-prep-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
 /* The briefing actions: one button and the three things it opens. */
 .briefing-actions {
   position: relative;

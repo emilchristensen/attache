@@ -8,7 +8,9 @@
  * Pure: the clock, the time zone and what the owner settled in this browser come in as input, so every rule is a
  * table test against a fixed clock.
  */
+import type { AttentionItemView, MeetingTimes } from "@attache/contracts";
 import { briefingLines } from "./briefing-text.ts";
+import { rowText } from "./inbox-rows.ts";
 import { atTimeOfDay, clockTime, sameDay, spokenTime, startOfDay } from "./zoned-time.ts";
 
 // ---- the rules, as named constants -------------------------------------------------------------------------------
@@ -23,6 +25,8 @@ export const REQUESTED_BRIEFING_STAYS_MS = 4 * HOUR_MS;
 export const HEADS_UP_TICK_MS = MINUTE_MS;
 /** Followers shown under the lead; any further ones open from a disclosure, in order. */
 export const VISIBLE_FOLLOWERS = 2;
+/** Meeting prep shows from this long before the meeting starts until its scheduled end. */
+export const MEETING_LEAD_MS = 15 * MINUTE_MS;
 
 /**
  * Urgency, most urgent first: a kind's place in the order. Within one rank, Heads-ups go by their time, then key.
@@ -85,14 +89,41 @@ export interface HeadsUpInput {
    * it runs next. `null` when not known.
    */
   schedule: { enabled: boolean; nextRunAt: string | null } | null;
+  /**
+   * The open Inbox items (only meeting prep with a meeting counts here), `"unknown"` while the Inbox has not answered.
+   * Meeting prep is a view of its Inbox item: Done is the item's decision, and the item is not listed below while shown.
+   */
+  meetings: readonly AttentionItemView[] | "unknown";
 }
 
 // ---- outputs ---------------------------------------------------------------------------------------------------------
 
-export type HeadsUpKindId = "daily-briefing" | "away-summary" | "requested-briefing" | "earlier-today" | "briefing-progress";
+export type HeadsUpKindId = "daily-briefing" | "away-summary" | "requested-briefing" | "earlier-today" | "briefing-progress" | "meeting-prep";
 
-/** What the owner can do with a Heads-up; the view draws each one. */
-export type HeadsUpAction = "read-briefing" | "got-it";
+/**
+ * What the owner can do with a Heads-up, in the order offered; the view draws each one. Meeting prep: `open-prep`
+ * opens the attendees and related notes in place, `calendar` opens the event in Google Calendar, `join` the call,
+ * `done` is the Inbox item's Done decision and `not-now` hides the Heads-up while the item stays open.
+ */
+export type HeadsUpAction = "read-briefing" | "got-it" | "open-prep" | "calendar" | "join" | "done" | "not-now";
+
+/** What a meeting prep Heads-up knows of its meeting. */
+export interface MeetingPrep {
+  /** The Inbox item's id: Done decides it, and the Inbox leaves it out while it is shown here. */
+  itemId: string;
+  phase: "upcoming" | "in-progress";
+  /** "14:30 to 15:00", in the current zone. */
+  interval: string;
+  /** The event in Google Calendar, or null when the item has no link. */
+  calendarUrl: string | null;
+  meetLink: string | null;
+  attendees: readonly string[];
+  /**
+   * The related notes the latest briefing found for this item (matched by its id), and when that briefing was
+   * written; null when the latest briefing did not look at this meeting.
+   */
+  notes: { related: readonly BriefingRelatedNote[]; foundAt: number } | null;
+}
 
 export interface HeadsUp {
   /** One occurrence: what Got it remembers and what the view keys by, so a re-render keeps focus in place. */
@@ -118,6 +149,7 @@ export interface HeadsUp {
   job?: BriefingJob;
   /** While held: the key of the progress line whose place this briefing took (`heldSlot`). */
   inPlaceOf?: string;
+  meeting?: MeetingPrep;
 }
 
 export interface HeadsUpKind {
@@ -291,9 +323,84 @@ const briefingProgress: HeadsUpKind = {
   },
 };
 
+/** The open meeting prep items that carry their meeting, as the kind reads them. */
+function meetingItems(input: HeadsUpInput): Array<AttentionItemView & { meeting: MeetingTimes }> {
+  if (input.meetings === "unknown") return [];
+  return input.meetings.filter((i): i is AttentionItemView & { meeting: MeetingTimes } => i.kind === "meeting_prep" && !!i.meeting);
+}
+
+const meetingKey = (itemId: string) => `meeting:${itemId}`;
+
+/** What the latest briefing found for this item, by its id; null when it did not look at it. */
+function briefingNotes(input: HeadsUpInput, itemId: string): MeetingPrep["notes"] {
+  const b = knownBriefing(input);
+  const found = b?.sections.filter((s) => s.id === "meetings").flatMap((s) => s.items).find((i) => i.id === itemId);
+  return b && found ? { related: found.related ?? [], foundAt: Date.parse(b.createdAt) } : null;
+}
+
+const UPCOMING_ACTIONS: readonly HeadsUpAction[] = ["open-prep", "calendar", "join", "done", "not-now"];
+const IN_PROGRESS_ACTIONS: readonly HeadsUpAction[] = ["join", "calendar", "done", "not-now", "open-prep"];
+
+/**
+ * Meeting prep: one card per open meeting prep item, from `MEETING_LEAD_MS` before the start until the scheduled end,
+ * unless Not now settled it. "Starts 14:00" before, "In progress, ends 15:00" with Join first during. Ranked before
+ * briefings and ordered by start, so the meeting in progress comes first, then the next one.
+ */
+const meetingPrep: HeadsUpKind = {
+  id: "meeting-prep",
+  applies: (input) =>
+    meetingItems(input).flatMap((item): HeadsUp[] => {
+      const start = Date.parse(item.meeting.start);
+      const end = Date.parse(item.meeting.end);
+      const key = meetingKey(item.id);
+      if (input.now < start - MEETING_LEAD_MS || input.now >= end || input.settled.has(key)) return [];
+      const phase = input.now < start ? "upcoming" : "in-progress";
+      const [from, to] = [clockTime(start, input.timeZone), clockTime(end, input.timeZone)];
+      const call = (a: HeadsUpAction) => a !== "join" || item.meeting.meetLink !== null;
+      const leaves = `until it ends at ${to}, or until Done or Not now.`;
+      return [
+        {
+          key,
+          kind: "meeting-prep",
+          form: "card",
+          rank: RANK.meeting,
+          at: start,
+          label: "Meeting prep",
+          timing: phase === "upcoming" ? `Starts ${from}` : `In progress, ends ${to}`,
+          title: rowText(item).subject,
+          explanation: "On your calendar",
+          why:
+            phase === "upcoming"
+              ? `A meeting with other people starts at ${from}. It is here from ${clockTime(start - MEETING_LEAD_MS, input.timeZone)} ${leaves}`
+              : `A meeting with other people, in progress. It is here ${leaves}`,
+          actions: (phase === "upcoming" ? UPCOMING_ACTIONS : IN_PROGRESS_ACTIONS).filter(call),
+          meeting: {
+            itemId: item.id,
+            phase,
+            interval: `${from} to ${to}`,
+            calendarUrl: item.url,
+            meetLink: item.meeting.meetLink,
+            attendees: item.meeting.attendees,
+            notes: briefingNotes(input, item.id),
+          },
+        },
+      ];
+    }),
+  next: (input) => {
+    const soonest = meetingItems(input)
+      .filter((i) => !input.settled.has(meetingKey(i.id)))
+      .map((i) => ({ item: i, at: Date.parse(i.meeting.start) - MEETING_LEAD_MS }))
+      .filter((n) => n.at > input.now)
+      .sort((a, b) => a.at - b.at)[0];
+    if (!soonest) return null;
+    const when = sameDay(soonest.at, input.now, input.timeZone) ? `at ${clockTime(soonest.at, input.timeZone)}` : `tomorrow at ${clockTime(soonest.at, input.timeZone)}`;
+    return { at: soonest.at, text: `Prep for ${rowText(soonest.item).subject} shows here ${when}.` };
+  },
+};
+
 // ---- the slot --------------------------------------------------------------------------------------------------------
 
-export const HEADS_UP_KINDS: readonly HeadsUpKind[] = [dailyBriefing, requestedKind("away-summary", "away", "Away summary"), requestedKind("requested-briefing", "manual", "Briefing you asked for"), briefingProgress, earlierToday];
+export const HEADS_UP_KINDS: readonly HeadsUpKind[] = [meetingPrep, dailyBriefing, requestedKind("away-summary", "away", "Away summary"), requestedKind("requested-briefing", "manual", "Briefing you asked for"), briefingProgress, earlierToday];
 
 function byUrgency(a: HeadsUp, b: HeadsUp): number {
   return a.rank - b.rank || a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
@@ -307,9 +414,14 @@ export function forYouNow(input: HeadsUpInput, kinds: readonly HeadsUpKind[] = H
   return { lead, followers: rest.slice(0, VISIBLE_FOLLOWERS), more: rest.slice(VISIBLE_FOLLOWERS), quiet: all.length ? null : quietLine(input, kinds) };
 }
 
+/** The ids of the Inbox items the slot shows as meeting prep: the Inbox leaves them out while they are shown here. */
+export function promotedMeetings(slot: Slot): ReadonlySet<string> {
+  return new Set([slot.lead, ...slot.followers, ...slot.more].flatMap((h) => (h?.meeting ? [h.meeting.itemId] : [])));
+}
+
 /** Nothing is timely: say so, and what comes next soonest. Null while an input is not known, so it never claims too much. */
 function quietLine(input: HeadsUpInput, kinds: readonly HeadsUpKind[]): string | null {
-  if (input.briefing === "unknown") return null;
+  if (input.briefing === "unknown" || input.meetings === "unknown") return null;
   const next = kinds
     .map((k) => k.next?.(input) ?? null)
     .filter((n) => n !== null)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { forYouNow, heldSlot, HEADS_UP_KINDS, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
+import type { AttentionItemView } from "@attache/contracts";
+import { forYouNow, heldSlot, HEADS_UP_KINDS, MEETING_LEAD_MS, promotedMeetings, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
 
 const CPH = "Europe/Copenhagen";
 
@@ -19,7 +20,7 @@ function briefing(over: Partial<BriefingView> = {}): BriefingView {
 }
 
 function input(at: string, over: Partial<HeadsUpInput> = {}): HeadsUpInput {
-  return { now: Date.parse(at), timeZone: CPH, briefing: briefing(), briefingJob: null, settled: new Set(), schedule: { enabled: true, nextRunAt: "2026-11-19T07:00:00Z" }, ...over };
+  return { now: Date.parse(at), timeZone: CPH, briefing: briefing(), briefingJob: null, settled: new Set(), schedule: { enabled: true, nextRunAt: "2026-11-19T07:00:00Z" }, meetings: [], ...over };
 }
 
 describe("the daily briefing", () => {
@@ -276,5 +277,145 @@ describe("a held slot", () => {
     const slot = heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked }));
     expect(keys(slot)).toEqual([null]);
     expect(slot.quiet).toBe("Nothing timely right now. The next daily briefing is scheduled for 08:00 tomorrow.");
+  });
+});
+
+/** An open meeting prep item as `GET /attention` returns it. */
+function prep(id: string, start: string, end: string, over: Partial<AttentionItemView["meeting"] & object> = {}): AttentionItemView {
+  return {
+    id,
+    key: `gcal:${id}`,
+    kind: "meeting_prep",
+    title: `Prepare for ${id === "a" ? "Pilot handover" : id === "b" ? "Billing triage" : `Meeting ${id}`}`,
+    summary: "Starts soon with Nora Lind.",
+    why: "A meeting with other people starts within 24 hours.",
+    sourceKind: "gcal",
+    connectionId: "gcal",
+    url: `https://calendar.google.com/event?eid=${id}`,
+    dueAt: start,
+    priority: 70,
+    state: "open",
+    snoozeUntil: null,
+    evidence: [],
+    firstSeenAt: "2026-11-17T12:00:00Z",
+    updatedAt: "2026-11-17T12:00:00Z",
+    actionId: null,
+    actionStatus: null,
+    changedSinceDecision: false,
+    draftable: null,
+    meeting: { start, end, meetLink: `https://meet.google.com/${id}`, attendees: ["Nora Lind", "Sam Berg"], ...over },
+  };
+}
+
+// Copenhagen is UTC+1 in November: 09:00Z is 10:00 there.
+const handover = prep("a", "2026-11-18T09:00:00Z", "2026-11-18T09:30:00Z");
+const triage = prep("b", "2026-11-18T09:30:00Z", "2026-11-18T10:00:00Z");
+const all = (slot: ReturnType<typeof forYouNow>) => [slot.lead, ...slot.followers, ...slot.more].filter((h): h is HeadsUp => h !== null);
+const keysOf = (slot: ReturnType<typeof forYouNow>) => all(slot).map((h) => h.key);
+
+describe("meeting prep", () => {
+  it("is not here more than 15 minutes before the start", () => {
+    expect(MEETING_LEAD_MS).toBe(15 * 60_000);
+    const slot = forYouNow(input("2026-11-18T08:44:00Z", { briefing: null, meetings: [handover] }));
+    expect(all(slot)).toEqual([]);
+    // The quiet line says when it comes, as it does for the next daily briefing.
+    expect(slot.quiet).toBe("Nothing timely right now. Prep for Pilot handover shows here at 09:45.");
+  });
+
+  it("leads from 15 minutes before the start, saying when it starts, with Open prep first", () => {
+    const slot = forYouNow(input("2026-11-18T08:45:00Z", { briefing: null, meetings: [handover] }));
+    expect(slot.lead).toMatchObject({
+      key: "meeting:a",
+      kind: "meeting-prep",
+      form: "card",
+      rank: RANK.meeting,
+      label: "Meeting prep",
+      timing: "Starts 10:00",
+      title: "Pilot handover",
+      explanation: "On your calendar",
+      actions: ["open-prep", "calendar", "join", "done", "not-now"],
+      meeting: { itemId: "a", phase: "upcoming", interval: "10:00 to 10:30", calendarUrl: "https://calendar.google.com/event?eid=a", meetLink: "https://meet.google.com/a", attendees: ["Nora Lind", "Sam Berg"] },
+    });
+    expect(slot.lead!.why).toBe("A meeting with other people starts at 10:00. It is here from 09:45 until it ends at 10:30, or until Done or Not now.");
+  });
+
+  it("reads In progress with Join first from the start until the scheduled end", () => {
+    for (const at of ["2026-11-18T09:00:00Z", "2026-11-18T09:29:00Z"]) {
+      const lead = forYouNow(input(at, { briefing: null, meetings: [handover] })).lead!;
+      expect(lead).toMatchObject({ key: "meeting:a", timing: "In progress, ends 10:30", actions: ["join", "calendar", "done", "not-now", "open-prep"], meeting: { phase: "in-progress" } });
+      expect(lead.why).toBe("A meeting with other people, in progress. It is here until it ends at 10:30, or until Done or Not now.");
+    }
+  });
+
+  it("leaves at the scheduled end", () => {
+    expect(all(forYouNow(input("2026-11-18T09:30:00Z", { briefing: null, meetings: [handover] })))).toEqual([]);
+  });
+
+  it("leads with Open in Google Calendar when the meeting has no call to join", () => {
+    const noCall = prep("c", "2026-11-18T09:00:00Z", "2026-11-18T09:30:00Z", { meetLink: null });
+    expect(forYouNow(input("2026-11-18T09:10:00Z", { briefing: null, meetings: [noCall] })).lead!.actions).toEqual(["calendar", "done", "not-now", "open-prep"]);
+    expect(forYouNow(input("2026-11-18T08:50:00Z", { briefing: null, meetings: [noCall] })).lead!.actions).toEqual(["open-prep", "calendar", "done", "not-now"]);
+  });
+
+  it("back to back: the next meeting comes in 15 minutes before its start, below the one in progress, then the briefing", () => {
+    expect(keysOf(forYouNow(input("2026-11-18T09:14:00Z", { meetings: [triage, handover] })))).toEqual(["meeting:a", "briefing:b1"]);
+    const overlap = forYouNow(input("2026-11-18T09:20:00Z", { meetings: [triage, handover] }));
+    expect(overlap.lead).toMatchObject({ key: "meeting:a", timing: "In progress, ends 10:30" });
+    expect(overlap.followers).toMatchObject([
+      { key: "meeting:b", form: "card", timing: "Starts 10:30", title: "Billing triage", meeting: { interval: "10:30 to 11:00" } },
+      { key: "briefing:b1", kind: "daily-briefing" },
+    ]);
+    // At 10:30 the first one has ended and the next one is in progress, still above the briefing.
+    const next = forYouNow(input("2026-11-18T09:30:00Z", { meetings: [triage, handover] }));
+    expect(keysOf(next)).toEqual(["meeting:b", "briefing:b1"]);
+    expect(next.lead!.timing).toBe("In progress, ends 11:00");
+  });
+
+  it("two meetings at the same minute go by their stable key, the same on every tick", () => {
+    const same = [prep("z", "2026-11-18T09:00:00Z", "2026-11-18T09:30:00Z"), prep("x", "2026-11-18T09:00:00Z", "2026-11-18T10:00:00Z"), prep("y", "2026-11-18T09:00:00Z", "2026-11-18T10:00:00Z")];
+    for (const at of ["2026-11-18T08:50:00Z", "2026-11-18T09:10:00Z"]) expect(keysOf(forYouNow(input(at, { briefing: null, meetings: same })))).toEqual(["meeting:x", "meeting:y", "meeting:z"]);
+    // Both lead in turn only as the order allows: one lead, the others follow.
+    expect(forYouNow(input("2026-11-18T09:10:00Z", { briefing: null, meetings: same })).followers.map((h) => h.form)).toEqual(["card", "card"]);
+  });
+
+  it("Not now hides that meeting only", () => {
+    const slot = forYouNow(input("2026-11-18T09:20:00Z", { briefing: null, meetings: [triage, handover], settled: new Set(["meeting:a"]) }));
+    expect(keysOf(slot)).toEqual(["meeting:b"]);
+  });
+
+  it("shows its times in the zone the browser is in now", () => {
+    expect(forYouNow(input("2026-11-18T09:10:00Z", { briefing: null, meetings: [handover], timeZone: "America/New_York" })).lead!.timing).toBe("In progress, ends 04:30");
+  });
+
+  it("finds its related notes in the latest briefing by the item's id, never by title, labelled with that briefing's time", () => {
+    const related = [{ title: "Nora Lind", relPath: "memory/people/nora-lind.md", lines: [3, 9] as [number, number] }];
+    const found = briefing({ sections: [{ id: "meetings", title: "Meetings", items: [{ id: "a", title: "Somewhere else", summary: "", url: null, isNew: true, changed: false, related }, { id: "x", title: "Prepare for Billing triage", summary: "", url: null, isNew: true, changed: false, related }] }] });
+    const slot = forYouNow(input("2026-11-18T09:20:00Z", { briefing: found, meetings: [handover, triage] }));
+    expect(all(slot).find((h) => h.key === "meeting:a")!.meeting!.notes).toEqual({ related, foundAt: Date.parse("2026-11-18T07:02:00Z") });
+    // The same title under another id is not this meeting: no briefing looked at it.
+    expect(all(slot).find((h) => h.key === "meeting:b")!.meeting!.notes).toBeNull();
+    // A briefing that looked and found nothing says so with an empty list.
+    const none = briefing({ sections: [{ id: "meetings", title: "Meetings", items: [{ id: "a", title: "", summary: "", url: null, isNew: false, changed: false, related: [] }] }] });
+    expect(forYouNow(input("2026-11-18T09:20:00Z", { briefing: none, meetings: [handover] })).lead!.meeting!.notes).toEqual({ related: [], foundAt: Date.parse("2026-11-18T07:02:00Z") });
+  });
+
+  it("makes no claim that nothing is timely while the open items are not known", () => {
+    expect(forYouNow(input("2026-11-18T05:00:00Z", { briefing: null, meetings: "unknown" })).quiet).toBeNull();
+  });
+
+  it("ignores items that are not meeting prep or carry no meeting", () => {
+    const old = { ...handover, id: "old", meeting: null };
+    const review = { ...handover, id: "r", kind: "review_request" };
+    expect(all(forYouNow(input("2026-11-18T09:10:00Z", { briefing: null, meetings: [old, review] })))).toEqual([]);
+  });
+});
+
+describe("the meetings promoted above the Inbox", () => {
+  it("are the meeting prep items For you now shows, in the lead, the followers or the disclosure", () => {
+    const meetings = [handover, triage, prep("c", "2026-11-18T09:30:00Z", "2026-11-18T10:00:00Z"), prep("d", "2026-11-18T09:30:00Z", "2026-11-18T10:00:00Z")];
+    const slot = forYouNow(input("2026-11-18T09:20:00Z", { meetings }));
+    expect([...promotedMeetings(slot)]).toEqual(["a", "b", "c", "d"]);
+    expect(slot.more.map((h) => h.key)).toEqual(["meeting:d", "briefing:b1"]);
+    expect(promotedMeetings(forYouNow(input("2026-11-18T07:00:00Z", { meetings })))).toEqual(new Set());
   });
 });
