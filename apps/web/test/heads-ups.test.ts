@@ -462,6 +462,11 @@ describe("a meeting that comes due while the Heads-ups are held", () => {
     expect(keysOf(withArrivedMeetings(handedOver, live, [], first.placed).slot)).toEqual(["meeting:a", "briefing:b2", "meeting:b"]);
   });
 
+  it("lets Done or Not now pressed here take an arrived meeting out at once, still held", () => {
+    const first = withArrivedMeetings(held, live, ["meeting:a"]);
+    expect(keysOf(withArrivedMeetings(held, live, ["meeting:b"], first.placed, new Set(["meeting:b"])).slot)).toEqual(["meeting:a", "briefing:b1"]);
+  });
+
   it("brings nothing else in: a briefing or a clock change still waits", () => {
     const later = forYouNow(input("2026-11-18T11:30:00Z", { meetings: [] }));
     expect(withArrivedMeetings(held, later, ["meeting:a"]).slot).toEqual(held);

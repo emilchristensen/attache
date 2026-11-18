@@ -121,12 +121,15 @@ export type Placed = ReadonlyMap<string, { after: string | null; headsUp: HeadsU
  * order, but never above the entries the pointer or focus is on (`holding`, their keys; none known: last), so the
  * held lead and its Join keep their place and destination. Once in, it is held like the rest (`placed`, passed back
  * in for the rest of the hold): it stays after the entry it came in after (or after the briefing that took that
- * progress line's place) and shows as it came in, Join included. Nothing else comes in.
+ * progress line's place) and shows as it came in, Join included, until this tab settles it (`settled`: Done, Not now).
+ * Nothing else comes in.
  */
-export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[], placed: Placed = new Map()): { slot: Slot; placed: Placed } {
+export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[], kept: Placed = new Map(), settled: ReadonlySet<string> = new Set()): { slot: Slot; placed: Placed } {
+  // What this tab settled during the hold (Done, Not now) leaves at once, as it does for the held entries.
+  const placed: Placed = new Map([...kept].filter(([key]) => !settled.has(key)));
   const entries = [slot.lead, ...slot.followers, ...slot.more].filter((h): h is HeadsUp => h !== null);
   const shown = new Set(entries.map((h) => h.key));
-  const fresh = [live.lead, ...live.followers, ...live.more].filter((h): h is HeadsUp => !!h?.meeting && !shown.has(h.key) && !placed.has(h.key)).sort(byUrgency);
+  const fresh = [live.lead, ...live.followers, ...live.more].filter((h): h is HeadsUp => !!h?.meeting && !shown.has(h.key) && !placed.has(h.key) && !settled.has(h.key)).sort(byUrgency);
   if (!fresh.length && !placed.size) return { slot, placed };
   const top = slot.lead ? 1 : 0;
   const insert = (list: readonly HeadsUp[], h: HeadsUp, at: number) => [...list.slice(0, at), h, ...list.slice(at)];

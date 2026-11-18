@@ -237,7 +237,8 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
     placed.current = new Map();
   } else if (!handoff.current && briefingWritten(frozen.current, live)) handoff.current = live;
   // While held, a meeting that comes due still comes in on time, below what the owner is on (`withArrivedMeetings`).
-  const arrived = held ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine, ...doneKeys]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...mine]) }), holding, placed.current) : null;
+  const own = new Set([...mine, ...doneKeys]);
+  const arrived = held ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...own]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...own]) }), holding, placed.current, own) : null;
   if (arrived) placed.current = arrived.placed;
   const slot = arrived ? arrived.slot : forYouNow(live);
   // This tab's own Got it, Not now and Done only stand in for a hold's frozen input: the live input has them (stored, or decided).
@@ -315,7 +316,7 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
         Try again
       </button>
     </>
-  ) : openInbox.error && !items ? (
+  ) : openInbox.error ? (
     <>
       Could not check your meetings.{" "}
       <button className="small" onClick={openInbox.reload}>
