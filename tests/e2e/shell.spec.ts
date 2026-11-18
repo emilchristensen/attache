@@ -109,6 +109,44 @@ test("count: Home's number beside its Inbox heading, Approvals and Connections a
   await expect(nav.getByRole("link", { name: /^Home/ }).locator(".count")).toHaveText(String(home));
 });
 
+test("count: while Drafts is still asked, Home keeps loading after the Inbox answers, and shows an Inbox failure with Retry at once", async () => {
+  const page = await journeys.newPage();
+  const drafts = "**/api/v1/actions?*";
+  const inbox = "**/api/v1/attention?state=open*";
+  try {
+    // The Inbox answers first; Drafts is held. Home must not show an empty list.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    await page.route(drafts, (route) => held.then(() => route.continue()).catch(() => undefined));
+    const answered = Promise.all([page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open")), page.waitForResponse((r) => r.url().endsWith("/api/v1/connections"))]);
+    await page.goto(`${stack.url}/`);
+    await answered;
+    await expect(page.getByRole("status", { name: "Loading" })).toBeVisible();
+    await expect(page.locator(".attention-group")).toHaveCount(0);
+    release();
+    await expect(page.locator(".attention-group").first()).toBeVisible();
+    await page.unroute(drafts);
+
+    // The Inbox fails while Drafts is held: the failure and its Retry show without waiting for Drafts.
+    let releaseAgain!: () => void;
+    const heldAgain = new Promise<void>((r) => (releaseAgain = r));
+    await page.route(drafts, (route) => heldAgain.then(() => route.continue()).catch(() => undefined));
+    await page.route(inbox, (route) => route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }));
+    await page.reload();
+    const failure = page.getByRole("alert").filter({ hasText: "busy" });
+    await expect(failure).toBeVisible();
+    await expect(failure.getByRole("button", { name: "Try again" })).toBeVisible();
+    await page.unroute(inbox);
+    releaseAgain();
+    await page.unroute(drafts);
+    await failure.getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator(".attention-group").first()).toBeVisible();
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.close();
+  }
+});
+
 test("skip link: the first Tab offers Skip to content, which moves focus to the page", async () => {
   const page = await journeys.open("/jobs");
   await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();

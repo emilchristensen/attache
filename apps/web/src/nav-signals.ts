@@ -111,9 +111,19 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: { ...inbox, data: heldInbox.data, error: heldInbox.error, reload: reloadPair },
+    openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
+}
+
+/**
+ * Home's rows: the held Inbox answer, loading while either list of the pair is still asked, so a first answer from
+ * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
+ * Drafts; the count still waits for the pair.
+ */
+function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error">, reload: () => void): Resource<R> {
+  const failed = !inbox.loading && inbox.error ? inbox.error : null;
+  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, reload };
 }
 
 /** The shell's signals, for the screens inside it. */
