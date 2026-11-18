@@ -45,6 +45,14 @@ Finding passages in the Brain from the Dashboard: the field at the top of Home, 
 Each result is a passage with its title, kind, file and lines, ranked by meaning and keywords, or by keywords only until meaning-based search is ready.
 It is a read: it starts no job, changes nothing and holds no conversation.
 
+**Library**:
+The Brain screen's view for reading: the collections, the notes in one collection, and the note reader beside them.
+Search results take its place while a query is typed.
+
+**Recent saves**:
+The Brain screen's view of every change to the Brain, newest first, with where each came from and whether Revert can undo it.
+It filters to all changes, those written without review, or those reverted.
+
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
 It follows the Decision count, also on the favicon; a part that could not be read never turns it on or off.
@@ -94,6 +102,14 @@ _Avoid_: Overwrite, fix, edit
 The day after which a fact should be checked again.
 A fact past its Review date stays in the Brain and is shown as unverified.
 _Avoid_: Expiry, expiration, stale date, TTL
+
+**History**:
+The part of a note that keeps replaced values and events, in the words and order they were written.
+It only grows, and the Dashboard shows it exactly as stored.
+
+**Change log**:
+Attache's own record of every change to a note: what changed, who or what made the change, and why.
+Recent saves and Revert read it; the note itself carries History instead.
 
 ### What needs the owner
 

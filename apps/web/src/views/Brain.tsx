@@ -1,174 +1,235 @@
-import { useEffect, useRef, useState } from "react";
-import { post } from "../api.ts";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Loading, navigate, Time, useLocation } from "../components/ui.tsx";
-import { StateTag } from "../components/StateTag.tsx";
-import { Tag } from "../components/Tag.tsx";
+import { Empty, ErrorState, Loading, navigate, useLocation } from "../components/ui.tsx";
+import { ChipNav } from "../components/ChipNav.tsx";
+import { Icon } from "../components/icons.tsx";
+import { useMenuDismiss } from "../components/menu.ts";
 import { useRevealDetail } from "../components/reveal-detail.ts";
-import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
-import { Tabs } from "../components/Tabs.tsx";
+import { useOpenEvidence } from "../components/Evidence.tsx";
+import { tabId, Tabs } from "../components/Tabs.tsx";
 import { BRAIN_SEARCH_ID, takeSearchFocus } from "../search-launch.ts";
 import { hitDestination, type SearchAnswer } from "../search.ts";
 import { RankingNote, SearchResultRow } from "../components/SearchField.tsx";
+import { brainHref, brainPlace, collection, COLLECTIONS, type BrainPlace } from "../brain.ts";
+import { NoteReader } from "./NoteReader.tsx";
 import { RecentSaves } from "./RecentSaves.tsx";
+import { useRebuildIndex } from "./RebuildIndex.tsx";
 
 interface DocListItem {
   id: string;
   root: string;
   relPath: string;
   area: string;
-  docType: string | null;
   title: string;
   mtimeMs: number;
-  meta: Record<string, unknown>;
-}
-interface StateEntry {
-  subject: string;
-  date: string;
-  /** The day after which the fact should be checked again. */
-  review?: string;
-  /** Past its Review date: kept, but to be checked before relying on it. */
-  unverified: boolean;
-  value: string;
-  source?: string;
-  line: number;
 }
 
-/** A fact's Review date, and a warning once it has passed. */
-function ReviewDate({ entry }: { entry: StateEntry }) {
-  if (!entry.review) return null;
-  if (!entry.unverified)
-    return (
-      <span className="small muted state-review" data-review={entry.review} title="The day after which this fact should be checked again">
-        review after {entry.review}
-      </span>
-    );
+type LibraryPlace = Extract<BrainPlace, { view: "library" }>;
+
+/** The most passages the Brain's search lists: the service's own limit. */
+const BRAIN_RESULTS = 50;
+/** How long typing pauses before the query is written to the address. */
+const QUERY_TO_ADDRESS_MS = 250;
+const VIEWS = [
+  { id: "library", label: "Library" },
+  { id: "recent", label: "Recent saves" },
+] as const;
+const VIEW_PANEL = "brain-view";
+
+/** The Brain's menu: actions that need no room on the page. Rebuild index is also in Settings. */
+function BrainMenu() {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  const chosen = useMenuDismiss(open, close, root, button);
+  const { rebuild, busy } = useRebuildIndex();
   return (
-    <span className="row state-review" data-review={entry.review} title={`Its Review date ${entry.review} has passed. Check it, then save the current value with a new Review date.`}>
-      <StateTag state="partial" label="unverified" />
-      <span className="small">review was due {entry.review}</span>
-    </span>
+    <div className="brain-menu" ref={root}>
+      <button ref={button} className="icon-button" aria-label="Brain menu" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen(!open)}>
+        <Icon name="more" size={20} />
+      </button>
+      {open && (
+        <div id={menuId} className="menu-pop" role="group" aria-label="Brain menu" onClick={chosen}>
+          <button className="menu-item" disabled={busy} onClick={rebuild}>
+            <span>Rebuild index</span>
+            <span className="menu-help">Read every note into search again, when search misses one. Notes are not changed.</span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
-interface Doc {
-  root: string;
-  relPath: string;
-  raw: string;
-  title: string;
-  area: string;
-  state: StateEntry[];
-  protected: boolean;
-  frontmatter: Record<string, unknown>;
-  changes: Array<{ id: string; change: string; subject: string | null; beforeValue: string | null; afterValue: string | null; reason: string | null; actor: string; status: string; createdAt: string }>;
-}
 
-const TABS: Array<{ id: string; label: string; query: string }> = [
-  { id: "person", label: "People", query: "area=memory&type=person" },
-  { id: "project", label: "Projects", query: "area=memory&type=project" },
-  { id: "decision", label: "Decisions", query: "area=memory&type=decision" },
-  { id: "note", label: "Notes", query: "area=memory&type=note" },
-  { id: "import", label: "Imported", query: "area=import" },
-  { id: "evidence", label: "Evidence", query: "area=evidence" },
-  { id: "deliverables", label: "Deliverables", query: "area=deliverables" },
-];
-
-/** A History line as the note stores it, with its `**Subject**` markers shown as bold instead of asterisks. */
-function HistoryLine({ text }: { text: string }) {
-  return <>{text.split(/\*\*(.+?)\*\*/).map((part, i) => (i % 2 ? <strong key={i}>{part}</strong> : part))}</>;
-}
-
-function DocPanel({ root, relPath }: { root: string; relPath: string }) {
-  const doc = useResource<Doc>(`/memory/document?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}`, ["memory.changed"]);
-  const [showSource, setShowSource] = useState(false);
-  const d = doc.data;
-  if (doc.loading && !d) return <Loading lines={6} />;
-  if (doc.error) return <ErrorState error={doc.error} retry={doc.reload} />;
-  if (!d) return null;
-  const history = d.raw.split(/^## History\s*$/m)[1]?.split("\n").filter((l) => l.startsWith("- ")) ?? [];
+/** The Brain's search field, full width: what the owner types replaces the Library with every result. */
+function BrainSearch({ q, onChange }: { q: string; onChange: (q: string) => void }) {
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (takeSearchFocus()) field.current?.focus();
+  }, []);
   return (
-    <div className="stack">
-      <div className="row">
-        <h2 className="detail-title" style={{ flex: 1 }}>{d.title}</h2>
-        <Tag>{d.area}</Tag>
-        {d.protected && <StateTag state="partial" label="protected" />}
+    <div className="search brain-search" role="search" aria-label="Brain">
+      <div className="search-box">
+        <Icon name="search" size={22} />
+        <input ref={field} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => onChange(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" autoComplete="off" spellCheck={false} />
       </div>
-      <p className="small muted mono">{root !== "data" ? `${root} › ` : ""}{relPath}</p>
-      {d.state.length > 0 && (
-        <div className="card stack-sm">
-          <h3>Current state</h3>
-          {d.state.map((s) => (
-            <div key={s.subject} className="stack-sm state-entry" data-subject={s.subject} data-unverified={s.unverified || undefined}>
-              <div className="state-row">
-                <strong>{s.subject}</strong>
-                <span className="small muted state-date">{s.date}</span>
-                <span className="state-value">{s.value}</span>
-                <ReviewDate entry={s} />
-              </div>
-              {s.source && <span className="small muted">Source: {s.source}</span>}
-            </div>
-          ))}
-          {d.protected && <p className="small muted">This identity record changes only from Settings.</p>}
-        </div>
-      )}
-      {history.length > 0 && (
-        <div className="card">
-          <h3>History</h3>
-          <ul className="small" style={{ paddingLeft: 18, margin: "6px 0 0", color: "var(--text-2)" }}>
-            {history.map((h, i) => (
-              <li key={i}>
-                <HistoryLine text={h.slice(2)} />
+    </div>
+  );
+}
+
+const COLLECTION_LINKS = COLLECTIONS.map((c) => ({ id: c.id, label: c.label, href: brainHref({ view: "library", collection: c.id }) }));
+
+/** The collections, without counts: a column beside the list on a wide screen, a row of chips on a narrow one. */
+function Collections({ place }: { place: LibraryPlace }) {
+  return <ChipNav label="Collections" className="collections" items={COLLECTION_LINKS} current={place.collection} />;
+}
+
+const updated = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/** One collection's notes by title. Curated notes open in the reader; other material opens in the evidence view. */
+function NoteList({ place, onPick }: { place: LibraryPlace; onPick: () => void }) {
+  const c = collection(place.collection);
+  const list = useResource<DocListItem[]>(`/memory/documents?${c.query}`, ["memory.changed"]);
+  const openEvidence = useOpenEvidence();
+  if (list.loading && !list.data) return <Loading label={`Loading ${c.label.toLowerCase()}`} />;
+  if (list.error) return <ErrorState error={list.error} retry={list.reload} title={`${c.label} could not load`} />;
+  if (!list.data?.length)
+    return <Empty title={`No ${c.label.toLowerCase()} yet`}>{c.id === "import" ? "Import a folder from Connections or Setup." : c.folder ? "Notes appear here when a Harness saves them." : "Nothing here yet."}</Empty>;
+  return (
+    <ul className="note-list" aria-label={c.label}>
+      {list.data.map((d) => {
+        const body = (
+          <>
+            <span className="note-list-title">{d.title}</span>
+            <span className="note-list-meta">Updated {updated.format(d.mtimeMs)}</span>
+          </>
+        );
+        return (
+          <li key={d.id}>
+            {d.area === "memory" ? (
+              <a
+                className="note-list-item"
+                href={brainHref({ view: "library", collection: c.id, root: d.root, path: d.relPath })}
+                aria-current={place.path === d.relPath && place.root === d.root ? "true" : undefined}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                  e.preventDefault();
+                  navigate(e.currentTarget.getAttribute("href")!);
+                  onPick();
+                }}
+              >
+                {body}
+              </a>
+            ) : (
+              <button className="note-list-item" onClick={() => openEvidence({ root: d.root, relPath: d.relPath, title: d.title })}>
+                {body}
+              </button>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Every passage that matches, in the Library's place, with how they were ranked. */
+function Results({ place, onPick, onClear }: { place: LibraryPlace; onPick: () => void; onClear: () => void }) {
+  const results = useResource<SearchAnswer>(`/memory/search?q=${encodeURIComponent(place.q)}&limit=${BRAIN_RESULTS}`, ["memory.changed"]);
+  const openEvidence = useOpenEvidence();
+  const answer = results.data;
+  const count = answer?.hits.length ?? 0;
+  return (
+    <section className="brain-results" aria-labelledby="brain-results-title" aria-busy={results.loading || undefined}>
+      <div className="brain-results-head">
+        <h2 id="brain-results-title" className="brain-results-title">
+          {answer ? (count === BRAIN_RESULTS ? `First ${count} results` : count === 1 ? "1 result" : `${count} results`) : "Results"}
+          <span className="sr-only"> for “{place.q}”</span>
+        </h2>
+        <button className="ghost small" onClick={onClear}>
+          Clear search
+        </button>
+      </div>
+      {answer && <RankingNote meaning={answer.meaning} />}
+      {results.loading && !answer && <Loading label="Searching" />}
+      <ErrorState error={results.error} retry={results.reload} title="Search failed" />
+      {answer && count === 0 && <Empty title="No matches">No passage matches “{place.q}”. Try other words. Search looks at titles, headings and text.</Empty>}
+      {count > 0 && (
+        <ul className="result-list">
+          {answer!.hits.map((h) => {
+            const to = hitDestination(h, place.q);
+            const current = to.kind === "brain" && place.path === h.relPath && place.root === h.root;
+            return (
+              <li key={h.chunkId}>
+                <button
+                  className="result-item"
+                  aria-current={current || undefined}
+                  onClick={() => {
+                    if (to.kind === "evidence") return openEvidence(to.target);
+                    navigate(to.href);
+                    onPick();
+                  }}
+                >
+                  <SearchResultRow hit={h} />
+                </button>
               </li>
-            ))}
-          </ul>
-        </div>
+            );
+          })}
+        </ul>
       )}
-      {d.changes.length > 0 && (
-        <div className="card">
-          <h3>Change log</h3>
-          <ul className="timeline" style={{ marginTop: 6 }}>
-            {d.changes.map((c) => (
-              <li key={c.id}>
-                <Time iso={c.createdAt} />
-                <span>
-                  {c.change} {c.subject ? `“${c.subject}”` : ""} by {c.actor}
-                  {c.beforeValue ? ` — was “${c.beforeValue}”` : ""}
-                  {c.reason ? ` (${c.reason})` : ""} <StateTag state={c.status} />
-                </span>
-              </li>
-            ))}
-          </ul>
+    </section>
+  );
+}
+
+/**
+ * The Library: collections, a collection's notes and the note reader side by side; with a query, every result
+ * replaces the collections and the list. On a narrow screen the collections are a row of chips and the reader goes
+ * below the list.
+ */
+function Library({ place, onClear }: { place: LibraryPlace; onClear: () => void }) {
+  const { detailRef, revealDetail } = useRevealDetail();
+  // A note opened from elsewhere (Home's search, Approvals) shows in view on a phone too, as a note picked here does.
+  const arrivedWithNote = useRef(place.path !== null);
+  useEffect(() => {
+    if (arrivedWithNote.current) revealDetail();
+  }, [revealDetail]);
+  const searching = place.q !== "";
+  return (
+    <div className={`library${searching ? " searching" : ""}`}>
+      {!searching && <Collections place={place} />}
+      <div className="split library-split">
+        <div className="library-list">{searching ? <Results place={place} onPick={revealDetail} onClear={onClear} /> : <NoteList place={place} onPick={revealDetail} />}</div>
+        <div ref={detailRef} className="split-detail library-reader">
+          {place.path ? (
+            <NoteReader key={`${place.root}:${place.path}`} root={place.root} relPath={place.path} />
+          ) : (
+            <p className="reader-placeholder">{searching ? "Pick a result to read its note here." : "Pick a note to read it here: its current state, sources, History and Change log."}</p>
+          )}
         </div>
-      )}
-      <button className="ghost small" style={{ alignSelf: "flex-start" }} onClick={() => setShowSource(!showSource)}>
-        {showSource ? "Hide file" : "Show the Markdown file"}
-      </button>
-      {showSource && <SourceView raw={d.raw} />}
+      </div>
     </div>
   );
 }
 
 export function BrainView() {
   const loc = useLocation();
-  const [tab, setTab] = useState(loc.search.get("tab") ?? "decision");
+  const place = brainPlace(loc.path, loc.search);
   // The query lives in the address (`/brain?q=`), so "All results in Brain" and the back button carry it.
-  const query = (loc.search.get("q") ?? "").trim();
+  const query = place.view === "library" ? place.q : "";
   const [q, setQ] = useState(query);
-  const selected = loc.search.get("path");
-  const selectedRoot = loc.search.get("root") ?? "data";
-  const t = TABS.find((x) => x.id === tab) ?? TABS[0]!;
-  const list = useResource<DocListItem[]>(query ? null : `/memory/documents?${t.query}`, ["memory.changed"]);
-  const results = useResource<SearchAnswer>(query ? `/memory/search?q=${encodeURIComponent(query)}` : null, ["memory.changed"]);
-  const open = useOpenEvidence();
-  // Typing writes the query to the address after a pause; an address that changes on its own (back, a link) fills the field.
+  // Typing writes the query to the address after a pause, in the Library; an address that changes on its own (back,
+  // a link) fills the field.
   useEffect(() => {
     if (q.trim() === query) return;
     const h = setTimeout(() => {
       const params = new URLSearchParams(location.search);
+      const library = location.pathname === "/brain";
+      if (!library) for (const key of [...params.keys()]) params.delete(key);
       if (q.trim()) params.set("q", q.trim());
       else params.delete("q");
       const search = params.toString();
-      navigate(`${location.pathname}${search ? `?${search}` : ""}`, { replace: true });
-    }, 250);
+      navigate(`/brain${search ? `?${search}` : ""}`, { replace: library });
+    }, QUERY_TO_ADDRESS_MS);
     return () => clearTimeout(h);
   }, [q, query]);
   const shownQuery = useRef(query);
@@ -177,74 +238,22 @@ export function BrainView() {
     shownQuery.current = query;
     setQ((typed) => (typed.trim() === query ? typed : query));
   }, [query]);
-  const { detailRef, revealDetail } = useRevealDetail();
-  // A note opened from elsewhere (Home's search) shows in view on a phone too, as a note picked here does.
-  const arrivedWithNote = useRef(selected !== null);
-  useEffect(() => {
-    if (arrivedWithNote.current) revealDetail();
-  }, [revealDetail]);
-  const searchField = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (takeSearchFocus()) searchField.current?.focus();
-  }, []);
-  const select = (root: string, relPath: string) => {
-    navigate(`/brain?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}${query ? `&q=${encodeURIComponent(query)}` : ""}`);
-    revealDetail();
+  const clear = () => {
+    setQ("");
+    if (place.view === "library") navigate(brainHref({ ...place, q: "" }), { replace: true });
+    document.getElementById(BRAIN_SEARCH_ID)?.focus();
   };
+  const selectView = (view: "library" | "recent") => navigate(view === "recent" ? brainHref({ view }) : brainHref({ view, q: query }));
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="page brain">
+      <div className="brain-head">
         <h1>Brain</h1>
-        <span className="subtitle">Your notes, imported material, evidence and deliverables, read-only. Search works without a model.</span>
-        <div className="actions">
-          <button className="ghost" onClick={() => void post("/memory/reindex")}>
-            Rebuild index
-          </button>
-        </div>
+        <BrainMenu />
       </div>
-      <RecentSaves here={loc.path === "/brain/recent"} />
-      <div className="split" style={{ marginTop: 14 }}>
-        <div className="stack">
-          <input ref={searchField} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />
-          {!query && (
-            <Tabs label="Collection" tabs={TABS} selected={t.id} onSelect={setTab} />
-          )}
-          {query ? (
-            <>
-              {results.loading && !results.data && <Loading />}
-              <ErrorState error={results.error} retry={results.reload} />
-              {results.data && <RankingNote meaning={results.data.meaning} />}
-              {results.data?.hits.length === 0 && <Empty title="No matches">Try other words. Search looks at titles, headings and text.</Empty>}
-              <div className="list">
-                {results.data?.hits.map((h) => {
-                  const to = hitDestination(h, query);
-                  return (
-                    <button key={h.chunkId} className="list-item" onClick={() => (to.kind === "brain" ? select(h.root, h.relPath) : open(to.target))}>
-                      <SearchResultRow hit={h} />
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <>
-              {list.loading && !list.data && <Loading />}
-              <ErrorState error={list.error} retry={list.reload} />
-              {list.data?.length === 0 && <Empty title={`No ${t.label.toLowerCase()} yet`}>{t.id === "import" ? "Import a folder from Connections or Setup." : "Notes appear here when a Harness saves them."}</Empty>}
-              <div className="list">
-                {list.data?.map((d) => (
-                  <button key={d.id} className="list-item" aria-current={selected === d.relPath} onClick={() => (d.area === "memory" ? select(d.root, d.relPath) : open({ root: d.root, relPath: d.relPath, title: d.title }))}>
-                    <div className="stack-sm" style={{ minWidth: 0 }}>
-                      <strong>{d.title}</strong>
-                      <span className="small mono muted">{d.relPath}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        <div ref={detailRef} className="split-detail">{selected ? <DocPanel root={selectedRoot} relPath={selected} /> : <Empty title="Select a note">People, projects, decisions and notes show their current state, history and change log here.</Empty>}</div>
+      <BrainSearch q={q} onChange={setQ} />
+      <Tabs label="Brain views" tabs={VIEWS} selected={place.view} onSelect={selectView} panelId={VIEW_PANEL} />
+      <div id={VIEW_PANEL} role="tabpanel" aria-labelledby={tabId(VIEW_PANEL, place.view)} className="brain-view">
+        {place.view === "recent" ? <RecentSaves show={place.show} /> : <Library place={place} onClear={clear} />}
       </div>
     </div>
   );

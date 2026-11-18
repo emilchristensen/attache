@@ -26,6 +26,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
 - **Memory with history.**
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
+  The Brain screen reads them side by side with their collections, opens each fact's source in place, and lists every recent save with its origin and one-click Revert.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
   Home's For you now brings the daily briefing forward in the morning, and the briefings you ask for, each saying why it is there and when it leaves.

@@ -9,6 +9,7 @@ import { AutoAccept } from "./AutoAccept.tsx";
 import { ReplicationCard } from "./Replication.tsx";
 import { FeatureList } from "./Setup.tsx";
 import { MeaningSearchCard } from "./MeaningSearch.tsx";
+import { SearchIndexCard } from "./RebuildIndex.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -232,6 +233,7 @@ export function SettingsView() {
         <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
         <AutoAccept />
         <MeaningSearchCard />
+        <SearchIndexCard />
         <Clients />
         <Backups />
         <div className="card stack-sm">

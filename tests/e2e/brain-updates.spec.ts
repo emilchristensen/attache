@@ -133,7 +133,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
     return res.status;
   });
   expect(dashboardSave).toBe(403);
-  await page.goto(`${stack.url}/brain`);
+  await page.goto(`${stack.url}/brain/recent`);
   const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
   await expect(created).toContainText("Claude Code, session sess-auto");
   await expect(created).toContainText("auto-accepted");
@@ -148,7 +148,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
   await page.reload();
   await expect(page.getByRole("region", { name: "Auto-accept" }).getByRole("checkbox", { name: /Claude Code/ })).not.toBeChecked();
   await harnessSave(stack, [{ action: "create", type: "note", title: "Quasar naming", facts: [{ subject: "Idea", value: "Name builds after quasars" }] }], { agent: "claude-code", session: "sess-asked" });
-  await page.goto(`${stack.url}/brain`);
+  await page.goto(`${stack.url}/brain/recent`);
   const confirmed = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Quasar naming" });
   await expect(confirmed).toContainText("Claude Code, session sess-asked");
   await expect(confirmed).not.toContainText("auto-accepted");
@@ -174,7 +174,7 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
     proposals: [{ item: { action: "create", type: "project", title: "Helix review board", facts: [{ subject: "Meets", value: "Every Tuesday" }] }, reason: "The review agreed a weekly board.", evidence: helix }],
   });
   await expect.poll(() => existsSync(join(stack.dataDir, "memory/projects/helix-review-board.md"))).toBe(true);
-  await page.goto(`${stack.url}/brain`);
+  await page.goto(`${stack.url}/brain/recent`);
   await expect(page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Helix review board" }).first()).toBeVisible();
 
   // Off: kept across a reload, and the next meeting's change waits for review instead.

@@ -1,39 +1,434 @@
-/* Brain: a note's Current state, and Recent saves. */
+/*
+ * Brain: the full-width search field, then Library (collections, a collection's notes and the note reader side by
+ * side) or Recent saves. Lists are ruled rows on the canvas under a 2 px ink rule; the reader is a paper sheet with a
+ * broad text column and ruled section titles. Narrow: the collections become a row of chips and the reader goes below
+ * the list.
+ */
 
-.state-entry {
-  border-top: 1px solid var(--rule);
-  padding-top: 8px;
+.brain-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
 }
-.state-row {
+.brain-menu {
+  position: relative;
+  margin-left: auto;
+}
+.brain-menu > button {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
-  grid-template-areas: "subject value date" ". review review";
-  column-gap: 12px;
-  row-gap: 2px;
-  align-items: baseline;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+.brain-search {
+  margin-bottom: var(--s-5);
+}
+.brain-view {
+  margin-top: var(--s-5);
+}
+
+/* ---- Library ----------------------------------------------------------------------------------------- */
+
+.library {
+  display: grid;
+  grid-template-columns: 152px minmax(0, 1fr);
+  gap: var(--s-5);
+  align-items: start;
+}
+.library.searching {
+  grid-template-columns: minmax(0, 1fr);
+}
+.library-split {
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: var(--s-5);
+}
+.library.searching .library-split {
+  grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+}
+
+/*
+ * A row of chips, scrolling sideways when they do not fit: Recent saves' filters, and the collections on a narrow
+ * screen. The chosen chip is solid ink.
+ */
+.chips ul,
+.collections ul {
+  list-style: none;
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  /* Room for the focus ring inside the scroller. */
+  padding: 4px;
+  margin: -4px;
+}
+.chips ul::-webkit-scrollbar,
+.collections ul::-webkit-scrollbar {
+  display: none;
+}
+.chips li,
+.collections li {
+  flex: none;
+}
+.chips a,
+.collections a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.chips a:hover,
+.collections a:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+.chips a[aria-current="true"],
+.collections a[aria-current="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+/* Collections on a wide screen: a column of plain words beside the list, no counts; the chosen one carries the
+   selection fill and ink bar. */
+@media (min-width: 961px) {
+  .collections ul {
+    flex-direction: column;
+    gap: 2px;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+  }
+  .collections a {
+    display: block;
+    min-height: 0;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--r-sm);
+    white-space: normal;
+  }
+  .collections a[aria-current="true"] {
+    background: var(--row-on);
+    box-shadow: inset 3px 0 0 var(--primary);
+    color: var(--ink);
+    font-weight: 600;
+  }
+}
+
+/* A collection's notes, or every search result: ruled rows under an ink rule. */
+.note-list,
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 2px solid var(--ink);
+}
+.note-list > li,
+.result-list > li {
+  border-bottom: 1px solid var(--rule);
+}
+.note-list-item,
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  white-space: normal;
+  font-weight: 400;
+}
+.note-list-item:hover,
+.result-item:hover {
+  background: var(--row-hover);
+}
+/* Selected: a fill and an ink bar, never an outline, so it cannot be mistaken for focus. */
+.note-list-item[aria-current="true"],
+.result-item[aria-current="true"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.note-list-title {
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-.state-row > strong {
-  grid-area: subject;
-}
-.state-row > .state-value {
-  grid-area: value;
-}
-.state-row > .state-date {
-  grid-area: date;
-}
-.state-row > .state-review {
-  grid-area: review;
+.note-list-meta {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-3);
 }
 
-.recent-saves {
-  margin-bottom: 14px;
+.brain-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+h2.brain-results-title {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brain-results .search-ranking {
+  margin: var(--s-1) 0 var(--s-3);
+}
+
+/* ---- the note reader --------------------------------------------------------------------------------- */
+
+.note-reader,
+.reader-placeholder {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+}
+.note-reader {
+  padding: var(--s-5) var(--s-5) var(--s-4);
+  overflow-wrap: anywhere;
+}
+.reader-placeholder {
+  margin: 0;
+  padding: var(--s-6) var(--s-5);
+  color: var(--ink-2);
+}
+.reader-kind {
+  margin: 0 0 var(--s-1);
+  font: 600 12px/18px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.reader-identity,
+.reader-proposal {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin: var(--s-3) 0 0;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  color: var(--ink-2);
+}
+.reader-identity > svg,
+.reader-proposal > svg {
+  flex: none;
+  margin-top: 1px;
+}
+.reader-proposal > svg {
+  color: var(--plum);
+}
+.reader-proposal {
+  color: var(--ink);
+}
+
+.reader-section {
+  margin-top: var(--s-5);
+}
+/* A ruled section title: the sans heading over a 2 px ink rule, the rows under it. */
+h3.reader-rule {
+  padding-bottom: var(--s-1);
+  border-bottom: 2px solid var(--ink);
+}
+
+.facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fact {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+  grid-template-areas: "subject value" ". meta" ". source";
+  column-gap: var(--s-4);
+  row-gap: var(--s-1);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.fact-subject {
+  grid-area: subject;
+  font-weight: 600;
+}
+.fact-value {
+  grid-area: value;
+}
+.fact-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-3);
+}
+.fact-date {
+  font-variant-numeric: tabular-nums;
+}
+.fact-review {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.fact[data-unverified] .fact-review {
+  color: var(--ink-2);
+}
+
+/* The source button: a real button (pointer, keyboard and touch), its summary cut short on one line. */
+button.fact-source-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.fact-source-word {
+  flex: none;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fact-source-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fact-source-chevron {
+  flex: none;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+.fact-source-toggle[aria-expanded="true"] .fact-source-chevron {
+  transform: rotate(-90deg);
+}
+.fact-source {
+  grid-area: source;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+  padding: var(--s-3);
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+}
+.fact-source[hidden] {
+  display: none;
+}
+.fact-source p {
+  margin: 0;
+}
+.fact-source-text {
+  font-size: var(--fs-control);
+  line-height: 20px;
+  color: var(--ink);
+}
+.fact-source-meta {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+
+.reader-notes > :first-child {
+  margin-top: var(--s-3);
+}
+.reader-history {
+  margin: var(--s-3) 0 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  line-height: 21px;
+}
+.reader-history li + li {
+  margin-top: var(--s-1);
+}
+.reader-history strong {
+  color: var(--ink);
+}
+.reader-foot {
+  margin-top: var(--s-5);
+  border-top: 1px solid var(--rule);
+}
+.reader-foot .timeline {
+  margin-top: var(--s-2);
+}
+
+/* ---- Recent saves ------------------------------------------------------------------------------------- */
+
+.recent-filters {
+  margin-bottom: var(--s-4);
+}
+.recent-saves .recent-changes {
+  margin: 0;
+  border-top: 2px solid var(--ink);
+}
+.recent-saves .recent-change:first-child {
+  border-top: none;
+}
+.recent-saves .recent-change {
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--rule);
+}
+.recent-empty {
+  margin: var(--s-3) 0 0;
+  color: var(--ink-2);
+}
+.recent-more {
+  margin-top: var(--s-3);
+}
+
+/* ---- narrow ------------------------------------------------------------------------------------------- */
+
+@media (max-width: 960px) {
+  /* The collections become one row of chips over the list (the chip rules above). */
+  .library {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-4);
+  }
+  .library-split,
+  .library.searching .library-split {
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 720px) {
-  /* Subject and date on one line, the value below at full width. */
-  .state-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: "subject date" "value value" "review review";
+  /* The reader goes below the list; with nothing picked there is nothing to show there. */
+  .library-split,
+  .library.searching .library-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reader-placeholder {
+    display: none;
+  }
+  .note-reader {
+    padding: var(--s-4);
+  }
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "subject" "value" "meta" "source";
+  }
+  /* A touch-sized source button on a phone. */
+  button.fact-source-toggle {
+    min-height: 36px;
   }
 }

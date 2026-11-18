@@ -199,9 +199,33 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
 
 ### Brain
 
-The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
-Its search field shows up to 20 matching passages, not only the first six, including raw session transcripts that Home's search leaves out, and keeps your words in the address as you type.
-Each memory note has a *Current state* with one dated entry per subject.
+The **Brain** opens with a full-width search field, and under it two views, each with its own address: **Library** (`/brain`) and **Recent saves** (`/brain/recent`).
+
+**Library** puts the collections, the notes in the chosen collection and the note you are reading side by side.
+The collections are People, Projects, Decisions, Notes, Imported, Evidence and Deliverables; they show no counts.
+A person, project, decision or note opens in the reader beside the list; imported notes, evidence and deliverables open in the evidence view.
+On a narrow window the collections become one row of chips that scrolls sideways, and the note goes below the list.
+The address names the note you are reading (`/brain?root=…&path=…`), so you can bookmark it or come back to it.
+
+Type in the search field and every matching passage, up to 50, takes the Library's place, with a line saying how they were ranked (by meaning and keywords, or by keywords only and why).
+The Brain's search includes raw session transcripts that Home's search leaves out, and it keeps your words in the address as you type (`/brain?q=…`).
+A passage in a note opens that note in the reader beside the results; anything else opens in the evidence view at the cited lines.
+**Clear search** brings the Library back.
+
+The reader shows one note:
+
+- *Current state* first, one dated entry per subject, with its Review date when it has one; past that date the entry is marked **unverified**.
+- **Source** beside an entry is a button: select, tap or press it to open the source in place, exactly as the note stores it, with when it was observed and a way to open it, the cited lines in the evidence view or the web page.
+  Select it again to close it.
+- The note's *Notes*, then *History* exactly as the note stores it.
+- The **Change log**, closed until you open it: every recorded change to the note, with who made it and why.
+- On your identity record, a line saying it changes only from Settings.
+- When a Proposal waits to change the note, a line linking to it in Approvals.
+- **Markdown file** opens the file itself at its path, with line numbers.
+
+The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Search index*.
+Jobs shows its progress, and it changes no note.
+
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
@@ -214,7 +238,8 @@ With Replication on, a Proposal made on one Machine shows on every Machine, and 
 Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
 If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
-**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first.
+**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first, 50 at a time with **Show more** below.
+Its filters keep **All** changes, those **Written without review** (auto-accepted or consolidated), or those **Reverted**, each with the revert that undid it; the filter is part of the address (`/brain/recent?show=reverted`).
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, the session or meeting Consolidation read, a Proposal you approved, or you) and when.
 A change written without your review is marked auto-accepted, or consolidated when Consolidation wrote it.
 **Revert** undoes one change with one click:
