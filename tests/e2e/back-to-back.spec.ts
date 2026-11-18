@@ -307,7 +307,7 @@ test("back to back with Done: the keyboard leaves a promoted row in place, Done 
   await own.close();
 });
 
-test("a row the keyboard is on keeps its place when its meeting moves up, under Group by type and when the meeting is decided elsewhere", async ({ browser }) => {
+test("a row the keyboard is on keeps its place when its meeting moves up, under Group by type, at the meeting's end and when it is decided elsewhere", async ({ browser }) => {
   const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
   const page = await own.newPage();
   await page.clock.install({ time: new Date() });
@@ -331,11 +331,16 @@ test("a row the keyboard is on keeps its place when its meeting moves up, under 
   await expect(meetings.locator(".inbox-family-count")).toHaveText("1");
   await expect(meetings.locator("[data-inbox-row]")).toHaveCount(2);
   await expectCount(page, base, 0);
+  // Its scheduled end passes with the keyboard still there: the Heads-up goes, and the place stays rather than
+  // turning back into a row for an ended meeting.
+  await advanceTo(page, Date.parse(times.retro!.end) + 1_000);
+  await expect(meetingHeadsUp(page, "Sprint retro")).toHaveCount(0);
+  await expect(stand).toBeFocused();
+  await expect(page.locator('#inbox [data-item-key="gcal:retro"] button[data-row-toggle]')).toHaveCount(0);
   // Done on another Machine: the item leaves the open list, and the place the keyboard is on stays.
   const id = await stand.getAttribute("data-item-id");
   await api(page, "POST", `/attention/${id}/decision`, { decision: "done" });
   await expectCount(page, base, -1);
-  await expect(meetingHeadsUp(page, "Sprint retro")).toHaveCount(0);
   await expect(stand).toBeFocused();
   // The keyboard moves on: the place goes.
   await page.keyboard.press("Tab");

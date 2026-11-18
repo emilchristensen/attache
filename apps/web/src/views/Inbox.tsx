@@ -8,7 +8,7 @@ import type { InboxCoverage } from "../connection-status.ts";
 import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
-import { meetingBoundaries, useHeadsUpClock } from "../heads-up-clock.ts";
+import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
 import { rowText, snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
@@ -233,8 +233,9 @@ function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionIt
  * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
  * when every source was read, and names what was read otherwise. `above` holds the items For you now shows as
  * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
+ * `clock` is Home's, shared with For you now, so a meeting leaves both at the same instant.
  */
-export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage; above: ReadonlySet<string> }) {
+export function Inbox({ attentionOn, draftsOn, coverage, above, clock }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage; above: ReadonlySet<string>; clock: HeadsUpClock }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
@@ -245,8 +246,6 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
   const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && hiddenView ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "actions.changed"]);
   const source = hiddenView ? hidden : open;
   const answered = source.data?.items ?? null;
-  // Read again when a listed meeting ends, so its row goes at its end, as its Heads-up does.
-  const clock = useHeadsUpClock(useMemo(() => meetingBoundaries(answered), [answered]));
   const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
   // A meeting that moves up while the keyboard is on its row keeps that row's place until the keyboard moves on.
   const focused = useFocusedRow();

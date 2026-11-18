@@ -3,7 +3,7 @@ import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
 import { briefingWritten, endedMeetings, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed, type Slot } from "../heads-ups.ts";
-import { meetingBoundaries, useHeadsUpClock } from "../heads-up-clock.ts";
+import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
 import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
@@ -226,13 +226,12 @@ function useDoneHere(items: readonly { id: string }[] | null) {
  * outside the hold. `onAbove` hears the ids of the Inbox items shown here as meeting prep (and those decided Done here
  * until the list catches up), so the Inbox leaves them out: each is one item, shown once.
  */
-export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAbove: (ids: ReadonlySet<string>) => void }) {
+export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolean; clock: HeadsUpClock; onAbove: (ids: ReadonlySet<string>) => void }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
   const openInbox = useSignals().openInbox;
   const items = openInbox.data?.items ?? null;
-  const clock = useHeadsUpClock(useMemo(() => meetingBoundaries(items), [items]));
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);

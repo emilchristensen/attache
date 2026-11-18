@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSignals } from "./nav-signals.ts";
 import { HEADS_UP_TICK_MS, MEETING_LEAD_MS } from "./heads-ups.ts";
 
 export interface HeadsUpClock {
@@ -51,4 +52,23 @@ export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpCloc
     return () => window.clearTimeout(timer);
   }, [next]);
   return clock;
+}
+
+/**
+ * Home's one clock, shared by For you now and the Inbox so a meeting leaves one and the other at the same instant.
+ * It reads the time at the boundaries of every meeting the open Inbox has listed while Home is open, also one that a
+ * later answer no longer lists while For you now still holds it, so no Join outlasts its meeting.
+ */
+export function useHomeClock(): HeadsUpClock {
+  const items = useSignals().openInbox.data?.items ?? null;
+  const [seen, setSeen] = useState<readonly number[]>([]);
+  useEffect(() => {
+    const fresh = meetingBoundaries(items);
+    setSeen((prev) => {
+      const now = Date.now();
+      const next = [...new Set([...prev, ...fresh])].filter((b) => b > now).sort((a, b) => a - b);
+      return next.length === prev.length && next.every((b, n) => b === prev[n]) ? prev : next;
+    });
+  }, [items]);
+  return useHeadsUpClock(seen);
 }

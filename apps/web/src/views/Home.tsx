@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useReadingPlace } from "../reading-place.ts";
+import { useHomeClock } from "../heads-up-clock.ts";
 import { useResource } from "../live.ts";
 import { HomeSearch } from "./HomeSearch.tsx";
 import { ForYouNow } from "./ForYouNow.tsx";
@@ -21,13 +22,14 @@ export function Home() {
   const connections = useConnectionsStatus();
   const [above, setAbove] = useState<ReadonlySet<string>>(NOTHING_ABOVE);
   const page = useRef<HTMLElement>(null);
+  const clock = useHomeClock();
   useReadingPlace(page);
   return (
     <section ref={page} className="page page-inbox" aria-label="Home">
       <HomeSearch recall={f.recall} />
-      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} onAbove={setAbove} />}
+      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
       <HomeConnections view={connections} />
-      <Inbox attentionOn={f.attention ?? false} draftsOn={f.drafts ?? false} coverage={inboxCoverage(connections.status)} above={above} />
+      <Inbox attentionOn={f.attention ?? false} draftsOn={f.drafts ?? false} coverage={inboxCoverage(connections.status)} above={above} clock={clock} />
       {f.recall && <RecentlyAdded />}
     </section>
   );
