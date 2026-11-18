@@ -527,8 +527,10 @@ export function splitRows(rows: StatusRow[]): { shown: StatusRow[]; more: Status
   return { shown: rows.slice(0, MAX_ROWS), more: rows.slice(MAX_ROWS) };
 }
 
-/** "1 more: not read yet", "2 more: down and not read yet". */
+/**
+ * The closed "N more" line names every source it holds with its state, so no affected source is hidden while the area
+ * is collapsed: "1 more: Jira (not read yet)", "2 more: GitHub (partly read); Confluence and Jira (not read yet)".
+ */
 export function moreLabel(more: StatusRow[]): string {
-  const words = [...new Set(more.map((r) => r.word.toLowerCase()))];
-  return `${more.length} more: ${nameList(words)}`;
+  return `${more.length} more: ${more.map((r) => `${r.subject} (${r.word.toLowerCase()})`).join("; ")}`;
 }

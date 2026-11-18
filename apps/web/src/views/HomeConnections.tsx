@@ -7,6 +7,7 @@ import { Icon } from "../components/icons.tsx";
 import { hueClass } from "../theme/hues.ts";
 import { connectionsStatus, moreLabel, nameList, splitRows, type ConnectionsStatus, type Reply, type StatusAction, type StatusRow } from "../connection-status.ts";
 import { connectionHref, reconfigureSignIn, reconnectMethod, retestConnection, startBrowserSignIn, testSignIn } from "../reconnect.ts";
+import { clockTime } from "../zoned-time.ts";
 import { useReader } from "./ReaderLine.tsx";
 
 interface Caps {
@@ -123,10 +124,6 @@ function AllGood({ status }: { status: Extract<ConnectionsStatus, { kind: "all_g
   );
 }
 
-function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 function LastRead({ lastRead }: { lastRead: StatusRow["lastRead"] }) {
   if (!lastRead.length) return null;
   if (lastRead.length === 1) {
@@ -152,7 +149,7 @@ function Retry({ retry }: { retry: StatusRow["retry"] }) {
   if (retry.kind === "none") return <p>Nothing is read again by itself.</p>;
   return (
     <p>
-      The next automatic read is at about <time dateTime={retry.at}>{clockTime(retry.at)}</time>.
+      The next automatic read is at about <time dateTime={retry.at}>{clockTime(Date.parse(retry.at), Intl.DateTimeFormat().resolvedOptions().timeZone)}</time>.
     </p>
   );
 }

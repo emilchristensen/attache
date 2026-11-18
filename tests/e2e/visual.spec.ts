@@ -198,7 +198,7 @@ async function homeConnectionsScreens(page: Page) {
     await page.goto(stack.url);
     await expect(area.locator(".conn-row")).toHaveCount(4);
     await area.locator(".conn-row-line").first().click();
-    await area.getByText("1 more: not read yet").click();
+    await area.getByText("1 more: Jira (not read yet)").click();
     await capture(path);
   };
   for (const scheme of ["light", "dark"] as const) {

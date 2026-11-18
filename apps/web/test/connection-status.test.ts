@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectionStatus, Coverage, CoverageState, FeatureStatus, ReaderView } from "@attache/contracts";
-import { connectionsStatus, inboxCoverage, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
+import { connectionsStatus, inboxCoverage, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
 
 // Fixtures of the three answers the Dashboard already asks for: /connections, /capabilities (features) and /reader.
 
@@ -434,5 +434,53 @@ describe("inboxCoverage: what an empty Inbox may claim", () => {
     const sessions = feature("sessions", { readiness: "needs_setup", reason: "Connect a Harness." });
     expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault")]), features: ok([...FEATURES, sessions]) })))).toBe("notes");
     expect(inboxCoverage(connectionsStatus(inputs({ features: ok([...FEATURES.filter((f) => f.id !== "attention"), feature("attention", { readiness: "unavailable", reason: "x" })]) })))).toBe("incomplete");
+  });
+});
+
+describe("mixed problems stay compact (#38)", () => {
+  const MIXED = withConnections(
+    conn("slack", { status: "needs_auth", lastError: "Slack is not connected in claude.ai" }),
+    conn("gmail", { coverage: coverage("error", { note: "GET /messages → HTTP 500" }) }),
+    conn("github", { coverage: coverage("partial", { note: "Review requests were read; assigned issues were not" }) }),
+    conn("jira", { coverage: null, lastSuccessAt: null, lastReadAt: null }),
+    conn("gcal", { coverage: coverage("offline") }),
+  );
+
+  it("keeps the source, the state word and the impact on each collapsed line, and Reconnect on the sign-in row", () => {
+    const { shown } = splitRows(rowsOf(MIXED));
+    expect(shown.map((r) => [r.subject, r.word, r.impact, r.icon])).toEqual([
+      ["Slack", "Sign-in needed", "Replies and mentions may be missing", "key"],
+      ["Gmail", "Down", "Replies may be missing", "warning"],
+      ["Google Calendar", "Offline", "Meetings may be missing", "warning"],
+    ]);
+    expect(shown[0]!.action).toEqual({ kind: "reconnect", connectionId: "slack" });
+  });
+
+  it("names every source behind \"N more\" with its state, so none is hidden from the collapsed area", () => {
+    const { more } = splitRows(rowsOf(MIXED));
+    expect(moreLabel(more)).toBe("2 more: GitHub (partly read); Jira (not read yet)");
+    expect(moreLabel(more.slice(1))).toBe("1 more: Jira (not read yet)");
+  });
+
+  it("names a grouped row by all of its sources", () => {
+    const rows = rowsOf(withConnections(conn("slack", { status: "needs_auth" }), conn("gmail", { status: "needs_auth" }), conn("github", { status: "needs_auth" }), conn("jira", { coverage: null }), conn("confluence", { coverage: null })));
+    expect(moreLabel(splitRows(rows).more)).toBe("1 more: Jira and Confluence (not read yet)");
+  });
+
+  it("tells unavailable, stale and unchecked data apart by word, colour and icon", () => {
+    const unavailable = onlyRow(withConnections(conn("gmail", { status: "error", lastError: "503" })));
+    const stale = onlyRow(inputs({ reader: ok({ ...THIS_READER, silent: true }) }));
+    const unchecked = onlyRow(withConnections(conn("gmail", { coverage: null })));
+    const checking = onlyRow(inputs({ reader: { state: "waiting" } }));
+    expect([unavailable, stale, unchecked, checking].map((r) => [r.word, r.hue, r.icon])).toEqual([
+      ["Down", "red", "warning"],
+      ["Not reading", "red", "warning"],
+      ["Not read yet", "slate", "question"],
+      ["Checking", "slate", "question"],
+    ]);
+    // Stale data says when it was last read; unchecked data claims no read at all.
+    expect(stale.lastRead).toEqual([{ name: "Every source", at: AT }]);
+    expect(unchecked.lastRead).toEqual([{ name: "Gmail", at: LAST_OK }]);
+    expect(checking.lastRead).toEqual([]);
   });
 });
