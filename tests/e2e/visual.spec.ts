@@ -21,15 +21,15 @@ test.afterAll(() => stack?.stop());
 const runGit = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
 
-/** The Replication card in every theme and width: off, up to date with two Machines, and blocked with its cause. */
+/** Machines and Replication in every theme and width: off, up to date with two Machines, and blocked with its cause on top. */
 async function replicationScreens(page: Page) {
-  // The card is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
+  // The section is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
   const capture = async (path: string, on: boolean) => {
     await page.goto(`${stack.url}/settings/machines`);
     const card = page.getByRole("region", { name: "Replication" });
     if (on) await expect(card.locator(".machine-row").first()).toBeVisible();
     await page.waitForTimeout(300);
-    await card.screenshot({ path });
+    await page.locator('[data-settings-section="machines"]').screenshot({ path });
   };
   const shoot = async (name: string) => {
     await page.setViewportSize({ width: 1360, height: 2000 });

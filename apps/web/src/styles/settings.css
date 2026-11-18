@@ -177,6 +177,10 @@
   .settings-nav-chevron {
     display: block;
   }
+  /* The card clips what is outside it, so the focus ring goes inside the row. */
+  .settings-nav a:focus-visible {
+    outline-offset: -3px;
+  }
 }
 
 /* ---- the sections' parts ------------------------------------------------------------- */

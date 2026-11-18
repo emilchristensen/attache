@@ -1374,8 +1374,11 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     const machinesEntry = page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /^Machines and Replication/ });
     await expect(machinesEntry).toHaveAccessibleName("Machines and Replication, Replication blocked");
     await expect(machinesEntry).toContainText("Replication blocked");
-    const problem = card.locator("[data-replication-problem]");
+    // The cause leads the section, above this Machine's name, so the warning leads straight to it.
+    const problem = page.locator('[data-settings-section="machines"] [data-replication-problem]');
     await expect(problem).toContainText("Replication is blocked");
+    const ourMachine = page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) });
+    expect((await problem.boundingBox())!.y).toBeLessThan((await ourMachine.boundingBox())!.y);
     await expect(problem).toContainText("plan.txt");
     await expect(problem).toContainText("What to do:");
     writeFileSync(join(stack.dataDir, "plan.txt"), "from the Work Mac\n");

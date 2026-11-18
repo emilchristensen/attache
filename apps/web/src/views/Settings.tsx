@@ -30,9 +30,17 @@ type SettingsPlace = "index" | "section" | "missing";
 /** Whether focus has nowhere to be: on the page itself, or on something no longer on screen. */
 const focusLost = (active: Element | null) => !active || active === document.body || !shownOnScreen(active);
 
+/** Whether all of `el` shows inside the scroller `page`. */
+function insideView(el: Element, page: HTMLElement | null): boolean {
+  if (!page) return true;
+  const box = el.getBoundingClientRect();
+  const view = page.getBoundingClientRect();
+  return box.top >= view.top && box.bottom <= view.bottom;
+}
+
 /**
  * Where focus goes when the address changes within Settings, or Settings opens. Chosen from the list, focus stays on
- * the list, so the next section is one key away. Arriving at a section from anywhere else (the palette, the Machine
+ * the list, so the next section is one key away, as long as the link is still in view at the top of the page. Arriving at a section from anywhere else (the palette, the Machine
  * panel, Back, a narrow window's list that the section replaced), the section takes focus at the top of the page.
  * Settings itself takes no focus, like any screen, except back from a section whose focus went with it: then the
  * section's link in the list has it.
@@ -46,7 +54,8 @@ function useArrival(root: RefObject<HTMLElement | null>, path: string, section: 
     const active = document.activeElement;
     if (nav?.contains(active) && shownOnScreen(active)) {
       root.current?.scrollTo({ top: 0 });
-      return;
+      // A short window, where the list does not stay in view: a link that went up with the page hands focus over.
+      if (insideView(active, root.current)) return;
     }
     if (place === "section" && section && revealSettingsSection(section, true)) return;
     if (came && focusLost(active) && shownOnScreen(nav)) nav.querySelector<HTMLElement>(`a[href="${settingsHref(came)}"]`)?.focus();

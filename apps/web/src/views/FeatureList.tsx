@@ -42,10 +42,12 @@ export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => 
       {caps.features.map((f) => {
         const shown = featureProblem(f);
         const needed = needs(f, caps.features);
-        const ids = { problem: `f-${f.id}-problem`, desc: `f-${f.id}-desc` };
+        const ids = { state: `f-${f.id}-state`, reason: `f-${f.id}-reason`, desc: `f-${f.id}-desc` };
+        // A screen reader hears the problem's words and why before what the feature does.
+        const described = [shown && ids.state, shown?.reason && ids.reason, ids.desc].filter(Boolean).join(" ");
         return (
           <div key={f.id} className="feature-row" data-feature={f.id}>
-            <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} aria-describedby={shown ? `${ids.problem} ${ids.desc}` : ids.desc} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} />
+            <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} aria-describedby={described} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} />
             <div className="feature-body">
               <div className="feature-head">
                 <label htmlFor={`f-${f.id}`} className={f.core ? "feature-name core" : "feature-name"}>
@@ -53,13 +55,13 @@ export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => 
                 </label>
                 {f.core && <Tag>core</Tag>}
                 {shown && (
-                  <span data-feature-problem={shown.state}>
+                  <span id={ids.state} data-feature-problem={shown.state}>
                     <StateTag state={shown.state} label={shown.words} />
                   </span>
                 )}
               </div>
               {shown?.reason && (
-                <p className="feature-reason" id={ids.problem}>
+                <p className="feature-reason" id={ids.reason}>
                   {shown.reason}
                 </p>
               )}

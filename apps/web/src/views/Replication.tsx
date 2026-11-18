@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
-import { useResource } from "../live.ts";
+import { useResource, type Resource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
@@ -195,7 +195,11 @@ function SwitchOn({ onDone }: { onDone: (v: ReplicationView) => void }) {
   );
 }
 
-function Problem({ view }: { view: ReplicationView }) {
+/**
+ * What is wrong with Replication, why and what to do: Settings shows it at the top of Machines and Replication, so the
+ * named Settings warning leads straight to its cause.
+ */
+export function ReplicationProblem({ view }: { view: ReplicationView }) {
   const p = PROBLEM[view.status];
   if (!p) return null;
   return (
@@ -252,7 +256,6 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
         <dt>Last sent</dt>
         <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} standalone /> : "nothing sent from this Machine yet"}</dd>
       </dl>
-      <Problem view={view} />
       <div className="row">
         <button disabled={busy !== null} onClick={() => void run("check", () => post<ReplicationView>("/replication/check").then(onChanged))}>
           {busy ? "Checking…" : "Check now"}
@@ -266,8 +269,12 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
 }
 
 /** Replication on this Machine: set it up or join, watch its status and the other Machines, or switch it off. */
-export function ReplicationCard({ dataFolder }: { dataFolder: string | null }) {
-  const view = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+/** This Machine's Replication, as Settings' Machines and Replication section asks for it once for the card and its notice. */
+export function useReplication(): Resource<ReplicationView> {
+  return useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+}
+
+export function ReplicationCard({ view, dataFolder }: { view: Resource<ReplicationView>; dataFolder: string | null }) {
   const v = view.data;
   const shown = v ? STATE[v.status] : null;
   return (

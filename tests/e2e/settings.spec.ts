@@ -136,6 +136,23 @@ test("sections: a list in four groups beside one section; each section has its o
   await expectSection(page, "clients");
 });
 
+test("sections: in a window too short to keep the list in view, a link chosen low in the list hands focus to its section", async () => {
+  const page = await journeys.open("/settings/features");
+  await page.setViewportSize({ width: 1360, height: 500 });
+  const link = sectionList(page).getByRole("link", { name: "Service health" });
+  await link.scrollIntoViewIfNeeded();
+  await link.click();
+  await expectSection(page, "service");
+  await expect(shown(page)).toBeFocused();
+  await expect(shown(page)).toBeInViewport();
+  // A link that stays in view after the page goes back to the top keeps focus.
+  const features = sectionList(page).getByRole("link", { name: "Features" });
+  await features.click();
+  await expectSection(page, "features");
+  await expect(features).toBeFocused();
+  await page.setViewportSize({ width: 1360, height: 900 });
+});
+
 /** A control in the section on screen, by its whole name. */
 const control = (page: Page, role: Role, name: string | RegExp) => shown(page).getByRole(role, { name, exact: typeof name === "string" });
 
@@ -188,6 +205,8 @@ test("features: a switch names only a problem, with its reason; a healthy or swi
     const row = featureRow(page, f.id);
     await expect(row.locator("[data-feature-problem]")).toHaveText(words[f.readiness]!);
     if (f.reason) await expect(row).toContainText(f.reason);
+    // The switch itself says so: its description is the problem, why, then what the feature does.
+    await expect(row.getByRole("checkbox")).toHaveAccessibleDescription([words[f.readiness], f.reason, f.description].filter(Boolean).join(" "));
   }
   for (const f of quiet) {
     const row = featureRow(page, f.id);

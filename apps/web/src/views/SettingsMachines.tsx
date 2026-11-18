@@ -5,7 +5,7 @@ import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
-import { ReplicationCard } from "./Replication.tsx";
+import { ReplicationCard, ReplicationProblem, useReplication } from "./Replication.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 function ThisMachine() {
@@ -46,13 +46,18 @@ function ThisMachine() {
   );
 }
 
-/** This Machine's name, then Replication with every state and action it has. */
+/**
+ * This Machine's name, then Replication with every state and action it has. A Replication problem, the cause of the
+ * named Settings warning, comes first, with what to do.
+ */
 export function MachinesSection() {
   const status = useResource<{ dataFolder: string | null }>("/status", ["config.changed"]);
+  const replication = useReplication();
   return (
     <SettingsSection id="machines" lede="This Machine's name, and Replication: the same Brain on every Machine you own.">
+      {replication.data && <ReplicationProblem view={replication.data} />}
       <ThisMachine />
-      <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
+      <ReplicationCard view={replication} dataFolder={status.data?.dataFolder ?? null} />
     </SettingsSection>
   );
 }
