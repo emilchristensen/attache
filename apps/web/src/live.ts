@@ -113,6 +113,9 @@ export function orderMark(): number {
   return ++marks;
 }
 
+/** How long a resource waits after a live event before it asks again, so a burst of events asks once. */
+export const REFRESH_DELAY_MS = 120;
+
 /**
  * Fetch a resource and refetch when a matching live event arrives or the
  * stream reconnects. Loading, error and data are kept separately so views can
@@ -155,7 +158,7 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   useLiveEvent((ev) => {
     if (ev.type === "reconnected" || refreshOn.includes(ev.type) || (ev.type === "job.event" && refreshOn.includes("job"))) {
       if (timer.current) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(load, 120);
+      timer.current = window.setTimeout(load, REFRESH_DELAY_MS);
     }
   });
   return { data, error, loading, answeredAt, reload: load, setData, askedAt };
