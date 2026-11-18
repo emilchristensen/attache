@@ -3,6 +3,8 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 export interface TabItem<T extends string> {
   id: T;
   label: string;
+  /** A number after the label ("2", "2+"), and the words a screen reader hears after the name ("at least 2 waiting"). */
+  count?: { shown: string; label: string };
 }
 
 interface TabsProps<T extends string> {
@@ -137,8 +139,14 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
             aria-selected={t.id === selected}
             onClick={() => onSelect(t.id)}
             onFocus={(e) => listRef.current && bringIntoView(listRef.current, e.currentTarget)}
+            aria-label={t.count ? `${t.label}, ${t.count.label}` : undefined}
           >
             {t.label}
+            {t.count && (
+              <span className="count" aria-hidden>
+                {t.count.shown}
+              </span>
+            )}
           </button>
         ))}
       </div>

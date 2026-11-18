@@ -34,6 +34,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
+  Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
 - **Replication (opt-in).**
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**

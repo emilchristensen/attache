@@ -5,7 +5,7 @@ export type ScreenId = "home" | "approvals" | "brain" | "connections" | "jobs" |
 
 export interface Screen {
   id: ScreenId;
-  /** Its address; sub-states live under it (`/brain?path=`, later `/approvals/<id>`, `/settings/<section>`). */
+  /** Its address; sub-states live under it (`/brain?path=`, a Draft at `/approvals/<id>`, `/settings/<section>`). */
   to: string;
   label: string;
   /** The letter after `g` that jumps here. */
@@ -36,3 +36,16 @@ export function screenAt(path: string): ScreenId | null {
 /** The narrow bottom bar's tabs; the rest of the screens are under More. */
 export const BOTTOM_BAR_SCREENS: readonly ScreenId[] = ["home", "approvals", "brain"];
 export const MORE_SCREENS: readonly ScreenId[] = ["jobs", "connections", "settings"];
+
+/** Approvals' tabs: Waiting at `/approvals`, Finished at `/approvals?tab=finished`. */
+export type ApprovalsTab = "waiting" | "finished";
+export const approvalsHref = (tab: ApprovalsTab = "waiting") => (tab === "finished" ? "/approvals?tab=finished" : "/approvals");
+
+/** A Draft's own page, under Approvals (Approvals stays selected in the navigation). */
+export const draftHref = (id: string) => `/approvals/${encodeURIComponent(id)}`;
+
+/** The Draft whose own page `path` is, or null: `/approvals/<id>`. */
+export function draftAt(path: string): string | null {
+  const m = /^\/approvals\/([^/]+)$/.exec(path);
+  return m ? decodeURIComponent(m[1]!) : null;
+}

@@ -38,13 +38,12 @@ export class ProposalIndex {
     return row && record ? { relPath: row.rel_path, record } : null;
   }
 
-  list(opts: { status?: ProposalView["status"]; limit?: number } = {}): ProposalRecord[] {
+  /** The Proposals in any of `statuses` (every one when empty), the latest made or decided first. */
+  list(opts: { statuses?: readonly ProposalView["status"][]; limit?: number } = {}): ProposalRecord[] {
     const limit = Math.max(1, Math.min(opts.limit ?? 100, MAX_LIST));
-    const rows = (
-      opts.status
-        ? this.db.prepare("select record from proposals where status = ? order by created_at desc, id limit ?").all(opts.status, limit)
-        : this.db.prepare("select record from proposals order by created_at desc, id limit ?").all(limit)
-    ) as Array<{ record: string }>;
+    const statuses = opts.statuses ?? [];
+    const where = statuses.length ? `where status in (${statuses.map(() => "?").join(",")})` : "";
+    const rows = this.db.prepare(`select record from proposals ${where} order by coalesce(decided_at, created_at) desc, id limit ?`).all(...statuses, limit) as Array<{ record: string }>;
     return rows.flatMap((r) => parseProposalRecord(json(r.record, null)) ?? []);
   }
 

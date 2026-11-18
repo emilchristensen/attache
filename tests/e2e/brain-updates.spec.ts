@@ -6,6 +6,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { approvalRow, draftsGroup, openApprovalRow, proposalsGroup, waitingTab } from "./approvals.ts";
 import { api, JourneyBrowser } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -81,9 +82,21 @@ test("the dot: a waiting Proposal lights the logo, favicon and tab title, and th
 
   // Deciding it in Approvals puts the dot out everywhere.
   await nav.getByRole("link", { name: /^Approvals/ }).click();
-  const proposal = page.getByRole("region", { name: /Changes to the Brain/ }).locator("[data-proposal]");
+  const proposal = approvalRow(page, "proposal", "Lena Berg");
+  await openApprovalRow(proposal);
+  // The decision's answer arrives only after the list was read again without the Proposal: the row keeps its place
+  // meanwhile and then becomes its one line.
+  const refetched = page.waitForResponse((r) => r.url().includes("/api/v1/memory/proposals?status=proposed") && r.request().method() === "GET");
+  const reject = "**/api/v1/memory/proposals/*/reject";
+  await page.route(reject, async (route) => {
+    const response = await route.fetch();
+    await refetched;
+    await route.fulfill({ response });
+  });
   await proposal.getByRole("button", { name: "Reject" }).click();
-  await expect(proposal).toHaveCount(0);
+  expect((await (await refetched).json()).proposals).toEqual([]);
+  await expect(proposal).toHaveAttribute("data-decided", "Rejected");
+  await page.unroute(reject);
   await expectTab(page, { dot: false, title: "Attache" });
   await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Attache" })).toBeVisible();
@@ -107,6 +120,48 @@ test("the dot: a request that fails leaves the dot as it was and shows no number
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expectTab(page, { dot: false, title: "Attache" });
+});
+
+test("approvals: each group answers for its own request, the Waiting tab and navigation show a lower bound, and nothing-waits is said only when both answered", async () => {
+  const page = await journeys.open("/approvals");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  // Both answered with nothing: the one true empty state.
+  await expect(page.getByText("Nothing waits for your OK.")).toBeVisible();
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
+
+  // The waiting Drafts stop answering while a Proposal waits: the Drafts group says it does not know, the Proposal
+  // still shows, and the tab and navigation give the known part as a lower bound.
+  const drafts = "**/api/v1/actions?status=draft,approved,revoked*";
+  await page.route(drafts, (route) => route.abort());
+  const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
+  await page.reload();
+  await expect(draftsGroup(page).getByRole("alert")).toContainText("Drafts could not be loaded. This is not an empty list");
+  await expect(approvalRow(proposalsGroup(page), "proposal", "Lena Berg")).toBeVisible();
+  await expect(page.getByText("Nothing waits for your OK.")).toHaveCount(0);
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, at least 1 waiting");
+  await expect(waitingTab(page).locator(".count")).toHaveText("1+");
+  await expect(nav.getByRole("link", { name: "Approvals, at least 1 waiting" }).locator(".count")).toHaveText("1+");
+
+  // Retry reads them again: nothing waits there, and the count is exact.
+  await page.unroute(drafts);
+  await draftsGroup(page).getByRole("button", { name: "Retry" }).click();
+  await expect(draftsGroup(page)).toContainText("No Drafts wait.");
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 1 waiting");
+
+  // After a good load the Proposals stop answering: the row stays, with when it was loaded, beside the failure.
+  const proposals = "**/api/v1/memory/proposals?*";
+  await page.route(proposals, (route) => route.abort());
+  await api(page, "POST", "/memory/proposals", { ...lenaBerg, item: { ...lenaBerg.item, title: "Ola Berg" } });
+  await expect(proposalsGroup(page).getByRole("alert")).toContainText(/^Proposals could not be refreshed\. These are the rows from \d\d:\d\d\. They may have changed, and the count leaves them out\./);
+  await expect(approvalRow(proposalsGroup(page), "proposal", "Lena Berg")).toBeVisible();
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
+  await page.unroute(proposals);
+  await proposalsGroup(page).getByRole("button", { name: "Retry" }).click();
+  await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 2 waiting");
+
+  // Clear them for the journeys after this one.
+  for (const p of (await api<{ proposals: Array<{ id: string }> }>(page, "GET", "/memory/proposals")).proposals) await api(page, "POST", `/memory/proposals/${p.id}/reject`);
+  expect(proposal.id).toBeTruthy();
 });
 
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
@@ -189,11 +244,12 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
     proposals: [{ item: { action: "create", type: "project", title: "Kestrel review board", facts: [{ subject: "Meets", value: "Every Thursday" }] }, reason: "The review agreed a weekly board.", evidence: kestrel }],
   });
   await page.goto(`${stack.url}/approvals`);
-  const proposal = page.getByRole("region", { name: /Changes to the Brain/ }).locator("[data-proposal]").filter({ hasText: "Kestrel review board" });
+  const proposal = approvalRow(proposalsGroup(page), "proposal", "Kestrel review board");
   await expect(proposal).toBeVisible();
   expect(existsSync(join(stack.dataDir, "memory/projects/kestrel-review-board.md"))).toBe(false);
+  await openApprovalRow(proposal);
   await proposal.getByRole("button", { name: "Reject" }).click();
-  await expect(proposal).toHaveCount(0);
+  await expect(proposal).toHaveAttribute("data-decided", "Rejected");
 
   // Back on, as the other journeys expect.
   await page.goto(`${stack.url}/settings`);

@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
 import { countDecisions, dotAfter, shownCount, spokenCount, type Answer, type DecisionCount, type Tally } from "./count.ts";
+import type { ApiError } from "./api.ts";
 import { useResource, type Resource } from "./live.ts";
+import { pairFailure } from "./pair.ts";
 import type { ScreenId } from "./routes.ts";
 
 /**
@@ -29,6 +31,15 @@ export interface NavSignals {
   inbox: Answer<AttentionItemView>;
   /** The rows behind `inbox`, as the count holds them: Home lists these, and its Retry asks the Inbox and Drafts again. */
   openInbox: Resource<{ items: AttentionItemView[] }>;
+  /** The waiting Drafts and the Proposals as the count read them, for Approvals' empty state. */
+  drafts: Answer<ActionView>;
+  proposals: Answer<ProposalView>;
+  /**
+   * The rows behind `drafts` and `proposals`, as the count holds them: Approvals lists these, so its sections, its
+   * Waiting tab and the navigation agree. The Drafts' Retry asks the Inbox and Drafts again, like Home's.
+   */
+  waitingDrafts: Resource<ActionView[]>;
+  waitingProposals: Resource<{ proposals: ProposalView[] }>;
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
 }
@@ -83,18 +94,26 @@ export function useNavSignals(): NavSignals {
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the count would show the decision twice, or not at all, for as
   // long as the slower request takes. Home's rows come from the same held answer, so they match the count.
-  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error, askedAt: inbox.askedAt }, drafts: { data: drafts.data, error: drafts.error } });
-  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error, askedAt: inbox.askedAt }, drafts: { data: drafts.data, error: drafts.error } };
+  const held = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, answeredAt: r.answeredAt, askedAt: r.askedAt });
+  const settled = useRef({ inbox: held(inbox), drafts: held(drafts) });
+  if (!inbox.loading && !drafts.loading) settled.current = { inbox: held(inbox), drafts: held(drafts) };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
+  // A failure is not held for its pair: it shows at once and stays until the pair settles again (`pair.ts`).
+  const failures = useRef<{ inbox: ApiError | null; drafts: ApiError | null }>({ inbox: null, drafts: null });
+  const pairSettled = !inbox.loading && !drafts.loading;
+  failures.current = { inbox: pairFailure(failures.current.inbox, inbox, pairSettled), drafts: pairFailure(failures.current.drafts, drafts, pairSettled) };
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const reloadPair = useCallback(() => {
     reloadInbox();
     reloadDrafts();
   }, [reloadInbox, reloadDrafts]);
+  const waitingDrafts = heldRows(drafts, inbox.loading, heldDrafts, failures.current.drafts, reloadPair);
   const inputs = {
     inbox: answer(heldInbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
-    drafts: answer(heldDrafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
+    // A Drafts failure counts at once, without waiting for the Inbox: an unknown part only lowers the count to a
+    // lower bound, so it can never count a decision twice; a good answer still waits for its pair.
+    drafts: answer(waitingDrafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
@@ -111,19 +130,22 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
+    openInbox: heldRows(inbox, drafts.loading, heldInbox, failures.current.inbox, reloadPair),
+    drafts: inputs.drafts,
+    proposals: inputs.proposals,
+    waitingDrafts,
+    waitingProposals: proposals,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
 
 /**
- * Home's rows: the held Inbox answer, loading while either list of the pair is still asked, so a first answer from
- * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
- * Drafts; the count still waits for the pair.
+ * One list of the pair as a screen shows it (Home's Inbox rows, Approvals' waiting Drafts): the held answer, loading
+ * while either list is still asked, so a first answer from one alone never shows as an empty list. Its own failure
+ * (`failed`, from `pairFailure`) shows at once with its Retry, without waiting for the other list.
  */
-function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "askedAt">, reload: () => void): Resource<R> {
-  const failed = !inbox.loading && inbox.error ? inbox.error : null;
-  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, askedAt: held.askedAt, error: failed ?? held.error, reload };
+function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt" | "askedAt">, failed: ApiError | null, reload: () => void): Resource<R> {
+  return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, askedAt: held.askedAt, reload };
 }
 
 /** The shell's signals, for the screens inside it. */
