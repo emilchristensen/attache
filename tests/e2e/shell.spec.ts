@@ -265,6 +265,19 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await expect(page.locator(".page").first()).toBeVisible();
   await expect(page.locator("[data-reader-warning]")).toHaveCount(0);
 
+  // A long Machine name with no spaces wraps inside the banner on a phone.
+  await page.route("**/api/v1/reader", (route) => route.fulfill({ json: { ...silent, machine: { ...silent.machine, name: "Emils-MacBook-Pro-16-inch-2026-work-laptop" } } }));
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.reload();
+  const banner = page.locator("[data-reader-warning]");
+  await expect(banner).toContainText("Emils-MacBook-Pro-16-inch-2026-work-laptop");
+  expect(await banner.evaluate((el) => el.scrollWidth <= el.clientWidth), "the banner's words stay inside it at 360 px").toBe(true);
+  await expect(banner.getByRole("link", { name: "Machines and Replication" })).toBeInViewport();
+  await page.unroute("**/api/v1/reader");
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.reload();
+  await expect(banner).toHaveCount(0);
+
   // A Reader that goes quiet while the tab is open: its lease runs out with no event, and the warning still arrives.
   const tab = await journeys.newPage();
   await tab.clock.install();
@@ -280,6 +293,24 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
   answer = "lapsed";
   await tab.clock.runFor(60_000);
+  await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
+  // The Reader comes back, but the answer to the event that says so fails: the warning still goes, once an answer arrives.
+  answer = "failing";
+  const name = (await api<{ name: string }>(tab, "GET", "/machine")).name;
+  const failed = tab.waitForResponse((r) => r.url().endsWith("/api/v1/reader") && r.status() === 503);
+  await api(tab, "PATCH", "/machine", { name });
+  await tab.clock.runFor(500);
+  await failed;
+  await expect(tab.locator("[data-reader-warning]")).toBeVisible();
+  answer = "renewed";
+  await tab.clock.runFor(31_000);
+  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  // A first answer that fails is asked again: the warning arrives once the service says the Reader is silent.
+  answer = "failing";
+  await tab.reload();
+  await expect(tab.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  answer = "lapsed";
+  await tab.clock.runFor(31_000);
   await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
   await tab.close();
 });

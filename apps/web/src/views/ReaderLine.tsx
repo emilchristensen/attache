@@ -6,22 +6,24 @@ import { Icon } from "../components/icons.tsx";
 
 export const READER_EVENTS = ["reader.changed", "replication.changed", "config.changed"];
 
-/** How often to ask again while the lease looks lapsed but no answer says so yet (a failed check, or clocks apart). */
+/** How often to ask again after a failed answer, or while the lease looks lapsed but no answer says so yet (clocks apart). */
 const RECHECK_MS = 30_000;
 
 /**
  * The Reader as the service sees it now. The service decides `silent` when asked, and a lease that simply runs out
- * sends no event, so this asks again just after the current lease would lapse, and keeps asking while that fails.
+ * sends no event, so this asks again just after the current lease would lapse. A failed answer is asked again too, so
+ * neither a missing warning nor a stale one waits for the next event.
  */
 function useReader() {
   const reader = useResource<ReaderView>("/reader", READER_EVENTS);
-  const { data, loading, reload } = reader;
+  const { data, error, loading, reload } = reader;
   useEffect(() => {
-    if (!data?.heartbeatAt || data.silent || loading) return;
-    const lapses = Date.parse(data.heartbeatAt) + READER_SILENT_AFTER_MS - Date.now();
-    const timer = window.setTimeout(reload, lapses > 0 ? lapses + 1000 : RECHECK_MS);
+    if (loading) return;
+    const lapses = !error && data?.heartbeatAt && !data.silent ? Date.parse(data.heartbeatAt) + READER_SILENT_AFTER_MS - Date.now() : null;
+    if (!error && lapses === null) return;
+    const timer = window.setTimeout(reload, lapses !== null && lapses > 0 ? lapses + 1000 : RECHECK_MS);
     return () => window.clearTimeout(timer);
-  }, [data, loading, reload]);
+  }, [data, error, loading, reload]);
   return reader;
 }
 
