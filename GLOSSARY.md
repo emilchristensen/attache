@@ -40,6 +40,11 @@ Its screens are Home, Approvals, Brain, Connections, Jobs and Settings.
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
+**Search the Brain**:
+Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`.
+Each result is a passage with its title, kind, file and lines, ranked by meaning and keywords, or by keywords only until meaning-based search is ready.
+It is a read: it starts no job, changes nothing and holds no conversation.
+
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
 It never means new, unread, changed or offline.

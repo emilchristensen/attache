@@ -423,10 +423,14 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), "no full page load").toBe(true);
 
-  // Search goes to the Brain's search field until Home has its own.
+  // Search goes to the Brain's search field off Home, and focuses Home's own field on Home.
   await bar.getByRole("button", { name: "Search" }).click();
   await expect(page).toHaveURL(`${stack.url}/brain`);
   await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
+  await bar.getByRole("link", { name: /^Home/ }).click();
+  await bar.getByRole("button", { name: "Search" }).click();
+  await expect(page).toHaveURL(`${stack.url}/`);
+  await expect(page.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 

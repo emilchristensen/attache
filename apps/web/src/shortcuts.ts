@@ -2,10 +2,12 @@ import { useEffect } from "react";
 import { modalOpen } from "./components/dialog.ts";
 import { navigate } from "./components/ui.tsx";
 import { SCREENS } from "./routes.ts";
+import { browserPlatform, isSearchChord, SEARCH_SLASH, searchKeyLabel } from "./search-keys.ts";
+import { launchSearch } from "./search-launch.ts";
 
 /**
  * The Dashboard's keyboard shortcuts: one keymap the shell listens with and the shortcut sheet lists.
- * Later tickets add their entries here (search, row movement, the opt-in decision keys); there is never
+ * Later tickets add their entries here (row movement, the opt-in decision keys); there is never
  * a single key for Apply, Reject, Approve, Send, Revert or Disconnect.
  */
 
@@ -28,6 +30,13 @@ export interface ShortcutGroup {
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   { title: "Go to", rows: SCREENS.map((s) => ({ keys: [JUMP_KEY, s.key], does: s.label })) },
+  {
+    title: "Search",
+    rows: [
+      { keys: [searchKeyLabel(browserPlatform())], does: "Search the Brain, even from a text field" },
+      { keys: [SEARCH_SLASH], does: "Search the Brain" },
+    ],
+  },
   { title: "Help", rows: [{ keys: [SHEET_KEY], does: "Show this list of shortcuts" }] },
 ];
 
@@ -49,6 +58,13 @@ export function useShortcuts(openSheet: () => void): void {
   useEffect(() => {
     let jumpUntil = 0;
     const onKey = (e: KeyboardEvent) => {
+      // Ctrl K and Cmd K search from anywhere, a text field included, but never from inside a dialog.
+      if (!e.defaultPrevented && !e.isComposing && isSearchChord(e) && !modalOpen()) {
+        e.preventDefault();
+        jumpUntil = 0;
+        launchSearch();
+        return;
+      }
       if (e.defaultPrevented || shortcutsIgnore(e)) {
         jumpUntil = 0;
         return;
@@ -67,6 +83,9 @@ export function useShortcuts(openSheet: () => void): void {
       } else if (e.key === SHEET_KEY) {
         e.preventDefault();
         openSheet();
+      } else if (e.key === SEARCH_SLASH) {
+        e.preventDefault();
+        launchSearch();
       }
     };
     window.addEventListener("keydown", onKey);
