@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
@@ -96,6 +97,59 @@ async function compactScreens(page: Page, name: string) {
   await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: true });
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.emulateMedia({ colorScheme: "light" });
+}
+
+/**
+ * A bad day for Home's Connections area, from the real answer with four sources changed: Slack signed out, Gmail
+ * down, Google Calendar not reached while offline and Jira not read yet, so three rows show and one waits behind "1 more".
+ */
+async function routeBadDay(page: Page) {
+  await page.route("**/api/v1/capabilities", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { connections: ConnectionStatus[] };
+    const gh = body.connections.find((c) => c.kind === "github")!;
+    const like = (kind: ConnectionStatus["kind"], label: string, extra: Partial<ConnectionStatus>): ConnectionStatus => ({ ...gh, id: kind, kind, label, ...extra });
+    const changed = [
+      like("slack", "Slack", { status: "needs_auth", lastError: "Slack is not connected in claude.ai" }),
+      like("gmail", "Gmail", { status: "error", lastError: "The connector answered 503" }),
+      like("gcal", "Google Calendar", { coverage: gh.coverage && { ...gh.coverage, state: "offline" } }),
+      like("jira", "Jira", { coverage: null, lastSuccessAt: null }),
+    ];
+    body.connections = [...body.connections.filter((c) => !changed.some((x) => x.kind === c.kind)), ...changed];
+    await route.fulfill({ response: res, json: body });
+  });
+}
+
+/** Home's Connections area: the green line as the stack is, then the bad day with its first row and "1 more" open. */
+async function homeConnectionsScreens(page: Page) {
+  const area = page.getByRole("status", { name: "Connections" });
+  const capture = async (path: string) => {
+    await page.waitForTimeout(300);
+    await area.screenshot({ path });
+  };
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(stack.url);
+    await expect(area).toContainText("All good");
+    await capture(`test-results/screens/${scheme}-home-connections.png`);
+  }
+  await routeBadDay(page);
+  const badDay = async (path: string) => {
+    await page.goto(stack.url);
+    await expect(area.locator(".conn-row")).toHaveCount(4);
+    await area.locator(".conn-row-line").first().click();
+    await area.getByText("1 more: not read yet").click();
+    await capture(path);
+  };
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await badDay(`test-results/screens/${scheme}-home-connections-problems.png`);
+  }
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await badDay("test-results/screens/narrow-home-connections-problems.png");
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.unroute("**/api/v1/capabilities");
 }
 
 test("screens", async ({ browser }) => {
@@ -259,6 +313,7 @@ test("screens", async ({ browser }) => {
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
+  await homeConnectionsScreens(page);
   await page.setViewportSize({ width: 390, height: 844 });
   for (const [name, path] of [["home", "/"], ["brain", "/brain?tab=person"], ["approvals", "/approvals"], ["jobs", "/jobs"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);

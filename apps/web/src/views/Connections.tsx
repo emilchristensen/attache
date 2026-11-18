@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
@@ -46,7 +46,17 @@ export function ConnectionsView() {
   const caps = useResource<Caps>("/capabilities", ["connections.changed", "config.changed", "job"]);
   const loc = useLocation();
   const oauth = loc.search.get("oauth");
+  const openId = loc.search.get("open");
   const d = caps.data;
+  // Home's Reconnect and Open in Connections land here: bring that Connection's controls into view and focus the first.
+  const loaded = d !== null;
+  useEffect(() => {
+    if (!loaded || !openId) return;
+    const card = document.querySelector<HTMLElement>(`[data-connection="${CSS.escape(openId)}"]`);
+    if (!card) return;
+    card.scrollIntoView({ block: "center" });
+    card.querySelector<HTMLElement>("button:not(:disabled), input")?.focus({ preventScroll: true });
+  }, [loaded, openId]);
   const card = (s: ConnectionStatus) => {
     const def = d!.definitions.find((x) => x.kind === s.kind);
     return def ? <ConnectionCard key={s.id} status={s} definition={def} onChanged={caps.reload} /> : null;

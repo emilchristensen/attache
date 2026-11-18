@@ -3,6 +3,7 @@ import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage
 import { api, post, put } from "../api.ts";
 import { MarkdownInline, Time, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
+import { reconnectMethod, startBrowserSignIn } from "../reconnect.ts";
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
@@ -76,14 +77,11 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
     );
 
   const signIn = (includeWrite = false) =>
-    run("oauth", async () => {
-      const r = await post<{ url: string }>(`/connections/${status.kind}/oauth/start`, { includeWrite });
-      window.location.href = r.url;
-    });
+    run("oauth", () => startBrowserSignIn(status.kind, includeWrite));
 
   // Methods with secrets need new ones; claude.ai-style methods only need the outside sign-in fixed and a fresh test.
   const reconnect = () => {
-    if (current?.fields.some((f) => f.secret)) {
+    if (current && reconnectMethod(status, definition) === "credentials") {
       setMethod(current.id);
       setEditing(true);
       return;

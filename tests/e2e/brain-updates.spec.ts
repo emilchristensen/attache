@@ -51,8 +51,9 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section).toBeVisible();
   await expect(section).toContainText("Nothing was written without your review in the last 7 days.");
   await expect(section.getByRole("listitem")).toHaveCount(0);
-  // With no sources nothing needs attention, so the logo shows no dot.
-  await expect(page.getByText("Nothing needs your attention")).toBeVisible();
+  // With no work source only the notes are read: Connections says Notes only, the empty Inbox says what was read, and the logo shows no dot.
+  await expect(page.getByRole("status", { name: "Connections" }).locator(".conn-row-line")).toHaveText("Notes · Notes only · Only your notes are read");
+  await expect(page.getByText("Nothing needs your attention in your notes")).toBeVisible();
   await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(0);
 });
 

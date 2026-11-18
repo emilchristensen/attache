@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { AttentionItemView, ConnectionStatus, JobView } from "@attache/contracts";
+import type { AttentionItemView, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { Empty, ErrorState, Link, Loading, navigate, Time, useAction } from "../components/ui.tsx";
@@ -8,7 +8,7 @@ import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
 import { openDraftId } from "../linked-draft.ts";
-import { ReaderLine } from "./ReaderLine.tsx";
+import type { InboxCoverage } from "../connection-status.ts";
 
 interface Briefing {
   id: string;
@@ -155,7 +155,7 @@ function BriefingOverview({ briefing }: { briefing: Briefing }) {
   );
 }
 
-function BriefingCard({ canRun }: { canRun: boolean }) {
+export function BriefingCard({ canRun }: { canRun: boolean }) {
   const b = useResource<{ briefing: Briefing | null }>("/briefings/latest", ["briefing.created"]);
   const [job, setJob] = useState<{ id: string; progress: number; note: string | null; status: string } | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -251,34 +251,19 @@ function BriefingCard({ canRun }: { canRun: boolean }) {
   );
 }
 
-export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
-  const sources = connections.filter((c) => c.kind in SOURCE_LABEL && c.status !== "not_configured");
-  if (!sources.length) return <p className="small muted">No sources connected beyond your notes. <Link to="/connections">Connect sources</Link></p>;
-  return (
-    <div className="coverage" aria-label="Source freshness">
-      {sources.map((s) => (
-        <div key={s.id} className="src" data-source={s.id}>
-          <StateTag state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never refreshed").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
-          <span>{s.label}</span>
-          <span className="when">
-            {s.lastSuccessAt ? (
-              <>
-                ok <Time iso={s.lastSuccessAt} />
-              </>
-            ) : (
-              "never succeeded"
-            )}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
+const EMPTY: Record<InboxCoverage, { title: string; body: string }> = {
+  all: { title: "Nothing needs your attention", body: "Items appear here when deadlines approach, reviews are requested, meetings need prep or replies are pending." },
+  notes: { title: "Nothing needs your attention in your notes", body: "No work source is connected, so only your notes were read." },
+  incomplete: { title: "Nothing found in the sources that were read", body: "Connections above says what was not read, so this may not be complete." },
+};
 
-export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsOn: boolean }) {
+/**
+ * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
+ * when every source was read, and names what was read otherwise.
+ */
+export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage }) {
   const [showHidden, setShowHidden] = useState(false);
   const items = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=${showHidden ? "dismissed,snoozed" : "open"}` : null, ["attention.changed", "briefing.created", "actions.changed"]);
-  const conns = useResource<ConnectionStatus[]>("/connections", ["connections.changed"]);
   const grouped = useMemo(() => {
     const out = new Map<string, AttentionItemView[]>();
     for (const it of items.data?.items ?? []) {
@@ -293,22 +278,8 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
         Search still works.
       </Empty>
     );
-  const failed = (conns.data ?? []).filter((c) => c.status !== "not_configured" && c.status !== "disconnected" && (c.status !== "connected" || (c.coverage && !["complete", "empty"].includes(c.coverage.state))));
   return (
     <div>
-      <BriefingCard canRun={attentionOn} />
-      <div className="section-title">
-        Sources
-        <Link to="/connections">manage</Link>
-      </div>
-      <ReaderLine />
-      {conns.data ?<Coverage connections={conns.data} /> : <Loading lines={2} />}
-      {failed.length > 0 && (
-        <div className="state partial small" style={{ marginTop: 10 }} role="status">
-          <strong style={{ color: "var(--warn)" }}>Incomplete coverage</strong>
-          <span>{failed.map((f) => `${f.label}: ${f.status !== "connected" ? f.status.replace(/_/g, " ") : f.coverage?.state}`).join(" · ")}. Items from these sources may be missing below.</span>
-        </div>
-      )}
       <div className="section-title">
         {showHidden ? "Dismissed and snoozed" : "Needs your attention"}
         <button className="small ghost" style={{ marginLeft: "auto" }} onClick={() => setShowHidden(!showHidden)}>
@@ -318,9 +289,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
       {items.loading && !items.data && <Loading />}
       <ErrorState error={items.error} retry={items.reload} />
       {items.data && items.data.items.length === 0 && (
-        <Empty title={showHidden ? "Nothing dismissed or snoozed" : failed.length ? "Nothing found in the sources that answered" : "Nothing needs your attention"}>
-          {showHidden ? null : failed.length ? "Some sources failed, so this may not be complete." : "Items appear here when deadlines approach, reviews are requested, meetings need prep or replies are pending."}
-        </Empty>
+        <Empty title={showHidden ? "Nothing dismissed or snoozed" : EMPTY[coverage].title}>{showHidden ? null : EMPTY[coverage].body}</Empty>
       )}
       {grouped.map((g) => (
         <section key={g.id} id={`attention-${g.id}`} className="attention-group" aria-label={g.title}>

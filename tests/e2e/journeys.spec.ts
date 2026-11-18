@@ -290,6 +290,51 @@ test("home: the inbox only, with no chat box or chat shortcut", async () => {
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
+test("connections on Home: one green line when all is read, Checking and Could not check when an answer is missing, and Not reading beside the warning", async () => {
+  const page = await journeys.open("/");
+  const area = page.getByRole("status", { name: "Connections" });
+  // Healthy: one line, nothing listed, a link to the details.
+  await expect(area).toContainText("All good");
+  await expect(area).toContainText(/\d+ sources? read .* by this Machine/);
+  await expect(area.locator(".conn-row")).toHaveCount(0);
+  expect((await area.boundingBox())!.height).toBeLessThan(64);
+  await area.getByRole("link", { name: "View details" }).click();
+  await expect(page).toHaveURL(`${stack.url}/connections`);
+
+  // While the Reader has not answered the area claims nothing; when it fails it says so and offers Retry.
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/v1/reader", async (route) => {
+    await held;
+    await route.abort();
+  });
+  await page.goto(`${stack.url}/`);
+  await expect(area.locator(".conn-row")).toHaveText(["Every Connection · Checking · Nothing is known yet"]);
+  release();
+  const failed = area.locator('.conn-row[data-state="could_not_check"]');
+  await expect(failed).toContainText("Could not check");
+  await expect(area).not.toContainText("All good");
+  await page.unroute("**/api/v1/reader");
+  await failed.getByRole("button", { name: "Retry" }).click();
+  await expect(area).toContainText("All good");
+
+  // A silent Reader: Not reading in red with Machines and Replication, and the warning under the masthead stays.
+  await page.route("**/api/v1/reader", async (route) => {
+    const res = await route.fetch();
+    const reader = await res.json();
+    await route.fulfill({ response: res, json: { ...reader, replicated: true, silent: true, thisMachine: false, machine: { id: "other", name: "Home PC" }, heartbeatAt: new Date(Date.now() - 2 * 3_600_000).toISOString() } });
+  });
+  await page.reload();
+  const notReading = area.locator('.conn-row[data-state="not_reading"]');
+  await expect(notReading.locator(".conn-row-line")).toHaveText("Home PC · Not reading · New items may be missing");
+  await expect(page.locator("[data-reader-warning]")).toBeVisible();
+  await notReading.locator(".conn-row-line").click();
+  await expect(notReading).toContainText("Nothing is read again by itself.");
+  await expect(notReading.getByRole("link", { name: "Machines and Replication" })).toHaveAttribute("href", "/settings");
+  await page.unroute("**/api/v1/reader");
+  await page.close();
+});
+
 test("look: the Dashboard sets its text in Inter, served by Attache itself, and loads nothing from the internet", async () => {
   const page = await journeys.newPage();
   const requests: string[] = [];
@@ -358,7 +403,7 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
       expect(ring.ratio, `${scheme} focus ring`).toBeGreaterThanOrEqual(3);
     }
     // A healthy state is plain words, never a coloured pill.
-    const healthy = page.locator(".coverage").getByText("complete", { exact: true }).first();
+    const healthy = page.getByRole("status", { name: "Connections" }).getByText("All good", { exact: true });
     await expect(healthy).toBeVisible();
     expect(await healthy.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
   }
@@ -406,7 +451,7 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toBeVisible();
   await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toContainText("snoozed until");
   await page.getByRole("button", { name: "Show open" }).click();
-  await expect(page.locator(".coverage")).toContainText("GitHub");
+  await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
 });
 
 test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
@@ -1060,13 +1105,38 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(page.getByText(/Still not signed in: Slack is not connected in claude.ai/)).toBeVisible(cliRun);
   await expect(slack.getByText("needs auth", { exact: true })).toBeVisible();
 
+  // Home names the sign-in in one amber line with its impact and Reconnect, and no green line.
+  await page.goto(`${stack.url}/`);
+  const area = page.getByRole("status", { name: "Connections" });
+  const row = area.locator('.conn-row[data-state="sign_in"]');
+  await expect(row.locator(".conn-row-line")).toHaveText("Slack · Sign-in needed · Replies and mentions may be missing");
+  await expect(area).not.toContainText("All good");
+  // Amber: the owner can act. The colour repeats the word; it never carries it alone.
+  const amber = await row.locator(".conn-word").evaluate((el) => {
+    const probe = document.body.appendChild(document.createElement("span"));
+    probe.style.color = "var(--amber)";
+    const expected = getComputedStyle(probe).color;
+    probe.remove();
+    return getComputedStyle(el).color === expected;
+  });
+  expect(amber).toBe(true);
+  // The line opens in place for the sentence, what failed and when it was last read; the button stays outside it.
+  const line = row.getByRole("button", { name: /^Slack · Sign-in needed/ });
+  await expect(line).toHaveAttribute("aria-expanded", "false");
+  await line.click();
+  await expect(line).toHaveAttribute("aria-expanded", "true");
+  await expect(row).toContainText("Slack signed you out, so Slack replies and mentions may be missing below.");
+  await expect(row).toContainText("Slack is not connected in claude.ai");
+  // Reconnect from Home tests the sign-in again, as the card does.
   await setServer("connected");
-  await callout.getByRole("button", { name: "Reconnect" }).click();
-  // The toast lasts a few seconds from the moment the test passes, which can be before the card has reloaded, so it is checked first.
-  await expect(page.getByText("Reconnected")).toBeVisible();
+  await row.getByRole("button", { name: "Reconnect" }).click();
+  // The toast lasts a few seconds from the moment the test passes, which can be before Home has reloaded, so it is checked first.
+  await expect(page.getByText("Reconnected")).toBeVisible(cliRun);
+  await expect(area).toContainText("All good");
+  await expect(connectionsLink).toHaveAccessibleName("Connections");
+  await page.goto(`${stack.url}/connections`);
   await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
   await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
-  await expect(connectionsLink).toHaveAccessibleName("Connections");
 });
 
 /** Select Check now and wait until the check has finished: the button reads "Checking…" meanwhile. */
@@ -1163,7 +1233,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
 
     // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
     await expect(card.locator('[data-machine="Home PC"]').getByText("Reader", { exact: true })).toBeVisible();
-    await second.goto(`${other.url}/`);
+    await second.goto(`${other.url}/connections`);
     const readerLine = second.locator(".page .reader-line");
     await expect(readerLine).toHaveAttribute("data-reader", "other");
     await expect(readerLine).toContainText("Home PC runs Source refresh and briefings.");
@@ -1187,7 +1257,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
   expect(readFileSync(join(stack.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
   expect(existsSync(join(stack.dataDir, ".git"))).toBe(true);
   // Without Replication this Machine is its own Reader again.
-  await page.goto(`${stack.url}/`);
+  await page.goto(`${stack.url}/connections`);
   await expect(page.locator(".page .reader-line")).toHaveAttribute("data-reader", "alone");
   await expect(page.locator(".page .reader-line")).toContainText("This Machine runs Source refresh and briefings.");
 });

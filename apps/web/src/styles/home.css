@@ -118,21 +118,156 @@ button.count-chip {
   border-left: 3px solid var(--amber);
 }
 
-.coverage {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+
+/* ---- Connections ---------------------------------------------------------------------- */
+
+/* One ruled line when all is good; otherwise a ruled head and one compact row per problem. */
+.home-connections {
+  border-block: 1px solid var(--rule);
+  margin: var(--s-5) 0 var(--s-4);
+  padding: 9px 0;
 }
-.coverage .src {
+.conn-title {
+  font: 600 var(--fs-body) / var(--lh-body) var(--font);
+  color: var(--ink);
+  margin: 0;
+}
+.conn-good,
+.conn-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.conn-good > .icon,
+.conn-good-word {
+  color: var(--c);
+}
+.conn-good-word {
+  font-weight: 500;
+}
+.conn-good-meta,
+.conn-working {
+  color: var(--ink-2);
   font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.conn-details {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.conn-rows {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+/* The line (icon, subject, word, impact) opens the row's detail in place; its one button stays beside it. */
+.conn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  border-top: 1px solid var(--rule);
+  padding: 4px 0;
+}
+.conn-row-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-control);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+button.conn-row-line:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.conn-row-icon {
+  color: var(--c);
+}
+.conn-row-text {
+  min-width: 0;
+}
+.conn-subject {
+  font-weight: 600;
+}
+.conn-word {
+  color: var(--c);
+  font-weight: 600;
+}
+.conn-sep,
+.conn-impact {
   color: var(--ink-2);
 }
-.coverage .src .when {
-  margin-left: auto;
+.conn-row-chevron {
   color: var(--ink-3);
+  transition: transform 0.15s;
+}
+.conn-row-line[aria-expanded="true"] .conn-row-chevron {
+  transform: rotate(90deg);
+}
+.conn-row-detail {
+  grid-column: 1 / -1;
+  padding: 2px 0 8px 34px;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  max-width: 72ch;
+}
+.conn-row-detail p {
+  margin: 2px 0;
+}
+.conn-failure {
+  color: var(--ink);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+.conn-more {
+  border-top: 1px solid var(--rule);
+}
+.conn-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  list-style: none;
+}
+.conn-more > summary::-webkit-details-marker {
+  display: none;
+}
+.conn-more-chevron {
+  margin-left: 1px;
+  transition: transform 0.15s;
+}
+.conn-more[open] > summary .conn-more-chevron {
+  transform: rotate(90deg);
+}
+.conn-more > .conn-rows {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  /* The button moves under the line, where it has room, and keeps a comfortable tap target. */
+  .conn-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .conn-row-action {
+    padding: 0 0 6px 34px;
+  }
+  .conn-details {
+    margin-left: 0;
+  }
 }
 
 /* ---- Recently added ----------------------------------------------------------------------- */

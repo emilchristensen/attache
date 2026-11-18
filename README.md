@@ -28,6 +28,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
+  Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
 - **Replication (opt-in).**
