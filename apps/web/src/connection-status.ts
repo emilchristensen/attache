@@ -38,6 +38,7 @@ export type StatusState =
 export type StatusAction =
   | { kind: "reconnect"; connectionId: string }
   | { kind: "refresh"; connectionIds: string[]; label: "Retry now" | "Refresh now" }
+  | { kind: "test"; connectionId: string; label: "Retry now" }
   | { kind: "retry_check" }
   | { kind: "open_connections"; connectionId?: string }
   | { kind: "open_settings" }
@@ -69,6 +70,8 @@ export interface StatusRow {
   counted: boolean;
   /** Inbox items may be missing because of it: false for the model, Harnesses and features other than Attention. */
   inbox: boolean;
+  /** Switched-on features that are not ready only because of this Connection, folded into its row: one cause, one row. */
+  alsoAffected: string[];
 }
 
 export type ConnectionsStatus =
@@ -119,10 +122,15 @@ function missingPhrase(c: ConnectionStatus): string {
   return MISSING[c.kind]?.long ?? `items from ${c.label}`;
 }
 
-/** A coverage state, raised to the worst state of any of its scopes: a refused or partial scope shows even when the rest was read. */
+/**
+ * A coverage state, raised to the worst state of any of its scopes: a refused or partial scope shows even when the
+ * rest was read. The service calls a source `partial` when one scope was read and another refused, so a refused scope
+ * inside `partial` is still Access denied.
+ */
 function coverageState(c: ConnectionStatus): CoverageState | null {
   const cov = c.coverage;
   if (!cov) return null;
+  if (cov.state === "partial" && cov.scopes.some((s) => s.state === "denied")) return "denied";
   if (!HEALTHY_COVERAGE.has(cov.state)) return cov.state;
   for (const worse of ["unauthorized", "denied", "partial"] as const) {
     if (cov.scopes.some((s) => s.state === worse)) return worse;
@@ -148,11 +156,16 @@ function retryOf(ctx: Context): StatusRow["retry"] {
   return ctx.nextReadAt ? { kind: "at", at: ctx.nextReadAt } : null;
 }
 
-function lastReadOf(cs: ConnectionStatus[]): StatusRow["lastRead"] {
-  return cs.filter(isReadable).map((c) => ({ name: c.label, at: c.lastSuccessAt }));
+/** A source no Source refresh has finished for yet: no stored read, whatever a sign-in test recorded. */
+function neverRead(c: ConnectionStatus): boolean {
+  return !c.coverage || c.coverage.state === "never_run" || c.coverage.state === "not_configured";
 }
 
-const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true };
+function lastReadOf(cs: ConnectionStatus[]): StatusRow["lastRead"] {
+  return cs.filter(isReadable).map((c) => ({ name: c.label, at: neverRead(c) ? null : c.lastSuccessAt }));
+}
+
+const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox" | "alsoAffected"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true, alsoAffected: [] };
 
 function signInRow(c: ConnectionStatus): StatusRow {
   const source = isReadable(c);
@@ -195,7 +208,8 @@ function downRow(c: ConnectionStatus, ctx: Context): StatusRow {
     failure: c.status === "error" ? c.lastError : coverageNote(c, "error"),
     lastRead: lastReadOf([c]),
     retry: source ? retryOf(ctx) : null,
-    action: source ? { kind: "refresh", connectionIds: [c.id], label: "Retry now" } : { kind: "open_connections", connectionId: c.id },
+    // A Connection in error comes back through a test; a read that failed comes back through another read.
+    action: c.status === "error" ? { kind: "test", connectionId: c.id, label: "Retry now" } : { kind: "refresh", connectionIds: [c.id], label: "Retry now" },
     inbox: source,
   };
 }
@@ -211,9 +225,8 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     icon: "warning",
     subject: nameList(cs.map((c) => c.label)),
     impact: one ? (MISSING[one.kind]?.short ?? "Items may be missing") : "Their items may be missing",
-    sentence: one
-      ? `This Machine had no network, so ${one.label} was not read and ${missingPhrase(one)} may be missing below.`
-      : `This Machine had no network, so ${plural(cs.length, "source")} were not read and their items may be missing below.`,
+    // The service also files timeouts and 5xx answers as offline, so this says what is known: they were not reached.
+    sentence: one ? `${one.label} could not be reached, so ${missingPhrase(one)} may be missing below.` : `${plural(cs.length, "source")} could not be reached, so their items may be missing below.`,
     lastRead: lastReadOf(cs),
     retry: retryOf(ctx),
     action: { kind: "refresh", connectionIds: cs.map((c) => c.id), label: "Retry now" },
@@ -293,6 +306,45 @@ function notReadingRow(r: ReaderView): StatusRow {
     retry: { kind: "none" },
     action: { kind: "machines" },
   };
+}
+
+/** Every source answered, but the Reader has stored no finished refresh of every source yet, so nothing is green. */
+function everySourceUnreadRow(sources: ConnectionStatus[], ctx: Context): StatusRow {
+  return {
+    ...BASE,
+    key: "not_read_yet:every",
+    state: "not_read_yet",
+    word: "Not read yet",
+    hue: "slate",
+    icon: "question",
+    subject: "Every source",
+    impact: "Items may be missing",
+    sentence: "No Source refresh of every source has finished yet, so items may be missing below.",
+    retry: retryOf(ctx),
+    action: { kind: "refresh", connectionIds: sources.map((c) => c.id), label: "Refresh now" },
+  };
+}
+
+/**
+ * A feature row whose only problem is a Connection that already has its own row: the feature's name joins that row
+ * instead, since one cause is one row. A feature with a cause of its own keeps its row.
+ */
+function foldIntoConnections(rows: StatusRow[], featureRows: Array<{ row: StatusRow; feature: FeatureStatus }>, connections: ConnectionStatus[]): StatusRow[] {
+  const broken = connections.filter((c) => c.status === "needs_auth" || c.status === "error");
+  const folded = new Map<string, string[]>();
+  const kept: StatusRow[] = [];
+  for (const { row, feature } of featureRows) {
+    const groups = feature.dependsOn.connections.filter((g) => !connections.some((c) => g.kinds.includes(c.kind) && c.status === "connected"));
+    const cause = groups.length > 0 ? broken.find((c) => groups.every((g) => g.kinds.includes(c.kind))) : undefined;
+    if (cause && rows.some((r) => r.key === `sign_in:${cause.id}` || r.key === `down:${cause.id}`)) folded.set(cause.id, [...(folded.get(cause.id) ?? []), feature.label]);
+    else kept.push(row);
+  }
+  const merged = rows.map((r) => {
+    const id = r.key.split(":")[1] ?? "";
+    const also = (r.state === "sign_in" || r.state === "down") && folded.get(id);
+    return also ? { ...r, alsoAffected: also } : r;
+  });
+  return [...merged, ...kept];
 }
 
 const SWITCHED_OFF: StatusRow = {
@@ -384,15 +436,19 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   const readerActive = reader.machine !== null && !reader.silent;
   const ctx: Context = { reading: readerActive && attentionOn, nextReadAt: readerActive && attentionOn && reader.thisMachine ? i.nextRefreshAt : null };
 
-  const { rows, healthy } = connectionRows(connections, ctx, attentionOn);
+  const found = connectionRows(connections, ctx, attentionOn);
+  const { healthy } = found;
+  const featureRows = features.flatMap((f) => {
+    const row = featureRow(f);
+    return row ? [{ row, feature: f }] : [];
+  });
+  const rows = foldIntoConnections(found.rows, featureRows, connections);
   if (!attentionOn) rows.push(SWITCHED_OFF);
   else if (!readerActive) rows.push(notReadingRow(reader));
-  for (const f of features) {
-    const row = featureRow(f);
-    if (row) rows.push(row);
-  }
   const workSources = connections.filter((c) => inUse(c) && isReadable(c) && c.kind !== "vault");
   if (attentionOn && workSources.length === 0) rows.push(NOTES_ONLY);
+  // Green needs a stored refresh of every source: single reads and sign-in tests do not make the list complete.
+  if (rows.length === 0 && attentionOn && reader.lastRefreshAt === null) rows.push(everySourceUnreadRow(healthy.filter(isReadable), ctx));
 
   const sources = healthy.filter(isReadable).length;
   const others = healthy.length - sources;

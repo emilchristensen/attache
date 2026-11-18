@@ -300,6 +300,9 @@ test("connections on Home: one green line when all is read, Checking and Could n
   expect((await area.boundingBox())!.height).toBeLessThan(64);
   await area.getByRole("link", { name: "View details" }).click();
   await expect(page).toHaveURL(`${stack.url}/connections`);
+  // A row's link into Connections lands on that Connection with the keyboard in it.
+  await page.goto(`${stack.url}/connections?open=github`);
+  await expect(page.locator('[data-connection="github"] :focus')).toHaveCount(1);
 
   // While the Reader has not answered the area claims nothing; when it fails it says so and offers Retry.
   let release: () => void = () => {};

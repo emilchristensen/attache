@@ -55,11 +55,12 @@ export function ConnectionsView() {
     const card = document.querySelector<HTMLElement>(`[data-connection="${CSS.escape(openId)}"]`);
     if (!card) return;
     card.scrollIntoView({ block: "center" });
-    card.querySelector<HTMLElement>("button:not(:disabled), input")?.focus({ preventScroll: true });
+    // The repair form's first field when it opened, otherwise the card's first control.
+    (card.querySelector<HTMLElement>("input[type=text], input[type=password], input:not([type]), select") ?? card.querySelector<HTMLElement>("button:not(:disabled)"))?.focus({ preventScroll: true });
   }, [loaded, openId]);
   const card = (s: ConnectionStatus) => {
     const def = d!.definitions.find((x) => x.kind === s.kind);
-    return def ? <ConnectionCard key={s.id} status={s} definition={def} onChanged={caps.reload} /> : null;
+    return def ? <ConnectionCard key={s.id} status={s} definition={def} onChanged={caps.reload} repair={s.id === openId} /> : null;
   };
   return (
     <div className="page page-narrow">

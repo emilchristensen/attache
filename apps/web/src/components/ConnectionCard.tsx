@@ -3,7 +3,7 @@ import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage
 import { api, post, put } from "../api.ts";
 import { MarkdownInline, Time, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
-import { reconnectMethod, startBrowserSignIn } from "../reconnect.ts";
+import { reconfigureSignIn, reconnectMethod, startBrowserSignIn } from "../reconnect.ts";
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
@@ -43,12 +43,15 @@ interface Props {
   definition: ConnectionDefinition;
   onChanged: () => void;
   compact?: boolean;
+  /** Opened from a link that asks for repair: a sign-in that needs new secrets, or a refused read, starts with its form open. */
+  repair?: boolean;
 }
 
-export function ConnectionCard({ status, definition, onChanged, compact }: Props) {
+export function ConnectionCard({ status, definition, onChanged, compact, repair = false }: Props) {
   const { busy, run } = useAction();
   const configured = status.status !== "not_configured" && status.status !== "disconnected";
-  const [editing, setEditing] = useState(!configured && !compact);
+  const needsForm = repair && configured && ((status.status === "needs_auth" && reconnectMethod(status, definition) === "credentials") || status.coverage?.state === "denied" || !!status.coverage?.scopes.some((s) => s.state === "denied"));
+  const [editing, setEditing] = useState((!configured && !compact) || needsForm);
   const [method, setMethod] = useState(definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? ""));
   const [fields, setFields] = useState<Record<string, string>>({});
   const [scopes, setScopes] = useState<string[]>(configured ? status.readScopes : definition.scopes.filter((s) => s.default).map((s) => s.id));
@@ -81,9 +84,14 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
 
   // Methods with secrets need new ones; claude.ai-style methods only need the outside sign-in fixed and a fresh test.
   const reconnect = () => {
-    if (current && reconnectMethod(status, definition) === "credentials") {
+    const how = reconnectMethod(status, definition);
+    if (current && how === "credentials") {
       setMethod(current.id);
       setEditing(true);
+      return;
+    }
+    if (how === "reconfigure") {
+      void run("reconnect", () => reconfigureSignIn(status).finally(onChanged), "Reconnected");
       return;
     }
     void run("reconnect", async () => {

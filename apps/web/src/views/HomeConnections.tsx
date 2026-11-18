@@ -1,12 +1,12 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type ReaderView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
 import { Link, navigate, Time, useAction } from "../components/ui.tsx";
 import { Icon } from "../components/icons.tsx";
 import { hueClass } from "../theme/hues.ts";
-import { connectionsStatus, moreLabel, splitRows, type ConnectionsStatus, type Reply, type StatusAction, type StatusRow } from "../connection-status.ts";
-import { connectionHref, reconnectMethod, startBrowserSignIn, testSignIn } from "../reconnect.ts";
+import { connectionsStatus, moreLabel, nameList, splitRows, type ConnectionsStatus, type Reply, type StatusAction, type StatusRow } from "../connection-status.ts";
+import { connectionHref, reconfigureSignIn, reconnectMethod, retestConnection, startBrowserSignIn, testSignIn } from "../reconnect.ts";
 import { useReader } from "./ReaderLine.tsx";
 
 interface Caps {
@@ -39,10 +39,30 @@ function mapReply<T, U>(r: Reply<T>, f: (t: T) => U): Reply<U> {
   return r.state === "ok" ? { state: "ok", data: f(r.data) } : r;
 }
 
-/** When this Machine's Source refresh runs next, if it is switched on and still ahead. */
-function nextRefresh(schedules: Schedule[] | null): string | null {
-  const next = schedules?.find((s) => s.jobKind === "source-refresh" && s.enabled)?.nextRunAt ?? null;
-  return next && Date.parse(next) > Date.now() ? next : null;
+/** When this Machine's Source refresh runs next, if it is switched on, still ahead and the schedule answered last time. */
+function nextRefresh(schedules: Resource<Schedule[]>, now: number): string | null {
+  if (schedules.error) return null;
+  const next = schedules.data?.find((s) => s.jobKind === "source-refresh" && s.enabled)?.nextRunAt ?? null;
+  return next && Date.parse(next) > now ? next : null;
+}
+
+/**
+ * The promised time of the next automatic read stops being promised the moment it is due: the page asks for the
+ * schedule again then, since a refresh that runs long may send no event that would.
+ */
+function useNextRefresh(schedules: Resource<Schedule[]>): string | null {
+  const [now, setNow] = useState(() => Date.now());
+  const next = nextRefresh(schedules, now);
+  const { reload } = schedules;
+  useEffect(() => {
+    if (!next) return;
+    const timer = window.setTimeout(() => {
+      setNow(Date.now());
+      reload();
+    }, Date.parse(next) - Date.now() + 1000);
+    return () => window.clearTimeout(timer);
+  }, [next, reload]);
+  return next;
 }
 
 /**
@@ -54,7 +74,7 @@ export function useConnectionsStatus(): ConnectionsView {
   const caps = useResource<Caps>("/capabilities", ["connections.changed", "config.changed"]);
   const reader = useReader();
   const schedules = useResource<Schedule[]>("/schedules", ["config.changed", "reader.changed"]);
-  const nextRefreshAt = nextRefresh(schedules.data);
+  const nextRefreshAt = useNextRefresh(schedules);
   const { data: capsData, error: capsError } = caps;
   const { data: readerData, error: readerError } = reader;
   const status = useMemo(() => {
@@ -146,7 +166,7 @@ function RowAction({ action, describedBy, view }: { action: StatusAction; descri
       const reconnect = () => {
         if (method === "credentials" || !status) return navigate(connectionHref(action.connectionId));
         if (method === "browser") return void run("reconnect", () => startBrowserSignIn(status.kind));
-        void run("reconnect", () => testSignIn(status.id).then(view.reload), "Reconnected");
+        void run("reconnect", () => (method === "reconfigure" ? reconfigureSignIn(status) : testSignIn(status.id)).then(view.reload), "Reconnected");
       };
       return (
         <button className="small primary" aria-describedby={describedBy} disabled={busy !== null} onClick={reconnect}>
@@ -162,6 +182,12 @@ function RowAction({ action, describedBy, view }: { action: StatusAction; descri
           disabled={busy !== null}
           onClick={() => run("refresh", () => Promise.all(action.connectionIds.map((id) => post(`/connections/${encodeURIComponent(id)}/refresh`))), "Refresh started")}
         >
+          {action.label}
+        </button>
+      );
+    case "test":
+      return (
+        <button className="small" aria-describedby={describedBy} disabled={busy !== null} onClick={() => run("test", () => retestConnection(action.connectionId).then(view.reload), "Working again")}>
           {action.label}
         </button>
       );
@@ -236,6 +262,7 @@ function ProblemRow({ row, view }: { row: StatusRow; view: ConnectionsView }) {
         <div id={detailId} className="conn-row-detail" hidden={!open}>
           <p>{row.sentence}</p>
           {row.failure && <p className="conn-failure">{row.failure}</p>}
+          {row.alsoAffected.length > 0 && <p>Also waiting on it: {nameList(row.alsoAffected)}.</p>}
           <LastRead lastRead={row.lastRead} />
           <Retry retry={row.retry} />
         </div>

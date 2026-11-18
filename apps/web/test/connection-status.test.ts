@@ -39,7 +39,8 @@ function conn(kind: ConnectionStatus["kind"], extra: Partial<ConnectionStatus> =
 
 function feature(id: FeatureStatus["id"], extra: Partial<FeatureStatus> = {}): FeatureStatus {
   const label = { recall: "Recall", capture: "Capture", attention: "Attention and briefings", drafts: "Drafts and approvals", jobs: "Background jobs", sessions: "Sessions" }[id];
-  return { id, label, description: "", core: false, enabled: true, readiness: "ready", reason: null, dependsOn: { features: [], connections: [] }, schedules: [], ...extra };
+  const connections = id === "drafts" ? [{ kinds: ["model" as const], label: "A model to prepare drafts", required: false }] : [];
+  return { id, label, description: "", core: false, enabled: true, readiness: "ready", reason: null, dependsOn: { features: [], connections }, schedules: [], ...extra };
 }
 
 const THIS_READER: ReaderView = { machine: { id: "m1", name: "Work Mac" }, thisMachine: true, replicated: false, heartbeatAt: null, silent: false, lastRefreshAt: AT };
@@ -139,7 +140,7 @@ describe("connectionsStatus: one case per state", () => {
 
   it("Down, red, with what failed, when it last worked and Retry now", () => {
     const row = onlyRow(withConnections(conn("slack", { status: "error", lastError: "The request timed out" })));
-    expect(row).toMatchObject({ state: "down", word: "Down", hue: "red", icon: "warning", subject: "Slack", failure: "The request timed out", action: { kind: "refresh", connectionIds: ["slack"], label: "Retry now" } });
+    expect(row).toMatchObject({ state: "down", word: "Down", hue: "red", icon: "warning", subject: "Slack", failure: "The request timed out", action: { kind: "test", connectionId: "slack", label: "Retry now" } });
     expect(row.sentence).toBe("Slack is not answering, so Slack replies and mentions may be missing below.");
     expect(row.lastRead).toEqual([{ name: "Slack", at: LAST_OK }]);
   });
@@ -149,15 +150,15 @@ describe("connectionsStatus: one case per state", () => {
     expect(row).toMatchObject({ state: "down", subject: "GitHub", failure: "GitHub answered 503" });
   });
 
-  it("Down for a Harness offers Open in Connections, since it has no Source refresh", () => {
+  it("Down for a Harness tests it again, and has no last read since it has no Source refresh", () => {
     const row = onlyRow(withConnections(conn("claude-code", { status: "error", lastError: "Not installed" })));
-    expect(row).toMatchObject({ state: "down", subject: "Claude Code", lastRead: [], action: { kind: "open_connections", connectionId: "claude-code" } });
+    expect(row).toMatchObject({ state: "down", subject: "Claude Code", lastRead: [], action: { kind: "test", connectionId: "claude-code", label: "Retry now" } });
   });
 
   it("Offline, red, as one row for every source this Machine could not reach", () => {
     const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") }), conn("slack", { coverage: coverage("offline") })));
     expect(row).toMatchObject({ state: "offline", word: "Offline", hue: "red", icon: "warning", subject: "GitHub, Gmail and Slack", impact: "Their items may be missing", action: { kind: "refresh", connectionIds: ["github", "gmail", "slack"], label: "Retry now" } });
-    expect(row.sentence).toBe("This Machine had no network, so 3 sources were not read and their items may be missing below.");
+    expect(row.sentence).toBe("3 sources could not be reached, so their items may be missing below.");
     expect(row.lastRead).toHaveLength(3);
   });
 
@@ -268,6 +269,40 @@ describe("connectionsStatus: rules for every row", () => {
       expect(["key", "warning", "question", "brain", "settings"]).toContain(row.icon);
       expect(row.sentence).toMatch(/\.$/);
     }
+  });
+});
+
+describe("connectionsStatus: findings from review round 1", () => {
+  it("is not green before the Reader stored a refresh of every source: one Not read yet row for every source", () => {
+    const row = onlyRow(inputs({ reader: ok({ ...THIS_READER, lastRefreshAt: null }) }));
+    expect(row).toMatchObject({ state: "not_read_yet", subject: "Every source", action: { kind: "refresh", connectionIds: ["vault", "github", "gmail", "slack"], label: "Refresh now" } });
+  });
+
+  it("names a refused scope Access denied even when the service's overall state is partial", () => {
+    const cov = coverage("partial", { scopes: [{ scope: "review requests for @me", state: "denied", items: 0, pages: 0 }, { scope: "authored pull requests", state: "complete", items: 2, pages: 1 }] });
+    expect(onlyRow(withConnections(conn("github", { coverage: cov })))).toMatchObject({ state: "denied", failure: "Refused: review requests for @me" });
+  });
+
+  it("folds a feature that waits on a broken Connection into that Connection's row: one cause, one row", () => {
+    const drafts = feature("drafts", { readiness: "partial", reason: "Drafts start empty for you to write; Attache cannot prepare them." });
+    const i = { ...withConnections(conn("model", { status: "needs_auth" })), features: ok([...FEATURES.filter((f) => f.id !== "drafts"), drafts]) };
+    const row = onlyRow(i);
+    expect(row).toMatchObject({ state: "sign_in", subject: "Model", alsoAffected: ["Drafts and approvals"] });
+  });
+
+  it("retries a Connection that is in error by testing it, and a failed read by reading again", () => {
+    expect(onlyRow(withConnections(conn("slack", { status: "error" }))).action).toEqual({ kind: "test", connectionId: "slack", label: "Retry now" });
+    expect(onlyRow(withConnections(conn("github", { coverage: coverage("error") }))).action).toEqual({ kind: "refresh", connectionIds: ["github"], label: "Retry now" });
+  });
+
+  it("shows no last-read time for a source that was never read, even after a successful test", () => {
+    const row = onlyRow(withConnections(conn("jira", { coverage: null, lastSuccessAt: AT })));
+    expect(row.lastRead).toEqual([{ name: "Jira", at: null }]);
+  });
+
+  it("says a source could not be reached, not that this Machine had no network, since the service also files timeouts and 5xx answers there", () => {
+    const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") })));
+    expect(row.sentence).toBe("2 sources could not be reached, so their items may be missing below.");
   });
 });
 
