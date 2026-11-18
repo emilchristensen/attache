@@ -71,10 +71,18 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     setHidden((prev) => (prev.before === next.before && prev.after === next.after ? prev : next));
   }, []);
 
+  const showSelected = useCallback(() => {
+    const list = listRef.current;
+    const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (list && tab) bringIntoView(list, tab);
+    measure();
+  }, [measure]);
+
+  // A tab changes width when the window does, or when Inter replaces the fallback font after the first layout.
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(showSelected);
     observer.observe(list);
     for (const tab of list.children) observer.observe(tab);
     list.addEventListener("scroll", measure, { passive: true });
@@ -82,14 +90,9 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
       observer.disconnect();
       list.removeEventListener("scroll", measure);
     };
-  }, [measure, tabs]);
+  }, [measure, showSelected, tabs]);
 
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]');
-    if (list && tab) bringIntoView(list, tab);
-    measure();
-  }, [selected, measure]);
+  useLayoutEffect(showSelected, [selected, showSelected]);
 
   const page = (direction: 1 | -1) => {
     const list = listRef.current;
