@@ -126,7 +126,8 @@ export class ActionService {
   edit(id: string, payload: Record<string, unknown>, expectedVersion: number, actor: string, context?: Record<string, unknown>): ActionView {
     const a = this.require(id);
     if (a.version !== expectedVersion) throw new ActionError("version_conflict", `The draft changed (now version ${a.version}); reload before editing.`);
-    if (!["draft", "approved", "revoked", "rejected"].includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
+    if (a.status === "rejected") throw new ActionError("not_editable", "A rejected Draft cannot be edited. Restore it first.");
+    if (!["draft", "approved", "revoked"].includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
     if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired.");
     const hash = payloadHash(a.kind, a.target, payload);
     const version = a.version + 1;
@@ -158,6 +159,29 @@ export class ActionService {
     tx(this.db, () => {
       this.db.prepare("update actions set status = 'rejected', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), id);
       this.event(id, "rejected", actor, reason ? { reason } : null);
+    });
+    return this.get(id)!;
+  }
+
+  /**
+   * Undo a rejection: the same text comes back as a new version in `draft`, until the Draft's own lifetime ends.
+   * Refused when another Draft for the same Inbox item already waits or is being sent, so one item never has two.
+   */
+  restore(id: string, expectedVersion: number, actor: string): ActionView {
+    const a = this.require(id);
+    if (a.status !== "rejected") throw new ActionError("not_restorable", `A ${a.status} action cannot be restored; only a rejected Draft can.`);
+    if (a.version !== expectedVersion) throw new ActionError("version_conflict", `The draft changed (now version ${a.version}); reload before restoring.`);
+    if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired, so it can no longer be restored.");
+    const key = (this.db.prepare("select attention_item_key k from actions where id = ?").get(id) as { k: string | null }).k;
+    if (key) {
+      const open = this.db.prepare("select id from actions where attention_item_key = ? and id <> ? and status in ('draft','approved','revoked','executing') limit 1").get(key, id);
+      if (open) throw new ActionError("superseded", "A newer Draft for the same item is open. Reject it before restoring this one.");
+    }
+    const version = a.version + 1;
+    tx(this.db, () => {
+      this.db.prepare("update actions set status = 'draft', version = ?, approval = null, updated_at = ? where id = ?").run(version, this.now().toISOString(), id);
+      this.event(id, "restored", actor, { version, payloadHash: a.payloadHash });
+      if (key) this.db.prepare("update attention_items set action_id = ? where item_key = ?").run(id, key);
     });
     return this.get(id)!;
   }
