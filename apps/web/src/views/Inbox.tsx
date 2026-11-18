@@ -352,7 +352,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
         </button>
       </InboxHeading>
       {showHidden && <div className="section-title">Dismissed and snoozed</div>}
-      {items.loading && !items.data && <Loading />}
+      {items.loading && !items.data && <Loading label="Loading the Inbox" />}
       <ErrorState error={items.error} retry={items.reload} />
       {items.data && items.data.items.length === 0 && (
         <Empty title={showHidden ? "Nothing dismissed or snoozed" : failed.length ? "Nothing found in the sources that answered" : "Nothing needs your attention"}>
