@@ -1,9 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { api, post, type ApiError } from "./api.ts";
+import { api, type ApiError } from "./api.ts";
 import { hub, useLiveStatus, useResource } from "./live.ts";
-import { ErrorBoundary, Link, Loading, navigate, useLocation, ErrorState } from "./components/ui.tsx";
+import { ErrorBoundary, Link, Loading, navigate, useLocation } from "./components/ui.tsx";
 import { EvidenceProvider } from "./components/Evidence.tsx";
 import { Logo } from "./components/Logo.tsx";
+import { CompactScreen } from "./components/CompactScreen.tsx";
+import { Pair } from "./views/Pair.tsx";
+import { ServiceUnreachable } from "./views/ServiceUnreachable.tsx";
 import { Setup } from "./views/Setup.tsx";
 import { Home } from "./views/Home.tsx";
 import { MemoryView } from "./views/Memory.tsx";
@@ -25,64 +28,6 @@ export const NAV: Array<{ to: string; label: string; key: string }> = [
   { to: "/connections", label: "Connections", key: "c" },
   { to: "/settings", label: "Settings", key: "s" },
 ];
-
-function Pair({ onPaired }: { onPaired: () => void }) {
-  const loc = useLocation();
-  const fromHash = new URLSearchParams(loc.hash.replace(/^#/, "")).get("code");
-  const [code, setCode] = useState(fromHash ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async (c: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await post("/pair", { code: c, clientName: `Browser (${navigator.platform || "web"})`, kind: "browser" });
-      history.replaceState(null, "", "/");
-      onPaired();
-    } catch (e) {
-      setError((e as ApiError).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  useEffect(() => {
-    if (fromHash) void submit(fromHash);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return (
-    <div className="setup" style={{ maxWidth: 520 }}>
-      <div className="brand" style={{ padding: 0 }}>
-        <Logo /> Attache
-      </div>
-      <div className="card stack" style={{ marginTop: 24 }}>
-        <h1>Pair this browser</h1>
-        <p className="muted">Attache runs on this computer and only talks to paired clients. The installer opens this page with a code. To pair again, run <code>attache pair --open</code> in a terminal, or create a code in Settings on an already paired browser.</p>
-        <form
-          className="stack"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit(code);
-          }}
-        >
-          <label className="field">
-            Pairing code
-            <input autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="ABCD2345" autoComplete="one-time-code" spellCheck={false} />
-          </label>
-          {error && (
-            <p className="error-text small" role="alert">
-              {error}
-            </p>
-          )}
-          <div>
-            <button className="primary" disabled={busy || code.trim().length < 6}>
-              {busy ? "Pairing…" : "Pair"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 function Shell({ children, path }: { children: ReactNode; path: string }) {
   const live = useLiveStatus();
@@ -166,10 +111,10 @@ export function App() {
   };
   useEffect(check, []);
 
-  if (state === "checking") return <div className="setup"><Loading lines={4} label="Connecting to Attache" /></div>;
-  if (state === "offline") return <div className="setup"><ErrorState error={err} retry={check} title="Attache service is not reachable" /><p className="muted small" style={{ marginTop: 12 }}>The service normally starts at login. Run <code>attache status</code> or reinstall to repair it.</p></div>;
+  if (state === "checking") return <CompactScreen busy><Loading lines={4} label="Connecting to Attache" /></CompactScreen>;
+  if (state === "offline") return <ServiceUnreachable error={err} retry={check} />;
   if (state === "unpaired" || loc.path === "/pair") return <Pair onPaired={check} />;
-  if (!session || !cfg.data) return <div className="setup"><Loading lines={4} /></div>;
+  if (!session || !cfg.data) return <CompactScreen busy><Loading lines={4} /></CompactScreen>;
   if (!cfg.data.config.setupCompleted || loc.path === "/setup") return <EvidenceProvider><Setup onDone={() => { cfg.reload(); navigate("/"); }} /></EvidenceProvider>;
 
   const p = loc.path;
