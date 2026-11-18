@@ -152,9 +152,9 @@ export function parseSource(text: string): FactSource {
   return { text, summary: text.length <= SHORT_SOURCE ? text : null, kind: null, observed: null, open: null };
 }
 
-/** The Proposals waiting for the owner's OK that change this note, oldest first. */
+/** The Proposals waiting for the owner's OK that change this note. */
 export function waitingProposalsFor(relPath: string, proposals: readonly ProposalView[]): ProposalView[] {
-  return proposals.filter((p) => p.status === "proposed" && p.target === relPath).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return proposals.filter((p) => p.status === "proposed" && p.target === relPath);
 }
 
 export function waitingProposalWords(n: number): string {

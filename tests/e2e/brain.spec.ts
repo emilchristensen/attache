@@ -156,6 +156,35 @@ test("brain: search results replace the Library with every result, say how they 
   await expect(search(page)).toHaveValue("");
   await expect(search(page)).toBeFocused();
   await expect(page).not.toHaveURL(/q=/);
+
+  // Choosing the view shown already keeps the collection and note.
+  await collections(page).getByRole("link", { name: "Projects" }).click();
+  await page.locator(".note-list-item", { hasText: "Atlas launch" }).click();
+  const here = page.url();
+  await page.getByRole("tab", { name: "Library" }).click();
+  await expect(page).toHaveURL(here);
+  // Words typed but not yet searched stay behind when the owner goes to Recent saves straight away.
+  await search(page).pressSequentially("He");
+  await page.getByRole("tab", { name: "Recent saves" }).click();
+  await expect(page).toHaveURL(`${stack.url}/brain/recent`);
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(`${stack.url}/brain/recent`);
+  await expect(search(page)).toHaveValue("");
+  // Choosing it again keeps its filter.
+  await page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Reverted" }).click();
+  await page.getByRole("tab", { name: "Recent saves" }).click();
+  await expect(page).toHaveURL(`${stack.url}/brain/recent?show=reverted`);
+});
+
+test("brain: a note picked far down a long list opens in view beside it, and the list keeps its place", async () => {
+  const page = await journeys.open("/brain?tab=project");
+  await page.setViewportSize({ width: 1280, height: 560 });
+  const last = page.locator(".note-list-item").last();
+  await last.scrollIntoViewIfNeeded();
+  const title = (await last.locator(".note-list-title").textContent())!;
+  await last.click();
+  await expect(reader(page).getByRole("heading", { level: 2, name: title })).toBeInViewport();
+  await expect(last).toBeInViewport();
 });
 
 test("brain: a fact's source is a button that opens in place with pointer, keyboard and touch", async ({ browser }) => {
@@ -229,7 +258,7 @@ test("brain: the reader shows Review dates, History as stored, the Change log cl
   await expect(reader(page).getByRole("region", { name: "Notes" })).toContainText("Met at the pilot kickoff.");
   const history = reader(page).getByRole("region", { name: "History" }).getByRole("listitem");
   const stored = readFileSync(join(stack.dataDir, NORA), "utf8").split("## History")[1]!.split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2).replace(/\*\*/g, ""));
-  expect(await history.evaluateAll((items) => items.map((li) => li.textContent))).toEqual(stored);
+  expect(await history.evaluateAll((items) => items.map((li) => (li as HTMLElement).innerText))).toEqual(stored);
 
   // The Markdown file itself is one click away, with line numbers, and not in the page until opened.
   const file = reader(page).locator("details.reader-file");

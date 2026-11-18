@@ -193,6 +193,21 @@ h2.brain-results-title {
 
 /* ---- the note reader --------------------------------------------------------------------------------- */
 
+/*
+ * Beside the list, the reader stays in view and scrolls on its own, so a note picked far down a long list opens
+ * where the owner is looking and the list keeps its place. The room is the window less the masthead (74 px) and a
+ * margin above and below.
+ */
+@media (min-width: 721px) {
+  .library-reader {
+    position: sticky;
+    top: var(--s-4);
+    max-height: calc(100dvh - 74px - 2 * var(--s-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 .note-reader,
 .reader-placeholder {
   background: var(--paper);
@@ -358,6 +373,10 @@ button.fact-source-toggle {
   color: var(--ink-2);
   font-size: var(--fs-control);
   line-height: 21px;
+}
+/* As stored: runs of spaces in a History line are kept, not collapsed. */
+.reader-history li {
+  white-space: pre-wrap;
 }
 .reader-history li + li {
   margin-top: var(--s-1);

@@ -158,9 +158,9 @@ describe("a waiting Proposal for the note being read", () => {
     proposal({ id: "b", target: "memory/people/nora.md" }),
     proposal({ id: "c", status: "applied" }),
     proposal({ id: "d", target: "(new project: Atlas)" }),
-    proposal({ id: "e", createdAt: "2026-11-18T09:00:00Z" }),
+    proposal({ id: "e" }),
   ];
-  it("only the waiting ones that change this note, oldest first", () => {
+  it("only the waiting ones that change this note", () => {
     expect(waitingProposalsFor("memory/projects/atlas.md", list).map((p) => p.id)).toEqual(["a", "e"]);
     expect(waitingProposalsFor("memory/projects/none.md", list)).toEqual([]);
   });

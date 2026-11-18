@@ -194,6 +194,10 @@ function Library({ place, onClear }: { place: LibraryPlace; onClear: () => void 
     if (arrivedWithNote.current) revealDetail();
   }, [revealDetail]);
   const searching = place.q !== "";
+  // Beside the list the reader scrolls on its own; another note starts at its top.
+  useEffect(() => {
+    if (detailRef.current) detailRef.current.scrollTop = 0;
+  }, [detailRef, place.root, place.path]);
   return (
     <div className={`library${searching ? " searching" : ""}`}>
       {!searching && <Collections place={place} />}
@@ -243,7 +247,13 @@ export function BrainView() {
     if (place.view === "library") navigate(brainHref({ ...place, q: "" }), { replace: true });
     document.getElementById(BRAIN_SEARCH_ID)?.focus();
   };
-  const selectView = (view: "library" | "recent") => navigate(view === "recent" ? brainHref({ view }) : brainHref({ view, q: query }));
+  const selectView = (view: "library" | "recent") => {
+    // The view shown already keeps its collection, note and filter.
+    if (view === place.view) return;
+    // Words typed but not yet in the address stay behind: they must not take the owner back to the Library.
+    setQ(query);
+    navigate(view === "recent" ? brainHref({ view }) : brainHref({ view, q: query }));
+  };
   return (
     <div className="page brain">
       <div className="brain-head">
