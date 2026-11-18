@@ -173,11 +173,20 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
     **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
     **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
     Yesterday's briefing never shows as today's.
+  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
+    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
+    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
+    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
+    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
+    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
+    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
   - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
+    Under a meeting it is one line, and **Read briefing** opens why it is there with the briefing.
   - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
-  - When nothing is timely, the area is one quiet line that says when the Reader's next daily briefing is scheduled.
+  - When nothing is timely, the area is one quiet line that says what comes next: when a meeting's prep shows, or when the Reader's next daily briefing is scheduled.
   - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
-  - Got it is remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - Got it and Not now are remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - When a Heads-up arrives while you read further down, the page keeps your place.
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.

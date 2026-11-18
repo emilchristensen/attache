@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frozenList, groupRows, ordered, PAGE_SIZE, pageLabel, PREVIEWS, typeOptions, withType, type ViewItem } from "../src/inbox-view.ts";
+import { backFromAbove, frozenList, groupRows, listedBelow, ordered, PAGE_SIZE, pageLabel, PREVIEWS, typeOptions, withType, type ViewItem } from "../src/inbox-view.ts";
 
 // The Inbox list's rules: order, the frozen snapshot and its arrivals, pages, the type picker and Group by type.
 
@@ -135,5 +135,23 @@ describe("Group by type", () => {
     const deadlines = groupRows(rows, new Set(["deadlines"]))[0]!;
     expect(ids(deadlines.rows)).toEqual(["d1", "d2", "d3", "d4"]);
     expect(deadlines.hidden).toBe(0);
+  });
+});
+
+describe("meeting prep and For you now", () => {
+  const meeting = (id: string, end: string) => ({ ...it_(id, { kind: "meeting_prep", sourceKind: "gcal" }), meeting: { start: "2026-11-18T09:00:00Z", end, meetLink: null, attendees: [] } });
+  const now = Date.parse("2026-11-18T09:20:00Z");
+  const items = [it_("deadline"), meeting("shown", "2026-11-18T09:30:00Z"), meeting("put-away", "2026-11-18T09:30:00Z"), meeting("ended", "2026-11-18T09:20:00Z")];
+
+  it("lists neither the meetings shown above nor one whose meeting has ended", () => {
+    expect(ids(listedBelow(items, new Set(["shown"]), now))).toEqual(["deadline", "put-away"]);
+    // Items with no meeting (another kind, or from before items carried one) are always listed.
+    expect(ids(listedBelow([{ ...it_("old", { kind: "meeting_prep" }), meeting: null }], new Set(), now))).toEqual(["old"]);
+  });
+
+  it("brings a meeting back into its place when it leaves For you now while still open, as after Not now", () => {
+    expect(backFromAbove(new Set(["shown", "put-away"]), new Set(["shown"]), items, now)).toEqual(["put-away"]);
+    // Gone from the open list (Done), or ended: nothing to bring back.
+    expect(backFromAbove(new Set(["gone", "ended"]), new Set(), items, now)).toEqual([]);
   });
 });

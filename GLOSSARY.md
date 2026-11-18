@@ -152,6 +152,11 @@ _Avoid_: Drafts page
 **Heads-up**:
 Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
 Every Heads-up says why it is here and when it leaves; "Got it" puts it away in this browser.
+A meeting prep Heads-up is a view of its Inbox item, not a second item: "Done" decides the item, "Not now" hides only the Heads-up.
+
+**Meeting prep**:
+An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
+From 15 minutes before the start it shows in For you now instead of the Inbox, with Join first once the meeting runs.
 _Avoid_: Occupant, nudge
 
 **For you now**:
