@@ -6,6 +6,7 @@ import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
 import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
+import { DELIVERY_UNCONFIRMED_MESSAGE } from "../actions/service.ts";
 import { FEATURES } from "../capabilities/registry.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { expandHome, folderName } from "../platform/locations.ts";
@@ -123,8 +124,8 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     if (!item) throw new HttpError(404, "not_found", "Attention item not found");
     if (!item.draftable) throw new HttpError(409, "not_draftable", "Attache cannot draft a response for this kind of item.");
     // The last send may have arrived: a replacement only on the owner's explicit choice, never as a routine new Draft.
-    if (item.actionStatus === "unknown" && !body.replaceUnconfirmed) throw new HttpError(409, "delivery_unconfirmed", "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
-    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}) }, capability: "drafts", connectionId: item.connectionId });
+    if (item.actionStatus === "unknown" && !body.replaceUnconfirmed) throw new HttpError(409, "delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
+    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}), ...(body.replaceUnconfirmed ? { replaceUnconfirmed: true } : {}) }, capability: "drafts", connectionId: item.connectionId });
     return { __status: 201, body: { job } };
   });
   r.post("/briefings", async (c) => {

@@ -1,5 +1,5 @@
 import type { ActionView, AttentionItemView } from "@attache/contracts";
-import { draftTargetUrl, unknownOutcomeNotice, type DraftNotice } from "./draft-state.ts";
+import { uncertainTargetUrl, unknownOutcomeNotice, type DraftNotice } from "./draft-state.ts";
 
 /**
  * Delivery unconfirmed on an Inbox item (table tests in `test/delivery.test.ts`): the item's last Draft was sent, but
@@ -17,7 +17,7 @@ export function unconfirmedDraftId(item: Pick<AttentionItemView, "actionId" | "a
 
 /** Where Check destination goes and what the warning says. */
 export interface DeliveryCheck {
-  /** The receipt's own place, else the Draft's target, else the item's link; null when none is known. */
+  /** The receipt's own place, else (a Gmail draft) Gmail's drafts, else the Draft's target, else the item's link; null when none is known. */
   href: string | null;
   notice: DraftNotice;
 }
@@ -28,5 +28,15 @@ const GENERAL_NOTICE: DraftNotice = { tone: "attention", warning: true, lines: [
 /** Check destination and the warning for an item, from its Draft once read (`null` before). */
 export function deliveryCheck(item: Pick<AttentionItemView, "url">, draft: ActionView | null): DeliveryCheck {
   if (!draft) return { href: item.url, notice: GENERAL_NOTICE };
-  return { href: draftTargetUrl(draft) ?? item.url, notice: unknownOutcomeNotice(draft) };
+  return { href: uncertainTargetUrl(draft) ?? item.url, notice: unknownOutcomeNotice(draft) };
+}
+
+/**
+ * The words between Prepare a replacement and the replacement itself, for the item's Draft kind
+ * (`item.draftable.actionKind`): a Gmail draft is only created, never sent, so the question is whether it exists.
+ */
+export function replacementWarning(actionKind: string | null): string {
+  return actionKind === "gmail.draft"
+    ? "Only if the draft is not in your Gmail drafts. A replacement is a new Draft for this item; nothing reaches Gmail until you approve and create it."
+    : "Only if the message did not arrive. A replacement is a new Draft for this item; nothing is sent until you approve and send it.";
 }

@@ -8,7 +8,7 @@ import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
 import { complete } from "../models/providers.ts";
 import { toCitation } from "../memory/citation.ts";
 import { escapeMarkdownInline } from "../memory/plain-text.ts";
-import { newEffectKey } from "../actions/service.ts";
+import { DELIVERY_UNCONFIRMED_MESSAGE, newEffectKey } from "../actions/service.ts";
 import { RemoteError } from "../connectors/http.ts";
 import { SOURCE_KINDS } from "../capabilities/registry.ts";
 import { nowIso } from "../core/db.ts";
@@ -148,6 +148,7 @@ async function runDraft(app: App, ctx: JobContext) {
   const item = getItem(app.db, itemId);
   if (!item) throw new JobBlockedError("The attention item no longer exists");
   if (!item.draftable) throw new JobBlockedError("This item has no action Attache can draft");
+  if (item.actionStatus === "unknown" && ctx.input.replaceUnconfirmed !== true) throw new JobBlockedError(DELIVERY_UNCONFIRMED_MESSAGE);
   const d = item.draftable;
   ctx.progress(0.1, "Gathering context");
   const related = search(app.db, `${item.title} ${String(d.context.title ?? "")}`, { limit: 5, areas: ["memory", "import", "evidence"], excludePrefixes: RECALL_EXCLUDE });

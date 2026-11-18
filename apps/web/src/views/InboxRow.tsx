@@ -112,13 +112,13 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
 
 /**
  * The open row: summary, why it is here, evidence, then the main action first and the decisions after it. An item
- * whose last send has an unknown outcome leads with its warning and Check destination instead.
+ * whose last send has an unknown outcome leads with its warning and Check destination, its summary and evidence after.
  */
 function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: string; actions: RowActions; draftsOn: boolean }) {
   const unconfirmed = unconfirmedDraftId(item);
   const canDraft = draftsOn && item.draftable !== null && item.state === "open";
-  return (
-    <div className="inbox-detail" id={id}>
+  const context = (
+    <>
       {item.summary && <p className="inbox-summary">{item.summary}</p>}
       {item.why && (
         <p className="inbox-why">
@@ -127,11 +127,19 @@ function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: 
         </p>
       )}
       <Evidence item={item} />
-      {unconfirmed ? (
+    </>
+  );
+  if (unconfirmed)
+    return (
+      <div className="inbox-detail unconfirmed" id={id}>
         <DeliveryUnconfirmed item={item} draftId={unconfirmed} sourceName={sourceName(item)} canReplace={canDraft} actions={actions} decisions={<Decisions item={item} actions={actions} primaryDone={false} />} />
-      ) : (
-        <MainActions item={item} canDraft={canDraft} actions={actions} />
-      )}
+        <div className="inbox-context">{context}</div>
+      </div>
+    );
+  return (
+    <div className="inbox-detail" id={id}>
+      {context}
+      <MainActions item={item} canDraft={canDraft} actions={actions} />
     </div>
   );
 }

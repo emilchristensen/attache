@@ -109,7 +109,7 @@ export function DraftAnswers({ d }: { d: ActionView }) {
   );
 }
 
-/** What came back from the other service: when it was verified (or that it could not be), its id and its address. */
+/** What came back from the other service: when it was verified, its id; for an unknown outcome, when it was recorded and where it went. */
 export function DraftReceipt({ d }: { d: ActionView }) {
   if ((d.status !== "succeeded" && d.status !== "unknown") || !d.receipt) return null;
   const r = d.receipt;
@@ -130,7 +130,7 @@ export function DraftReceipt({ d }: { d: ActionView }) {
           <dd className="mono">{String(r.remoteId)}</dd>
         </>
       )}
-      {url && (
+      {d.status === "unknown" && url && (
         <>
           <dt>Address</dt>
           <dd>

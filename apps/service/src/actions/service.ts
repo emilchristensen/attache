@@ -5,6 +5,12 @@ import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
 export const APPROVAL_TTL_MS = 15 * 60_000;
 
+/**
+ * Why an item whose last Draft has a send of unknown outcome is not drafted again: only the owner's explicit choice
+ * (`replaceUnconfirmed`) prepares a replacement. The route refuses with it, and a Draft job checks again when it runs.
+ */
+export const DELIVERY_UNCONFIRMED_MESSAGE = "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.";
+
 export class ActionError extends Error {
   readonly code: string;
   readonly status: number;

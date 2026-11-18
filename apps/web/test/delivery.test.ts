@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionStatus, ActionView } from "@attache/contracts";
-import { deliveryCheck, unconfirmedDraftId } from "../src/delivery.ts";
+import { deliveryCheck, replacementWarning, unconfirmedDraftId } from "../src/delivery.ts";
 
 const PR = "https://github.com/acme/web/pull/42";
 const COMMENT = "https://github.com/acme/web/pull/42#issuecomment-901";
@@ -56,10 +56,24 @@ describe("Check destination and the warning on the open row", () => {
     expect(deliveryCheck({ url: null }, draft({ receipt: null, target: { repo: "acme/web", number: 42 }, context: {} })).href).toBeNull();
   });
 
+  it("a Gmail draft whose creation is unconfirmed is checked in Gmail's drafts, not in the thread it answers", () => {
+    const gmail = draft({ kind: "gmail.draft", target: { threadId: "t1" }, receipt: { error: "timeout" }, context: { item: { id: "item-1", url: "https://mail.google.com/mail/u/0/#inbox/t1" } } });
+    expect(deliveryCheck({ url: "https://mail.google.com/mail/u/0/#inbox/t1" }, gmail).href).toBe("https://mail.google.com/mail/u/0/#drafts");
+    expect(deliveryCheck({ url: null }, { ...gmail, receipt: { url: "https://mail.google.com/mail/u/0/#drafts?compose=abc" } }).href).toBe("https://mail.google.com/mail/u/0/#drafts?compose=abc");
+  });
+
   it("before the Draft is read (or when it cannot be), warns in general words and points at the item's link", () => {
     expect(deliveryCheck({ url: PR }, null)).toEqual({
       href: PR,
       notice: { tone: "attention", warning: true, lines: ["The last send could not be verified. It may have arrived. Check the destination before you do anything else."] },
     });
+  });
+});
+
+describe("the warning before a replacement", () => {
+  it("asks whether the message arrived, or for a Gmail draft whether it was created", () => {
+    expect(replacementWarning("github.comment")).toBe("Only if the message did not arrive. A replacement is a new Draft for this item; nothing is sent until you approve and send it.");
+    expect(replacementWarning(null)).toBe("Only if the message did not arrive. A replacement is a new Draft for this item; nothing is sent until you approve and send it.");
+    expect(replacementWarning("gmail.draft")).toBe("Only if the draft is not in your Gmail drafts. A replacement is a new Draft for this item; nothing reaches Gmail until you approve and create it.");
   });
 });

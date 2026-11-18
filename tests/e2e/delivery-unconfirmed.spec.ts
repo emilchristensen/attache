@@ -79,6 +79,8 @@ async function expectCount(page: Page, expected: { total: number; home: number; 
 }
 
 const actionNames = (row: Locator) => row.locator(".inbox-actions > :is(a, button)").evaluateAll((els) => els.map((e) => e.textContent?.trim()));
+/** The first control in the open row's detail, in keyboard and reading order. */
+const firstControl = (row: Locator) => row.locator(".inbox-detail").locator("a, button").first();
 
 test("a send of unknown outcome: back on Home the open row and its place survive the round trip, and the collapsed row says Delivery unconfirmed after a reload", async () => {
   const page = await journeys.open("/");
@@ -103,7 +105,7 @@ test("a send of unknown outcome: back on Home the open row and its place survive
   await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
   await expect(row.locator(".inbox-source")).toContainText("Delivery unconfirmed");
   await expect.poll(async () => Math.round((await row.boundingBox())!.y)).toBe(Math.round(placed));
-  await expect(row.locator(".inbox-actions > :is(a, button)").first()).toHaveText("Check destination");
+  await expect(firstControl(row)).toHaveText("Check destination");
   // A reload keeps the warning: it is the stored outcome, not a message of the moment.
   await page.reload();
   await expect(row.locator(".inbox-source")).toContainText("Delivery unconfirmed");
@@ -150,6 +152,7 @@ test("from Home after the send: Check destination opens the destination and chan
 
   await openRow(row);
   await expect(row.locator(".draft-notice")).toContainText("The outcome could not be verified. The request may have reached GitHub. Check the pull request before you do anything else.");
+  await expect(firstControl(row)).toHaveText("Check destination");
   expect(await actionNames(row)).toEqual(["Check destination", "View the Draft", "Open in GitHub", "Prepare a replacement", "Done", "Snooze", "Dismiss"]);
   await expect(row.getByRole("button", { name: "Prepare draft" })).toHaveCount(0);
 

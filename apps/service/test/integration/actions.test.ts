@@ -301,6 +301,12 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(plain.body.error.message).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
     expect((await svc.get("/jobs?limit=200")).length).toBe(jobsBefore);
     expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // A Draft job asked for another way (the generic jobs route) is held to the same rule when it runs.
+    const generic = await svc.post("/jobs", { kind: "draft", input: { attentionItemId: item.id } });
+    const held = await svc.waitJob(generic.job.id);
+    expect(held.job.status).toBe("blocked");
+    expect(held.job.error).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
     // The explicit choice prepares a new Draft; the uncertain one keeps its outcome.
     const { job } = await svc.post(`/attention/${item.id}/draft`, { replaceUnconfirmed: true });
     const done = await svc.waitJob(job.id);

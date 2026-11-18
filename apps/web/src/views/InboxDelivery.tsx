@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { ActionView, AttentionItemView } from "@attache/contracts";
 import { useResource } from "../live.ts";
-import { deliveryCheck } from "../delivery.ts";
+import { deliveryCheck, replacementWarning } from "../delivery.ts";
 import { DraftNoticeLine } from "./DraftParts.tsx";
 
 /** What the open row of an item with Delivery unconfirmed needs from the Inbox. */
@@ -11,11 +11,9 @@ export interface DeliveryRowActions {
   busy: boolean;
 }
 
-/** The words that stand between Prepare a replacement and the replacement itself. */
-export const REPLACEMENT_WARNING = "Only if the message did not arrive. A replacement is a new Draft for this item; nothing is sent until you approve and send it.";
-
 /**
- * The warning and the first actions of an open item whose last send has an unknown outcome: Check destination first
+ * The warning and the actions of an open item whose last send has an unknown outcome, above its summary and evidence
+ * so that Check destination is the first control in the row's detail: Check destination first
  * (the place the send went, in a new tab; it decides nothing), then the original Draft with its receipt, the item's
  * own link when it goes elsewhere, and Prepare a replacement, which only opens a separate explicit choice.
  * The decisions (Done, Snooze, Dismiss) follow in the row's own `decisions` slot.
@@ -56,7 +54,7 @@ export function DeliveryUnconfirmed({ item, draftId, sourceName, canReplace, act
         {decisions}
         {choosing && (
           <div className="inbox-replace" id={choice} role="group" aria-label="Prepare a replacement">
-            <p className="inbox-replace-warning">{REPLACEMENT_WARNING}</p>
+            <p className="inbox-replace-warning">{replacementWarning(item.draftable?.actionKind ?? null)}</p>
             <div className="inbox-replace-actions">
               <button
                 className="small"

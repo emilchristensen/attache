@@ -192,7 +192,10 @@ a.source-chip {
 /* Delivery unconfirmed: the warning above the actions, and the separate choice to prepare a replacement. */
 .inbox-detail .draft-notice {
   max-width: 68ch;
-  margin-top: var(--s-3);
+  margin-top: var(--s-1);
+}
+.inbox-context {
+  margin-top: var(--s-4);
 }
 .inbox-replace {
   flex-basis: 100%;
