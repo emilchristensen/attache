@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { inboxReach } from "../src/inbox-empty.ts";
 import type { ConnectionStatus, Coverage, CoverageState, FeatureStatus, ReaderView } from "@attache/contracts";
-import { connectionsStatus, inboxCoverage, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
+import { connectionsStatus, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
 
 // Fixtures of the three answers the Dashboard already asks for: /connections, /capabilities (features) and /reader.
 
@@ -64,6 +65,12 @@ function inputs(over: Partial<StatusInputs> = {}): StatusInputs {
 function withConnections(...changed: ConnectionStatus[]): StatusInputs {
   const ids = new Set(changed.map((c) => c.id));
   return inputs({ connections: ok([...HEALTHY_CONNECTIONS.filter((c) => !ids.has(c.id)), ...changed]) });
+}
+
+/** What an empty Inbox may claim, in three words: every source read, only the notes, or not everything. */
+function coverageOf(status: ReturnType<typeof connectionsStatus>): "all" | "notes" | "incomplete" {
+  const reach = inboxReach(status);
+  return reach.kind === "all" || reach.kind === "notes" ? reach.kind : "incomplete";
 }
 
 function rowsOf(i: StatusInputs): StatusRow[] {
@@ -337,7 +344,7 @@ describe("connectionsStatus: findings from review round 2", () => {
   it("still says no full refresh has finished when an unrelated model or Harness problem is listed", () => {
     const rows = rowsOf({ ...withConnections(conn("model", { status: "needs_auth" })), reader: ok({ ...THIS_READER, lastRefreshAt: null }) });
     expect(rows.map((r) => r.key)).toEqual(["sign_in:model", "not_read_yet:every"]);
-    expect(inboxCoverage(connectionsStatus({ ...withConnections(conn("model", { status: "needs_auth" })), reader: ok({ ...THIS_READER, lastRefreshAt: null }) }))).toBe("incomplete");
+    expect(coverageOf(connectionsStatus({ ...withConnections(conn("model", { status: "needs_auth" })), reader: ok({ ...THIS_READER, lastRefreshAt: null }) }))).toBe("incomplete");
   });
 
   it("keeps each unreached source's own diagnostics in the shared Offline row", () => {
@@ -422,18 +429,18 @@ describe("connectionsStatus: findings from review round 4", () => {
   });
 });
 
-describe("inboxCoverage: what an empty Inbox may claim", () => {
+describe("inboxReach: what an empty Inbox may claim", () => {
   it("claims every source only on the green line, the notes alone when nothing else is connected, and nothing otherwise", () => {
-    expect(inboxCoverage(connectionsStatus(inputs()))).toBe("all");
-    expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault"), conn("model")]) })))).toBe("notes");
-    expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault", { coverage: coverage("partial") }), conn("model")]) })))).toBe("incomplete");
-    expect(inboxCoverage(connectionsStatus(withConnections(conn("gmail", { status: "needs_auth" }))))).toBe("incomplete");
-    expect(inboxCoverage(connectionsStatus(inputs({ reader: { state: "waiting" } })))).toBe("incomplete");
+    expect(coverageOf(connectionsStatus(inputs()))).toBe("all");
+    expect(coverageOf(connectionsStatus(inputs({ connections: ok([conn("vault"), conn("model")]) })))).toBe("notes");
+    expect(coverageOf(connectionsStatus(inputs({ connections: ok([conn("vault", { coverage: coverage("partial") }), conn("model")]) })))).toBe("incomplete");
+    expect(coverageOf(connectionsStatus(withConnections(conn("gmail", { status: "needs_auth" }))))).toBe("incomplete");
+    expect(coverageOf(connectionsStatus(inputs({ reader: { state: "waiting" } })))).toBe("incomplete");
     // Problems that hide no Inbox item: the model signed out, a Harness down, a feature other than Attention not ready.
-    expect(inboxCoverage(connectionsStatus(withConnections(conn("model", { status: "needs_auth" }), conn("claude-code", { status: "error" }))))).toBe("all");
+    expect(coverageOf(connectionsStatus(withConnections(conn("model", { status: "needs_auth" }), conn("claude-code", { status: "error" }))))).toBe("all");
     const sessions = feature("sessions", { readiness: "needs_setup", reason: "Connect a Harness." });
-    expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault")]), features: ok([...FEATURES, sessions]) })))).toBe("notes");
-    expect(inboxCoverage(connectionsStatus(inputs({ features: ok([...FEATURES.filter((f) => f.id !== "attention"), feature("attention", { readiness: "unavailable", reason: "x" })]) })))).toBe("incomplete");
+    expect(coverageOf(connectionsStatus(inputs({ connections: ok([conn("vault")]), features: ok([...FEATURES, sessions]) })))).toBe("notes");
+    expect(coverageOf(connectionsStatus(inputs({ features: ok([...FEATURES.filter((f) => f.id !== "attention"), feature("attention", { readiness: "unavailable", reason: "x" })]) })))).toBe("incomplete");
   });
 });
 
