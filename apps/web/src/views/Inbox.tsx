@@ -63,16 +63,23 @@ interface ToolsProps {
   type: string;
   view: InboxViewId;
   arrivals: number;
+  /** The visible range, which fills Show new items' place on a narrow window while nothing waits. */
+  range: string | null;
   onType: (type: string) => void;
   onView: (view: InboxViewId) => void;
   onShowNew: () => void;
 }
 
 /** The view controls: Show new items in a place kept for it, the one type picker with counts, and the view. */
-function InboxTools({ items, type, view, arrivals, onType, onView, onShowNew }: ToolsProps) {
+function InboxTools({ items, type, view, arrivals, range, onType, onView, onShowNew }: ToolsProps) {
   const options = useMemo(() => typeOptions(items, type), [items, type]);
   return (
     <div className="inbox-tools">
+      {range && arrivals === 0 && (
+        <span className="inbox-tools-range" aria-hidden>
+          {range}
+        </span>
+      )}
       <button className="inbox-show-new" data-show-new data-waiting={arrivals > 0 || undefined} disabled={arrivals === 0} aria-hidden={arrivals === 0 || undefined} tabIndex={arrivals === 0 ? -1 : undefined} onClick={onShowNew}>
         Show {plural(arrivals, "new item")}
       </button>
@@ -96,6 +103,7 @@ function InboxTools({ items, type, view, arrivals, onType, onView, onShowNew }: 
 
 interface RowsProps {
   entries: readonly ListEntry[];
+  clock: { now: number; timeZone: string };
   openId: string | null;
   onToggle: (id: string) => void;
   actions: RowActions;
@@ -103,8 +111,7 @@ interface RowsProps {
   onUndo: (entry: ListEntry) => void;
 }
 
-function Rows({ entries, openId, onToggle, actions, draftsOn, onUndo }: RowsProps) {
-  const clock = useHeadsUpClock();
+function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo }: RowsProps) {
   return (
     <ul className="inbox-rows">
       {entries.map((e) =>
@@ -232,7 +239,8 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     if (first) focusAfter(first, "row");
   };
   const toggle = (id: string) => setPlace({ openId: place.openId === id ? null : id });
-  const rowsProps = { openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
+  const clock = useHeadsUpClock();
+  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
 
   if (!attentionOn)
     return (
@@ -249,6 +257,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
           type={place.type}
           view={place.view}
           arrivals={arrivals.length}
+          range={!grouped && typed.length > 0 ? pageLabel(shown.length, typed.length) : null}
           onType={(type) => setPlace({ type, shown: PAGE_SIZE })}
           onView={(view) => {
             setPlace({ view, shown: PAGE_SIZE, openId: null });
@@ -267,7 +276,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
       {live && typed.length === 0 && list.entries.length > 0 && <p className="inbox-none">No items of this type.</p>}
       {grouped
         ? grouped.map((g) => (
-            <section key={g.family} className="inbox-family" aria-label={g.label} data-family={g.family}>
+            <section key={g.family} id={`attention-${g.family}`} className="inbox-family" aria-label={g.label} data-family={g.family}>
               <h3 className="inbox-family-title">
                 {g.label} <span className="inbox-family-count">{g.total}</span>
               </h3>

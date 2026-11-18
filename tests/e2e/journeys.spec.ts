@@ -392,8 +392,9 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
+    // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
     const first = page.locator("#inbox [data-inbox-row]").first();
-    await openRow(first);
+    if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
     const onCard = first.getByRole("button", { name: "Snooze" });
     const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
     const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
@@ -1099,9 +1100,12 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await page.locator('[data-connection="vault-data"]').getByRole("button", { name: "Refresh now" }).click();
   await expect(page.getByText("Refresh started")).toBeVisible();
   await page.goto(`${stack.url}/`);
-  const facts = page.getByRole("region", { name: "Facts to check" });
-  await expect(facts.getByText("Review date passed: “Budget” in Helix rollout")).toBeVisible();
-  await expect(facts.getByText(/“Status” in Helix rollout/)).toHaveCount(0);
+  // A fact to check is its own type in the Inbox: a dated page, the words "Fact to check", from the Brain.
+  const fact = inboxRow(page, "Review date passed: “Budget” in Helix rollout");
+  await expect(fact).toHaveAttribute("data-type", "fact-review");
+  await expect(fact).toContainText("Fact to check");
+  await expect(fact.locator(".inbox-source")).toContainText("Brain");
+  await expect(inboxRow(page, /“Status” in Helix rollout/)).toHaveCount(0);
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {

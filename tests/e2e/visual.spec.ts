@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { inboxRow, openRow } from "./inbox.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -213,7 +214,8 @@ test("screens", async ({ browser }) => {
   await setupScreens(page, "finish");
   await page.getByRole("button", { name: "Finish setup" }).click();
   const pr = inboxRow(page, "Add checkout retry");
-  await openRow(pr, { timeout: 20_000 });
+  await expect(pr).toBeVisible({ timeout: 20_000 });
+  await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Briefings" }).click();
   await page.getByRole("button", { name: /^Prepare a briefing/ }).click();

@@ -55,6 +55,10 @@ select.inbox-picker {
 .inbox-show-new:not([data-waiting]) {
   visibility: hidden;
 }
+/* On a wide window the range sits under the list only; on a narrow one it also fills Show new items' place. */
+.inbox-tools-range {
+  display: none;
+}
 
 /* ---- the rows ------------------------------------------------------------------------------------ */
 
@@ -243,10 +247,24 @@ a.source-chip {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  .inbox-show-new {
+  /* Show new items, or the range while nothing waits, in a row of its own that keeps its height either way. */
+  .inbox-show-new,
+  .inbox-tools-range {
     grid-column: 1 / -1;
     grid-row: 2;
+    min-height: 36px;
+  }
+  .inbox-show-new {
     justify-content: center;
+  }
+  .inbox-show-new:not([data-waiting]) {
+    display: none;
+  }
+  .inbox-tools-range {
+    display: flex;
+    align-items: center;
+    font-size: var(--fs-meta);
+    color: var(--ink-2);
   }
   select.inbox-picker {
     width: 100%;
@@ -300,5 +318,12 @@ a.source-chip {
   }
   .inbox-detail {
     padding: 0 2px var(--s-4);
+  }
+}
+
+/* A touch screen's buttons are 44 px tall, so the range keeps that height in the button's place. */
+@media (max-width: 720px) and (pointer: coarse) {
+  .inbox-tools-range {
+    min-height: 44px;
   }
 }

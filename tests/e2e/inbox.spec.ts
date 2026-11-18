@@ -263,6 +263,11 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 360, height: 780 });
   await expect(rows(page).first()).toBeVisible();
+  await page.locator("#inbox").evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await page.screenshot({ path: "test-results/screens/narrow-home-inbox-head.png" });
+  // On a narrow window Show new items' place shows the range while nothing waits, at the button's height.
+  await expect(page.locator(".inbox-tools-range")).toHaveText(/^1–20 of \d+$/);
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
   const deadline = (await typePicker(page).locator("option").allTextContents()).find((o) => o.startsWith("Deadline ("))!;
   await typePicker(page).selectOption({ label: deadline });
   await expect(rows(page).first()).toHaveAttribute("data-type", "deadline");
