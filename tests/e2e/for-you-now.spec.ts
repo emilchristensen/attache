@@ -67,7 +67,11 @@ test("quiet: with nothing timely the area is one line, and the briefing actions 
   const page = await journeys.open("/");
   const forYou = area(page);
   await expect(forYou).toHaveAttribute("data-for-you-now", "quiet");
-  await expect(forYou).toContainText("Nothing timely right now. The next daily briefing is scheduled for 08:00 tomorrow.");
+  // The scheduler's next run, an instant, said in the browser's zone.
+  const { schedules } = await api<{ schedules: Array<{ jobKind: string; nextRunAt: string }> }>(page, "GET", "/status");
+  const next = new Date(schedules.find((x) => x.jobKind === "briefing")!.nextRunAt);
+  const clock = await page.evaluate((iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), next.toISOString());
+  await expect(forYou.locator(".for-you-now-quiet-text")).toHaveText(new RegExp(`^Nothing timely right now\\. The (next )?daily briefing is scheduled (for ${clock}( tomorrow)?|on \\d+ \\w+ at ${clock})\\.$`));
   await forYou.getByRole("button", { name: "Briefings" }).click();
   const menu = forYou.getByRole("group", { name: "Briefing actions" });
   await expect(menu.getByRole("button")).toHaveText([/^Prepare a briefing/, /^Away summary/, /^Meeting context/]);
@@ -86,7 +90,7 @@ test("morning: the daily briefing leads with one development, its why, Read brie
   await expect(lead).toBeVisible();
   await expect(lead.locator(".heads-up-eyebrow")).toHaveText("Morning briefing · Until noon");
   await expect(lead.getByRole("heading", { level: 3 })).not.toBeEmpty();
-  await expect(lead.locator(".heads-up-why")).toHaveText(/^Written at 09:\d\d for this morning\. It leaves at noon, or when you press Got it\.$/);
+  await expect(lead.locator(".heads-up-why")).toHaveText(/^Written at \d\d:\d\d for this morning\. It leaves at noon, or when you press Got it\.$/);
   // The amber spread, with its sun.
   expect(await lead.evaluate((el) => getComputedStyle(el, "::after").content)).toBe('""');
   // Its share of the first viewport leaves room for the Inbox heading and two complete rows.
@@ -160,7 +164,7 @@ test("Got it: the briefing shrinks to one Earlier today line, remembered in this
   await forYou.locator('[data-heads-up="daily-briefing"]').getByRole("button", { name: "Got it" }).click();
   await expect(forYou.locator('[data-heads-up="daily-briefing"]')).toHaveCount(0);
   const earlier = forYou.locator('[data-heads-up="earlier-today"]');
-  await expect(earlier).toContainText(/Daily briefing · Earlier today, 09:\d\d/);
+  await expect(earlier).toContainText(/Daily briefing · Earlier today, \d\d:\d\d/);
   await expect(earlier).toContainText("It stays here until midnight while it is the latest briefing.");
   // Focus lands on the area's heading, not on the page's start, and the change is said once.
   await expect(forYou.getByRole("heading", { name: "For you now" })).toBeFocused();
@@ -208,7 +212,7 @@ test("asked for: an Away summary leads on paper, without the amber spread, until
   const lead = forYou.locator('[data-heads-up="away-summary"]');
   await expect(lead).toBeVisible({ timeout: 30_000 });
   await expect(lead.locator(".heads-up-eyebrow")).toHaveText(/^Away summary · Until \d\d:\d\d$/);
-  await expect(lead.locator(".heads-up-why")).toHaveText(/^You asked for it at 09:\d\d\. It leaves at \d\d:\d\d, or when you press Got it\.$/);
+  await expect(lead.locator(".heads-up-why")).toHaveText(/^You asked for it at \d\d:\d\d\. It leaves at \d\d:\d\d, or when you press Got it\.$/);
   expect(await lead.evaluate((el) => el.classList.contains("feature"))).toBe(false);
   // The daily briefing is no longer the latest, so its Earlier today line has gone.
   await expect(forYou.locator('[data-heads-up="earlier-today"]')).toHaveCount(0);
@@ -216,7 +220,7 @@ test("asked for: an Away summary leads on paper, without the amber spread, until
   await forYou.getByRole("button", { name: "Briefings" }).click();
   await forYou.getByRole("button", { name: /^Meeting context/ }).click();
   const context = page.getByRole("region", { name: "Meeting context" });
-  await expect(context).toContainText(/As the briefing at 09:\d\d found it/);
+  await expect(context).toContainText(/As the briefing at \d\d:\d\d found it/);
   await context.getByRole("button", { name: "Close" }).click();
   await expect(context).toHaveCount(0);
   await lead.getByRole("button", { name: "Got it" }).click();
@@ -235,6 +239,22 @@ test("failure: a briefing that could not be checked says so with Try again, neve
   await forYou.getByRole("button", { name: "Try again" }).click();
   await expect(forYou).toContainText("Nothing timely right now.");
   await page.close();
+});
+
+test("hold: a briefing written elsewhere waits while the keyboard focus is on the lead", async () => {
+  const page = await journeys.open("/");
+  await writeBriefing(page, "daily");
+  const daily = area(page).locator('[data-heads-up="daily-briefing"]');
+  await daily.getByRole("button", { name: "Read briefing" }).focus();
+  // Another Machine or tab asks for a briefing: it becomes the latest, but the focused lead stays put.
+  await writeBriefing(page, "manual");
+  await page.waitForTimeout(1500);
+  await expect(daily).toBeVisible();
+  await expect(daily.getByRole("button", { name: "Read briefing" })).toBeFocused();
+  // Focus leaves: the briefing asked for takes the lead.
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(area(page).locator('[data-heads-up="requested-briefing"]')).toBeVisible();
+  await expect(daily).toHaveCount(0);
 });
 
 test("narrow: the lead and its lines fit a phone with no sideways scrolling", async () => {

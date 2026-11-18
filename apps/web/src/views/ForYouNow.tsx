@@ -20,11 +20,6 @@ const ICON: Record<HeadsUpKindId, IconName> = {
   "briefing-progress": "clock",
 };
 
-interface Schedule {
-  briefingAt: string;
-  briefingEnabled: boolean;
-}
-
 /** What one Heads-up offers, drawn from its actions. */
 function Actions({ headsUp, lead, open, onRead, onGotIt }: { headsUp: HeadsUp; lead: boolean; open: boolean; onRead: () => void; onGotIt: () => void }) {
   if (!headsUp.actions.length) return null;
@@ -103,6 +98,13 @@ function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
   );
 }
 
+/** The scheduler's daily briefing row (`/status`), or null while not known or when there is none. */
+function useBriefingSchedule(enabled: boolean): HeadsUpInput["schedule"] {
+  const r = useResource<{ schedules: Array<{ jobKind: string; enabled: boolean; nextRunAt: string | null }> }>(enabled ? "/status" : null, ["config.changed", "briefing.created", "service.resumed"]);
+  const row = r.data?.schedules.find((x) => x.jobKind === "briefing");
+  return row ? { enabled: row.enabled, nextRunAt: row.nextRunAt } : null;
+}
+
 /** The latest briefing, as the slot needs it: unknown until the first answer. */
 function useLatestBriefing(enabled: boolean) {
   const r = useResource<{ briefing: BriefingView | null }>(enabled ? "/briefings/latest" : null, ["briefing.created"]);
@@ -117,16 +119,20 @@ function useLatestBriefing(enabled: boolean) {
  * none moves or leaves until the owner moves away. The owner's own Got it applies at once, and the heading and the
  * briefing actions are outside the hold, so a briefing asked for there shows as soon as it is written.
  */
-export function ForYouNow({ attentionOn, schedule }: { attentionOn: boolean; schedule: Schedule | null }) {
+export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const clock = useHeadsUpClock();
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
-  const { held, holdProps } = useHold();
-  // A briefing the owner asked for here: until it arrives, it and its progress show even while a Heads-up holds still,
-  // since asking was the owner's own action. The value is the latest briefing's id when they asked.
+  const schedule = useBriefingSchedule(attentionOn);
+  const { held, focused, holdProps } = useHold();
+  // Got it pressed in this tab applies at once, even while held; another tab's waits until the hold ends.
+  const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
+  // A briefing the owner asked for here: until it arrives, it and its progress show even while the pointer holds the
+  // Heads-ups still, since asking was the owner's own action and the menu that asks opens over them. Keyboard focus
+  // on a Heads-up still holds it. The value is the latest briefing's id when they asked.
   const [askedOver, setAskedOver] = useState<string | null | undefined>(undefined);
   const latestId = typeof latest.value === "object" && latest.value !== null ? latest.value.id : null;
   useEffect(() => {
@@ -142,11 +148,12 @@ export function ForYouNow({ attentionOn, schedule }: { attentionOn: boolean; sch
     briefing: latest.value,
     briefingJob: job,
     schedule,
+    settled,
   };
   const frozen = useRef(live);
   if (!held) frozen.current = live;
-  else if (askedOver !== undefined) frozen.current = { ...frozen.current, briefing: live.briefing, briefingJob: live.briefingJob };
-  const input: HeadsUpInput = { ...frozen.current, settled };
+  else if (askedOver !== undefined && !focused) frozen.current = { ...frozen.current, briefing: live.briefing, briefingJob: live.briefingJob };
+  const input: HeadsUpInput = held ? { ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) } : frozen.current;
   const slot = forYouNow(input);
 
   if (!attentionOn)
@@ -166,6 +173,7 @@ export function ForYouNow({ attentionOn, schedule }: { attentionOn: boolean; sch
   const toggle = (key: string) => setOpen((o) => (o.has(key) ? new Set([...o].filter((k) => k !== key)) : new Set([...o, key])));
   const gotIt = (h: HeadsUp) => {
     settle(h.key);
+    setMine((m) => new Set([...m, h.key]));
     setSaid(h.kind === "daily-briefing" ? "Briefing put away. It stays under Earlier today until midnight." : "Briefing put away.");
     heading.current?.focus();
   };

@@ -80,8 +80,11 @@ export interface HeadsUpInput {
   briefingJob: BriefingJob | null;
   /** Occurrence keys the owner settled in this browser (Got it, Not now). */
   settled: ReadonlySet<string>;
-  /** The daily briefing's schedule from `/config`, `null` when not known. */
-  schedule: { briefingAt: string; briefingEnabled: boolean } | null;
+  /**
+   * The daily briefing's schedule row as the service's scheduler keeps it (`/status`): whether it runs and the instant
+   * it runs next. `null` when not known.
+   */
+  schedule: { enabled: boolean; nextRunAt: string | null } | null;
 }
 
 // ---- outputs ---------------------------------------------------------------------------------------------------------
@@ -111,8 +114,6 @@ export interface HeadsUp {
   /** Why it is here and when it leaves. */
   why: string;
   actions: readonly HeadsUpAction[];
-  /** The instant it stops applying (exclusive), or null when only the owner's action ends it. */
-  until: number | null;
   briefing?: BriefingView;
   job?: BriefingJob;
 }
@@ -172,7 +173,6 @@ const dailyBriefing: HeadsUpKind = {
         ...headline(b),
         why: `Written at ${clockTime(made, input.timeZone)} for this morning. It leaves at noon, or when you press Got it.`,
         actions: ["read-briefing", "got-it"],
-        until,
         briefing: b,
       },
     ];
@@ -180,11 +180,14 @@ const dailyBriefing: HeadsUpKind = {
   next: (input) => {
     const schedule = input.schedule;
     if (!schedule) return null;
-    if (!schedule.briefingEnabled) return { at: Number.POSITIVE_INFINITY, text: "The daily briefing is switched off." };
-    const today = atTimeOfDay(input.now, input.timeZone, schedule.briefingAt);
-    if (today > input.now) return { at: today, text: `The daily briefing is scheduled for ${clockTime(today, input.timeZone)}.` };
-    const tomorrow = atTimeOfDay(startOfDay(input.now, input.timeZone, 1), input.timeZone, schedule.briefingAt);
-    return { at: tomorrow, text: `The next daily briefing is scheduled for ${clockTime(tomorrow, input.timeZone)} tomorrow.` };
+    if (!schedule.enabled) return { at: Number.POSITIVE_INFINITY, text: "The daily briefing is switched off." };
+    // An instant from the scheduler, in whatever zone it keeps: shown in the zone the browser is in now.
+    const at = schedule.nextRunAt ? Date.parse(schedule.nextRunAt) : Number.NaN;
+    if (!(at > input.now)) return null;
+    const time = clockTime(at, input.timeZone);
+    if (sameDay(at, input.now, input.timeZone)) return { at, text: `The daily briefing is scheduled for ${time}.` };
+    if (startOfDay(input.now, input.timeZone, 1) === startOfDay(at, input.timeZone)) return { at, text: `The next daily briefing is scheduled for ${time} tomorrow.` };
+    return { at, text: `The next daily briefing is scheduled ${spokenTime(at, input.now, input.timeZone)}.` };
   },
 };
 
@@ -213,7 +216,6 @@ const earlierToday: HeadsUpKind = {
         ...headline(b),
         why: `Written at ${at}. It stays here until midnight while it is the latest briefing.`,
         actions: ["read-briefing"],
-        until: startOfDay(made, input.timeZone, 1),
         briefing: b,
       },
     ];
@@ -243,7 +245,6 @@ function requestedKind(id: "away-summary" | "requested-briefing", briefingKind: 
           ...headline(b),
           why: `You asked for it ${spokenTime(made, input.now, input.timeZone)}. It leaves at ${leaves}, or when you press Got it.`,
           actions: ["read-briefing", "got-it"],
-          until,
           briefing: b,
         },
       ];
@@ -270,7 +271,6 @@ const briefingProgress: HeadsUpKind = {
         explanation: null,
         why: "Here while the briefing is written. It keeps running if you close this tab.",
         actions: [],
-        until: null,
         job,
       },
     ];

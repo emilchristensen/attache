@@ -19,7 +19,7 @@ function briefing(over: Partial<BriefingView> = {}): BriefingView {
 }
 
 function input(at: string, over: Partial<HeadsUpInput> = {}): HeadsUpInput {
-  return { now: Date.parse(at), timeZone: CPH, briefing: briefing(), briefingJob: null, settled: new Set(), schedule: { briefingAt: "08:00", briefingEnabled: true }, ...over };
+  return { now: Date.parse(at), timeZone: CPH, briefing: briefing(), briefingJob: null, settled: new Set(), schedule: { enabled: true, nextRunAt: "2026-11-19T07:00:00Z" }, ...over };
 }
 
 describe("the daily briefing", () => {
@@ -144,7 +144,7 @@ function meetings(...starts: Array<[key: string, start: string]>): HeadsUpKind {
   return {
     id: "daily-briefing",
     applies: () =>
-      starts.map(([key, start]): HeadsUp => ({ key, kind: "daily-briefing", form: "card", rank: RANK.meeting, at: Date.parse(start), label: "Meeting prep", timing: "", title: key, explanation: null, why: "", actions: [], until: null })),
+      starts.map(([key, start]): HeadsUp => ({ key, kind: "daily-briefing", form: "card", rank: RANK.meeting, at: Date.parse(start), label: "Meeting prep", timing: "", title: key, explanation: null, why: "", actions: [] })),
   };
 }
 
@@ -176,21 +176,23 @@ describe("the slot", () => {
 });
 
 describe("the quiet line", () => {
-  it("says nothing is timely and when the next daily briefing is due", () => {
+  it("says nothing is timely and when the scheduler runs the next daily briefing, in the current zone", () => {
     expect(forYouNow(input("2026-11-19T05:00:00Z", { briefing: null })).quiet).toBe("Nothing timely right now. The daily briefing is scheduled for 08:00.");
     // Yesterday's briefing is the latest, but its day is over.
     expect(forYouNow(input("2026-11-19T05:00:00Z")).quiet).toBe("Nothing timely right now. The daily briefing is scheduled for 08:00.");
+    // The Reader schedules at 08:00 Copenhagen time; seen from New York that is 02:00.
+    expect(forYouNow(input("2026-11-19T05:00:00Z", { briefing: null, timeZone: "America/New_York" })).quiet).toBe("Nothing timely right now. The daily briefing is scheduled for 02:00.");
   });
 
-  it("says tomorrow once today's briefing time has passed or today's briefing is written", () => {
+  it("says tomorrow, or the day, when the next run is not today", () => {
     expect(forYouNow(input("2026-11-18T21:30:00Z", { briefing: null })).quiet).toBe("Nothing timely right now. The next daily briefing is scheduled for 08:00 tomorrow.");
-    const away = briefing({ kind: "away", createdAt: "2026-11-18T05:00:00Z" });
-    expect(forYouNow(input("2026-11-18T10:00:00Z", { briefing: away })).quiet).toBe("Nothing timely right now. The next daily briefing is scheduled for 08:00 tomorrow.");
+    expect(forYouNow(input("2026-11-18T21:30:00Z", { briefing: null, schedule: { enabled: true, nextRunAt: "2026-11-21T07:00:00Z" } })).quiet).toBe("Nothing timely right now. The next daily briefing is scheduled on 21 November at 08:00.");
   });
 
-  it("says when daily briefings are off, and makes no promise while the schedule is not known", () => {
-    expect(forYouNow(input("2026-11-19T05:00:00Z", { briefing: null, schedule: { briefingAt: "08:00", briefingEnabled: false } })).quiet).toBe("Nothing timely right now. The daily briefing is switched off.");
+  it("says when daily briefings are off, and makes no promise while the next run is not known or already due", () => {
+    expect(forYouNow(input("2026-11-19T05:00:00Z", { briefing: null, schedule: { enabled: false, nextRunAt: null } })).quiet).toBe("Nothing timely right now. The daily briefing is switched off.");
     expect(forYouNow(input("2026-11-19T05:00:00Z", { briefing: null, schedule: null })).quiet).toBe("Nothing timely right now.");
+    expect(forYouNow(input("2026-11-19T08:00:00Z", { briefing: null })).quiet).toBe("Nothing timely right now.");
   });
 
   it("is not shown while the briefing is not known, so it never claims nothing is timely", () => {

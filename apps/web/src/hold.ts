@@ -12,6 +12,8 @@ export function useHold() {
   }, []);
   return {
     held: pointer || focus,
+    /** Held by the keyboard focus, which only moves when the owner moves it. */
+    focused: focus,
     holdProps: {
       onPointerEnter: () => setPointer(true),
       onPointerLeave: () => setPointer(false),
