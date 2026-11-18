@@ -261,6 +261,12 @@ svg.icon {
   transition: width 0.4s ease;
 }
 
+/* A link back to where the owner came from, above a page's title: a Draft's page, a narrow window's Settings section. */
+.back-link {
+  align-self: flex-start;
+  font-size: var(--fs-control);
+}
+
 /* ---- disclosure ------------------------------------------------------------------------ */
 
 /* `components/Disclosure.tsx`: a ruled row that opens in place, its title at the card-heading scale. */

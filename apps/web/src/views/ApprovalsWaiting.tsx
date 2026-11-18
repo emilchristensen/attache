@@ -10,6 +10,7 @@ import { shownEntries, type ApprovalsVisit } from "./approvals-visit.ts";
 import { DecidedRow, GroupFailure, KIND_MARK, type ApprovalKind } from "./ApprovalRow.tsx";
 import { DraftRow } from "./DraftRow.tsx";
 import { brainNoteHref, ProposalRow } from "./ProposalRow.tsx";
+import { settingsHref } from "../routes.ts";
 
 /** How many Drafts being sent In progress lists. */
 const SENDING_LIMIT = 50;
@@ -106,7 +107,7 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
 
   const draftsGroup = draftsOff ? (
     <p className="approvals-none">
-      Drafts are switched off. <Link to="/settings">Open Settings</Link>
+      Drafts are switched off. <Link to={settingsHref("features")}>Open Settings</Link>
     </p>
   ) : (
     <>

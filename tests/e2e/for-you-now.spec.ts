@@ -403,7 +403,7 @@ test("off: with Attention and briefings switched off the area says so, with a wa
   await expect(forYou).toHaveAttribute("data-for-you-now", "off");
   await expect(forYou).toContainText("Heads-ups need Attention and briefings, which is switched off.");
   await forYou.getByRole("link", { name: "Turn it on in Settings" }).click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/settings\/features$/);
   await api(page, "PUT", "/features", { changes: { attention: true, drafts: true }, cascade: true });
 });
 

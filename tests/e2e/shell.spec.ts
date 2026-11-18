@@ -275,7 +275,7 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(panel.locator(".reader-line")).toHaveAttribute("data-reader", "alone");
   await expect(panel).toContainText("This Machine runs Source refresh and briefings.");
   await expect(panel).toContainText("Live updates are connected.");
-  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings");
+  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings/machines");
   // Escape belongs to the topmost layer: the shortcut sheet over the disclosure closes first.
   await page.keyboard.press("?");
   const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -287,13 +287,13 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
   await expect(trigger).toBeFocused();
-  // Following its link by keyboard leaves focus on the button, not at the top of the page.
+  // Following its link by keyboard closes it and lands on the Machines and Replication section, focused.
   await page.keyboard.press("Enter");
   await panel.getByRole("link", { name: /Machines and Replication/ }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(`${stack.url}/settings`);
+  await expect(page).toHaveURL(`${stack.url}/settings/machines`);
   await expect(panel).toBeHidden();
-  await expect(trigger).toBeFocused();
+  await expect(page.locator('[data-settings-section="machines"]')).toBeFocused();
 
   // A lost live connection shows on the button itself, and the disclosure says what it means.
   await stack.stopService();
@@ -458,7 +458,8 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(bar.getByRole("link", { name: "Approvals, 1 waiting" })).toBeVisible();
 
   // The last thing on a page scrolls clear of the bar, safe area included.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/machines`);
+  await expect(page.getByRole("region", { name: "Replication" })).toBeVisible();
   await page.locator(".page").first().evaluate((el) => el.scrollTo(0, el.scrollHeight));
   const last = await page.locator(".page").first().evaluate((el) => {
     const kids = [...el.querySelectorAll("*")].filter((k) => (k as HTMLElement).offsetParent !== null && k.getBoundingClientRect().height > 0);
@@ -483,12 +484,14 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(more).toBeHidden();
   await expect(bar.getByRole("button", { name: "More" })).toBeFocused();
 
-  // Its Machines and Replication link goes to Settings in the same page, closing the sheet.
+  // Its Machines and Replication link goes to that Settings section in the same page, closing the sheet.
   await bar.getByRole("button", { name: "More" }).click();
   await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
   await more.getByRole("link", { name: /Machines and Replication/ }).click();
   await expect(more).toBeHidden();
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page).toHaveURL(`${stack.url}/settings/machines`);
+  // The sheet closed first, so the section it opened has focus, not More.
+  await expect(page.locator('[data-settings-section="machines"]')).toBeFocused();
   expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), "no full page load").toBe(true);
 
   // Search opens the search palette off Home, across the whole narrow width, and focuses Home's own field on Home.

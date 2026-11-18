@@ -336,7 +336,7 @@ test("connections on Home: one green line when all is read, Checking and Could n
   await expect(page.locator("[data-reader-warning]")).toBeVisible();
   await notReading.locator(".conn-row-line").click();
   await expect(notReading).toContainText("Nothing is read again by itself.");
-  await expect(notReading.getByRole("link", { name: "Machines and Replication" })).toHaveAttribute("href", "/settings");
+  await expect(notReading.getByRole("link", { name: "Machines and Replication" })).toHaveAttribute("href", "/settings/machines");
   await page.unroute("**/api/v1/reader");
   await page.close();
 });
@@ -657,24 +657,34 @@ test("wording: counts read as words in the right number, never with (s)", async 
 });
 
 test("feature switches: turning attention off changes the product and the backend", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/features");
   await page.getByRole("checkbox", { name: /^Attention and briefings/ }).click();
   await expect(page.getByRole("alert")).toContainText("Drafts and approvals needs Attention and briefings");
   await page.getByRole("button", { name: "Also turn off what depends on it" }).click();
   await expect(page.getByRole("checkbox", { name: /^Attention and briefings/ })).not.toBeChecked();
   await expect(page.getByRole("checkbox", { name: /^Drafts and approvals/ })).not.toBeChecked();
+  // Its schedule stopped: Service health's diagnostics list it as off.
+  await serviceSchedules(page);
   await expect(page.getByText("Source refresh: off")).toBeVisible();
   await page.goto(stack.url);
   await expect(page.getByText("Attention and briefings is off")).toBeVisible();
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/features`);
   await page.getByRole("checkbox", { name: /^Drafts and approvals/ }).click();
   await page.getByRole("button", { name: "Turn on what it needs too" }).click();
   await expect(page.getByRole("checkbox", { name: /^Attention and briefings/ })).toBeChecked();
+  await serviceSchedules(page);
   await expect(page.getByText(/Source refresh: next/)).toBeVisible();
 });
 
+/** Settings' Service health with its diagnostics open, where each schedule says when it runs next or that it is off. */
+async function serviceSchedules(page: Page) {
+  await page.goto(`${stack.url}/settings/service`);
+  await page.getByText("Diagnostics", { exact: true }).click();
+  await expect(page.locator("[data-diagnostics]")).toBeVisible();
+}
+
 test("this Machine: named after its hostname, renamed in Settings, and the name is kept", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/machines");
   const card = page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) });
   const name = card.getByRole("textbox", { name: "Name" });
   await expect(name).not.toHaveValue("");
@@ -688,7 +698,7 @@ test("this Machine: named after its hostname, renamed in Settings, and the name 
 });
 
 test("credentials: Settings says which secret store holds them and why", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/service");
   // The stack forces the private file, as an install without a system secret store would use.
   const store = page.locator("[data-credential-store]");
   await expect(store).toHaveAttribute("data-credential-store", "file");
@@ -809,8 +819,10 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
         if (path !== "/setup") expect([s.contentLeft, s.contentTop], `${at}: content starts where Home's does`).toEqual([home.contentLeft, home.contentTop]);
         if (viewport.width < 1280) continue;
         // Wide windows keep the reading columns: Settings and Connections, Home's column centred beside the scrollbar, and the centred Setup steps.
-        if (path === "/connections" || path === "/settings") expect(s.contentWidth, `${at}: content column`).toBe(824);
-        if (path === "/") {
+        if (path === "/connections") expect(s.contentWidth, `${at}: content column`).toBe(824);
+        // Settings' section list sits beside its sections, across the whole reading column, as Home's does.
+        if (path === "/settings") expect(s.contentWidth, `${at}: content column`).toBeGreaterThan(824);
+        if (path === "/" || path === "/settings") {
           expect(s.contentWidth, `${at}: reading column`).toBeLessThanOrEqual(1072);
           expect(Math.abs(s.contentLeft - (s.scrollbarLeft - s.contentRight)), `${at}: the reading column is centred`).toBeLessThanOrEqual(1);
         }
@@ -1225,7 +1237,7 @@ async function checkNow(card: Locator) {
 
 test("replication: set up in Settings, joined from another Machine's setup, watched, blocked with its cause, and switched off", async ({ browser }) => {
   const remote = createBareRemote();
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/machines");
   const card = page.getByRole("region", { name: "Replication" });
   await expect(card.getByText("off", { exact: true })).toBeVisible();
   await card.getByRole("textbox", { name: "Repository" }).fill(remote);
@@ -1266,7 +1278,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await expect(second.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
     expect(readFileSync(join(other.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
     await second.evaluate(() => fetch("/api/v1/setup/complete", { method: "POST", credentials: "same-origin", headers: { "x-attache-client": "1" } }));
-    await second.goto(`${other.url}/settings`);
+    await second.goto(`${other.url}/settings/machines`);
     const machineCard = second.locator(".card", { has: second.getByRole("heading", { name: "This Machine" }) });
     await machineCard.getByRole("textbox", { name: "Name" }).fill("Work Mac");
     await machineCard.getByRole("button", { name: "Rename" }).click();
@@ -1299,6 +1311,10 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     // Settings carries the named warning in the masthead, from every screen.
     const settingsLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Settings/ });
     await expect(settingsLink).toHaveAccessibleName("Settings, Replication blocked");
+    // In Settings' section list the warning sits on the section it is about, in words.
+    const machinesEntry = page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /^Machines and Replication/ });
+    await expect(machinesEntry).toHaveAccessibleName("Machines and Replication, Replication blocked");
+    await expect(machinesEntry).toContainText("Replication blocked");
     const problem = card.locator("[data-replication-problem]");
     await expect(problem).toContainText("Replication is blocked");
     await expect(problem).toContainText("plan.txt");
@@ -1308,6 +1324,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await expect(card.getByText("up to date", { exact: true })).toBeVisible();
     await expect(problem).toHaveCount(0);
     await expect(settingsLink).toHaveAccessibleName("Settings");
+    await expect(machinesEntry).toHaveAccessibleName("Machines and Replication");
 
     // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
     await expect(card.locator('[data-machine="Home PC"]').getByText("Reader", { exact: true })).toBeVisible();
@@ -1368,11 +1385,18 @@ test("wording: connection help shows commands as code and addresses as links", a
 });
 
 test("wording: on Linux and Windows no view names macOS, and example folders are on this computer", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/schedules");
   await expect(page.getByRole("checkbox", { name: "Desktop notification for new urgent items" })).toBeVisible();
-  await page.getByRole("tab", { name: "Join another Machine" }).click();
-  await expect(page.getByRole("textbox", { name: /Empty folder for the Brain/ })).toHaveAttribute("placeholder", join(DOCUMENTS, "Brain"));
-  await expectNoMacWording(page, "/settings");
+  // Every Settings section, each on its own page.
+  for (const id of ["features", "schedules", "identity", "saving", "meaning-search", "backup", "machines", "clients", "service"]) {
+    await page.goto(`${stack.url}/settings/${id}`);
+    await expect(page.locator(`[data-settings-section="${id}"]`)).toBeVisible();
+    if (id === "machines") {
+      await page.getByRole("tab", { name: "Join another Machine" }).click();
+      await expect(page.getByRole("textbox", { name: /Empty folder for the Brain/ })).toHaveAttribute("placeholder", join(DOCUMENTS, "Brain"));
+    }
+    await expectNoMacWording(page, `/settings/${id}`);
+  }
   await page.goto(`${stack.url}/connections`);
   await expect(page.getByRole("textbox", { name: "Folder path" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
   await expectNoMacWording(page, "/connections");

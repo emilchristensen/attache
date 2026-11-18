@@ -256,11 +256,6 @@ button.approval-subject::after {
   flex-direction: column;
   gap: var(--s-4);
 }
-.back-link {
-  align-self: flex-start;
-  font-size: var(--fs-control);
-}
-
 /* ---- narrow: kind first, the whole subject next, then the meta line and time --------------------------- */
 
 @media (max-width: 720px) {

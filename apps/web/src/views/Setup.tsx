@@ -1,23 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { ConnectionDefinition, ConnectionStatus, FeatureStatus, Config } from "@attache/contracts";
-import { api, patch, post, put, type ApiError } from "../api.ts";
+import type { FeatureStatus, Config } from "@attache/contracts";
+import { api, patch, post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
-import { Tag } from "../components/Tag.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { Logo } from "../components/Logo.tsx";
 import { Icon } from "../components/icons.tsx";
 import { SetupActions } from "./SetupActions.tsx";
 import { DataFolderStep } from "./SetupDataFolder.tsx";
+import { FeatureList, type Caps } from "./FeatureList.tsx";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
-interface Caps {
-  features: FeatureStatus[];
-  connections: ConnectionStatus[];
-  definitions: ConnectionDefinition[];
-}
 
 export function Setup({ onDone }: { onDone: () => void }) {
   const cfg = useResource<{ config: Config }>("/config", ["config.changed"]);
@@ -98,58 +93,6 @@ function Nav({ onBack, onNext, nextLabel = "Continue", disabled }: { onBack?: ()
         {nextLabel}
       </button>
     </SetupActions>
-  );
-}
-
-export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => void }) {
-  const { run } = useAction();
-  const [problem, setProblem] = useState<{ id: string; on: boolean; message: string } | null>(null);
-  const toggle = async (id: string, on: boolean, cascade = false) => {
-    try {
-      await put("/features", { changes: { [id]: on }, cascade });
-      setProblem(null);
-      onChanged();
-    } catch (e) {
-      const err = e as ApiError;
-      if (err.code === "dependency") setProblem({ id, on, message: err.message });
-      else throw e;
-    }
-  };
-  return (
-    <div className="card" role="group" aria-label="Features">
-      {caps.features.map((f) => (
-        <div key={f.id} className="feature-row" data-feature={f.id}>
-          <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} />
-          <div style={{ flex: 1 }}>
-            <label htmlFor={`f-${f.id}`} className="row" style={{ cursor: f.core ? "default" : "pointer" }}>
-              <strong>{f.label}</strong>
-              {f.core && <Tag>core</Tag>}
-              <StateTag state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
-            </label>
-            <p className="desc">{f.description}</p>
-            {(f.dependsOn.features.length > 0 || f.dependsOn.connections.length > 0) && (
-              <p className="deps">
-                Needs: {[...f.dependsOn.features.map((d) => caps.features.find((x) => x.id === d)?.label ?? d), ...f.dependsOn.connections.map((c) => `${c.label}${c.required ? "" : " (optional)"}`)].join(" · ")}
-              </p>
-            )}
-            {f.enabled && f.reason && <p className="small" style={{ color: f.readiness === "ready" ? "var(--muted)" : "var(--warn)", marginTop: 4 }}>{f.reason}</p>}
-            {problem?.id === f.id && (
-              <div className="state partial small" style={{ marginTop: 8 }} role="alert">
-                <span>{problem.message}</span>
-                <div className="row">
-                  <button className="small primary" onClick={() => void run("cascade", () => toggle(problem.id, problem.on, true))}>
-                    {problem.on ? "Turn on what it needs too" : "Also turn off what depends on it"}
-                  </button>
-                  <button className="small ghost" onClick={() => setProblem(null)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 

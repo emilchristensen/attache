@@ -58,6 +58,10 @@ Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd 
 It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
 _Avoid_: Command palette, quick open
 
+**Settings section**:
+One page of Settings, at its own address under `/settings/`, such as Identity or Machines and Replication.
+Settings lists its nine sections in four groups, Attache, Brain, Machines and Service, and shows one at a time; each setting and action is in exactly one section.
+
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
 It follows the Decision count, also on the favicon; a part that could not be read never turns it on or off.

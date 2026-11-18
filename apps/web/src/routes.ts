@@ -47,8 +47,8 @@ export interface SettingsSection {
 }
 
 /**
- * Every Settings section, each at `/settings/<id>`. The search palette's Go to group reaches each one; Settings
- * shows the section the address names (#32 of spec #14 turns these into a section list).
+ * Every Settings section, each at `/settings/<id>`, in the section list's order. Settings shows one at a time; the
+ * search palette's Go to group and the Machine panel reach them by these addresses.
  */
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: "features", label: "Features", group: "Attache" },
@@ -66,10 +66,23 @@ export function settingsHref(id: string): string {
   return `/settings/${id}`;
 }
 
+/** The section list: each group once, with its sections, in order. */
+export function settingsGroups(): Array<{ group: SettingsGroup; sections: SettingsSection[] }> {
+  return SETTINGS_SECTIONS.reduce<Array<{ group: SettingsGroup; sections: SettingsSection[] }>>((groups, s) => {
+    const last = groups[groups.length - 1];
+    return last?.group === s.group ? [...groups.slice(0, -1), { ...last, sections: [...last.sections, s] }] : [...groups, { group: s.group, sections: [s] }];
+  }, []);
+}
+
 /** The Settings section `path` names, or null for Settings itself, another screen or an unknown section. */
 export function settingsSectionAt(path: string): string | null {
   const id = path.startsWith("/settings/") ? path.slice("/settings/".length) : null;
   return SETTINGS_SECTIONS.some((s) => s.id === id) ? id : null;
+}
+
+/** The section Settings shows at `path`: the first one at `/settings` itself, else the one named; null for an unknown one. */
+export function settingsSectionShown(path: string): string | null {
+  return path === "/settings" ? SETTINGS_SECTIONS[0]!.id : settingsSectionAt(path);
 }
 
 /** Approvals' tabs: Waiting at `/approvals`, Finished at `/approvals?tab=finished`. */

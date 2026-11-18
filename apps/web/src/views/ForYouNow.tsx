@@ -11,6 +11,7 @@ import { Link } from "../components/ui.tsx";
 import { BriefingActions } from "./BriefingActions.tsx";
 import { BriefingDetail, MeetingContext } from "./BriefingParts.tsx";
 import { useBriefingJob } from "./briefing-job.ts";
+import { settingsHref } from "../routes.ts";
 
 const ICON: Record<HeadsUpKindId, IconName> = {
   "daily-briefing": "sun",
@@ -192,7 +193,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
             For you now
           </h2>
           <p className="for-you-now-quiet-text">
-            Heads-ups need Attention and briefings, which is switched off. <Link to="/settings">Turn it on in Settings</Link>
+            Heads-ups need Attention and briefings, which is switched off. <Link to={settingsHref("features")}>Turn it on in Settings</Link>
           </p>
         </div>
       </section>

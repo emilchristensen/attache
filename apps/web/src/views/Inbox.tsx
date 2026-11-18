@@ -1,4 +1,4 @@
-import { draftHref } from "../routes.ts";
+import { draftHref, settingsHref } from "../routes.ts";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { plural, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
@@ -243,7 +243,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
 
   if (!attentionOn)
     return (
-      <Empty title="Attention and briefings is off" action={<Link to="/settings">Turn it on in Settings</Link>}>
+      <Empty title="Attention and briefings is off" action={<Link to={settingsHref("features")}>Turn it on in Settings</Link>}>
         Search still works.
       </Empty>
     );

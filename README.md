@@ -43,6 +43,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 Attache has no chat box of its own; you ask the Brain from your Harness.
 Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
 Home, Approvals, Brain, Connections, Jobs and Settings sit in one masthead, or in a bottom bar on a narrow window, and `g` then a letter jumps to each (`?` lists the shortcuts).
+Settings keeps its choices in sections, each at its own address, and a feature switch speaks up only when the feature is on but not fully working.
 The logo's dot, the tab's icon and its title, such as "(14) Attache", show how many decisions wait for you, counted once each across the Inbox, Approvals and sign-ins.
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
