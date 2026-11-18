@@ -511,9 +511,14 @@ test("palette: the same results as Home's field open the same places, and search
   await field(page).fill("zyxwvut");
   await expect(palette(page).locator(".search-status")).toHaveText("No passages match “zyxwvut”. Try other words.");
 
-  // Enter opens evidence at the cited lines; closing it gives focus back to where the owner started.
+  // Enter opens evidence at the cited lines; closing it brings the palette back with the query and that passage.
   await field(page).fill("cutover plan finance");
   await expect(options.first()).toContainText("Orion");
+  // Moving away and back leaves the passage chosen the way the owner chose it.
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  const chosen = (await options.first().locator(".search-hit-place").textContent())!;
   await page.keyboard.press("Enter");
   await expect(palette(page)).toBeHidden();
   const drawer = page.getByRole("dialog", { name: /Evidence/ });
@@ -521,7 +526,18 @@ test("palette: the same results as Home's field open the same places, and search
   await expect(drawer.locator(".line.hl").first()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
+  await expect(palette(page)).toBeVisible();
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("cutover plan finance");
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(options.first().locator(".search-hit-place")).toHaveText(chosen);
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
   await expect(page).toHaveURL(`${stack.url}/approvals`);
+  // The next opening starts afresh.
+  await page.keyboard.press("Control+k");
+  await expect(field(page)).toHaveValue("");
+  await page.keyboard.press("Escape");
 
   // A memory note opens in the Brain with the query; All results in Brain carries the query too.
   await page.keyboard.press("Control+k");
@@ -539,6 +555,45 @@ test("palette: the same results as Home's field open the same places, and search
   // Searching started no job and sent nothing but reads.
   expect(writes).toEqual([]);
   expect((await api<Array<{ id: string }>>(page, "GET", "/jobs?limit=100")).length).toBe(jobsBefore);
+});
+
+test("palette: a chosen place stays chosen when passages arrive, links in the results close it, and the section already open comes back into view", async () => {
+  const page = await journeys.open("/jobs");
+  await openPaletteAt(page, "/jobs", "Jobs");
+  // "settings" names the screen and, through it, the sections; Features is chosen before the passages answer.
+  await page.keyboard.type("settings");
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveText(/^Features/);
+  await page.keyboard.press("ArrowDown");
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+  await expect(palette(page).getByRole("status")).toHaveText(/\d+ results?/);
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`${stack.url}/settings/features`);
+
+  // Choosing the section the address already names brings it back into view, with no new history entry.
+  await openPaletteAt(page, "/settings/identity", "Settings");
+  await page.keyboard.press("Escape");
+  const identity = page.locator('[data-settings-section="identity"]');
+  await expect.poll(() => inView(identity)).toBe(true);
+  await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 0));
+  await page.locator("h1").click();
+  await expect.poll(() => inView(identity)).toBe(false);
+  const entries = await page.evaluate(() => history.length);
+  await page.keyboard.press("Control+k");
+  await field(page).fill("identity");
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeHidden();
+  await expect.poll(() => inView(identity)).toBe(true);
+  await expect(identity).toBeFocused();
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+
+  // The ranking line's Settings link closes the palette and opens meaning-based search, even from Settings.
+  await page.keyboard.press("Control+k");
+  await field(page).fill("Helios");
+  await palette(page).locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/settings/meaning-search`);
+  await expect.poll(() => inView(page.locator('[data-settings-section="meaning-search"]'))).toBe(true);
 });
 
 test("browse: one disclosure beside the field opens People, Projects, Decisions, Notes and Recent saves", async () => {

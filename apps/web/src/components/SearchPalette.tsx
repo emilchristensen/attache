@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { keepTabInside, useModalDialog } from "./dialog.ts";
-import { SearchField, type PaletteMode } from "./SearchField.tsx";
+import { SearchField, type PaletteMode, type PaletteResume } from "./SearchField.tsx";
 
 /** The palette's search field. */
 export const PALETTE_SEARCH_ID = "palette-search";
@@ -9,18 +9,23 @@ export const PALETTE_SEARCH_ID = "palette-search";
  * Search the Brain on every screen but Home (#34 of spec #14): Home's search field and results in a modal dialog,
  * with a Go to group for every screen and Settings section. Focus stays inside it (Tab wraps); Esc closes it and
  * focus goes back to where it was. A choice closes it first, then opens, so focus lands where the choice leads.
- * Each opening starts with an empty field. Searching only reads: it starts no job and changes nothing.
+ * Each opening starts with an empty field, except after evidence opened from it: closing the evidence opens the
+ * palette again with the same query and passage. Searching only reads: it starts no job and changes nothing.
  */
-export function SearchPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SearchPalette({ open, onClose, onReopen }: { open: boolean; onClose: () => void; onReopen: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const title = useId();
   const then = useRef<(() => void) | null>(null);
-  // A new field each time it opens, so it starts empty.
-  const [opening, setOpening] = useState(0);
+  // Where the next opening starts (set only on the way back from evidence), and the opening on screen.
+  const [resume, setResume] = useState<PaletteResume | null>(null);
+  const [session, setSession] = useState<{ n: number; resume: PaletteResume | null }>({ n: 0, resume: null });
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setOpening((n) => n + 1);
+    if (open) {
+      setSession((s) => ({ n: s.n + 1, resume }));
+      setResume(null);
+    }
   }
   const afterClose = () => {
     const go = then.current;
@@ -37,6 +42,11 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose: () =>
       then.current = go ?? null;
       onClose();
     },
+    reopen: (r) => {
+      setResume(r);
+      onReopen();
+    },
+    resume: session.resume,
   };
   return (
     <dialog ref={ref} className="sheet palette" aria-labelledby={title} onKeyDown={(e) => keepTabInside(e.nativeEvent, e.currentTarget)}>
@@ -48,7 +58,7 @@ export function SearchPalette({ open, onClose }: { open: boolean; onClose: () =>
           Close
         </button>
       </div>
-      {open && <SearchField key={opening} id={PALETTE_SEARCH_ID} palette={mode} />}
+      {open && <SearchField key={session.n} id={PALETTE_SEARCH_ID} palette={mode} />}
     </dialog>
   );
 }

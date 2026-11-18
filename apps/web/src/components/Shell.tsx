@@ -35,8 +35,10 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
   const openShortcuts = useCallback(() => setSheet("shortcuts"), []);
   // Home's field when it is on screen, the search palette everywhere else.
   const search = useCallback(() => {
-    if (!focusHomeSearch()) setSheet("search");
-  }, []);
+    if (current === "home") focusHomeSearch();
+    else setSheet("search");
+  }, [current]);
+  const reopenSearch = useCallback(() => setSheet("search"), []);
   useShortcuts(openShortcuts, search);
   // Browser Back or Forward under the open palette takes the owner somewhere else: the palette closes.
   const [shownPath, setShownPath] = useState(path);
@@ -59,7 +61,7 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <BottomBar current={current} signals={signals} moreOpen={sheet === "more"} onMore={() => setSheet("more")} moreRef={moreButton} onSearch={search} />
       <MoreSheet open={sheet === "more"} onClose={closeMore} current={current} signals={signals} opener={moreButton} />
       <ShortcutSheet open={sheet === "shortcuts"} onClose={closeShortcuts} />
-      <SearchPalette open={sheet === "search"} onClose={closeSearch} />
+      <SearchPalette open={sheet === "search"} onClose={closeSearch} onReopen={reopenSearch} />
     </div>
     </SignalsContext.Provider>
   );

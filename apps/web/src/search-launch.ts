@@ -7,11 +7,9 @@
 /** Home's search field (#21). */
 export const HOME_SEARCH_ID = "home-search";
 
-/** Focuses Home's search field when it is on screen; false when it is not, and the palette should open instead. */
-export function focusHomeSearch(): boolean {
-  const home = location.pathname === "/" ? document.getElementById(HOME_SEARCH_ID) : null;
-  if (!home) return false;
-  home.focus();
-  home.scrollIntoView({ block: "nearest" });
-  return true;
+/** Focuses Home's search field. */
+export function focusHomeSearch(): void {
+  const home = document.getElementById(HOME_SEARCH_ID);
+  home?.focus();
+  home?.scrollIntoView({ block: "nearest" });
 }

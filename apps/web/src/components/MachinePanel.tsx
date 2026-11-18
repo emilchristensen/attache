@@ -1,6 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useLiveConnection, useResource } from "../live.ts";
-import { settingsHref } from "../routes.ts";
 import { ReaderLine } from "../views/ReaderLine.tsx";
 import { modalOpen } from "./dialog.ts";
 import { Icon } from "./icons.tsx";
@@ -39,7 +38,7 @@ function LiveLine() {
 
 /**
  * This Machine, its Reader and the live connection: the masthead disclosure and the More sheet show the same lines.
- * Its link goes to Settings' Machines and Replication section.
+ * Its link goes to Settings until Settings has a Machines and Replication section of its own (#32 of spec #14).
  */
 export function MachinePanel() {
   const name = useMachineName();
@@ -53,7 +52,7 @@ export function MachinePanel() {
       </p>
       <ReaderLine />
       <LiveLine />
-      <Link to={settingsHref("machines")}>Machines and Replication</Link>
+      <Link to="/settings">Machines and Replication</Link>
     </div>
   );
 }

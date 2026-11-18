@@ -4,10 +4,12 @@ import { brainResultsHref, hitDestination, hitKind, hitPlace, INLINE_RESULTS, mo
 import { shownAnswer, useSearchAnswer, type SearchState } from "../search-answer.ts";
 import { browserPlatform, caretAfter, searchKeyLabel } from "../search-keys.ts";
 import { goToMatches, type GoToEntry } from "../palette.ts";
+import { settingsHref, settingsSectionAt } from "../routes.ts";
+import { revealSettingsSection } from "../views/settings-section.ts";
 import { useOpenEvidence } from "./Evidence.tsx";
 import { Icon } from "./icons.tsx";
 import { StateTag } from "./StateTag.tsx";
-import { Link, navigate } from "./ui.tsx";
+import { navigate } from "./ui.tsx";
 import type { MeaningStatus } from "@attache/contracts";
 
 /**
@@ -65,7 +67,26 @@ export function SearchResultRow({ hit }: { hit: SearchHit }) {
 }
 
 /** How the results were ranked; while only by keywords, why, and where to change it. */
-export function RankingNote({ meaning }: { meaning: MeaningStatus }) {
+/**
+ * A link inside the results: an ordinary link for a new tab, otherwise `follow`, which the palette uses to close
+ * itself before going.
+ */
+function FollowLink({ href, follow, children }: { href: string; follow: (href: string) => void; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        follow(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+export function RankingNote({ meaning, follow = navigate }: { meaning: MeaningStatus; follow?: (href: string) => void }) {
   const line = rankingLine(meaning);
   if (line.ranking === "meaning")
     return (
@@ -75,7 +96,10 @@ export function RankingNote({ meaning }: { meaning: MeaningStatus }) {
     );
   return (
     <p className="search-ranking" data-ranking="keywords" data-keywords-only>
-      {line.text}: {line.reason}. <Link to="/settings">Settings</Link>
+      {line.text}: {line.reason}.{" "}
+      <FollowLink href={settingsHref("meaning-search")} follow={follow}>
+        Settings
+      </FollowLink>
     </p>
   );
 }
@@ -132,6 +156,25 @@ function OptionGroup({ label, stale = false, children }: { label: string; stale?
  */
 export interface PaletteMode {
   leave: (then?: () => void) => void;
+  /** Opens the palette again where the owner left it for evidence. */
+  reopen: (resume: PaletteResume) => void;
+  /** Where to start: the query, and the passage to choose again once its answer is back. */
+  resume: PaletteResume | null;
+}
+
+export interface PaletteResume {
+  text: string;
+  chunkId: number;
+}
+
+/**
+ * Goes to `href`; for the Settings section the address already names, the address stays and the section comes
+ * into view again (Settings only reacts to a changed address).
+ */
+function goTo(href: string) {
+  const section = settingsSectionAt(href);
+  if (section && location.pathname === href) revealSettingsSection(section, true);
+  else navigate(href);
 }
 
 /**
@@ -141,7 +184,7 @@ export interface PaletteMode {
  * Home places it inline; the search palette places the same field in a dialog (`palette`), where `Esc` closes it.
  */
 export function SearchField({ id, className, palette }: { id: string; className?: string; palette?: PaletteMode }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(palette?.resume?.text ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const { state, retry } = useSearchAnswer(text, INLINE_RESULTS);
@@ -162,12 +205,37 @@ export function SearchField({ id, className, palette }: { id: string; className?
   const openEvidence = useOpenEvidence();
   const placesKey = places.map((p) => p.href).join(" ");
 
-  // Each new answer (and each new set of places) chooses the first option, so Enter opens the best match, and
-  // shows it from the top.
+  const placeCount = places.length;
+  const activeNow = useRef(active);
+  activeNow.current = active;
+  // The passage the owner opened evidence for from the palette, chosen again when its answer is back.
+  const backTo = useRef(palette?.resume?.chunkId ?? null);
+
+  // New places (the owner typed) choose the first option and show the list from the top.
   useEffect(() => {
     setActive(choosable > 0 ? 0 : -1);
     list.current?.scrollTo({ top: 0 });
-  }, [answer, choosable, placesKey]);
+    // Only the places decide here; an answer has its own effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placesKey]);
+  // Each new answer chooses the first option, so Enter opens the best match, unless the owner chose a place, which
+  // stays chosen; coming back from evidence, the passage it showed is chosen again.
+  useEffect(() => {
+    const back = backTo.current;
+    const again = back === null || !current ? -1 : (answer?.hits ?? []).findIndex((h) => h.chunkId === back);
+    if (again >= 0) {
+      backTo.current = null;
+      setActive(placeCount + again);
+      requestAnimationFrame(() => document.getElementById(optionId(placeCount + again))?.scrollIntoView({ block: "nearest" }));
+      return;
+    }
+    const a = activeNow.current;
+    if (a >= 0 && a < placeCount) return;
+    setActive(choosable > 0 ? 0 : -1);
+    list.current?.scrollTo({ top: 0 });
+    // optionId is derived from a stable id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answer, choosable, current, placeCount]);
 
   const leave = (go: () => void) => {
     setOpen(false);
@@ -176,16 +244,21 @@ export function SearchField({ id, className, palette }: { id: string; className?
   };
   const openOption = (i: number) => {
     const place = places[i];
-    if (place) return leave(() => navigate(place.href));
+    if (place) return leave(() => goTo(place.href));
     const hit = hits[i - places.length];
     if (!hit) return;
     const to = hitDestination(hit, text);
-    leave(() => (to.kind === "brain" ? navigate(to.href) : openEvidence(to.target)));
+    if (to.kind === "brain") return leave(() => navigate(to.href));
+    // From the palette, closing the evidence opens the palette again with this query and this passage chosen.
+    const resume = { text, chunkId: hit.chunkId };
+    leave(() => openEvidence(palette ? { ...to.target, onClosed: () => palette.reopen(resume) } : to.target));
   };
   const showAll = () => {
     const href = brainResultsHref(text);
     leave(() => navigate(href));
   };
+  /** Follows a link inside the results, closing the palette first. */
+  const follow = (href: string) => leave(() => goTo(href));
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // While an input method composes text, its keys are its own.
     if (e.nativeEvent.isComposing) return;
@@ -295,7 +368,7 @@ export function SearchField({ id, className, palette }: { id: string; className?
         <SearchStatus state={state} count={hits.length} retry={retry} />
         {searched && (
           <div className="search-foot">
-            {answer && <RankingNote meaning={answer.meaning} />}
+            {answer && <RankingNote meaning={answer.meaning} follow={follow} />}
             <a
               className="search-all"
               href={brainResultsHref(text)}

@@ -4,6 +4,7 @@ import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction, useLocation } from "../components/ui.tsx";
 import { SETTINGS_SECTIONS, settingsSectionAt } from "../routes.ts";
+import { revealSettingsSection, settingsSectionDomId } from "./settings-section.ts";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
@@ -212,7 +213,7 @@ function Backups() {
 function Section({ id, children }: { id: string; children: ReactNode }) {
   const label = SETTINGS_SECTIONS.find((s) => s.id === id)!.label;
   return (
-    <div id={`settings-${id}`} className="settings-section stack" role="group" data-settings-section={id} aria-label={label} tabIndex={-1}>
+    <div id={settingsSectionDomId(id)} className="settings-section stack" role="group" data-settings-section={id} aria-label={label} tabIndex={-1}>
       {children}
     </div>
   );
@@ -232,14 +233,9 @@ function useSectionInView(section: string | null, answered: number) {
   }, [section]);
   useEffect(() => {
     if (!section || done.current === section) return;
-    const el = document.getElementById(`settings-${section}`);
-    if (!el) return;
-    el.scrollIntoView({ block: "start" });
     // Focus moves once; a part that answers later only scrolls, so it never takes focus from what the owner chose.
-    if (focused.current !== section) {
-      focused.current = section;
-      el.focus({ preventScroll: true });
-    }
+    if (!revealSettingsSection(section, focused.current !== section)) return;
+    focused.current = section;
     if (answered === 3) done.current = section;
   }, [section, answered]);
 }

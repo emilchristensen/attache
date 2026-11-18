@@ -274,7 +274,7 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(panel.locator(".reader-line")).toHaveAttribute("data-reader", "alone");
   await expect(panel).toContainText("This Machine runs Source refresh and briefings.");
   await expect(panel).toContainText("Live updates are connected.");
-  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings/machines");
+  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings");
   // Escape belongs to the topmost layer: the shortcut sheet over the disclosure closes first.
   await page.keyboard.press("?");
   const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -286,14 +286,13 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
   await expect(trigger).toBeFocused();
-  // Following its link by keyboard closes the panel and puts focus on the Settings section it names, not at the
-  // top of the page.
+  // Following its link by keyboard leaves focus on the button, not at the top of the page.
   await page.keyboard.press("Enter");
   await panel.getByRole("link", { name: /Machines and Replication/ }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(`${stack.url}/settings/machines`);
+  await expect(page).toHaveURL(`${stack.url}/settings`);
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("group", { name: "Machines and Replication" })).toBeFocused();
+  await expect(trigger).toBeFocused();
 
   // A lost live connection shows on the button itself, and the disclosure says what it means.
   await stack.stopService();
