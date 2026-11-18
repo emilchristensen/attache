@@ -84,11 +84,11 @@ export function placeholderFit(input: HTMLInputElement): { text: number; room: n
 }
 
 /**
- * Marks `phrase` in `el`'s text: with `hide` its glyphs turn transparent through a CSS highlight (nothing moves and
- * the DOM is untouched), without it the mark is lifted. Returns the phrase's box inside the window, or null when it
- * has none there. Runs inside the page.
+ * Marks one character of `phrase` (at `index`) in `el`'s text: with `hide` its glyph turns transparent through a CSS
+ * highlight (nothing moves and the DOM is untouched), without it the mark is lifted. Returns that character's box
+ * inside the window, or null when it has none there. Runs inside the page.
  */
-function markPhrase(el: Element, [phrase, hide]: readonly [string, boolean]): { x: number; y: number; width: number; height: number } | null {
+function markGlyph(el: Element, [phrase, index, hide]: readonly [string, number, boolean]): { x: number; y: number; width: number; height: number } | null {
   const NAME = "phrase-drawn";
   if (!document.getElementById(NAME)) {
     const style = document.createElement("style");
@@ -102,8 +102,8 @@ function markPhrase(el: Element, [phrase, hide]: readonly [string, boolean]): { 
     const at = (node.textContent ?? "").indexOf(phrase);
     if (at < 0) continue;
     const range = document.createRange();
-    range.setStart(node, at);
-    range.setEnd(node, at + phrase.length);
+    range.setStart(node, at + index);
+    range.setEnd(node, at + index + 1);
     if (hide) CSS.highlights.set(NAME, new Highlight(range));
     const box = range.getBoundingClientRect();
     const left = Math.max(0, Math.floor(box.left));
@@ -116,17 +116,40 @@ function markPhrase(el: Element, [phrase, hide]: readonly [string, boolean]): { 
 }
 
 /**
- * Whether the owner sees `phrase` in `el`, by its pixels: hiding just its glyphs must change the picture where it
- * sits. Words that are clipped, painted over by any layer or drawn invisibly change nothing. Pair it with
- * `phraseShown`, which asks that every part of the phrase lies inside what clips it.
+ * Whether the owner sees `phrase` in `el`, by its pixels: hiding each of its glyphs on its own must change the picture
+ * where that glyph sits. A glyph that is clipped (even only the last digit), painted over by any layer or drawn
+ * invisibly changes nothing. Pair it with `phraseShown`, which asks that the phrase lies inside what clips it.
  */
 export async function phraseDrawn(el: Locator, phrase: string): Promise<boolean> {
   const page = el.page();
-  const clip = await el.evaluate(markPhrase, [phrase, false] as const);
-  if (!clip) return false;
-  const shown = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
-  await el.evaluate(markPhrase, [phrase, true] as const);
-  const hidden = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
-  await el.evaluate(markPhrase, [phrase, false] as const);
-  return !shown.equals(hidden);
+  const shot = { animations: "disabled", caret: "hide" } as const;
+  for (let i = 0; i < phrase.length; i++) {
+    if (!phrase[i]!.trim()) continue;
+    const clip = await el.evaluate(markGlyph, [phrase, i, false] as const);
+    if (!clip) return false;
+    const shown = await page.screenshot({ clip, ...shot });
+    await el.evaluate(markGlyph, [phrase, i, true] as const);
+    const hidden = await page.screenshot({ clip, ...shot });
+    await el.evaluate(markGlyph, [phrase, i, false] as const);
+    if (shown.equals(hidden)) return false;
+  }
+  return true;
+}
+
+/** Whether a field's placeholder paints: the field looks different once its placeholder is taken away. */
+export async function placeholderDrawn(input: Locator): Promise<boolean> {
+  const page = input.page();
+  await input.scrollIntoViewIfNeeded();
+  const box = (await input.boundingBox())!;
+  const clip = { x: Math.floor(box.x), y: Math.floor(box.y), width: Math.ceil(box.width), height: Math.ceil(box.height) };
+  const shot = { clip, animations: "disabled", caret: "hide" } as const;
+  const shown = await page.screenshot(shot);
+  const placeholder = await input.evaluate((el: HTMLInputElement) => {
+    const was = el.placeholder;
+    el.placeholder = "";
+    return was;
+  });
+  const bare = await page.screenshot(shot);
+  await input.evaluate((el: HTMLInputElement, was) => (el.placeholder = was), placeholder);
+  return !shown.equals(bare);
 }

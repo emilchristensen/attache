@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
 import { inboxRow, openRow } from "./inbox.ts";
-import { phraseDrawn, phraseShown, placeholderFit } from "./layout.ts";
+import { phraseDrawn, phraseShown, placeholderDrawn, placeholderFit } from "./layout.ts";
 import { buildAll, ROOT, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -30,6 +30,8 @@ const REHEARSAL = "Finish recovery rehearsal and document rollback ownership: Or
 const FIRST_THREE = [1, 2, 3].map((n) => `region ${n}`);
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+/** The day the first three regions are due, written once so the details are checked against what was seeded. */
+const TODAY = day(0);
 /** Each region's note: a long title, so the source line runs onto a second line on a phone too. */
 const noteTitle = (n: number) => `Orion regional migration ${n}: recovery rehearsal and rollback owners`;
 const notePath = (n: number) => `Orion/orion-regional-migration-${n}.md`;
@@ -40,7 +42,7 @@ test.beforeAll(async ({ browser }) => {
   mkdirSync(join(stack.vaultDir, "Orion"), { recursive: true });
   DEADLINES.forEach((title, i) => {
     const n = i + 1;
-    writeFileSync(join(stack.vaultDir, notePath(n)), `---\ntitle: '${noteTitle(n)}'\n---\n# ${noteTitle(n)}\n\n## Tasks\n- [ ] ${title} 📅 ${day(n <= 3 ? 0 : n)}\n`);
+    writeFileSync(join(stack.vaultDir, notePath(n)), `---\ntitle: '${noteTitle(n)}'\n---\n# ${noteTitle(n)}\n\n## Tasks\n- [ ] ${title} 📅 ${n <= 3 ? TODAY : day(n)}\n`);
   });
   // The service dates deadlines in UTC; a browser in UTC too says "Due today" for them at any hour of the run.
   journeys = await JourneyBrowser.start(browser, stack.url, { timezoneId: "UTC" });
@@ -96,6 +98,7 @@ test("heavy day at 375 px: the first three recovery rehearsal deadlines show the
     await expect(search).toBeVisible();
     await expect(search).toHaveValue("");
     await expect(search).toHaveAttribute("placeholder", "Search the Brain");
+    expect(await placeholderDrawn(search), `"Search the Brain" paints in the field (${scheme})`).toBe(true);
     const fit = await search.evaluate(placeholderFit);
     expect(fit.text, `"Search the Brain" fits the field at 375 px (${scheme})`).toBeLessThanOrEqual(fit.room);
     for (const region of FIRST_THREE) await expectRegionShown(rehearsal(page, region), region, `375 px ${scheme}`);
@@ -194,7 +197,7 @@ test("journey: on a phone the owner picks region 2 by its visible title, opens t
     await expect(picked!.locator("[data-row-toggle]")).toHaveText(`${REHEARSAL}, region 2`);
     await expect(picked!.locator(".inbox-source")).toContainText(`Notes · ${noteTitle(2)}`);
     await expect(detail.locator(".inbox-summary")).toContainText(`From “${noteTitle(2)}” (${notePath(2)}`);
-    await expect(detail.locator(".inbox-summary")).toContainText(`due ${day(0)}`);
+    await expect(detail.locator(".inbox-summary")).toContainText(`due ${TODAY}`);
     await picked!.evaluate((el) => el.scrollIntoView({ block: "start" }));
     await page.screenshot({ path: `test-results/screens/narrow-${scheme}-home-inbox-region-2-open.png` });
     // Closed again, the other regions are still told apart.
