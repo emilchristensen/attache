@@ -231,7 +231,7 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     // The service also files timeouts and 5xx answers as offline, so this says what is known: they were not reached.
     sentence: one ? `${one.label} could not be reached, so ${missingPhrase(one)} may be missing below.` : `${plural(cs.length, "source")} could not be reached, so their items may be missing below.`,
     // One row for one shared cause and one remedy, keeping what each source's own read said.
-    failure: cs.length === 1 ? coverageNote(cs[0]!, "offline") : cs.map((c) => `${c.label}: ${coverageNote(c, "offline") ?? "not reached"}`).join("; "),
+    failure: one ? offlineFailure(one) : cs.map((c) => `${c.label}: ${offlineFailure(c) ?? "not reached"}`).join("; "),
     lastRead: lastReadOf(cs),
     retry: retryOf(ctx),
     action: { kind: "refresh", connectionIds: cs.map((c) => c.id), label: "Retry now" },
@@ -241,14 +241,27 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
 /** A host name, with its port, inside a recorded reason ("api.github.com", "slack.com:443"). */
 const HOST = /\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\b/gi;
 
+/** Every reason the source's last read recorded for not reaching it, once each. */
+function offlineReasons(c: ConnectionStatus): string[] {
+  const notes = [c.coverage?.note, ...(c.coverage?.scopes ?? []).filter((s) => s.state === "offline").map((s) => s.note)];
+  return [...new Set(notes.filter((n): n is string => !!n?.trim()))];
+}
+
 /**
  * Why a source was not reached, as one comparable phrase: the service files network errors, timeouts and 5xx answers
  * alike as offline and says which only in its message, so sources share a cause only when their messages match once
- * each one's own host, case and spacing are set aside. A source that recorded no reason shows no shared cause.
+ * each one's own host, case and spacing are set aside. A source that recorded no reason, or several different ones,
+ * shows no single cause to share.
  */
 function offlineCause(c: ConnectionStatus): string | null {
-  const note = coverageNote(c, "offline");
-  return note ? note.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase() : null;
+  const causes = new Set(offlineReasons(c).map((n) => n.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase()));
+  return causes.size === 1 ? [...causes][0]! : null;
+}
+
+/** What failed for one unreached source: every recorded reason, else whatever the service last said. */
+function offlineFailure(c: ConnectionStatus): string | null {
+  const reasons = offlineReasons(c);
+  return reasons.length ? reasons.join("; ") : coverageNote(c, "offline");
 }
 
 /** Sources that failed for one shared reason share a row; every other source has its own, in the order given. */

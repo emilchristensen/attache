@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type ConnectionStatus, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -17,13 +17,23 @@ function featureForJob(kind: JobKind) {
   return FEATURES.find((f) => f.jobKinds.includes(kind))?.id ?? "jobs";
 }
 
+/** A Connection's sign-in state before a test, a re-saved method or a browser sign-in changes it. */
+type Prior = Pick<ConnectionStatus, "status" | "lastSuccessAt">;
+
+function priorSignIn(app: App, id: string): Prior | null {
+  const rec = app.connections.record(id);
+  return rec ? app.connections.status(rec) : null;
+}
+
 /**
  * A source that just recovered its sign-in still shows the failed coverage of its last Source refresh: refresh it now.
- * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in.
+ * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in. Only a
+ * sign-in that worked before counts as recovered; a first sign-in during Setup is left to Setup and the schedule.
  */
-function refreshIfRecovered(app: App, id: string, before: string | undefined, ok: boolean) {
+function refreshIfRecovered(app: App, id: string, before: Prior | null, ok: boolean) {
   const rec = app.connections.record(id);
-  if (!ok || !rec || (before !== "needs_auth" && before !== "error") || !rec.readScopes.length || !app.featureEnabled("attention")) return;
+  if (!ok || !rec || !before || (before.status !== "needs_auth" && before.status !== "error") || !before.lastSuccessAt) return;
+  if (!rec.readScopes.length || !app.featureEnabled("attention")) return;
   app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
 }
 
@@ -170,7 +180,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
-    const before = app.connections.record(kind)?.status;
+    const before = priorSignIn(app, kind);
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
     // Saving the method again is how a login made outside Attache is picked up.
@@ -178,7 +188,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     return out;
   });
   r.post("/connections/:id/test", async (c) => {
-    const before = app.connections.requireRecord(c.params.id!).status;
+    const before = priorSignIn(app, c.params.id!);
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
@@ -243,7 +253,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const code = c.query("code");
       if (!code) return back("No authorization code returned", false);
       const rec = app.connections.requireRecord(pending.kind);
-      const before = rec.status;
+      const before = priorSignIn(app, rec.id);
       const adapter = app.connections.adapter(pending.kind);
       try {
         // Exchange the code with the client this sign-in started with; persist it only now that it worked.

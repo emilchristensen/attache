@@ -74,13 +74,21 @@ describe("meeting preparation, team recall and pending replies through claude.ai
     expect((await svc.post("/connections/jira/test")).test).toMatchObject({ ok: true });
   });
 
-  it("a browser sign-in that brings a signed-out Jira back refreshes it straight away", async () => {
-    svc.app.db.prepare("update connections set status = 'needs_auth' where id = 'jira'").run();
+  it("a browser sign-in that brings a signed-out Jira back refreshes it straight away, but a first sign-in does not", async () => {
     const jiraRefreshes = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "source-refresh" && j.connectionId === "jira").length;
+    const signIn = async () => {
+      const { url } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
+      const callback = (await fetch(url, { redirect: "manual" })).headers.get("location")!;
+      expect((await fetch(callback, { redirect: "manual" })).headers.get("location")).toMatch(/oauth=ok/);
+    };
     const before = await jiraRefreshes();
-    const { url } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
-    const callback = (await fetch(url, { redirect: "manual" })).headers.get("location")!;
-    expect((await fetch(callback, { redirect: "manual" })).headers.get("location")).toMatch(/oauth=ok/);
+    // Setup's first sign-in: it never worked before, so there is nothing to recover from.
+    svc.app.db.prepare("update connections set status = 'needs_auth', last_success_at = null where id = 'jira'").run();
+    await signIn();
+    expect(await jiraRefreshes()).toBe(before);
+    // The sign-in that has now passed worked before; signed out again since.
+    svc.app.db.prepare("update connections set status = 'needs_auth' where id = 'jira'").run();
+    await signIn();
     expect(await jiraRefreshes()).toBe(before + 1);
   });
 

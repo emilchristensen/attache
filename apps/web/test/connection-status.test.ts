@@ -403,6 +403,25 @@ describe("connectionsStatus: Offline sources share a row only for a shared cause
   });
 });
 
+describe("connectionsStatus: findings from review round 4", () => {
+  it("gives a source whose scopes were not reached for different reasons its own row, keeping every reason", () => {
+    const github = coverage("offline", {
+      scopes: [
+        { scope: "assigned issues", state: "offline", items: 0, pages: 0, note: "Network error contacting api.github.com: fetch failed" },
+        { scope: "review requests for @me", state: "offline", items: 0, pages: 0, note: "GET /search/issues → HTTP 503: unavailable" },
+      ],
+    });
+    const rows = rowsOf(withConnections(conn("github", { coverage: github }), conn("jira", { coverage: unreached("example.atlassian.net") })));
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:jira"]);
+    expect(rows[0]!.failure).toBe("Network error contacting api.github.com: fetch failed; GET /search/issues → HTTP 503: unavailable");
+  });
+
+  it("does not take a bare last error for a shared cause", () => {
+    const rows = rowsOf(withConnections(conn("github", { coverage: coverage("offline"), lastError: "offline" }), conn("gmail", { coverage: coverage("offline"), lastError: "offline" })));
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail"]);
+  });
+});
+
 describe("inboxCoverage: what an empty Inbox may claim", () => {
   it("claims every source only on the green line, the notes alone when nothing else is connected, and nothing otherwise", () => {
     expect(inboxCoverage(connectionsStatus(inputs()))).toBe("all");
