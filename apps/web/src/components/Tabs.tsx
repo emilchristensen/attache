@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 export interface TabItem<T extends string> {
   id: T;
@@ -78,7 +78,8 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     measure();
   }, [measure]);
 
-  useEffect(() => {
+  // A layout effect, like the first alignment below: widths are seeded in the same frame, before a font can swap in.
+  useLayoutEffect(() => {
     const list = listRef.current;
     if (!list) return;
     const bar = new ResizeObserver(measure);
