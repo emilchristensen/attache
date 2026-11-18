@@ -249,9 +249,12 @@ export function SearchField({ id, className, palette }: { id: string; className?
     if (!hit) return;
     const to = hitDestination(hit, text);
     if (to.kind === "brain") return leave(() => navigate(to.href));
-    // From the palette, closing the evidence opens the palette again with this query and this passage chosen.
+    // From the palette, closing the evidence opens the palette again with this query and this passage chosen, if
+    // the owner is still where they opened it (Back or Forward under the drawer leaves the palette closed).
     const resume = { text, chunkId: hit.chunkId };
-    leave(() => openEvidence(palette ? { ...to.target, onClosed: () => palette.reopen(resume) } : to.target));
+    const from = location.href;
+    const onClosed = () => location.href === from && palette?.reopen(resume);
+    leave(() => openEvidence(palette ? { ...to.target, onClosed } : to.target));
   };
   const showAll = () => {
     const href = brainResultsHref(text);

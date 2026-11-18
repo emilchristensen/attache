@@ -511,14 +511,16 @@ test("palette: the same results as Home's field open the same places, and search
   await field(page).fill("zyxwvut");
   await expect(palette(page).locator(".search-status")).toHaveText("No passages match “zyxwvut”. Try other words.");
 
-  // Enter opens evidence at the cited lines; closing it brings the palette back with the query and that passage.
-  await field(page).fill("cutover plan finance");
-  await expect(options.first()).toContainText("Orion");
-  // Moving away and back leaves the passage chosen the way the owner chose it.
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowUp");
-  await expect(options.first()).toHaveAttribute("aria-selected", "true");
-  const chosen = (await options.first().locator(".search-hit-place").textContent())!;
+  // Enter opens evidence at the cited lines; closing it brings the palette back with the query and that passage,
+  // not just the first one.
+  await field(page).fill("Orion");
+  await expect(options.nth(1)).toBeVisible();
+  const kinds = await options.locator(".search-hit-kind").allTextContents();
+  const pick = kinds.findIndex((k, i) => i > 0 && !["Person", "Project", "Decision", "Note"].includes(k));
+  expect(pick, `a later result that opens as evidence among ${kinds.join(", ")}`).toBeGreaterThan(0);
+  for (let i = 0; i < pick; i++) await page.keyboard.press("ArrowDown");
+  await expect(options.nth(pick)).toHaveAttribute("aria-selected", "true");
+  const chosen = (await options.nth(pick).locator(".search-hit-place").textContent())!;
   await page.keyboard.press("Enter");
   await expect(palette(page)).toBeHidden();
   const drawer = page.getByRole("dialog", { name: /Evidence/ });
@@ -528,16 +530,29 @@ test("palette: the same results as Home's field open the same places, and search
   await expect(drawer).toBeHidden();
   await expect(palette(page)).toBeVisible();
   await expect(field(page)).toBeFocused();
-  await expect(field(page)).toHaveValue("cutover plan finance");
-  await expect(options.first()).toHaveAttribute("aria-selected", "true");
-  await expect(options.first().locator(".search-hit-place")).toHaveText(chosen);
+  await expect(field(page)).toHaveValue("Orion");
+  await expect(options.nth(pick)).toHaveAttribute("aria-selected", "true");
+  await expect(options.nth(pick).locator(".search-hit-place")).toHaveText(chosen);
   await page.keyboard.press("Escape");
   await expect(palette(page)).toBeHidden();
   await expect(page).toHaveURL(`${stack.url}/approvals`);
   // The next opening starts afresh.
   await page.keyboard.press("Control+k");
   await expect(field(page)).toHaveValue("");
+  // Evidence left by Back or Forward does not bring the palette back somewhere else.
+  await field(page).fill("Orion");
+  await options.nth(pick).click();
+  await expect(drawer).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState(null, "", "/jobs");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(palette(page)).toBeHidden();
+  await page.goto(`${stack.url}/approvals`);
+  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
 
   // A memory note opens in the Brain with the query; All results in Brain carries the query too.
   await page.keyboard.press("Control+k");
