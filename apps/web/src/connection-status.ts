@@ -115,7 +115,7 @@ function isReadable(c: ConnectionStatus): boolean {
 }
 
 /** Set up and meant to work: neither waiting to be set up nor disconnected by the owner. */
-function inUse(c: ConnectionStatus): boolean {
+export function inUse(c: ConnectionStatus): boolean {
   return c.status !== "not_configured" && c.status !== "disconnected";
 }
 
@@ -137,6 +137,36 @@ function coverageState(c: ConnectionStatus): CoverageState | null {
     if (cov.scopes.some((s) => s.state === worse)) return worse;
   }
   return cov.state;
+}
+
+/** What is wrong with one set-up Connection, as Home's rows and the Connections page both name it. */
+export type ConnectionState = "sign_in" | "down" | "offline" | "denied" | "partial" | "not_read_yet";
+
+/** How each Connection state shows: its word, colour and glyph, the same on Home and on the Connections page. */
+export const CONNECTION_LOOK: Record<ConnectionState, Pick<StatusRow, "word" | "hue" | "icon">> = {
+  sign_in: { word: "Sign-in needed", hue: "amber", icon: "key" },
+  down: { word: "Down", hue: "red", icon: "warning" },
+  offline: { word: "Offline", hue: "red", icon: "warning" },
+  denied: { word: "Access denied", hue: "amber", icon: "key" },
+  partial: { word: "Partly read", hue: "amber", icon: "warning" },
+  not_read_yet: { word: "Not read yet", hue: "slate", icon: "question" },
+};
+
+/**
+ * One Connection's problem, or null when it works or is not set up. Its status decides first (signed out, down); a
+ * source's last read decides the rest, and only while Attention is on, since nothing reads the sources while it is off.
+ */
+export function connectionState(c: ConnectionStatus, attentionOn: boolean): ConnectionState | null {
+  if (!inUse(c)) return null;
+  if (c.status === "needs_auth") return "sign_in";
+  if (c.status === "error") return "down";
+  if (!isReadable(c) || !attentionOn) return null;
+  const state = coverageState(c);
+  if (state === null || state === "never_run" || state === "not_configured") return "not_read_yet";
+  if (state === "unauthorized") return "sign_in";
+  if (state === "error") return "down";
+  if (state === "offline" || state === "denied" || state === "partial") return state;
+  return null;
 }
 
 function coverageNote(c: ConnectionStatus, state: CoverageState): string | null {
@@ -176,9 +206,7 @@ function signInRow(c: ConnectionStatus): StatusRow {
     ...BASE,
     key: `sign_in:${c.id}`,
     state: "sign_in",
-    word: "Sign-in needed",
-    hue: "amber",
-    icon: "key",
+    ...CONNECTION_LOOK.sign_in,
     subject: c.label,
     impact,
     sentence,
@@ -196,9 +224,7 @@ function downRow(c: ConnectionStatus, ctx: Context): StatusRow {
     ...BASE,
     key: `down:${c.id}`,
     state: "down",
-    word: "Down",
-    hue: "red",
-    icon: "warning",
+    ...CONNECTION_LOOK.down,
     subject: c.label,
     impact: source ? (MISSING[c.kind]?.short ?? "Items may be missing") : "It does not work",
     sentence: source ? `${c.label} is not answering, so ${missingPhrase(c)} may be missing below.` : `${c.label} does not answer.`,
@@ -223,9 +249,7 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     ...BASE,
     key: `offline:${cs.map((c) => c.id).join(",")}`,
     state: "offline",
-    word: "Offline",
-    hue: "red",
-    icon: "warning",
+    ...CONNECTION_LOOK.offline,
     subject: nameList(cs.map((c) => c.label)),
     impact: one ? (MISSING[one.kind]?.short ?? "Items may be missing") : "Their items may be missing",
     // The service also files timeouts and 5xx answers as offline, so this says what is known: they were not reached.
@@ -280,9 +304,7 @@ function coverageRow(c: ConnectionStatus, state: "denied" | "partial"): StatusRo
     ...BASE,
     key: `${state}:${c.id}`,
     state,
-    word: denied ? "Access denied" : "Partly read",
-    hue: "amber",
-    icon: denied ? "key" : "warning",
+    ...CONNECTION_LOOK[state],
     subject: c.label,
     impact: MISSING[c.kind]?.short ?? "Items may be missing",
     sentence: denied ? `${c.label} refused one of the reads, so ${missingPhrase(c)} may be missing below.` : `${c.label} was only partly read, so ${missingPhrase(c)} may be missing below.`,
@@ -298,9 +320,7 @@ function notReadYetRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     ...BASE,
     key: `not_read_yet:${cs.map((c) => c.id).join(",")}`,
     state: "not_read_yet",
-    word: "Not read yet",
-    hue: "slate",
-    icon: "question",
+    ...CONNECTION_LOOK.not_read_yet,
     subject: nameList(cs.map((c) => c.label)),
     impact: one ? (MISSING[one.kind]?.short ?? "Items may be missing") : "Their items may be missing",
     sentence: one ? `No Source refresh has finished for ${one.label} yet, so ${missingPhrase(one)} may be missing below.` : `No Source refresh has finished for ${plural(cs.length, "source")} yet, so their items may be missing below.`,
@@ -431,19 +451,14 @@ function connectionRows(cs: ConnectionStatus[], ctx: Context, attentionOn: boole
   const offline: ConnectionStatus[] = [];
   const unread: ConnectionStatus[] = [];
   for (const c of cs.filter(inUse)) {
-    if (c.status === "needs_auth") rows.push(signInRow(c));
-    else if (c.status === "error") rows.push(downRow(c, ctx));
-    else if (!isReadable(c)) healthy.push(c);
-    else if (!attentionOn) continue;
-    else {
-      const state = coverageState(c);
-      if (state === null || state === "never_run" || state === "not_configured") unread.push(c);
-      else if (state === "unauthorized") rows.push(signInRow(c));
-      else if (state === "error") rows.push(downRow(c, ctx));
-      else if (state === "offline") offline.push(c);
-      else if (state === "denied" || state === "partial") rows.push(coverageRow(c, state));
-      else healthy.push(c);
-    }
+    const state = connectionState(c, attentionOn);
+    if (state === "sign_in") rows.push(signInRow(c));
+    else if (state === "down") rows.push(downRow(c, ctx));
+    else if (state === "offline") offline.push(c);
+    else if (state === "denied" || state === "partial") rows.push(coverageRow(c, state));
+    else if (state === "not_read_yet") unread.push(c);
+    // While Attention is off a source's last read says nothing, so it is neither a problem nor counted as working.
+    else if (!isReadable(c) || attentionOn) healthy.push(c);
   }
   for (const group of byOfflineCause(offline)) rows.push(offlineRow(group, ctx));
   if (unread.length) rows.push(notReadYetRow(unread, ctx));
