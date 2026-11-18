@@ -1,3 +1,4 @@
+import { draftHref } from "../routes.ts";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { plural, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
@@ -226,7 +227,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
         },
         "Preparing a draft in the background",
       ),
-    viewDraft: (draftId) => navigate(`/approvals?id=${draftId}`),
+    viewDraft: (draftId) => navigate(draftHref(draftId)),
   };
   useInboxKeys(live, decide, busy !== null);
 

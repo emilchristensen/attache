@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
-import { approvalEndedAt, FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
+import { approvalEndedAt, plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, Time, useAction, useLocation } from "../components/ui.tsx";
+import { ErrorState, Link, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
-import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
-import { Tabs, type TabItem } from "../components/Tabs.tsx";
-
-const BODY_KEY: Record<string, string> = { "slack.post": "text" };
-const KIND_LABEL: Record<string, string> = { "github.comment": "GitHub comment", "jira.comment": "Jira comment", "confluence.comment": "Confluence comment", "slack.post": "Slack message", "gmail.draft": "Gmail draft" };
+import { DRAFT_KIND_WORDS as KIND_LABEL, draftBodyKey } from "../approvals.ts";
+import { approvalsHref } from "../routes.ts";
 
 function DraftDetail({ id }: { id: string }) {
   const a = useResource<ActionView>(`/actions/${id}`, ["actions.changed"]);
@@ -18,7 +15,7 @@ function DraftDetail({ id }: { id: string }) {
   const { busy, run } = useAction();
   const open = useOpenEvidence();
   const d = a.data;
-  const key = d ? (BODY_KEY[d.kind] ?? "body") : "body";
+  const key = d ? draftBodyKey(d.kind) : "body";
   useEffect(() => {
     if (d && !dirty) setBody(String(d.payload[key] ?? ""));
   }, [d, dirty, key]);
@@ -37,7 +34,9 @@ function DraftDetail({ id }: { id: string }) {
   return (
     <div className="stack" data-action-id={d.id} data-status={d.status}>
       <div className="row">
-        <h2 className="detail-title" style={{ flex: 1 }}>{d.title}</h2>
+        <h1 style={{ flex: 1 }}>
+          {d.title}
+        </h1>
         <StateTag state={d.status} />
       </div>
       <dl className="kv">
@@ -204,49 +203,19 @@ function DraftDetail({ id }: { id: string }) {
   );
 }
 
-type Filter = "open" | "done" | "all";
-const FILTERS: ReadonlyArray<TabItem<Filter>> = [
-  { id: "open", label: "Needs review" },
-  { id: "done", label: "Finished" },
-  { id: "all", label: "All" },
-];
-
-/** The Drafts list beside the chosen Draft, shown under Approvals at `/approvals?id=`. */
-export function DraftsSection() {
-  const loc = useLocation();
-  const [filter, setFilter] = useState<Filter>("open");
-  const statuses = filter === "open" ? OPEN_ACTION_STATUSES.join(",") : filter === "done" ? FINISHED_ACTION_STATUSES.join(",") : "";
-  const list = useResource<ActionView[]>(`/actions${statuses ? `?status=${statuses}` : ""}`, ["actions.changed", "job"]);
-  const selected = loc.search.get("id");
-  const { detailRef, revealDetail } = useRevealDetail();
-  useEffect(() => {
-    if (!selected && list.data?.[0]) navigate(`/approvals?id=${list.data[0].id}`, { replace: true });
-  }, [list.data, selected]);
+/**
+ * A Draft's own page at `/approvals/<id>`, where it is edited, approved and sent. For now it holds the Draft detail
+ * as it was beside the Drafts list; #28 of spec #14 rewrites it (the message as the reading surface, fourteen states).
+ */
+export function DraftPage({ id }: { id: string }) {
   return (
-    <section className="approvals-section" aria-labelledby="drafts-to-send">
-      <h2 id="drafts-to-send">Drafts to send</h2>
-      <p className="subtitle">Nothing is sent until you approve a specific version. Edits invalidate earlier approvals.</p>
-      <div className="split">
-        <div className="stack">
-          <Tabs label="Drafts to show" tabs={FILTERS} selected={filter} onSelect={setFilter} />
-          {list.loading && !list.data && <Loading />}
-          <ErrorState error={list.error} retry={list.reload} />
-          {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an Inbox item. Drafts appear here with their context.</Empty>}
-          <div className="list">
-            {list.data?.map((d) => (
-              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/approvals?id=${d.id}`); revealDetail(); }}>
-                <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
-                  <strong>{d.title}</strong>
-                  <span className="row small muted">
-                    <StateTag state={d.status} /> {KIND_LABEL[d.kind] ?? d.kind} · <Time iso={d.updatedAt} />
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div ref={detailRef} className="split-detail">{selected ? <DraftDetail id={selected} /> : <Empty title="Select a draft" />}</div>
+    <div className="page">
+      <div className="draft-page">
+        <Link to={approvalsHref()} className="back-link">
+          <span aria-hidden>←</span> Back to Approvals
+        </Link>
+        <DraftDetail id={id} />
       </div>
-    </section>
+    </div>
   );
 }

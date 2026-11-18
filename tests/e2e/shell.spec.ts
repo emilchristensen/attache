@@ -204,9 +204,10 @@ test("routes: Home, Approvals and Brain live at their new addresses, and the old
   await page.goto(`${stack.url}/approvals`);
   await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
   await expect(mainNav(page).getByRole("link", { name: /^Approvals/ })).toHaveAttribute("aria-current", "page");
-  // Today's Drafts list and Proposals list, both under the one heading, so nothing is unreachable.
+  // Waiting holds Drafts to send and Changes to the Brain; its tab carries the same number as the navigation.
+  await expect(page.getByRole("tab", { name: "Waiting, 1 waiting" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("region", { name: "Drafts to send" })).toBeVisible();
-  await expect(page.getByRole("region", { name: /Changes to the Brain/ }).locator("[data-proposal]")).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Changes to the Brain" }).locator('[data-approval-row="proposal"]')).toHaveCount(1);
   for (const old of ["/memory", "/drafts", "/memory?tab=person", "/drafts?id=x"]) {
     await page.goto(`${stack.url}${old}`);
     await expect(page.getByRole("heading", { level: 1, name: "Not found" })).toBeVisible();

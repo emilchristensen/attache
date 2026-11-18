@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
+import { approvalRow, approvalRowById, draftsGroup, openApprovalRow, proposalsGroup } from "./approvals.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
 import { lineStarts } from "./layout.ts";
 import { inboxRow, inboxView, openRow } from "./inbox.ts";
@@ -515,10 +516,18 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   // The rejected Draft is finished, so the item is a decision on Home again.
   await expect(needYou).toHaveText(new RegExp(`^${before} needs? you here$`));
   await expect(countLine).toHaveCount(0);
-  await page.goto(`${stack.url}/approvals?id=${rejectedId}`);
+  // Finished lists it with its outcome; it opens in place and leads to its own page.
+  await page.goto(`${stack.url}/approvals`);
   await page.getByRole("tab", { name: "Finished" }).click();
-  await expect(page.getByRole("button", { name: /Review acme\/web#42/ }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/approvals\?tab=finished$/);
+  const finished = approvalRowById(page, "draft", rejectedId!);
+  await expect(finished.locator(".approval-meta")).toContainText("GitHub comment on acme/web #42 · v1");
+  await expect(finished.locator(".tag")).toHaveText("Rejected");
+  await openApprovalRow(finished);
+  await finished.getByRole("link", { name: "Open the Draft" }).click();
+  await expect(page).toHaveURL(new RegExp(`/approvals/${rejectedId}$`));
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
+  await expect(page.getByRole("link", { name: /^Approvals/ }).first()).toHaveAttribute("aria-current", "page");
 });
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
@@ -528,7 +537,9 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
   await pr.getByRole("button", { name: "View draft" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
+  // View draft opens the Draft's own page under Approvals.
+  await expect(page).toHaveURL(/\/approvals\/[^/?]+$/);
+  await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
   const box = page.getByRole("textbox", { name: "Text" });
   await expect(box).toHaveValue(/reviewed the changes/);
   // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
@@ -553,7 +564,22 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await gh.getByRole("checkbox", { name: /I understand/ }).check();
   await gh.getByRole("button", { name: "Save write permissions" }).click();
   await expect(gh.getByText("Post a comment on a pull request or issue", { exact: false }).first()).toBeVisible();
+  // Approvals lists the approved Draft under Drafts to send with its destination, version and first line. It opens in
+  // place read-only, offers no Approve or Send, and leads to its own page for them.
   await page.goto(`${stack.url}/approvals`);
+  const row = approvalRow(draftsGroup(page), "draft", "Add checkout retry");
+  await expect(row.locator(".approval-kind")).toHaveText("Draft");
+  await expect(row.locator(".approval-meta")).toContainText("GitHub comment on acme/web #42 · v2");
+  await expect(row.locator(".approval-meta .tag")).toHaveText("Approved");
+  await expect(row.locator(".approval-preview")).toHaveText("Looks good. One question: does the retry respect idempotency keys?");
+  await openApprovalRow(row);
+  await expect(row.locator(".draft-quote")).toHaveText("Retries failed payments once.");
+  await expect(row.locator(".draft-text")).toHaveText("Looks good. One question: does the retry respect idempotency keys?");
+  await expect(row.getByRole("textbox")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: /^(Approve|Send)/ })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Reject" })).toBeVisible();
+  await row.getByRole("link", { name: "Review and send v2" }).click();
+  await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
   // The owner steps away and the 15-minute approval ends: the draft goes back to needing approval, and approving again is one click.
   const detail = page.locator("[data-action-id]");
   await expect(detail).toHaveAttribute("data-status", "approved");
@@ -611,9 +637,10 @@ test("wording: counts read as words in the right number, never with (s)", async 
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?, 2 indexed files\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
 
-  await page.goto(`${stack.url}/approvals`);
-  await page.getByRole("tab", { name: "Finished" }).click();
-  await page.locator(".list-item", { hasText: "acme/web#42" }).first().click();
+  await page.goto(`${stack.url}/approvals?tab=finished`);
+  const sent = approvalRow(page, "draft", "GitHub comment on acme/web #42");
+  await openApprovalRow(sent);
+  await sent.getByRole("link", { name: "Open the Draft" }).click();
   await expect(page.getByText("1 changed file", { exact: true })).toBeVisible();
 
   await page.goto(`${stack.url}/jobs`);
@@ -870,26 +897,68 @@ test("approvals: a Proposal shows every part of the change and is applied or rej
   });
   const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
 
-  const review = page.getByRole("region", { name: /Changes to the Brain/ });
-  const card = review.locator(`[data-proposal="${update.id}"]`);
-  await expect(card.getByText(`Update ${VENDOR}`)).toBeVisible();
-  // A fact the note already holds with another value shows as a correction: the old value and the new one.
+  // A third Proposal corrects the same fact, from the value the first one replaces: applying the first makes it stale.
+  const stale = await propose({ item: { action: "update", path: VENDOR, facts: [{ subject: "Decision", value: "Stay with Nimbus", reason: "Price" }] }, reason: "Finance call" });
+
+  const review = proposalsGroup(page);
+  // A Proposal never looks like a Draft: plum change glyph and the word Proposal, on the group and on every row.
+  await expect(review.getByRole("heading", { level: 2, name: "Changes to the Brain" })).toBeVisible();
+  const card = approvalRowById(page, "proposal", update.id);
+  await expect(card.locator(".approval-kind")).toHaveText("Proposal");
+  await expect(card.locator(".approval-kind")).toHaveClass(/c-plum/);
+  // Collapsed, it names the note and the change, previous to new.
+  await expect(card.locator("[data-row-toggle]")).toHaveText("Email vendor");
+  await expect(card.locator(".approval-preview")).toHaveText("Decision: Switch to Postmark for 2027 → Use Postmark from January 2027 · 2 more changes");
+  const newNote = approvalRowById(page, "proposal", create.id);
+  await expect(newNote.locator("[data-row-toggle]")).toHaveText("Lena Berg");
+  await expect(newNote.locator(".approval-meta .tag")).toHaveText("New person");
+  await expect(newNote.locator(".approval-preview")).toHaveText("Role: Postmark account manager");
+
+  // Opened in place: every part, the reason, the evidence and where it came from, then Apply and Reject.
+  await openApprovalRow(card);
   await expect(card.locator('[data-part="correction"]')).toHaveText([/Correction\s*Decision: Switch to Postmark for 2027 → Use Postmark from January 2027 \(Contract signed\)/]);
   await expect(card.locator('[data-part="correction"] del')).toHaveText("Switch to Postmark for 2027");
   await expect(card.locator('[data-part="fact"]')).toHaveText([/Owner: Procurement \(Named in the contract\)/]);
   await expect(card.locator('[data-part="event"]')).toHaveText([/Postmark contract signed/]);
   await expect(card.locator("[data-evidence]")).toHaveText(/Evidence\s*Procurement signed the Postmark contract this morning\./);
-  await expect(card).toContainText("Why: Vendor review session");
+  await expect(card.locator("[data-why]")).toHaveText(/Why\s*Vendor review session/);
   await expect(card).toContainText("Source: Claude Code session in attache");
-  const newNote = review.locator(`[data-proposal="${create.id}"]`);
-  await expect(newNote.getByText("New person: Lena Berg")).toBeVisible();
-  await expect(newNote.locator('[data-part="tags"]')).toContainText("vendor");
 
+  // Applied, it stays as one line in its place until the next visit, with the way to the note.
   await card.getByRole("button", { name: "Apply" }).click();
-  await expect(card).toHaveCount(0);
+  await expect(card).toHaveAttribute("data-decided", "Applied");
+  await expect(card).toContainText("Applied · Email vendor");
+  await expect(card.locator(".approval-decided")).toBeFocused();
+  await openApprovalRow(newNote);
+  await expect(newNote.locator('[data-part="tags"]')).toContainText("vendor");
   await newNote.getByRole("button", { name: "Reject" }).click();
-  await expect(review.locator("[data-proposal]")).toHaveCount(0);
-  await expect(review).toContainText("No changes to review");
+  await expect(newNote).toHaveAttribute("data-decided", "Rejected");
+
+  // The stale one is refused: the reason shows in the row, Apply is off and Reject still works.
+  const refused = approvalRowById(page, "proposal", stale.id);
+  await openApprovalRow(refused);
+  await refused.getByRole("button", { name: "Apply" }).click();
+  await expect(refused.getByRole("alert")).toContainText(/Not applied\. "Decision" in memory\/decisions\/email-vendor\.md changed since this Proposal was made/);
+  await expect(refused).not.toHaveAttribute("data-decided");
+  await expect(refused.getByRole("button", { name: "Apply" })).toBeDisabled();
+  await refused.getByRole("button", { name: "Reject" }).click();
+  await expect(refused).toHaveAttribute("data-decided", "Rejected");
+  await expect(page.locator('[data-approval-row="proposal"]')).toHaveCount(3);
+  // The decided lines stay for the whole visit, also after a look at Finished.
+  await page.getByRole("tab", { name: "Finished" }).click();
+  await page.getByRole("tab", { name: /^Waiting/ }).click();
+  await expect(page.locator('[data-approval-row="proposal"][data-decided]')).toHaveCount(3);
+  await expect(page.getByRole("tab", { name: /^Waiting/ })).toBeFocused();
+
+  // On the next visit the decided rows are gone, and Finished lists them with their outcomes, the latest first.
+  await page.reload();
+  await expect(review.getByText("No changes to the Brain wait.").or(page.getByText("Nothing waits for your OK."))).toBeVisible();
+  await expect(page.locator('[data-approval-row="proposal"]')).toHaveCount(0);
+  await page.getByRole("tab", { name: "Finished" }).click();
+  await expect(approvalRowById(page, "proposal", update.id).locator(".tag").first()).toHaveText("Applied");
+  await expect(approvalRowById(page, "proposal", stale.id).locator(".tag").first()).toHaveText("Rejected");
+  const finishedIds = await page.locator('[data-approval-row="proposal"]').evaluateAll((rows) => rows.map((r) => r.getAttribute("data-row-id")));
+  expect(finishedIds.slice(0, 3)).toEqual([stale.id, create.id, update.id]);
 
   const file = readFileSync(join(stack.dataDir, VENDOR), "utf8");
   const [current, history] = file.split("## History");

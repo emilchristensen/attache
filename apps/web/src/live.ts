@@ -95,6 +95,8 @@ export interface Resource<T> {
   data: T | null;
   error: ApiError | null;
   loading: boolean;
+  /** When the data now held was answered (ms since the epoch), so a failure after a good load can say how old it is. */
+  answeredAt: number | null;
   reload: () => void;
   setData: (d: T) => void;
   /** When the request behind `data` was asked, as an `orderMark()`, so a newer answer can be told from an older one. */
@@ -120,6 +122,7 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(!!path);
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
   const [askedAt, setAskedAt] = useState<number | null>(null);
   const seq = useRef(0);
   const load = useCallback(() => {
@@ -131,6 +134,7 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
       .then((d) => {
         if (mine !== seq.current) return;
         setData(d);
+        setAnsweredAt(Date.now());
         setAskedAt(asked);
         setError(null);
       })
@@ -144,6 +148,7 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   }, [path]);
   useEffect(() => {
     setData(null);
+    setAnsweredAt(null);
     load();
   }, [load]);
   const timer = useRef<number | null>(null);
@@ -153,5 +158,5 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
       timer.current = window.setTimeout(load, 120);
     }
   });
-  return { data, error, loading, reload: load, setData, askedAt };
+  return { data, error, loading, answeredAt, reload: load, setData, askedAt };
 }
