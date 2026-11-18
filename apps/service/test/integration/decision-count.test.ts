@@ -18,7 +18,7 @@ const LONE_DRAFTS = 102;
 const PROPOSALS = 101;
 
 const coverage: Coverage = { state: "complete", scopes: [], items: 0, at: new Date().toISOString() };
-const candidate = (n: number) => ({ key: `count:item-${n}`, kind: "deadline", title: `Item ${n}`, summary: "", why: "", priority: 1, sourceKind: "count", connectionId: null, fingerprint: `fp-${n}`, evidence: [] });
+const candidate = (n: number) => ({ key: `count:item-${n}`, kind: "deadline" as const, title: `Item ${n}`, summary: "", why: "", priority: 1, sourceKind: "count", connectionId: null, fingerprint: `fp-${n}`, evidence: [] });
 
 /** A Draft, linked to the Inbox item with this key when one is given. */
 function draft(itemKey: string | null, body: string) {

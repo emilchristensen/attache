@@ -1,6 +1,6 @@
 import { useResource } from "../live.ts";
-import { ForYouNow } from "./ForYouNow.tsx";
 import { HomeSearch } from "./HomeSearch.tsx";
+import { ForYouNow } from "./ForYouNow.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { HomeConnections, useConnectionsStatus } from "./HomeConnections.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";

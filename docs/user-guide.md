@@ -136,6 +136,9 @@ On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Searc
 Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
 Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere in the Brain's.
 Press `?` for the list of keyboard shortcuts.
+On Home, `j` and `k` move between Inbox rows and `Enter` opens one; they change nothing.
+The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+No single key ever applies, approves, sends, rejects, reverts or disconnects.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
 
@@ -186,8 +189,19 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   At most three rows show, and the rest wait behind "1 more".
   Only a Connection that needs you to sign in again counts toward the dot.
   An item list is never shown as "nothing to do" while this area shows a problem.
-- Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
+- **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
+  Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
+  A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
+  Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
+  On a narrow window the type comes first, then the whole subject, then the source and time.
+  Select a row to open it in place: the summary, why it is here, its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
+  A decided row stays where it was as one line with **Undo**, so nothing below it moves.
+  The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
+  Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
+  The **Type** menu lists every type with its count and shows one type at a time.
+  The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft.
 - **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
@@ -195,7 +209,7 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
-  While that draft waits for you or is being sent, the item offers **View draft** instead.
+  While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
   Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 

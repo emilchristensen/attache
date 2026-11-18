@@ -30,6 +30,8 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/setup/identity", { name: "Test User", email: "alex@example.com", confirm: true });
   await api(page, "POST", "/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${stack.fixtureUrl}/model`, model: "fixture-model" } });
   await api(page, "POST", "/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678" } });
+  // A Harness too, so every feature is ready and Home's Connections area is the one green line of a healthy morning.
+  await api(page, "POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
   await api(page, "POST", "/setup/complete");
   await api(page, "POST", "/import", { path: stack.vaultDir });
   await api(page, "POST", "/connections/github/refresh");
@@ -54,13 +56,41 @@ async function writeBriefing(page: Page, kind: "daily" | "away" | "manual"): Pro
 /**
  * For you now's share of the first 1280 x 800 viewport, with disclosures closed. Home's other parts take the rest:
  * masthead 74, page top 24, the Home heading and search field (#21) about 120, the Connections line (#22) about 72,
- * the Inbox heading and its count line about 66, and typed rows (#23) about 70 each. So two complete rows fit under an
- * unread briefing, and four once it is put away. The rows themselves are measured once #22 and #23 are on Home.
+ * the Inbox heading and its count line about 66, and typed rows (#23) 72 each. So two complete rows fit under an
+ * unread briefing, and four once it is put away; `completeRows` measures the rows themselves.
  */
 const BUDGET = { unread: 230, putAway: 90 };
 
 async function areaHeight(page: Page): Promise<number> {
   return Math.round((await area(page).boundingBox())!.height);
+}
+
+/**
+ * The fold criterion, measured: at scroll position zero, with the Inbox heading on screen, how many Inbox rows end
+ * (bottom edge, not top) inside the viewport, with their whole subject, source line and time visible. -1 when the
+ * Inbox heading itself is below the fold.
+ */
+async function completeRows(page: Page): Promise<number> {
+  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
+  return page.evaluate(() => {
+    const scroller = document.querySelector(".page")!;
+    scroller.scrollTo(0, 0);
+    const fold = window.innerHeight;
+    if (document.querySelector("#inbox h2")!.getBoundingClientRect().bottom > fold) return -1;
+    const rows = [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")];
+    const whole = (row: HTMLElement) => row.getBoundingClientRect().bottom <= fold && [...row.querySelectorAll(".inbox-subject, .inbox-source, .inbox-time")].every((el) => el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().bottom <= fold);
+    return rows.filter(whole).length;
+  });
+}
+
+/** A sign-in problem on Home's Connections area: GitHub's answer says it needs a new sign-in. */
+async function routeSignIn(page: Page) {
+  await page.route("**/api/v1/capabilities", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { connections: Array<{ kind: string; status: string; lastError: string | null }> };
+    body.connections = body.connections.map((c) => (c.kind === "github" ? { ...c, status: "needs_auth", lastError: "Bad credentials" } : c));
+    await route.fulfill({ response: res, json: body });
+  });
 }
 
 test("quiet: with nothing timely the area is one line, and the briefing actions are there", async () => {
@@ -95,6 +125,9 @@ test("morning: the daily briefing leads with one development, its why, Read brie
   expect(await lead.evaluate((el) => getComputedStyle(el, "::after").content)).toBe('""');
   // Its share of the first viewport leaves room for the Inbox heading and two complete rows.
   expect(await areaHeight(page), "For you now with an unread briefing").toBeLessThanOrEqual(BUDGET.unread);
+  // A healthy morning with an unread briefing: the Inbox heading and two complete typed rows above the fold.
+  await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
+  expect(await completeRows(page), "complete Inbox rows under an unread briefing").toBeGreaterThanOrEqual(2);
   // Read briefing opens every point, the linked counts and the file, in place.
   await lead.getByRole("button", { name: "Read briefing" }).click();
   await expect(lead.getByRole("button", { name: "Read briefing" })).toHaveAttribute("aria-expanded", "true");
@@ -175,10 +208,18 @@ test("Got it: the briefing shrinks to one Earlier today line, remembered in this
   await earlier.getByRole("button", { name: "Read briefing" }).click();
   // Put away, it leaves room for four complete rows.
   expect(await areaHeight(page), "For you now with the briefing put away").toBeLessThanOrEqual(BUDGET.putAway);
+  expect(await completeRows(page), "complete Inbox rows after Got it").toBeGreaterThanOrEqual(4);
   // Remembered in this browser, so a reload keeps it put away.
   await page.reload();
   await expect(area(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
   await expect(area(page).locator('[data-heads-up="daily-briefing"]')).toHaveCount(0);
+  // With the briefing as a follower line and one sign-in problem, at least the first row is still complete.
+  // (Overlapping meetings join this case when meeting prep Heads-ups arrive, #26 of spec #14.)
+  await routeSignIn(page);
+  await page.reload();
+  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  expect(await completeRows(page), "complete Inbox rows with a sign-in problem").toBeGreaterThanOrEqual(1);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("noon: a new daily briefing leaves at noon, but not while the pointer is on it", async ({ browser }) => {

@@ -99,7 +99,7 @@ export function useNavSignals(): NavSignals {
   // Once rows are on screen, a refresh holds the rows and the route's answer until all three have answered, and the
   // Inbox and Drafts parts are counted from that held answer (`withRows`): the rows and the number beside them change
   // together, whichever answers first. Proposals and sign-ins count from the latest answer.
-  const answerOf = <R>(r: Resource<R>) => ({ data: r.data, error: r.error });
+  const answerOf = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, askedAt: r.askedAt });
   const settled = useRef({ inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) });
   const rowsShown = settled.current.inbox.data !== null;
   if (!inbox.loading && !drafts.loading && !(rowsShown && totals.loading)) settled.current = { inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) };
@@ -144,9 +144,9 @@ export function useNavSignals(): NavSignals {
  * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
  * Drafts; the count still waits for the pair.
  */
-function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error">, reload: () => void): Resource<R> {
+function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "askedAt">, reload: () => void): Resource<R> {
   const failed = !inbox.loading && inbox.error ? inbox.error : null;
-  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, reload };
+  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, askedAt: held.askedAt, error: failed ?? held.error, reload };
 }
 
 /** The shell's signals, for the screens inside it. */
