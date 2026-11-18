@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type ConnectionStatus, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -18,21 +18,28 @@ function featureForJob(kind: JobKind) {
 }
 
 /** A Connection's sign-in state before a test, a re-saved method or a browser sign-in changes it. */
-type Prior = Pick<ConnectionStatus, "status" | "lastSuccessAt">;
+interface Prior {
+  status: string;
+  /** The sign-in worked at some point before. */
+  workedBefore: boolean;
+  /** A Source refresh stored a read, which may now be stale. */
+  read: boolean;
+}
 
 function priorSignIn(app: App, id: string): Prior | null {
-  const rec = app.connections.record(id);
-  return rec ? app.connections.status(rec) : null;
+  const row = app.db.prepare("select status, last_success_at, coverage from connections where id = ?").get(id) as { status: string; last_success_at: string | null; coverage: string | null } | undefined;
+  return row ? { status: row.status, workedBefore: !!row.last_success_at, read: !!row.coverage } : null;
 }
 
 /**
  * A source that just recovered its sign-in still shows the failed coverage of its last Source refresh: refresh it now.
- * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in. Only a
- * sign-in that worked before counts as recovered; a first sign-in during Setup is left to Setup and the schedule.
+ * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in. A sign-in
+ * recovers when it worked before or a stored read now needs replacing; a first sign-in during Setup with nothing read
+ * is left to Setup and the schedule.
  */
 function refreshIfRecovered(app: App, id: string, before: Prior | null, ok: boolean) {
   const rec = app.connections.record(id);
-  if (!ok || !rec || !before || (before.status !== "needs_auth" && before.status !== "error") || !before.lastSuccessAt) return;
+  if (!ok || !rec || !before || (before.status !== "needs_auth" && before.status !== "error") || !(before.workedBefore || before.read)) return;
   if (!rec.readScopes.length || !app.featureEnabled("attention")) return;
   app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
 }

@@ -75,21 +75,28 @@ describe("meeting preparation, team recall and pending replies through claude.ai
   });
 
   it("a browser sign-in that brings a signed-out Jira back refreshes it straight away, but a first sign-in does not", async () => {
-    const jiraRefreshes = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "source-refresh" && j.connectionId === "jira").length;
+    const jiraJobs = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "source-refresh" && j.connectionId === "jira");
+    const jiraRefreshes = async () => (await jiraJobs()).length;
     const signIn = async () => {
       const { url } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
       const callback = (await fetch(url, { redirect: "manual" })).headers.get("location")!;
       expect((await fetch(callback, { redirect: "manual" })).headers.get("location")).toMatch(/oauth=ok/);
     };
+    const signedOut = (lastSuccessAt: string | null, coverage: string | null) => svc.app.db.prepare("update connections set status = 'needs_auth', last_success_at = ?, coverage = ? where id = 'jira'").run(lastSuccessAt, coverage);
     const before = await jiraRefreshes();
-    // Setup's first sign-in: it never worked before, so there is nothing to recover from.
-    svc.app.db.prepare("update connections set status = 'needs_auth', last_success_at = null where id = 'jira'").run();
+    // Setup's first sign-in: it never worked and nothing was read, so there is nothing to recover from.
+    signedOut(null, null);
     await signIn();
     expect(await jiraRefreshes()).toBe(before);
-    // The sign-in that has now passed worked before; signed out again since.
-    svc.app.db.prepare("update connections set status = 'needs_auth' where id = 'jira'").run();
+    // A scheduled read stored a refused read while the first sign-in was pending: that read is stale now.
+    signedOut(null, JSON.stringify({ state: "unauthorized", scopes: [], items: 0, at: new Date().toISOString() }));
     await signIn();
     expect(await jiraRefreshes()).toBe(before + 1);
+    await svc.waitJob((await jiraJobs())[0].id);
+    // The sign-in worked before and was lost since.
+    signedOut(new Date().toISOString(), null);
+    await signIn();
+    expect(await jiraRefreshes()).toBe(before + 2);
   });
 
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {
