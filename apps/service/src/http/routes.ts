@@ -2,6 +2,7 @@ import type { Router } from "./router.ts";
 import type { App } from "../app.ts";
 import { registerConsolidationRoutes } from "./routes-consolidation.ts";
 import { registerCoreRoutes } from "./routes-core.ts";
+import { registerCountRoutes } from "./routes-count.ts";
 import { registerDataRoutes } from "./routes-data.ts";
 import { registerHarnessRoutes } from "./routes-harnesses.ts";
 import { registerMeaningRoutes } from "./routes-meaning.ts";
@@ -20,4 +21,5 @@ export function registerRoutes(router: Router, app: App, port: () => number) {
   registerWrapUpRoutes(router, app);
   registerHarnessRoutes(router, app);
   registerConsolidationRoutes(router, app);
+  registerCountRoutes(router, app);
 }
