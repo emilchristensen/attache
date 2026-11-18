@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MeaningStatus } from "@attache/contracts";
-import { brainResultsHref, hitDestination, hitKind, hitPlace, moveActive, rankingLine, searchPath, type SearchHit } from "../src/search.ts";
-import { isSearchChord, searchKeyLabel } from "../src/search-keys.ts";
+import { brainResultsHref, hitDestination, hitKind, hitPlace, moveActive, rankingLine, resultsRoom, searchPath, type SearchHit } from "../src/search.ts";
+import { caretAfter, isSearchChord, searchKeyLabel } from "../src/search-keys.ts";
 
 const hit = (over: Partial<SearchHit> = {}): SearchHit => ({
   chunkId: 1,
@@ -127,6 +127,51 @@ describe("moveActive", () => {
 
   it("chooses nothing when there is nothing to choose", () => {
     expect(moveActive(-1, 0, "ArrowDown")).toBe(-1);
+  });
+});
+
+describe("resultsRoom", () => {
+  // The page shows 75-420 px of the window; the list starts at 192 and the foot under it is 48 px tall.
+  const room = (over: Partial<Parameters<typeof resultsRoom>[0]> = {}) =>
+    resultsRoom({ listTop: 192, below: 48, visibleTop: 75, visibleBottom: 420, ...over });
+
+  it("fills what is left of the visible page under the list, less the foot and a margin", () => {
+    expect(room()).toBe(420 - 192 - 48 - 12);
+  });
+
+  it("never grows past the visible page when the page is scrolled and the list starts above its top", () => {
+    // Scrolled 535 px: measuring from the list's own top would give 703 px and run the results off the page.
+    expect(room({ listTop: 192 - 535 })).toBe(420 - 75 - 48 - 12);
+  });
+
+  it("keeps a usable list in a short window; the page scrolls for the rest", () => {
+    expect(room({ visibleBottom: 300 })).toBe(160);
+  });
+});
+
+describe("caretAfter", () => {
+  const key = (k: string, mods: Partial<{ ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) => ({ key: k, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods });
+  const at = (start: number, end = start, direction: "forward" | "backward" | "none" = "none") => ({ start, end, direction });
+
+  it("moves the caret to the start or the end of the text, as Home and End do on every system", () => {
+    expect(caretAfter(key("End"), at(2), 17)).toEqual(at(17));
+    expect(caretAfter(key("Home"), at(9), 17)).toEqual(at(0));
+    expect(caretAfter(key("End"), at(2, 6, "forward"), 17)).toEqual(at(17));
+  });
+
+  it("with Shift selects from where the selection started", () => {
+    expect(caretAfter(key("End", { shiftKey: true }), at(4), 17)).toEqual(at(4, 17, "forward"));
+    expect(caretAfter(key("Home", { shiftKey: true }), at(4), 17)).toEqual(at(0, 4, "backward"));
+    // A backward selection started at its end.
+    expect(caretAfter(key("End", { shiftKey: true }), at(2, 6, "backward"), 17)).toEqual(at(6, 17, "forward"));
+    expect(caretAfter(key("Home", { shiftKey: true }), at(2, 6, "forward"), 17)).toEqual(at(0, 2, "backward"));
+  });
+
+  it("leaves other keys and chords to the browser", () => {
+    expect(caretAfter(key("ArrowLeft"), at(4), 17)).toBeNull();
+    expect(caretAfter(key("End", { metaKey: true }), at(4), 17)).toBeNull();
+    expect(caretAfter(key("Home", { ctrlKey: true }), at(4), 17)).toBeNull();
+    expect(caretAfter(key("End", { altKey: true }), at(4), 17)).toBeNull();
   });
 });
 
