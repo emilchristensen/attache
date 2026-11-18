@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
-import type { ProposalView } from "@attache/contracts";
 import { useResource } from "../live.ts";
+import { useSignals } from "../nav-signals.ts";
+import { approvalsHref } from "../routes.ts";
 import { ErrorState, Link, Loading, Markdown, Time } from "../components/ui.tsx";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -138,16 +139,16 @@ function ChangeLog({ changes }: { changes: readonly NoteChange[] }) {
   );
 }
 
-/** The Proposals that wait to change this note, as one line linking to Approvals. */
+/** The Proposals that wait to change this note, from the list the shell already holds, as one line linking to Approvals. */
 function WaitingProposals({ relPath }: { relPath: string }) {
-  const res = useResource<{ proposals: ProposalView[] }>("/memory/proposals?status=proposed&limit=100", ["memory.changed"]);
-  const waiting = waitingProposalsFor(relPath, res.data?.proposals ?? []);
+  const { waitingProposals } = useSignals();
+  const waiting = waitingProposalsFor(relPath, waitingProposals.data?.proposals ?? []);
   if (!waiting.length) return null;
   return (
     <p className="reader-proposal" data-waiting-proposals={waiting.length}>
       <Icon name="change" size={18} />
       <span>
-        {waitingProposalWords(waiting.length)} <Link to="/approvals">Review {waiting.length === 1 ? "it" : "them"} in Approvals</Link>
+        {waitingProposalWords(waiting.length)} <Link to={approvalsHref()}>Review {waiting.length === 1 ? "it" : "them"} in Approvals</Link>
       </span>
     </p>
   );
