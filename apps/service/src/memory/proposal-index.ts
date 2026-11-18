@@ -47,6 +47,11 @@ export class ProposalIndex {
     return rows.flatMap((r) => parseProposalRecord(json(r.record, null)) ?? []);
   }
 
+  /** How many Proposals are in this status, without the list's limit. */
+  count(status: ProposalView["status"]): number {
+    return Number((this.db.prepare("select count(*) n from proposals where status = ?").get(status) as { n: number }).n);
+  }
+
   paths(): Map<string, string> {
     const rows = this.db.prepare("select id, rel_path from proposals").all() as Array<{ id: string; rel_path: string }>;
     return new Map(rows.map((r) => [r.rel_path, r.id]));

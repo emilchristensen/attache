@@ -101,7 +101,8 @@ export function DecidedRow({ kind, id, words, subject, focus, onFocused, after }
 
 /**
  * A group's own request failure, on first load or after a good load: what failed, the rows still shown and how old
- * they are, and Retry. Never an empty list. `counted`: the group's rows are decisions, which the count then leaves out.
+ * they are, and Retry. Never an empty list. `counted`: the count leaves the group's rows out
+ * (it is counting from the lists, and this one failed).
  */
 export function GroupFailure({ what, error, answeredAt, retry, retained, counted = false }: { what: string; error: ApiError; answeredAt: number | null; retry: () => void; retained: boolean; counted?: boolean }) {
   const at = answeredAt === null ? null : clockTime(answeredAt, Intl.DateTimeFormat().resolvedOptions().timeZone);
