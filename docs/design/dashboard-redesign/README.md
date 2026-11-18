@@ -3,7 +3,13 @@
 Two designers, Astra (GPT-6 Astra) and Fable (Claude Fable 5.2), designed the redesign independently and reviewed each other over three rounds.
 After round 2 the owner gave feedback (`FEEDBACK-1.md`): too dense, too dull, item types blur together.
 Fable produced v4 in response, Astra reviewed it in round 3, and Fable applied the agreed fixes as v5.
-The owner then asked Fable directly for a look inspired by T3 Code and dropped the copper palette; that restyle is v6, the current version.
+The owner then asked Fable directly for a look inspired by T3 Code and dropped the copper palette; that restyle is v6.
+
+> **Superseded for the look (2026-11-18).**
+> A GPT-6.2 Astra designer then designed the Dashboard blind, from the requirements only, in `../dashboard-blind-astra/`.
+> The owner preferred it, and spec #14 and its tickets now take the visual language, the Home layout and the Inbox view from `../dashboard-blind-astra/DESIGN.md` and `../dashboard-blind-astra/SPEC-UPDATES.md`.
+> This folder stays the reference for the counts, the Draft states, the fixtures and the narrow-screen journeys.
+> `astra/review-4.md` is a GPT-6.2 Astra review of v6, and its findings are filed as #37 to #41.
 
 ![Today, light, morning](fable/screenshots/light-today-morning.png)
 
