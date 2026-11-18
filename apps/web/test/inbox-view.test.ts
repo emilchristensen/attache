@@ -131,6 +131,21 @@ describe("Group by type", () => {
     expect(deadlines.hidden).toBe(1);
   });
 
+  it("keeps a row standing in for a meeting that moved up in its family's place without counting it", () => {
+    const meetings = ["m1", "m2", "m3", "m4"].map((id) => it_(id, { kind: "meeting_prep", sourceKind: "gcal" }));
+    // m1 moved up while the keyboard was on it: three real meetings, all three in the preview, nothing behind Show all.
+    const group = groupRows(meetings, new Set(), "m1")[0]!;
+    expect(ids(group.rows)).toEqual(["m1", "m2", "m3", "m4"]);
+    expect(group.total).toBe(3);
+    expect(group.hidden).toBe(0);
+    // Alone in its family, it keeps its place, and the family counts nothing.
+    const alone = groupRows([it_("d1"), meetings[0]!], new Set(), "m1");
+    expect(alone.map((g) => [g.family, ids(g.rows), g.total])).toEqual([
+      ["deadlines", ["d1"], 1],
+      ["meetings", ["m1"], 0],
+    ]);
+  });
+
   it("shows every row of a family after Show all", () => {
     const deadlines = groupRows(rows, new Set(["deadlines"]))[0]!;
     expect(ids(deadlines.rows)).toEqual(["d1", "d2", "d3", "d4"]);

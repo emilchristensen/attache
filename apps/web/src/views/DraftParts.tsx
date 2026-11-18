@@ -109,18 +109,35 @@ export function DraftAnswers({ d }: { d: ActionView }) {
   );
 }
 
-/** What came back from the other service: when it was verified, its id and link. */
+/** What came back from the other service: when it was verified, its id; for an unknown outcome, when it was recorded and where it went. */
 export function DraftReceipt({ d }: { d: ActionView }) {
-  if (d.status !== "succeeded" || !d.receipt) return null;
+  if ((d.status !== "succeeded" && d.status !== "unknown") || !d.receipt) return null;
   const r = d.receipt;
+  const url = typeof r.url === "string" ? r.url : null;
   return (
     <dl className="kv draft-receipt" data-receipt>
       <dt>Verified</dt>
-      <dd>{typeof r.verifiedAt === "string" ? DRAFT_CLOCK.day(r.verifiedAt) : "yes"}</dd>
+      <dd>{d.status === "unknown" ? "No, the outcome is unknown" : typeof r.verifiedAt === "string" ? DRAFT_CLOCK.day(r.verifiedAt) : "yes"}</dd>
+      {d.status === "unknown" && typeof r.at === "string" && (
+        <>
+          <dt>Recorded</dt>
+          <dd>{DRAFT_CLOCK.day(r.at)}</dd>
+        </>
+      )}
       {r.remoteId !== undefined && r.remoteId !== null && (
         <>
           <dt>Remote id</dt>
           <dd className="mono">{String(r.remoteId)}</dd>
+        </>
+      )}
+      {d.status === "unknown" && url && (
+        <>
+          <dt>Address</dt>
+          <dd>
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              {url}
+            </a>
+          </dd>
         </>
       )}
     </dl>

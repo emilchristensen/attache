@@ -107,6 +107,14 @@ export function draftTargetUrl(d: Pick<ActionView, "target" | "receipt" | "conte
   return str(rec(d.receipt).url) ?? str(d.target.url) ?? str(rec(rec(d.context).item).url);
 }
 
+/** Gmail's list of drafts: where a Gmail draft of unknown outcome is checked when Gmail returned no address for it. */
+export const GMAIL_DRAFTS_URL = "https://mail.google.com/mail/u/0/#drafts";
+
+/** Where to check a send of unknown outcome: the receipt's address, else (a Gmail draft) Gmail's drafts, else the target. */
+export function uncertainTargetUrl(d: Pick<ActionView, "kind" | "target" | "receipt" | "context">): string | null {
+  return str(rec(d.receipt).url) ?? (d.kind === "gmail.draft" ? GMAIL_DRAFTS_URL : draftTargetUrl(d));
+}
+
 /** The thing to check on the other service ("the pull request"). */
 function targetThing(d: ActionView): string {
   switch (d.kind) {
@@ -254,13 +262,23 @@ function afterSend(d: ActionView, clock: DraftClock): DraftScreen {
     });
   }
   const thing = targetThing(d);
+  const check = uncertainTargetUrl(d);
   return finished({
     state: "unknown",
     status: "Outcome unknown",
     steps: steps("done", ["Approved", "done"], ["Outcome unknown", "unknown"], v),
-    notice: attention(`The outcome could not be verified. The request may have reached ${service}. Check ${thing} before you do anything else.`, ...[error, str(receipt.note)].filter((l): l is string => l !== null)),
-    actions: [...(url ? [button("open-target", thing.startsWith("the ") ? `Open ${thing}` : `Open ${service}`)] : []), button("copy", "Copy text")],
+    notice: unknownOutcomeNotice(d),
+    actions: [...(check ? [button("open-target", thing.startsWith("the ") ? `Open ${thing}` : `Open ${service}`)] : []), button("copy", "Copy text")],
   });
+}
+
+/**
+ * What a send of unknown outcome means, with the receipt's error and note: the Draft's page and the Inbox item it
+ * came from (Delivery unconfirmed) say the same words.
+ */
+export function unknownOutcomeNotice(d: ActionView): DraftNotice {
+  const receipt = rec(d.receipt);
+  return attention(`The outcome could not be verified. The request may have reached ${draftService(d)}. Check ${targetThing(d)} before you do anything else.`, ...[str(receipt.error), str(receipt.note)].filter((l): l is string => l !== null));
 }
 
 /** A Draft that is finished without being sent: rejected (restorable until it expires) or expired. */

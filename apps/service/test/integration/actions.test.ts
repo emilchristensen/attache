@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
-import { installFixtureModel } from "../fixtures/fixture-model.ts";
+import { installFixtureModel, type FixtureModel } from "../fixtures/fixture-model.ts";
 import { addBusinessHours } from "../../src/actions/expiry.ts";
 import { APPROVAL_TTL_MS } from "../../src/actions/service.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
 let fx: FixtureServer;
+let model: FixtureModel;
 const clock = new ManualClock();
 const posted: Array<{ id: number; body: string; html_url: string }> = [];
 
@@ -42,7 +43,7 @@ async function prepareDraft() {
 
 beforeAll(async () => {
   fx = await startFixtureServer();
-  installFixtureModel(fx);
+  model = installFixtureModel(fx);
   githubFixture();
   svc = await startTestService({ clock });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture" } });
@@ -280,6 +281,63 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     clock.skip(8 * 86_400_000);
     expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version })).body.error.code).toBe("expired");
     expect((await svc.get(`/actions/${d.id}`)).status).toBe("rejected");
+  });
+
+  it("after a send of unknown outcome the item is not drafted again unless the owner explicitly asks for a replacement", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const d = await prepareDraft();
+    const ap = await svc.post(`/actions/${d.id}/approve`, { version: d.version, payloadHash: d.payloadHash });
+    // The comment is posted, but reading it back fails: nobody knows whether it arrived.
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const exec = await svc.post(`/actions/${d.id}/execute`, { nonce: ap.approval.nonce, version: d.version, payloadHash: d.payloadHash });
+    await svc.waitJob(exec.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
+    const item = await reviewItem();
+    expect(item).toMatchObject({ state: "open", actionId: d.id, actionStatus: "unknown" });
+    // Asking for a Draft as usual is refused, and nothing is queued.
+    const jobsBefore = (await svc.get("/jobs?limit=200")).length;
+    const plain = await svc.call("POST", `/attention/${item.id}/draft`, {});
+    expect(plain.status).toBe(409);
+    expect(plain.body.error.code).toBe("delivery_unconfirmed");
+    expect(plain.body.error.message).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect((await svc.get("/jobs?limit=200")).length).toBe(jobsBefore);
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // A Draft job asked for another way (the generic jobs route) is held to the same rule when it runs.
+    const generic = await svc.post("/jobs", { kind: "draft", input: { attentionItemId: item.id } });
+    const held = await svc.waitJob(generic.job.id);
+    expect(held.job.status).toBe("blocked");
+    expect(held.job.error).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // The explicit choice names the Draft it replaces: consent for another Draft does not count.
+    const other = await svc.call("POST", `/attention/${item.id}/draft`, { replaceUnconfirmed: "another-draft" });
+    expect(other.status).toBe(409);
+    expect(other.body.error.code).toBe("delivery_unconfirmed");
+    // The explicit choice prepares a new Draft; the uncertain one keeps its outcome.
+    const { job } = await svc.post(`/attention/${item.id}/draft`, { replaceUnconfirmed: d.id });
+    const done = await svc.waitJob(job.id);
+    expect(done.job.status).toBe("succeeded");
+    expect(done.job.result.actionId).not.toBe(d.id);
+    const replacement = done.job.result.actionId;
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "draft" });
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("unknown");
+    // A send that starts while a Draft job writes holds that job back when it would save.
+    const stop = model.respond((call) => {
+      if (/Write .* the user could send/.test(call.user)) svc.app.db.prepare("update actions set status = 'executing' where id = ?").run(replacement);
+      return null;
+    });
+    const during = await svc.post(`/attention/${item.id}/draft`, {});
+    const waited = await svc.waitJob(during.job.id);
+    stop();
+    expect(waited.job.status).toBe("blocked");
+    expect(waited.job.error).toBe("The last Draft for this item is being sent. Wait for its outcome before preparing another.");
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "executing" });
+    // That send ends unknown too: the owner's earlier choice to replace the first Draft does not replace this one.
+    svc.app.db.prepare("update actions set status = 'unknown' where id = ?").run(replacement);
+    const stale = await svc.post("/jobs", { kind: "draft", input: { attentionItemId: item.id, replaceUnconfirmed: d.id } });
+    const refused = await svc.waitJob(stale.job.id);
+    expect(refused.job.status).toBe("blocked");
+    expect(refused.job.error).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "unknown" });
   });
 
   it("draft expiry counts business hours only", () => {

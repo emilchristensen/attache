@@ -2,8 +2,8 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
-import { briefingWritten, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed } from "../heads-ups.ts";
-import { useHeadsUpClock } from "../heads-up-clock.ts";
+import { briefingWritten, endedMeetings, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed, type Slot } from "../heads-ups.ts";
+import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
 import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
@@ -13,7 +13,7 @@ import { Link, useAction } from "../components/ui.tsx";
 import { BriefingActions } from "./BriefingActions.tsx";
 import { BriefingDetail, MeetingContext } from "./BriefingParts.tsx";
 import { useBriefingJob } from "./briefing-job.ts";
-import { MeetingLead, MeetingLine, type MeetingHandlers } from "./MeetingHeadsUp.tsx";
+import { MeetingEnded, MeetingLead, MeetingLine, type MeetingHandlers } from "./MeetingHeadsUp.tsx";
 
 const ICON: Record<HeadsUpKindId, IconName> = {
   "daily-briefing": "sun",
@@ -51,19 +51,23 @@ interface EntryProps {
   /** Meeting prep's Done and Not now. */
   meeting: Omit<MeetingHandlers, "onOpenPrep">;
   clock: { now: number; timeZone: string };
+  /** Its meeting has ended while held: drawn as "Meeting ended" at `ended.height`, taking the focus it had. */
+  ended: { height: number | undefined; takeFocus: boolean } | null;
 }
 
 const isMeeting = (h: HeadsUp): h is HeadsUp & { meeting: MeetingPrep } => !!h.meeting;
 
 /** The lead, drawn as its kind needs. */
 function Lead(props: EntryProps) {
-  const { headsUp, open, onRead, meeting, clock } = props;
+  const { headsUp, open, onRead, meeting, clock, ended } = props;
+  if (ended) return <MeetingEnded headsUp={headsUp} line={false} {...ended} />;
   return isMeeting(headsUp) ? <MeetingLead headsUp={headsUp} open={open} clock={clock} onOpenPrep={onRead} {...meeting} /> : <LeadCard {...props} />;
 }
 
 /** A follower, drawn as its kind needs. */
 function Follower(props: EntryProps) {
-  const { headsUp, open, onRead, meeting, clock } = props;
+  const { headsUp, open, onRead, meeting, clock, ended } = props;
+  if (ended) return <MeetingEnded headsUp={headsUp} line {...ended} />;
   return isMeeting(headsUp) ? <MeetingLine headsUp={headsUp} open={open} clock={clock} onOpenPrep={onRead} {...meeting} /> : <Line {...props} />;
 }
 
@@ -173,6 +177,32 @@ function useLatestBriefing(enabled: boolean) {
 const NONE: ReadonlySet<string> = new Set();
 
 /**
+ * Each Heads-up's height as last drawn, by key, so a meeting that ends while held keeps its size as "Meeting ended".
+ * Spread `ref` on the element that holds them.
+ */
+function useEntryHeights() {
+  const ref = useRef<HTMLDivElement>(null);
+  const heights = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const drawn = ref.current?.querySelectorAll<HTMLElement>("[data-heads-up-key]:not([data-meeting-ended])") ?? [];
+    heights.current = new Map([...heights.current, ...[...drawn].map((el) => [el.dataset.headsUpKey!, el.offsetHeight] as const)]);
+  });
+  return { ref, heights: heights.current };
+}
+
+/** Says once, politely, which held meetings have ended (their places show "Meeting ended"). */
+function useEndedSaid(slot: Slot, ended: ReadonlySet<string>, say: (words: string) => void) {
+  const told = useRef<ReadonlySet<string>>(NONE);
+  const fresh = [...ended].filter((k) => !told.current.has(k));
+  const titles = [slot.lead, ...slot.followers, ...slot.more].filter((h): h is HeadsUp => !!h && fresh.includes(h.key)).map((h) => h.title);
+  const words = titles.length ? `${titles.join(", ")} ended.` : null;
+  useEffect(() => {
+    told.current = ended;
+    if (words) say(words);
+  }, [ended, words, say]);
+}
+
+/**
  * The meeting prep items decided Done here, until the open list no longer has them: their Heads-up goes at once and
  * the Inbox does not list them while the list catches up. One that comes back later (its evidence changed) is not
  * held back.
@@ -196,23 +226,22 @@ function useDoneHere(items: readonly { id: string }[] | null) {
  * outside the hold. `onAbove` hears the ids of the Inbox items shown here as meeting prep (and those decided Done here
  * until the list catches up), so the Inbox leaves them out: each is one item, shown once.
  */
-export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAbove: (ids: ReadonlySet<string>) => void }) {
+export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolean; clock: HeadsUpClock; onAbove: (ids: ReadonlySet<string>) => void }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
-  const clock = useHeadsUpClock();
+  // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
+  const openInbox = useSignals().openInbox;
+  const items = openInbox.data?.items ?? null;
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
   const schedule = useBriefingSchedule(attentionOn, clock.now);
-  const { held, holding, holdProps } = useHold("data-heads-up-key");
+  const { held, holding, focused, holdProps } = useHold("data-heads-up-key");
   // Got it, Not now and Done pressed in this tab apply at once, even while held; another tab's wait until the hold ends.
   const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [context, setContext] = useState(false);
   const [said, setSaid] = useState("");
-  // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
-  const openInbox = useSignals().openInbox;
-  const items = openInbox.data?.items ?? null;
   const doneHere = useDoneHere(items);
   const doneKeys = useMemo(() => [...doneHere.done].map((id) => `meeting:${id}`), [doneHere.done]);
   const { busy, run } = useAction();
@@ -241,6 +270,11 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
   const arrived = held ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...own]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...own]) }), holding, placed.current, own) : null;
   if (arrived) placed.current = arrived.placed;
   const slot = arrived ? arrived.slot : forYouNow(live);
+  // A held meeting whose end has passed stays in its place as "Meeting ended" until the hold ends.
+  const endedKey = held ? [...endedMeetings(slot, clock.now)].sort().join(" ") : "";
+  const ended = useMemo<ReadonlySet<string>>(() => new Set(endedKey ? endedKey.split(" ") : []), [endedKey]);
+  const entries = useEntryHeights();
+  useEndedSaid(slot, ended, setSaid);
   // This tab's own Got it, Not now and Done only stand in for a hold's frozen input: the live input has them (stored, or decided).
   useEffect(() => {
     if (!held && mine.size) setMine(new Set());
@@ -300,6 +334,7 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
     onGotIt: () => gotIt(h),
     meeting: { onDone: () => isMeeting(h) && done(h), onNotNow: () => notNow(h), busy: busy === h.key },
     clock,
+    ended: ended.has(h.key) ? { height: entries.heights.get(h.key), takeFocus: focused === h.key } : null,
   });
   const actions = <BriefingActions running={!!job} hasBriefing={typeof latest.value === "object" && latest.value !== null} start={start} onMeetingContext={() => setContext(true)} />;
   const meetingContext = context && typeof latest.value === "object" && latest.value !== null && (
@@ -340,7 +375,7 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
         )}
         {actions}
       </div>
-      <div className="heads-ups" {...holdProps}>
+      <div className="heads-ups" ref={entries.ref} {...holdProps}>
         {slot.lead && <Lead key={slot.lead.key} {...entry(slot.lead)} />}
         {slot.followers.length > 0 && (
           <ul className="heads-up-lines" aria-label={slot.lead ? "Also timely" : "Timely"}>

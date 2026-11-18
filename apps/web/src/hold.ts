@@ -21,6 +21,8 @@ export function useHold(attribute: string) {
   return {
     held: pointer !== false || focus !== false,
     holding: [pointer, focus].filter((k): k is string => typeof k === "string"),
+    /** The `attribute` value the keyboard focus is on, or null. */
+    focused: typeof focus === "string" ? focus : null,
     holdProps: {
       onPointerEnter: onPointer,
       onPointerOver: onPointer,

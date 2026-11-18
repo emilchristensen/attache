@@ -145,6 +145,10 @@ Each Draft has its own page under Approvals; saving new text makes the next vers
 A rejected Draft is locked: only Restore brings it back, as the next version, until it expires.
 _Avoid_: Outgoing message
 
+**Delivery unconfirmed**:
+The label on an Inbox item whose last Draft was sent but whose outcome could not be verified, so the message may or may not have arrived.
+The open item leads with Check destination; preparing a replacement Draft is a separate, explicit choice, and checking alone never sends, resolves the item or claims delivery.
+
 **Approvals**:
 The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
 It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.
@@ -159,6 +163,7 @@ A meeting prep Heads-up is a view of its Inbox item, not a second item: "Done" d
 **Meeting prep**:
 An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
 From 15 minutes before the start it shows in For you now instead of the Inbox, with Join first once the meeting runs.
+A meeting that ends while the pointer or keyboard is on it shows "Meeting ended" in its place until the owner moves on, and a row the keyboard is on when its meeting moves up says "Moved up to For you now"; neither has anything to press.
 _Avoid_: Occupant, nudge
 
 **For you now**:

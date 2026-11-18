@@ -10,7 +10,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
-import { SELF, setCalendar } from "./calendar.ts";
+import { SELF, setCalendar } from "./meetings.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 
 let stack: Stack;
@@ -41,7 +41,7 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/jobs", { kind: "source-refresh", title: "Refresh every source", input: { all: true, reason: "manual" } });
   await expect.poll(async () => (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
   // Two overlapping meetings and a briefing the owner asked for: For you now at its tallest on an ordinary day.
-  await setCalendar(stack, page, [
+  await setCalendar(page, stack, [
     { id: "handover", summary: "Pilot handover", start: -10, end: 30, meetLink: "https://meet.google.com/abc-defg-hij" },
     { id: "triage", summary: "Billing triage", start: 10, end: 50, meetLink: "https://meet.google.com/bil-ling-tri" },
   ]);
