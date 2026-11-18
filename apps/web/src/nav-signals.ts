@@ -25,8 +25,10 @@ export interface NavSignals {
   count: DecisionCount;
   /** Whether the logo and favicon carry the dot: on while a decision is known to wait; an unknown leaves it as it was. */
   dot: boolean;
-  /** The open Inbox items the count read, for Home's line relating rows to decisions. */
+  /** The open Inbox items as the count read them, for Home's line relating rows to decisions. */
   inbox: Answer<AttentionItemView>;
+  /** The request behind `inbox`: Home lists these rows and retries this request, so the rows and the count agree. */
+  openInbox: Resource<{ items: AttentionItemView[] }>;
   /** "Replication blocked" or "Replication unauthorized" while it is; null otherwise. */
   settingsWarning: string | null;
 }
@@ -71,16 +73,21 @@ export function useNavSignals(): NavSignals {
   const draftsOn = feature("drafts");
   // A Draft's status shows on its Inbox item, so the Inbox follows Draft changes too; housekeeping announces an
   // expired Draft on both events.
-  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null, ["attention.changed", "actions.changed"]);
+  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null, ["attention.changed", "actions.changed", "briefing.created"]);
   const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null, ["actions.changed", "attention.changed"]);
   const proposals = useResource<{ proposals: ProposalView[] }>(`/memory/proposals?status=proposed&limit=${COUNT_LIMITS.proposals}`, ["memory.changed"]);
   const connections = useResource<ConnectionStatus[]>("/connections", ["connections.changed"]);
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
 
+  // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
+  // lists refresh on the same events, so a new answer from one is held until the other has answered too; otherwise
+  // the count would show the decision twice, or not at all, for as long as the slower request takes.
+  const fresh = { inbox: answer(inbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox), drafts: answer(drafts, draftsOn, (d) => d, COUNT_LIMITS.drafts) };
+  const settledPair = useRef(fresh);
+  if (!inbox.loading && !drafts.loading) settledPair.current = fresh;
   const inputs = {
-    inbox: answer(inbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
+    ...settledPair.current,
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
-    drafts: answer(drafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
     connections: answer(connections, true, (d) => d, null),
   };
   const count = countDecisions(inputs);
@@ -96,6 +103,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
+    openInbox: inbox,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
@@ -103,9 +111,11 @@ export function useNavSignals(): NavSignals {
 /** The shell's signals, for the screens inside it. */
 export const SignalsContext = createContext<NavSignals | null>(null);
 
-/** The shell's count and badges; null outside the shell. */
-export function useSignals(): NavSignals | null {
-  return useContext(SignalsContext);
+/** The shell's count and badges, for a screen inside the shell. */
+export function useSignals(): NavSignals {
+  const signals = useContext(SignalsContext);
+  if (!signals) throw new Error("useSignals() is for screens inside the shell");
+  return signals;
 }
 
 /** The badge beside a screen's name in the navigation: Home's number moves to its Inbox heading while the owner is on Home. */

@@ -423,6 +423,11 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   // The item's decision is now its Draft's, counted once, in Approvals; the line relates the rows to the decisions.
   await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
   await expect(countLine).toHaveText(new RegExp(`^${before - 1} items? below needs? you · 1 Draft in Approvals$`));
+  // The line speaks of the open rows, so it leaves with them when the dismissed and snoozed ones show instead.
+  await page.getByRole("button", { name: "Show dismissed" }).click();
+  await expect(countLine).toHaveCount(0);
+  await page.getByRole("button", { name: "Show open" }).click();
+  await expect(countLine).toBeVisible();
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");

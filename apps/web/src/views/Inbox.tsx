@@ -285,11 +285,11 @@ const NOTHING_PROMOTED: ReadonlySet<string> = new Set();
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
  * number out, and the line that relates the rows to the decisions when they differ.
  */
-function InboxHeading({ children }: { children: ReactNode }) {
+function InboxHeading({ children, open }: { children: ReactNode; open: boolean }) {
   const signals = useSignals();
-  const home = signals?.count.home;
-  const needYou = home && home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = signals && home ? homeLine(signals.inbox, home, NOTHING_PROMOTED) : null;
+  const home = signals.count.home;
+  const needYou = home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
+  const line = open ? homeLine(signals.inbox, NOTHING_PROMOTED) : null;
   return (
     <>
       <div className="inbox-head">
@@ -311,7 +311,10 @@ function InboxHeading({ children }: { children: ReactNode }) {
 
 export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsOn: boolean }) {
   const [showHidden, setShowHidden] = useState(false);
-  const items = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=${showHidden ? "dismissed,snoozed" : "open"}` : null, ["attention.changed", "briefing.created", "actions.changed"]);
+  // The open rows are the shell's request behind the count, so the rows, their Retry and the count agree.
+  const open = useSignals().openInbox;
+  const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && showHidden ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "briefing.created", "actions.changed"]);
+  const items = showHidden ? hidden : open;
   const conns = useResource<ConnectionStatus[]>("/connections", ["connections.changed"]);
   const grouped = useMemo(() => {
     const out = new Map<string, AttentionItemView[]>();
@@ -343,7 +346,7 @@ export function Inbox({ attentionOn, draftsOn }: { attentionOn: boolean; draftsO
           <span>{failed.map((f) => `${f.label}: ${f.status !== "connected" ? f.status.replace(/_/g, " ") : f.coverage?.state}`).join(" · ")}. Items from these sources may be missing below.</span>
         </div>
       )}
-      <InboxHeading>
+      <InboxHeading open={!showHidden}>
         <button className="small ghost" onClick={() => setShowHidden(!showHidden)}>
           {showHidden ? "Show open" : "Show dismissed"}
         </button>

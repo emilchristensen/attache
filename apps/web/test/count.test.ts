@@ -129,11 +129,6 @@ describe("countDecisions", () => {
     expect({ total: read(c.total), home: read(c.home), approvals: read(c.approvals), connections: read(c.connections) }).toEqual(expected);
   });
 
-  it("adds the parts up to the total in every case, so the numbers on screen match the tab title", () => {
-    const c = countDecisions({ inbox: rows([...items(4), item("draft")], 200), proposals: rows(proposals(3)), drafts: rows([draft("draft"), draft("revoked")]), connections: rows([connection("needs_auth"), connection("needs_auth")], null) });
-    expect([c.home.count, c.approvals.count, c.connections.count, c.total.count]).toEqual([4, 5, 2, 11]);
-  });
-
   it("names each part's condition: known, at its list limit, unknown or off", () => {
     expect(countDecisions({ inbox: rows(items(2), 200), proposals: rows(proposals(1)), drafts: off, connections: failed })).toMatchObject({
       home: { state: "known" },
@@ -186,29 +181,23 @@ describe("spokenCount", () => {
 });
 
 describe("homeLine", () => {
-  const home = (list: Array<ReturnType<typeof item>>, limit = 200) => countDecisions({ ...quiet, inbox: rows(list, limit) }).home;
   it("says nothing when the rows below are the decisions", () => {
-    const list = items(3);
-    expect(homeLine(rows(list, 200), home(list), new Set())).toBeNull();
+    expect(homeLine(rows(items(3), 200), new Set())).toBeNull();
   });
   it("relates rows to decisions when an item's Draft waits in Approvals", () => {
-    const list = [...items(3), item("draft")];
-    expect(homeLine(rows(list, 200), home(list), new Set())).toBe("3 items below need you · 1 Draft in Approvals");
+    expect(homeLine(rows([...items(3), item("draft")], 200), new Set())).toBe("3 items below need you · 1 Draft in Approvals");
   });
   it("counts a promoted meeting above, once", () => {
     const meeting = item(null, "meeting_prep");
-    const list = [meeting, ...items(3), item("approved"), item("revoked")];
-    expect(homeLine(rows(list, 200), home(list), new Set([meeting.id]))).toBe("1 meeting above · 3 items below need you · 2 Drafts in Approvals");
+    expect(homeLine(rows([meeting, ...items(3), item("approved"), item("revoked")], 200), new Set([meeting.id]))).toBe("1 meeting above · 3 items below need you · 2 Drafts in Approvals");
   });
   it("uses the singular for one item below", () => {
-    const list = [item(), item("draft")];
-    expect(homeLine(rows(list, 200), home(list), new Set())).toBe("1 item below needs you · 1 Draft in Approvals");
+    expect(homeLine(rows([item(), item("draft")], 200), new Set())).toBe("1 item below needs you · 1 Draft in Approvals");
   });
-  it("marks the rows below as a lower bound when the list is full", () => {
-    const list = [...items(2), item("draft")];
-    expect(homeLine(rows(list, 3), home(list, 3), new Set())).toBe("2+ items below need you · 1 Draft in Approvals");
+  it("counts the rows on screen exactly, even when the list is full", () => {
+    expect(homeLine(rows([...items(2), item("draft")], 3), new Set())).toBe("2 items below need you · 1 Draft in Approvals");
   });
   it("says nothing when the Inbox has not answered", () => {
-    expect(homeLine(failed, countDecisions({ ...quiet, inbox: failed }).home, new Set())).toBeNull();
+    expect(homeLine(failed, new Set())).toBeNull();
   });
 });

@@ -101,19 +101,19 @@ export function tabTitle(total: Tally): string {
 /**
  * The line under Home's Inbox heading when its rows and its decisions differ: "1 meeting above · 3 items below need
  * you · 1 Draft in Approvals". `promoted` holds the ids of items shown above as Heads-ups instead of in the list.
+ * It speaks of the rows on screen, so its numbers are exact even when the heading's count is a lower bound.
  * Null when every row below is a decision on Home, or when the Inbox has not answered.
  */
-export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, home: Tally, promoted: ReadonlySet<string>): string | null {
+export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, promoted: ReadonlySet<string>): string | null {
   if (inbox.kind !== "rows") return null;
   const above = inbox.rows.filter((i) => promoted.has(i.id) && !draftWaits(i)).length;
   const below = inbox.rows.filter((i) => !promoted.has(i.id));
   const inApprovals = below.filter(draftWaits).length;
   if (above === 0 && inApprovals === 0) return null;
   const decisions = below.length - inApprovals;
-  const more = home.exact ? "" : "+";
   return [
     above > 0 && plural(above, "meeting") + " above",
-    `${decisions}${more} ${decisions === 1 && !more ? "item below needs" : "items below need"} you`,
+    `${plural(decisions, "item")} below ${decisions === 1 ? "needs" : "need"} you`,
     inApprovals > 0 && plural(inApprovals, "Draft") + " in Approvals",
   ]
     .filter(Boolean)
