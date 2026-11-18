@@ -22,6 +22,8 @@ const Evidence = z.array(
   }),
 );
 
+const Meeting = z.object({ start: z.string(), end: z.string(), meetLink: z.string().nullable(), attendees: z.array(z.string()) });
+
 const Draftable = z.object({ actionKind: z.string(), target: z.record(z.string(), z.unknown()), context: z.record(z.string(), z.unknown()) });
 
 export const InboxItemPart = z.object({
@@ -43,6 +45,8 @@ export const InboxItemPart = z.object({
   /** Set when the source no longer reports the item. */
   resolvedAt: z.string().nullable(),
   machine: MachineRef.nullable(),
+  /** Meeting prep: the meeting's times and call. Records written before it existed have none. */
+  meeting: Meeting.nullable().default(null),
 });
 export type InboxItemPart = z.infer<typeof InboxItemPart>;
 
@@ -84,15 +88,21 @@ export interface DerivedState {
   decidedFingerprint: string | null;
 }
 
+/** Whether the meeting an item is about has reached its scheduled end by `now`. */
+export function meetingOver(item: Pick<InboxItemPart, "meeting">, now: string): boolean {
+  return !!item.meeting && Date.parse(item.meeting.end) <= Date.parse(now);
+}
+
 /**
  * The item's state on this Machine at `now`:
- * resolved by its source, else snoozed while the snooze runs, else dismissed
+ * resolved by its source or once its meeting has ended, else snoozed while the snooze runs, else dismissed
  * or done while its evidence is what the owner decided on, else open.
+ * A meeting's end is worked out from the record on every Machine, so it needs no write that replicates.
  */
-export function deriveState(item: Pick<InboxItemPart, "fingerprint" | "resolvedAt">, decision: InboxDecisionPart | null, now: string): DerivedState {
+export function deriveState(item: Pick<InboxItemPart, "fingerprint" | "resolvedAt" | "meeting">, decision: InboxDecisionPart | null, now: string): DerivedState {
   const decidedFingerprint = decision && decision.decision !== "reopen" ? decision.fingerprint : null;
   const base = { snoozeUntil: null, decidedFingerprint };
-  if (item.resolvedAt) return { ...base, state: "resolved" };
+  if (item.resolvedAt || meetingOver(item, now)) return { ...base, state: "resolved" };
   if (decision?.decision === "snooze" && decision.until && decision.until > now) return { ...base, state: "snoozed", snoozeUntil: decision.until };
   if (decision && decision.fingerprint === item.fingerprint) {
     if (decision.decision === "dismiss") return { ...base, state: "dismissed" };

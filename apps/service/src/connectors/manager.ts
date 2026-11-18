@@ -37,6 +37,8 @@ export interface ManagerDeps {
   claude: ClaudeConnectorRunner;
   /** Whether this Machine is the Reader, which alone raises inbox items for facts past their Review date. */
   isReader: () => boolean;
+  /** The service's clock, so a source reads "now" as the Inbox does; the system clock when left out. */
+  now?: () => Date;
 }
 
 export class ConnectionManager {
@@ -84,7 +86,7 @@ export class ConnectionManager {
       http: createHttpClient({ signal: sig }),
       log: this.d.log,
       signal: sig,
-      now: () => new Date(),
+      now: this.d.now ?? (() => new Date()),
       endpoint: resolveEndpoint,
       selfEmail: this.d.selfEmail(),
       claude: this.d.claude,
