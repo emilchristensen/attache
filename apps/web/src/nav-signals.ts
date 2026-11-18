@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from "react";
 import { WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
 import { countDecisions, dotAfter, shownCount, spokenCount, type Answer, type DecisionCount, type Tally } from "./count.ts";
+import type { ApiError } from "./api.ts";
 import { useResource, type Resource } from "./live.ts";
+import { pairFailure } from "./pair.ts";
 import type { ScreenId } from "./routes.ts";
 
 /**
@@ -96,13 +98,17 @@ export function useNavSignals(): NavSignals {
   const settled = useRef({ inbox: held(inbox), drafts: held(drafts) });
   if (!inbox.loading && !drafts.loading) settled.current = { inbox: held(inbox), drafts: held(drafts) };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
+  // A failure is not held for its pair: it shows at once and stays until the pair settles again (`pair.ts`).
+  const failures = useRef<{ inbox: ApiError | null; drafts: ApiError | null }>({ inbox: null, drafts: null });
+  const pairSettled = !inbox.loading && !drafts.loading;
+  failures.current = { inbox: pairFailure(failures.current.inbox, inbox, pairSettled), drafts: pairFailure(failures.current.drafts, drafts, pairSettled) };
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const reloadPair = useCallback(() => {
     reloadInbox();
     reloadDrafts();
   }, [reloadInbox, reloadDrafts]);
-  const waitingDrafts = heldRows(drafts, inbox.loading, heldDrafts, reloadPair);
+  const waitingDrafts = heldRows(drafts, inbox.loading, heldDrafts, failures.current.drafts, reloadPair);
   const inputs = {
     inbox: answer(heldInbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
     // A Drafts failure counts at once, without waiting for the Inbox: an unknown part only lowers the count to a
@@ -124,7 +130,7 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: heldRows(inbox, drafts.loading, heldInbox, reloadPair),
+    openInbox: heldRows(inbox, drafts.loading, heldInbox, failures.current.inbox, reloadPair),
     drafts: inputs.drafts,
     proposals: inputs.proposals,
     waitingDrafts,
@@ -136,11 +142,9 @@ export function useNavSignals(): NavSignals {
 /**
  * One list of the pair as a screen shows it (Home's Inbox rows, Approvals' waiting Drafts): the held answer, loading
  * while either list is still asked, so a first answer from one alone never shows as an empty list. Its own failure
- * shows at once with its Retry, without waiting for the other list, and stays while a Retry is under way, until a
- * good answer replaces it; a good answer still waits for the pair.
+ * (`failed`, from `pairFailure`) shows at once with its Retry, without waiting for the other list.
  */
-function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, reload: () => void): Resource<R> {
-  const failed = own.error;
+function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, failed: ApiError | null, reload: () => void): Resource<R> {
   return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
 }
 
