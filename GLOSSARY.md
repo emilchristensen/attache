@@ -145,6 +145,10 @@ Each Draft has its own page under Approvals; saving new text makes the next vers
 A rejected Draft is locked: only Restore brings it back, as the next version, until it expires.
 _Avoid_: Outgoing message
 
+**Delivery unconfirmed**:
+The label on an Inbox item whose last Draft was sent but whose outcome could not be verified, so the message may or may not have arrived.
+The open item leads with Check destination; preparing a replacement Draft is a separate, explicit choice, and checking alone never sends, resolves the item or claims delivery.
+
 **Approvals**:
 The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
 It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.

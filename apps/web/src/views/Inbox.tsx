@@ -1,6 +1,6 @@
 import { draftHref } from "../routes.ts";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { plural, type AttentionItemView, type JobView } from "@attache/contracts";
+import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { Empty, Link, Loading, navigate, useAction } from "../components/ui.tsx";
@@ -266,18 +266,20 @@ export function Inbox({ attentionOn, draftsOn, connections, above }: { attention
       focusAfter(e.item.id, "row");
       reload();
     });
+  const prepare = (item: AttentionItemView, body: AttentionDraftBody) =>
+    void run(
+      "draft",
+      async () => {
+        await post<{ job: JobView }>(`/attention/${item.id}/draft`, body);
+        reload();
+      },
+      body.replaceUnconfirmed ? "Preparing a replacement Draft in the background" : "Preparing a draft in the background",
+    );
   const actions: RowActions = {
     decide,
     busy: busy !== null,
-    prepareDraft: (item) =>
-      void run(
-        "draft",
-        async () => {
-          await post<{ job: JobView }>(`/attention/${item.id}/draft`, {});
-          reload();
-        },
-        "Preparing a draft in the background",
-      ),
+    prepareDraft: (item) => prepare(item, {}),
+    prepareReplacement: (item, draftId) => prepare(item, { replaceUnconfirmed: draftId }),
     viewDraft: (draftId) => {
       // Coming back from the Draft finds the open row where it stood.
       setPlace({ anchor: place.openId ? anchorOf(place.openId) : null });
