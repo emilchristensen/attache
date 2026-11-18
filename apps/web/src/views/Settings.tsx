@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Config, ConnectionDefinition, ConnectionStatus, FeatureStatus, MachineView } from "@attache/contracts";
 import { del, patch, post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { ErrorState, Loading, Time, useAction, useLocation } from "../components/ui.tsx";
+import { SETTINGS_SECTIONS, settingsSectionAt } from "../routes.ts";
+import { revealSettingsSection, settingsSectionDomId } from "./settings-section.ts";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { AutoAccept } from "./AutoAccept.tsx";
@@ -208,10 +210,43 @@ function Backups() {
   );
 }
 
+/** One Settings section, at `/settings/<id>`: the search palette's Go to opens it here. A named group, not a landmark. */
+function Section({ id, children }: { id: string; children: ReactNode }) {
+  const label = SETTINGS_SECTIONS.find((s) => s.id === id)!.label;
+  return (
+    <div id={settingsSectionDomId(id)} className="settings-section stack" role="group" data-settings-section={id} aria-label={label} tabIndex={-1}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Brings the section the address names into view and gives it focus, on arrival and whenever the address names
+ * another. Settings loads its parts one by one, so it scrolls again as each part answers and moves what is above
+ * the section, until all three have answered.
+ */
+function useSectionInView(section: string | null, answered: number) {
+  const done = useRef<string | null>(null);
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    done.current = null;
+    focused.current = null;
+  }, [section]);
+  useEffect(() => {
+    if (!section || done.current === section) return;
+    // Focus moves once; a part that answers later only scrolls, so it never takes focus from what the owner chose.
+    if (!revealSettingsSection(section, focused.current !== section)) return;
+    focused.current = section;
+    if (answered === 3) done.current = section;
+  }, [section, answered]);
+}
+
 export function SettingsView() {
   const caps = useResource<Caps>("/capabilities", ["config.changed", "connections.changed"]);
   const cfg = useResource<{ config: Config }>("/config", ["config.changed"]);
   const status = useResource<Status>("/status", ["config.changed", "job"]);
+  const section = settingsSectionAt(useLocation().path);
+  useSectionInView(section, [caps, cfg, status].filter((r) => r.data || r.error).length);
   return (
     <div className="page page-narrow">
       <div className="page-header">
@@ -219,59 +254,69 @@ export function SettingsView() {
         <span className="subtitle">Every choice from setup can be changed here. Turning a feature off stops its schedules and cancels its queued work.</span>
       </div>
       <div className="stack">
-        <h2>Features</h2>
-        {caps.loading && !caps.data && <Loading />}
-        <ErrorState error={caps.error} retry={caps.reload} />
-        {caps.data && <FeatureList caps={caps.data} onChanged={caps.reload} />}
-        {cfg.data && (
-          <>
-            <Schedules config={cfg.data.config} onSaved={cfg.reload} />
-            <Identity config={cfg.data.config} onSaved={cfg.reload} />
-          </>
-        )}
-        <ThisMachine />
-        <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
-        <AutoAccept />
-        <MeaningSearchCard />
-        <SearchIndexCard />
-        <Clients />
-        <Backups />
-        <div className="card stack-sm">
-          <h3>Service health</h3>
-          <ErrorState error={status.error} retry={status.reload} />
-          {status.data && (
-            <dl className="kv">
-              <dt>Version</dt>
-              <dd>{status.data.version}</dd>
-              <dt>Running since</dt>
-              <dd>
-                <Time iso={status.data.startedAt} standalone /> (pid {status.data.pid}, Node {status.data.node})
-              </dd>
-              <dt>Data folder</dt>
-              <dd className="mono">{status.data.dataFolder}</dd>
-              <dt>Service state</dt>
-              <dd className="mono">{status.data.stateDir}</dd>
-              <dt>Credentials</dt>
-              <dd data-credential-store={status.data.credentialStore}>
-                {CREDENTIAL_STORES[status.data.credentialStore]}
-                {status.data.credentialStoreNote && <div className="small muted">{status.data.credentialStoreNote}</div>}
-              </dd>
-              <dt>Indexed files</dt>
-              <dd>{status.data.documents}</dd>
-              <dt>Jobs</dt>
-              <dd>{status.data.jobs.map((j) => `${j.n} ${j.status}`).join(", ") || "none"}</dd>
-              <dt>Schedules</dt>
-              <dd>
-                {status.data.schedules.map((s) => (
-                  <div key={s.id}>
-                    {s.label}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
-                  </div>
-                ))}
-              </dd>
-            </dl>
-          )}
-          <p className="small muted">If Attache stops responding, run <code>attache status</code>. Reinstalling repairs the service without touching your data.</p>
-        </div>
+        <Section id="features">
+          <h2>Features</h2>
+          {caps.loading && !caps.data && <Loading />}
+          <ErrorState error={caps.error} retry={caps.reload} />
+          {caps.data && <FeatureList caps={caps.data} onChanged={caps.reload} />}
+        </Section>
+        <Section id="schedules">{cfg.data && <Schedules config={cfg.data.config} onSaved={cfg.reload} />}</Section>
+        <Section id="identity">{cfg.data && <Identity config={cfg.data.config} onSaved={cfg.reload} />}</Section>
+        <Section id="machines">
+          <ThisMachine />
+          <ReplicationCard dataFolder={status.data?.dataFolder ?? null} />
+        </Section>
+        <Section id="saving">
+          <AutoAccept />
+        </Section>
+        <Section id="meaning-search">
+          <MeaningSearchCard />
+          <SearchIndexCard />
+        </Section>
+        <Section id="clients">
+          <Clients />
+        </Section>
+        <Section id="backup">
+          <Backups />
+        </Section>
+        <Section id="service">
+          <div className="card stack-sm">
+            <h3>Service health</h3>
+            <ErrorState error={status.error} retry={status.reload} />
+            {status.data && (
+              <dl className="kv">
+                <dt>Version</dt>
+                <dd>{status.data.version}</dd>
+                <dt>Running since</dt>
+                <dd>
+                  <Time iso={status.data.startedAt} standalone /> (pid {status.data.pid}, Node {status.data.node})
+                </dd>
+                <dt>Data folder</dt>
+                <dd className="mono">{status.data.dataFolder}</dd>
+                <dt>Service state</dt>
+                <dd className="mono">{status.data.stateDir}</dd>
+                <dt>Credentials</dt>
+                <dd data-credential-store={status.data.credentialStore}>
+                  {CREDENTIAL_STORES[status.data.credentialStore]}
+                  {status.data.credentialStoreNote && <div className="small muted">{status.data.credentialStoreNote}</div>}
+                </dd>
+                <dt>Indexed files</dt>
+                <dd>{status.data.documents}</dd>
+                <dt>Jobs</dt>
+                <dd>{status.data.jobs.map((j) => `${j.n} ${j.status}`).join(", ") || "none"}</dd>
+                <dt>Schedules</dt>
+                <dd>
+                  {status.data.schedules.map((s) => (
+                    <div key={s.id}>
+                      {s.label}: {s.enabled ? <>next <Time iso={s.nextRunAt} /></> : "off"}
+                    </div>
+                  ))}
+                </dd>
+              </dl>
+            )}
+            <p className="small muted">If Attache stops responding, run <code>attache status</code>. Reinstalling repairs the service without touching your data.</p>
+          </div>
+        </Section>
       </div>
     </div>
   );

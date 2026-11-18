@@ -41,7 +41,7 @@ It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
 **Search the Brain**:
-Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`.
+Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`, which open the search palette off Home.
 Each result is a passage with its title, kind, file and lines, ranked by meaning and keywords, or by keywords only until meaning-based search is ready.
 It is a read: it starts no job, changes nothing and holds no conversation.
 
@@ -52,6 +52,11 @@ Search results take its place while a query is typed.
 **Recent saves**:
 The Brain screen's view of every change to the Brain, newest first, with where each came from and whether Revert can undo it.
 It filters to all changes, those written without review, or those reverted.
+
+**Search palette**:
+Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd K`, `/`, the masthead's Search or the bottom bar's Search.
+It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
+_Avoid_: Command palette, quick open
 
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.

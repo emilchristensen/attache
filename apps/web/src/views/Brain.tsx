@@ -7,7 +7,6 @@ import { useMenuDismiss } from "../components/menu.ts";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { tabId, Tabs } from "../components/Tabs.tsx";
-import { BRAIN_SEARCH_ID, takeSearchFocus } from "../search-launch.ts";
 import { hitDestination, type SearchAnswer } from "../search.ts";
 import { RankingNote, SearchResultRow } from "../components/SearchField.tsx";
 import { brainHref, brainPlace, collection, COLLECTIONS, type BrainPlace } from "../brain.ts";
@@ -26,6 +25,8 @@ interface DocListItem {
 
 type LibraryPlace = Extract<BrainPlace, { view: "library" }>;
 
+/** The Brain's own search field; Clear search puts focus back in it. */
+const BRAIN_SEARCH_ID = "brain-search";
 /** The most passages the Brain's search lists: the service's own limit. */
 const BRAIN_RESULTS = 50;
 /** How long typing pauses before the query is written to the address. */
@@ -64,15 +65,11 @@ function BrainMenu() {
 
 /** The Brain's search field, full width: what the owner types replaces the Library with every result. */
 function BrainSearch({ q, onChange }: { q: string; onChange: (q: string) => void }) {
-  const field = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (takeSearchFocus()) field.current?.focus();
-  }, []);
   return (
     <div className="search brain-search" role="search" aria-label="Brain">
       <div className="search-box">
         <Icon name="search" size={22} />
-        <input ref={field} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => onChange(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" autoComplete="off" spellCheck={false} />
+        <input id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => onChange(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" autoComplete="off" spellCheck={false} />
       </div>
     </div>
   );
