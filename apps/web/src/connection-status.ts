@@ -115,7 +115,7 @@ function isReadable(c: ConnectionStatus): boolean {
 }
 
 /** Set up and meant to work: neither waiting to be set up nor disconnected by the owner. */
-function inUse(c: ConnectionStatus): boolean {
+export function inUse(c: ConnectionStatus): boolean {
   return c.status !== "not_configured" && c.status !== "disconnected";
 }
 

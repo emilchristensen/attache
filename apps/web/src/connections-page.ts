@@ -1,5 +1,5 @@
 import type { ConnectionDefinition, ConnectionKind, ConnectionStatus } from "@attache/contracts";
-import { CONNECTION_LOOK, connectionState, nameList, type ConnectionState, type StatusRow } from "./connection-status.ts";
+import { CONNECTION_LOOK, connectionState, inUse, nameList, type ConnectionState, type StatusRow } from "./connection-status.ts";
 
 /**
  * The Connections page (#31 of spec #14), from the Connections the service lists: rows in four groups for what is set
@@ -32,10 +32,8 @@ const GROUPS: ReadonlyArray<{ id: Exclude<GroupId, "needs_you">; title: string; 
   { id: "model", title: "Model", kinds: ["model"] },
 ];
 
-/** Set up and meant to work: neither waiting to be set up nor disconnected by the owner. */
-function setUp(c: ConnectionStatus): boolean {
-  return c.status !== "not_configured" && c.status !== "disconnected";
-}
+/** Set up and meant to work, as Home's Connections area counts it: neither waiting to be set up nor disconnected. */
+const setUp = inUse;
 
 function rowOf(c: ConnectionStatus, attentionOn: boolean): PageRow {
   const state = connectionState(c, attentionOn);
@@ -59,7 +57,7 @@ export function connectionsPage(connections: ConnectionStatus[], attentionOn: bo
   return needsYou.length ? [{ id: "needs_you", title: "Needs you", rows: needsYou, tiles: [] }, ...groups] : groups;
 }
 
-const HARNESSES: readonly ConnectionKind[] = ["claude-code", "codex", "antigravity", "claude-desktop"];
+const HARNESSES = GROUPS.find((g) => g.id === "harnesses")!.kinds;
 
 /** The columns of one row: who it is signed in as, what Attache may read and write there, and when it last read or answered. */
 export interface RowCells {
@@ -91,7 +89,8 @@ export function rowCells(c: ConnectionStatus, def: ConnectionDefinition): RowCel
   const at = (label: RowCells["last"]["label"], when: string | null) => ({ label, at: when });
   if (c.kind === "model") return { account: c.account, reads: "only what Attache sends it", writes: "nothing", last: at("Last answered", c.lastSuccessAt) };
   if (HARNESSES.includes(c.kind)) return { account: c.account, reads: "the Brain", writes: "to the Brain", last: at("Last answered", c.lastSuccessAt) };
-  const reads = c.readScopes.length ? phrase(labelled(c.readScopes, def.scopes)) : "nothing";
+  // A notes folder is indexed whole for search; its scope only says which notes raise Inbox items, shown when it opens.
+  const reads = c.kind === "vault" ? "its Markdown files" : c.readScopes.length ? phrase(labelled(c.readScopes, def.scopes)) : "nothing";
   const writes = c.settings.builtin === true ? "the Brain" : c.writeActions.length ? phrase(labelled(c.writeActions, def.writeActions)) : "nothing";
   return { account: c.account, reads, writes, last: at("Last read", c.lastReadAt) };
 }
@@ -101,4 +100,11 @@ export function openAtStart(groups: PageGroup[], openId: string | null): Set<str
   const needsYou = groups.find((g) => g.id === "needs_you")?.rows.map((r) => r.connection.id) ?? [];
   const shown = groups.some((g) => g.rows.some((r) => r.connection.id === openId) || g.tiles.some((t) => t.id === openId));
   return new Set(openId && shown ? [...needsYou, openId] : needsYou);
+}
+
+/** The open rows after a new answer: a Connection that has just come into "Needs you" opens; the rest stay as they are. */
+export function openNewlyNeeded(open: ReadonlySet<string>, before: PageGroup[], after: PageGroup[]): Set<string> {
+  const needing = (groups: PageGroup[]) => groups.find((g) => g.id === "needs_you")?.rows.map((r) => r.connection.id) ?? [];
+  const was = new Set(needing(before));
+  return new Set([...open, ...needing(after).filter((id) => !was.has(id))]);
 }

@@ -3,7 +3,7 @@ import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage
 import { api, post, put } from "../api.ts";
 import { MarkdownInline, Time, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
-import { reconfigureSignIn, reconnectMethod, startBrowserSignIn } from "../reconnect.ts";
+import { reconfigureSignIn, reconnectMethod, savedFields, startBrowserSignIn } from "../reconnect.ts";
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
@@ -74,16 +74,24 @@ export function ConnectionCard(props: Props) {
  * Test, Refresh now, Reconfigure, Disconnect, what it reads and what it may write. `inRow`: the Connections page's
  * row already shows the account and what it reads and writes in its columns, so they are not repeated.
  */
-export function ConnectionControls({ status, definition, onChanged, compact, repair = false, inRow = false }: Props & { inRow?: boolean }) {
+/**
+ * `testResult`: the Connections page keeps the last Test or connect result by Connection, since a row is drawn anew
+ * when it moves between a tile, its group and "Needs you"; without it the controls keep their own.
+ */
+export function ConnectionControls({ status, definition, onChanged, compact, repair = false, inRow = false, testResult }: Props & { inRow?: boolean; testResult?: { message: string | null; set: (message: string | null) => void } }) {
   const { busy, run } = useAction();
   const configured = status.status !== "not_configured" && status.status !== "disconnected";
   const needsForm = repair && configured && ((status.status === "needs_auth" && reconnectMethod(status, definition) === "credentials") || status.coverage?.state === "denied" || !!status.coverage?.scopes.some((s) => s.state === "denied"));
   const [editing, setEditing] = useState((!configured && !compact) || needsForm);
   const [method, setMethod] = useState(definition.authMethods.some((a) => a.id === status.authMethod) ? status.authMethod : (definition.authMethods[0]?.id ?? ""));
-  const [fields, setFields] = useState<Record<string, string>>({});
+  // The saved non-secret fields of the method in use, so a new secret alone keeps the rest of what was saved.
+  const savedFor = (id: string) => (configured ? savedFields(status, definition.authMethods.find((a) => a.id === id)) : {});
+  const [fields, setFields] = useState<Record<string, string>>(() => savedFor(method));
   const [scopes, setScopes] = useState<string[]>(configured ? status.readScopes : definition.scopes.filter((s) => s.default).map((s) => s.id));
   const [preview, setPreview] = useState<DisconnectEffects | null>(null);
-  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [ownTestMsg, setOwnTestMsg] = useState<string | null>(null);
+  const testMsg = testResult ? testResult.message : ownTestMsg;
+  const setTestMsg = testResult ? testResult.set : setOwnTestMsg;
   const m = definition.authMethods.find((x) => x.id === method) ?? definition.authMethods[0];
   // Browser sign-in follows the method being edited, or the method the connection was saved with.
   const current = definition.authMethods.find((a) => a.id === status.authMethod);
@@ -114,6 +122,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
     const how = reconnectMethod(status, definition);
     if (current && how === "credentials") {
       setMethod(current.id);
+      setFields(savedFor(current.id));
       setEditing(true);
       return;
     }
@@ -182,7 +191,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
           {definition.authMethods.length > 1 && (
             <label className="field">
               How to connect
-              <select value={method} onChange={(e) => setMethod(e.target.value)}>
+              <select value={method} onChange={(e) => { setMethod(e.target.value); setFields(savedFor(e.target.value)); }}>
                 {definition.authMethods.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.label}
@@ -275,7 +284,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
               )}
               {!builtin && (
                 <>
-                  <button className="ghost" onClick={() => setEditing(true)}>
+                  <button className="ghost" onClick={() => { setFields(savedFor(method)); setEditing(true); }}>
                     Reconfigure
                   </button>
                   <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<DisconnectEffects>(`/connections/${status.id}/disconnect-preview`)))}>

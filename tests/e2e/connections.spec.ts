@@ -160,6 +160,12 @@ test("a tile opens in place across its group into the setup form, and the Notes 
   await connectionToggle(gmail).click();
   await expect(gmail.getByRole("button", { name: "Connect" })).toBeHidden();
 
+  // Connecting from a tile makes it a row in its group, still open, and the connect test's result stays with it.
+  const slack = await openConnection(page, "slack");
+  await slack.getByRole("button", { name: "Connect" }).click();
+  await expect(page.locator('[data-group="work"] .connection-row[data-connection="slack"]')).toBeVisible({ timeout: 30_000 });
+  await expect(slack.locator(".connection-detail")).toContainText("Test: Slack answered through claude.ai");
+
   // Importing a folder: preview first, then import, read-only.
   await page.getByRole("button", { name: /^Import a folder/ }).click();
   await page.getByRole("textbox", { name: "Folder path" }).fill(stack.vaultDir);
@@ -174,10 +180,14 @@ test("a tile opens in place across its group into the setup form, and the Notes 
 });
 
 test("Needs you: a revoked token signs GitHub out, Home's Reconnect opens its row first in Needs you with the token field ready, and a new token puts it back", async () => {
-  const page = await journeys.open("/");
+  // Signed out while the page is open: the closed row moves to Needs you and opens there by itself.
+  const page = await journeys.open("/connections");
+  await expect(connectionToggle(connection(page, "github"))).toHaveAttribute("aria-expanded", "false");
   await revokeGithubToken(TOKEN, true);
   await api(page, "POST", "/connections/github/refresh");
   await expect.poll(async () => (await api<Array<{ id: string; status: string }>>(page, "GET", "/connections")).find((c) => c.id === "github")?.status).toBe("needs_auth");
+  await expect(connectionToggle(page.locator('[data-group="needs_you"] [data-connection="github"]'))).toHaveAttribute("aria-expanded", "true");
+  await page.goto(`${stack.url}/`);
 
   // Home: one amber sign-in row; its Reconnect needs a new token, so it opens GitHub's own row on Connections.
   const area = page.getByRole("status", { name: "Connections" });
@@ -254,6 +264,21 @@ test("captures: the page in light, dark and narrow, with a row open and with a s
   expect(words!.x + words!.width).toBeLessThanOrEqual(chevron!.x);
   await page.screenshot({ path: "test-results/screens/narrow-320-connections-needs-you.png" });
   await page.unroute("**/api/v1/capabilities");
+
+  // Two sign-ins on a phone: a link to the second lands on it, in view, below the first one's open form.
+  await page.route("**/api/v1/capabilities", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { connections: Array<{ id: string }> };
+    body.connections = body.connections.map((c) => (c.id === "github" || c.id === "model" ? { ...c, status: "needs_auth", lastError: "Signed out" } : c));
+    await route.fulfill({ response: res, json: body });
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${stack.url}/connections?open=model`);
+  const model = page.locator('[data-group="needs_you"] [data-connection="model"]');
+  await expect(model.locator(":focus")).toHaveCount(1);
+  await expect(model.locator(":focus")).toBeInViewport();
+  await page.unroute("**/api/v1/capabilities");
+  await page.setViewportSize({ width: 1360, height: 900 });
 });
 
 test("no unresolved console errors across the Connections journeys", () => {

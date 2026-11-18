@@ -3,7 +3,7 @@ import type { ConnectionStatus, Coverage, CoverageState } from "@attache/contrac
 import type { FeatureStatus, ReaderView } from "@attache/contracts";
 import { connectionsStatus } from "../src/connection-status.ts";
 import type { ConnectionDefinition } from "@attache/contracts";
-import { connectionsPage, openAtStart, rowCells, type PageGroup } from "../src/connections-page.ts";
+import { connectionsPage, openAtStart, openNewlyNeeded, rowCells, type PageGroup } from "../src/connections-page.ts";
 
 // The Connections page from the Connections the service lists (`/capabilities`) and whether Attention is on.
 
@@ -170,10 +170,10 @@ describe("rowCells: account, permission and last read, each its own column", () 
     ["a source with nothing chosen reads nothing", conn("github", { account: "alex" }), github, { account: "alex", reads: "nothing", writes: "nothing", last: { label: "Last read", at: LAST_OK } }],
     ["a source never read says so by its missing time", conn("gcal", { lastReadAt: null }), def("gcal"), { account: null, reads: "nothing", writes: "nothing", last: { label: "Last read", at: null } }],
     [
-      "the data folder is where Attache writes the Brain",
+      "the data folder is read whole and is where Attache writes the Brain",
       conn("vault", { account: "/home/alex/Attache", settings: { builtin: true }, readScopes: ["tasks"] }),
       def("vault", { scopes: [{ id: "tasks", label: "Tasks and notes with due dates", default: true }] }),
-      { account: "/home/alex/Attache", reads: "tasks and notes with due dates", writes: "the Brain", last: { label: "Last read", at: LAST_OK } },
+      { account: "/home/alex/Attache", reads: "its Markdown files", writes: "the Brain", last: { label: "Last read", at: LAST_OK } },
     ],
     ["the model reads only what Attache sends it, and answers rather than reads", conn("model", { account: "anthropic · claude" }), def("model"), { account: "anthropic · claude", reads: "only what Attache sends it", writes: "nothing", last: { label: "Last answered", at: LAST_OK } }],
     ["a Harness reaches the Brain", conn("claude-code", { account: "~/.claude/settings.json" }), def("claude-code"), { account: "~/.claude/settings.json", reads: "the Brain", writes: "to the Brain", last: { label: "Last answered", at: LAST_OK } }],
@@ -195,5 +195,15 @@ describe("openAtStart: rows open when the page opens", () => {
   });
   it("ignores a link to a Connection the page does not show", () => {
     expect([...openAtStart(connectionsPage(TYPICAL, true), "nope")]).toEqual([]);
+  });
+});
+
+describe("openNewlyNeeded: a Connection that comes to need sign-in while the page is open", () => {
+  const signedOut = (...ids: string[]) => connectionsPage(TYPICAL.map((c) => (ids.includes(c.id) ? { ...c, status: "needs_auth" as const } : c)), true);
+  it("opens when it arrives in Needs you, keeping every other row as the owner left it", () => {
+    expect([...openNewlyNeeded(new Set(["claude-code"]), connectionsPage(TYPICAL, true), signedOut("github"))].sort()).toEqual(["claude-code", "github"]);
+  });
+  it("stays closed once the owner closed it in Needs you", () => {
+    expect([...openNewlyNeeded(new Set(), signedOut("github"), signedOut("github", "gmail"))]).toEqual(["gmail"]);
   });
 });
