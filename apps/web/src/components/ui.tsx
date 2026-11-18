@@ -28,12 +28,13 @@ export function useLocation(): { path: string; search: URLSearchParams; hash: st
   }, [href]);
 }
 
-export function Link(props: { to: string; children: ReactNode; className?: string; "aria-current"?: "page" | undefined; title?: string }) {
+export function Link(props: { to: string; children: ReactNode; className?: string; "aria-current"?: "page" | undefined; "aria-label"?: string; title?: string }) {
   return (
     <a
       href={props.to}
       className={props.className}
       aria-current={props["aria-current"]}
+      aria-label={props["aria-label"]}
       title={props.title}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;

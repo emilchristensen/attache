@@ -50,6 +50,13 @@ const PATHS = {
       <circle cx="18.5" cy="12" r=".9" />
     </>
   ),
+  /** This Machine: a laptop. */
+  machine: (
+    <>
+      <rect x="5" y="5" width="14" height="10" rx="1.5" />
+      <path d="M3 19h18" />
+    </>
+  ),
   // Kinds of Inbox item
   /** Review request: a branch fork. */
   fork: (

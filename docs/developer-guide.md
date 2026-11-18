@@ -11,7 +11,7 @@ Developer setup is separate from end-user installation: users run the installer 
 | `apps/web` | Browser client (React + Vite), served by the service |
 | `installer` | `install.sh`, `uninstall.sh` shipped inside the release |
 | `scripts` | Release build, verification, install tests, live read-only checks, docs check |
-| `tests/e2e` | Playwright journeys (Chrome, visual captures): `journeys.spec.ts`, `brain-updates.spec.ts` (ADR 0004: auto-accept, the Consolidation switch, Home's Recently added), `visual.spec.ts`; `browser.ts` and `stack.ts` are their shared kit |
+| `tests/e2e` | Playwright journeys (Chrome, visual captures): `journeys.spec.ts`, `brain-updates.spec.ts` (ADR 0004: auto-accept, the Consolidation switch, Home's Recently added), `shell.spec.ts` (the masthead, this Machine's disclosure, the silent-Reader warning, the bottom bar and More, routes and shortcuts; it sets itself up through the API, so it runs on its own), `visual.spec.ts`; `browser.ts` and `stack.ts` are their shared kit |
 | `docs` | Architecture, guides, architecture decision records |
 
 Service modules: `core/` (db, config, logging with redaction, service paths), `platform/` (everything that differs per operating system: service manager, secret store, notifications, locations, Harness locations, executable wrappers; see `docs/architecture.md`), `memory/` (Markdown model, policy, indexer, search, store), `attention/`, `jobs/` (queue, scheduler, runners), `actions/` (drafts, approvals, expiry), `connectors/` (one adapter per service plus manager), `capabilities/registry.ts`, `http/`, `mcp/` (the MCP server a Harness starts with `attache mcp`).

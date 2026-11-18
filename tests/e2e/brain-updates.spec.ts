@@ -53,7 +53,7 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section.getByRole("listitem")).toHaveCount(0);
   // With no sources nothing needs attention, so the logo shows no dot.
   await expect(page.getByText("Nothing needs your attention")).toBeVisible();
-  await expect(page.locator(".nav .brand .logo-dot")).toHaveCount(0);
+  await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(0);
 });
 
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
@@ -80,7 +80,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
     return res.status;
   });
   expect(dashboardSave).toBe(403);
-  await page.goto(`${stack.url}/memory`);
+  await page.goto(`${stack.url}/brain`);
   const created = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Nebula naming" });
   await expect(created).toContainText("Claude Code, session sess-auto");
   await expect(created).toContainText("auto-accepted");
@@ -95,7 +95,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
   await page.reload();
   await expect(page.getByRole("region", { name: "Auto-accept" }).getByRole("checkbox", { name: /Claude Code/ })).not.toBeChecked();
   await harnessSave(stack, [{ action: "create", type: "note", title: "Quasar naming", facts: [{ subject: "Idea", value: "Name builds after quasars" }] }], { agent: "claude-code", session: "sess-asked" });
-  await page.goto(`${stack.url}/memory`);
+  await page.goto(`${stack.url}/brain`);
   const confirmed = page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Quasar naming" });
   await expect(confirmed).toContainText("Claude Code, session sess-asked");
   await expect(confirmed).not.toContainText("auto-accepted");
@@ -121,7 +121,7 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
     proposals: [{ item: { action: "create", type: "project", title: "Helix review board", facts: [{ subject: "Meets", value: "Every Tuesday" }] }, reason: "The review agreed a weekly board.", evidence: helix }],
   });
   await expect.poll(() => existsSync(join(stack.dataDir, "memory/projects/helix-review-board.md"))).toBe(true);
-  await page.goto(`${stack.url}/memory`);
+  await page.goto(`${stack.url}/brain`);
   await expect(page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Helix review board" }).first()).toBeVisible();
 
   // Off: kept across a reload, and the next meeting's change waits for review instead.
@@ -135,8 +135,8 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
   arriveMeetingCapture(stack, "evidence/captures/2026-11-16-granola-kestrel-review.md", "Granola 2026-11-16: Kestrel review", [`[0:05] Alex: ${kestrel}.`], {
     proposals: [{ item: { action: "create", type: "project", title: "Kestrel review board", facts: [{ subject: "Meets", value: "Every Thursday" }] }, reason: "The review agreed a weekly board.", evidence: kestrel }],
   });
-  await page.goto(`${stack.url}/memory`);
-  const proposal = page.getByRole("region", { name: /Memory changes to review/ }).locator("[data-proposal]").filter({ hasText: "Kestrel review board" });
+  await page.goto(`${stack.url}/approvals`);
+  const proposal = page.getByRole("region", { name: /Changes to the Brain/ }).locator("[data-proposal]").filter({ hasText: "Kestrel review board" });
   await expect(proposal).toBeVisible();
   expect(existsSync(join(stack.dataDir, "memory/projects/kestrel-review-board.md"))).toBe(false);
   await proposal.getByRole("button", { name: "Reject" }).click();

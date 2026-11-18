@@ -1,67 +1,225 @@
-/* The frame around every screen: the sidebar, the page, its header, the banner and the narrow bottom bar. */
+/*
+ * The frame around every screen: the masthead, the silent-Reader banner, the page in its centred reading column,
+ * the narrow bottom bar, and the More and shortcut sheets.
+ *
+ * The masthead, the banner and the page share one column: 1072 px at most inside 36 px gutters (16 px on a phone).
+ * The page is the one scroller, and every row of the frame reserves the same scrollbar gutter (`scrollbar-gutter`
+ * on an `overflow: hidden` box), so the mark, the banner text and the content start at the same x on systems that
+ * draw classic scrollbars, and the column is centred in the part of the window beside the scrollbar.
+ */
+
+:root {
+  --column: 1072px;
+  --gutter: var(--s-6);
+}
+@media (max-width: 720px) {
+  :root {
+    --gutter: var(--s-4);
+  }
+}
 
 .shell {
-  display: grid;
-  grid-template-columns: var(--nav-w) 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
-/* The sidebar: paper beside the canvas, quiet rows, the current screen filled with ink. */
-.nav {
+/* One row of the frame laid out in the reading column. */
+.masthead-inner,
+.banner,
+.page {
+  padding-inline: max(var(--gutter), calc((100% - var(--column)) / 2));
+  scrollbar-gutter: stable;
+}
+
+/* The first stop for the keyboard: hidden until focused, then over the masthead's mark. */
+.skip-link {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  z-index: 50;
+  padding: var(--s-2) var(--s-3);
+  background: var(--primary);
+  color: var(--on-primary);
+  border-radius: var(--r-sm);
+  transform: translateY(calc(-100% - var(--s-4)));
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* ---- the masthead ------------------------------------------------------------------------------ */
+
+.masthead {
+  flex: none;
   background: var(--paper);
-  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.masthead-inner {
+  overflow: hidden;
+  min-height: 74px;
   display: flex;
-  flex-direction: column;
-  padding: 16px 10px;
-  gap: 1px;
-  overflow-y: auto;
+  align-items: center;
+  gap: var(--s-6);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 10px 16px;
   font: 700 21px/1 var(--serif);
   letter-spacing: -0.04em;
 }
+.masthead .brand {
+  flex: none;
+  font-size: 27px;
+  color: var(--ink);
+  text-decoration: none;
+}
 
-.nav a {
+.masthead-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.masthead-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 9px;
   border-radius: var(--r-sm);
   color: var(--ink-2);
   font-size: var(--fs-control);
   font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
 }
-.nav a:hover {
+.masthead-nav a:hover {
   background: var(--row-hover);
-  text-decoration: none;
   color: var(--ink);
+  text-decoration: none;
 }
-.nav a[aria-current="page"] {
+/* The current screen: a solid ink tab, shape and contrast rather than colour alone. */
+.masthead-nav a[aria-current="page"],
+.bottom-bar [aria-current="page"],
+.bottom-bar [aria-current="true"],
+.more-nav a[aria-current="page"] {
   background: var(--primary);
   color: var(--on-primary);
 }
-.nav .count {
-  margin-left: auto;
+
+/* A decision count beside a screen's name: the number in a ruled box, in the name's own colour. */
+.count {
   font: 600 12px/1 var(--mono);
-  color: inherit;
   font-variant-numeric: tabular-nums;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: var(--r-tag);
 }
-.nav .spacer {
-  flex: 1;
-}
-.nav .kbd-hint {
-  padding: 8px 10px;
-  font-size: var(--fs-meta);
-  color: var(--ink-3);
+.screen-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.main {
+.masthead-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+/* As tall as a button with words, also when only the icon shows. */
+.masthead-tools button {
+  min-height: 36px;
+}
+
+/* ---- this Machine's disclosure ----------------------------------------------------------------- */
+
+/*
+ * The mark keeps its full width; this Machine's button gives way instead, so it never leaves the column whatever the
+ * system's Georgia makes of the mark. A long name, or on the narrowest phones the state, ends in an ellipsis; the
+ * button's accessible name and the panel still say all of it.
+ */
+.machine {
+  display: flex;
+  min-width: 0;
+}
+.machine-trigger {
+  min-width: 0;
+}
+.machine-trigger-name,
+.machine-trigger-live {
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+.machine-trigger-name {
+  max-width: 10em;
+}
+.machine-trigger-chevron {
+  transform: rotate(90deg);
+  color: var(--ink-3);
+}
+.machine[data-lost] .machine-trigger {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+/* While the connection is lost the state takes the name's place on the button; the panel still names the Machine. */
+.machine[data-lost] .machine-trigger-name {
+  display: none;
+}
+.machine-trigger-live {
+  font-weight: 600;
+}
+
+/* Fixed under its button, outside the masthead's clipping; `MachineDisclosure` places it. */
+.machine-popover {
+  position: fixed;
+  z-index: 30;
+  width: min(360px, calc(100vw - 2 * var(--gutter)));
+  padding: var(--s-4);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.machine-panel-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+}
+/* A Machine is named after its host by default: one long word that must wrap rather than leave the panel. */
+.machine-panel-name > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.machine-panel-body .reader-line {
+  margin: 0;
+}
+.machine-panel-body > a {
+  font-size: var(--fs-control);
+}
+.live-line {
+  margin: 0;
+  color: var(--ink-3);
+}
+.live-line.lost {
+  color: var(--amber);
+}
+
+/* ---- the page ---------------------------------------------------------------------------------- */
+
+/* The skip link's target: focus lands on the page, which shows no ring of its own around the whole screen. */
+.main:focus {
+  outline: none;
+}
+.main {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -71,9 +229,10 @@
 .page {
   flex: 1;
   overflow-y: auto;
-  padding: var(--s-5) var(--s-6) var(--s-7);
+  padding-top: var(--s-5);
+  padding-bottom: var(--s-7);
 }
-/* Cap the content, not the page: the page scrolls, and its scrollbar belongs at the window's edge. */
+/* A narrower reading column inside the page's, for the long forms of Connections and Settings. */
 .page-narrow > * {
   max-width: 824px;
 }
@@ -96,13 +255,30 @@
   font-size: var(--fs-control);
 }
 
+/* A notice under the masthead that stays in view on every screen (the silent Reader). */
 .banner {
-  padding: 8px 16px;
+  flex: none;
+  overflow: hidden;
+  padding-block: var(--s-2);
   font-size: var(--fs-control);
   border-bottom: 1px solid var(--rule);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+}
+.banner > p {
+  margin: 0;
+  min-width: 0;
+  /* A Machine name may be one long word; it wraps rather than pushing the line out of the window. */
+  overflow-wrap: anywhere;
+}
+.banner .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.banner a {
+  color: inherit;
+  text-decoration: underline;
 }
 .banner.warn {
   background: var(--amber-soft);
@@ -113,45 +289,200 @@
   color: var(--danger);
 }
 
-.bottom-nav {
+/* ---- the sheets: More and the keyboard shortcuts ------------------------------------------------ */
+
+.sheet {
+  width: min(480px, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100vh - 2 * var(--s-6));
+  overflow-y: auto;
+  padding: var(--s-4) var(--s-5) var(--s-5);
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+.sheet::backdrop {
+  background: var(--backdrop);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.sheet-title {
+  font-size: var(--fs-detail);
+  line-height: var(--lh-detail);
+  margin: 0;
+}
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--s-4);
+  font-size: var(--fs-control);
+}
+.shortcut-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: var(--s-1);
+}
+.shortcut-table th,
+.shortcut-table td {
+  text-align: left;
+  font-weight: 400;
+  padding: 6px 0;
+  border-top: 1px solid var(--rule);
+}
+.shortcut-table th {
+  width: 9em;
+  color: var(--ink-2);
+}
+
+/* The More sheet rises from the bottom edge of a narrow window, clear of the home indicator. */
+.more-sheet {
+  margin: auto auto 0;
+  width: 100%;
+  max-width: 100%;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  border-bottom: 0;
+  padding-bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
+}
+.more-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.more-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 48px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-weight: 500;
+}
+.more-nav a:hover {
+  background: var(--row-hover);
+  text-decoration: none;
+}
+.more-nav .count,
+.more-nav .screen-warning {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+}
+.more-machine {
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule);
+}
+
+/* ---- the bottom bar ---------------------------------------------------------------------------- */
+
+.bottom-bar {
   display: none;
 }
 
-@media (max-width: 720px) {
-  .shell {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+/* A desktop window that is not wide: the launcher and this Machine keep their icons and lose their words. */
+@media (max-width: 1120px) {
+  .masthead-inner {
+    gap: var(--s-4);
   }
-  .nav {
+  .masthead .brand {
+    font-size: 24px;
+  }
+  .masthead-nav a {
+    padding-inline: 7px;
+  }
+  .search-launcher-label,
+  .machine-trigger-name {
     display: none;
   }
-  .bottom-nav {
-    display: flex;
+}
+
+/* A narrow window: the bottom bar takes the screens; the masthead keeps the mark, and this Machine only while the live connection is lost. */
+@media (max-width: 960px) {
+  .masthead-inner {
+    min-height: 56px;
+  }
+  .masthead .brand {
+    font-size: 22px;
+  }
+  .masthead .brand .logo {
+    width: 28px;
+    height: 28px;
+  }
+  .masthead-nav,
+  .search-launcher,
+  .machine:not([data-lost]) {
+    display: none;
+  }
+  .bottom-bar {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
     border-top: 1px solid var(--rule);
-    background: color-mix(in srgb, var(--paper) 88%, transparent);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
-    overflow-x: auto;
+    background: var(--paper);
     padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
   }
-  /* Equal widths where the labels allow, and never narrower than a label, so none is cut off. */
-  .bottom-nav a {
-    flex: 1 1 0;
-    min-width: max-content;
-    text-align: center;
-    padding: 8px 4px;
+  .bottom-bar a,
+  .bottom-bar button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 6px 2px;
     font-size: 12px;
     font-weight: 500;
+    line-height: 16px;
     color: var(--ink-2);
+    background: transparent;
+    border: 0;
     border-radius: var(--r-sm);
     white-space: nowrap;
   }
-  .bottom-nav a[aria-current="page"] {
-    color: var(--on-primary);
+  .bottom-bar a:hover {
+    text-decoration: none;
+  }
+  /* The count and the brass dot sit on the icon's corner, so a long label keeps its width. */
+  .bottom-bar .count {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 7px);
+    font-size: 11px;
+    padding: 1px 4px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .bottom-bar [aria-current] .count {
     background: var(--primary);
+    color: var(--on-primary);
+  }
+  .bottom-bar .attention-dot {
+    position: absolute;
+    top: 7px;
+    left: calc(50% + 9px);
+  }
+}
+
+@media (max-width: 720px) {
+  /* On a phone the lost connection's button is a state beside the mark: the chevron and the gap give their room to it. */
+  .masthead-inner {
+    gap: var(--s-2);
+  }
+  .machine-trigger-chevron {
+    display: none;
   }
   .page {
-    padding: var(--s-4) var(--s-4) var(--s-6);
+    padding-top: var(--s-4);
+    padding-bottom: var(--s-6);
   }
   h1 {
     font-size: 30px;
@@ -161,5 +492,20 @@
   .heading-section {
     font-size: 26px;
     line-height: 31px;
+  }
+}
+
+/*
+ * The narrowest phones (a folded phone's 280 px): while the live connection is lost, the briefcase alone is the mark
+ * and the state keeps its words. "Attache" stays the link's name for a screen reader.
+ */
+@media (max-width: 319px) {
+  .masthead-inner:has(.machine[data-lost]) .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

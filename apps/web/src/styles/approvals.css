@@ -1,0 +1,10 @@
+/* Approvals: the Drafts to send, then the changes to the Brain, each a section under the one page heading. */
+
+.approvals-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+.approvals-section > .subtitle {
+  margin: var(--s-1) 0 var(--s-4);
+}

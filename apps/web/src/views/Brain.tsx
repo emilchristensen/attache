@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MeaningStatus } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
@@ -7,8 +7,8 @@ import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { SourceView, useOpenEvidence } from "../components/Evidence.tsx";
-import { ProposalReview } from "../components/ProposalReview.tsx";
 import { Tabs } from "../components/Tabs.tsx";
+import { BRAIN_SEARCH_ID, takeSearchFocus } from "../search-launch.ts";
 import { RecentSaves } from "./RecentSaves.tsx";
 
 interface Hit {
@@ -178,7 +178,7 @@ function KeywordsOnly({ meaning }: { meaning: MeaningStatus }) {
   );
 }
 
-export function MemoryView() {
+export function BrainView() {
   const loc = useLocation();
   const [tab, setTab] = useState(loc.search.get("tab") ?? "decision");
   const [q, setQ] = useState("");
@@ -194,28 +194,31 @@ export function MemoryView() {
     return () => clearTimeout(h);
   }, [q]);
   const { detailRef, revealDetail } = useRevealDetail();
+  const searchField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (takeSearchFocus()) searchField.current?.focus();
+  }, []);
   const select = (root: string, relPath: string) => {
-    navigate(`/memory?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
+    navigate(`/brain?root=${encodeURIComponent(root)}&path=${encodeURIComponent(relPath)}&tab=${tab}`);
     revealDetail();
   };
   return (
     <div className="page">
       <div className="page-header">
-        <h1>Memory</h1>
-        <span className="subtitle">Curated memory, imported notes, evidence and deliverables. Search works without a model.</span>
+        <h1>Brain</h1>
+        <span className="subtitle">Your notes, imported material, evidence and deliverables, read-only. Search works without a model.</span>
         <div className="actions">
           <button className="ghost" onClick={() => void post("/memory/reindex")}>
             Rebuild index
           </button>
         </div>
       </div>
-      <ProposalReview />
       <RecentSaves />
       <div className="split" style={{ marginTop: 14 }}>
         <div className="stack">
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search memory and notes" aria-label="Search memory" />
+          <input ref={searchField} id={BRAIN_SEARCH_ID} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the Brain" aria-label="Search the Brain" />
           {!query && (
-            <Tabs label="Memory type" tabs={TABS} selected={t.id} onSelect={setTab} />
+            <Tabs label="Collection" tabs={TABS} selected={t.id} onSelect={setTab} />
           )}
           {query ? (
             <>

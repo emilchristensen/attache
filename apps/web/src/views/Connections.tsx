@@ -3,6 +3,7 @@ import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureS
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
+import { ReaderLine } from "./ReaderLine.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
 
@@ -56,6 +57,7 @@ export function ConnectionsView() {
         <h1>Connections</h1>
         <span className="subtitle">Each connection shows what it may read and write, when it last succeeded and how complete its last Source refresh was.</span>
       </div>
+      <ReaderLine />
       {oauth && (
         <div className={`state ${oauth === "ok" ? "partial" : "error"} small`} role="status" style={{ marginBottom: 14 }}>
           {loc.search.get("message")}

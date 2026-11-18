@@ -14,19 +14,23 @@ class LiveHub {
   private es: EventSource | null = null;
   private listeners = new Set<Listener>();
   private statusListeners = new Set<() => void>();
-  status: "connecting" | "open" | "closed" = "connecting";
-  private wasOpen = false;
+  /**
+   * `connecting` only for the first attempt after the page loads; `reconnecting` once an attempt failed and the
+   * browser retries, `closed` while the hub waits to start a new stream.
+   */
+  status: "connecting" | "open" | "reconnecting" | "closed" = "connecting";
+  private opened = false;
 
   start() {
     if (this.es) return;
     this.es = new EventSource(`${API_PREFIX}/events`);
     this.es.onopen = () => {
-      const reconnect = this.wasOpen;
-      this.wasOpen = true;
+      const reconnect = this.opened;
+      this.opened = true;
       this.setStatus("open");
       if (reconnect) this.emit({ type: "reconnected" });
     };
-    this.es.onerror = () => this.setStatus(this.es?.readyState === EventSource.CLOSED ? "closed" : "connecting");
+    this.es.onerror = () => this.setStatus(this.es?.readyState === EventSource.CLOSED ? "closed" : "reconnecting");
     this.es.onmessage = (m) => {
       try {
         this.emit(JSON.parse(m.data) as LiveEvent);
@@ -73,6 +77,12 @@ export function useLiveStatus() {
     (cb) => hub.onStatus(cb),
     () => hub.status,
   );
+}
+
+/** The live connection as the owner hears of it: `lost` once an attempt failed; the first connect after the page loads is not news. */
+export function useLiveConnection(): { status: LiveHub["status"]; lost: boolean } {
+  const status = useLiveStatus();
+  return { status, lost: status === "reconnecting" || status === "closed" };
 }
 
 export function useLiveEvent(handler: Listener) {

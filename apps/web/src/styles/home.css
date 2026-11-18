@@ -1,10 +1,5 @@
 /* Home: the briefing, the Inbox and Recently added. */
 
-/* Long lines get hard to read once the column is wide. */
-.page-inbox > * {
-  max-width: 920px;
-}
-
 /* ---- the briefing ------------------------------------------------------------------ */
 
 /* The briefing is the lead timely item: the amber feature spread. */
@@ -138,13 +133,6 @@ button.count-chip {
 .coverage .src .when {
   margin-left: auto;
   color: var(--ink-3);
-}
-.reader-line {
-  margin: 0 0 8px;
-  color: var(--ink-3);
-}
-.reader-line.silent {
-  color: var(--amber);
 }
 
 /* ---- Recently added ----------------------------------------------------------------------- */

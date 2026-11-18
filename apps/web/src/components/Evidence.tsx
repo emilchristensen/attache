@@ -117,7 +117,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
               <div className="row">
                 <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
-                  <Link to={`/memory?path=${encodeURIComponent(d.relPath)}`}>Open in Memory</Link>
+                  <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`}>Open in Brain</Link>
                 )}
               </div>
               {mode === "source" ? <SourceView raw={d.raw} lines={target.lines} /> : <Markdown text={d.raw.replace(/^---[\s\S]*?---\n/, "")} />}

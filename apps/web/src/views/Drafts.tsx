@@ -211,7 +211,8 @@ const FILTERS: ReadonlyArray<TabItem<Filter>> = [
   { id: "all", label: "All" },
 ];
 
-export function DraftsView() {
+/** The Drafts list beside the chosen Draft, shown under Approvals at `/approvals?id=`. */
+export function DraftsSection() {
   const loc = useLocation();
   const [filter, setFilter] = useState<Filter>("open");
   const statuses = filter === "open" ? OPEN_ACTION_STATUSES.join(",") : filter === "done" ? FINISHED_ACTION_STATUSES.join(",") : "";
@@ -219,14 +220,12 @@ export function DraftsView() {
   const selected = loc.search.get("id");
   const { detailRef, revealDetail } = useRevealDetail();
   useEffect(() => {
-    if (!selected && list.data?.[0]) navigate(`/drafts?id=${list.data[0].id}`, { replace: true });
+    if (!selected && list.data?.[0]) navigate(`/approvals?id=${list.data[0].id}`, { replace: true });
   }, [list.data, selected]);
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1>Drafts and approvals</h1>
-        <span className="subtitle">Nothing is sent until you approve a specific version. Edits invalidate earlier approvals.</span>
-      </div>
+    <section className="approvals-section" aria-labelledby="drafts-to-send">
+      <h2 id="drafts-to-send">Drafts to send</h2>
+      <p className="subtitle">Nothing is sent until you approve a specific version. Edits invalidate earlier approvals.</p>
       <div className="split">
         <div className="stack">
           <Tabs label="Drafts to show" tabs={FILTERS} selected={filter} onSelect={setFilter} />
@@ -235,7 +234,7 @@ export function DraftsView() {
           {list.data?.length === 0 && <Empty title="No drafts">Use “Prepare draft” on an Inbox item. Drafts appear here with their context.</Empty>}
           <div className="list">
             {list.data?.map((d) => (
-              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/drafts?id=${d.id}`); revealDetail(); }}>
+              <button key={d.id} className="list-item" aria-current={d.id === selected} onClick={() => { navigate(`/approvals?id=${d.id}`); revealDetail(); }}>
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong>{d.title}</strong>
                   <span className="row small muted">
@@ -248,6 +247,6 @@ export function DraftsView() {
         </div>
         <div ref={detailRef} className="split-detail">{selected ? <DraftDetail id={selected} /> : <Empty title="Select a draft" />}</div>
       </div>
-    </div>
+    </section>
   );
 }

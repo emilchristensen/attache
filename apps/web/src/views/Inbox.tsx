@@ -90,7 +90,7 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
             disabled={busy !== null}
             onClick={() =>
               run("draft", async () => {
-                if (draftId) return navigate(`/drafts?id=${draftId}`);
+                if (draftId) return navigate(`/approvals?id=${draftId}`);
                 await post<{ job: JobView }>(`/attention/${item.id}/draft`, {});
                 onChanged();
               }, draftId ? undefined : "Preparing a draft in the background")
@@ -132,7 +132,7 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
 
 const KIND_LABEL: Record<string, string> = { daily: "Daily", away: "Away summary", manual: "On demand" };
 // Briefing sections that live on another screen instead of in the attention list below.
-const SECTION_ROUTE: Record<string, string> = { prepared: "/drafts", memory: "/memory" };
+const SECTION_ROUTE: Record<string, string> = { prepared: "/approvals", memory: "/approvals" };
 
 function jumpTo(sectionId: string) {
   const route = SECTION_ROUTE[sectionId];

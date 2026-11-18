@@ -109,14 +109,43 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 **Home** shows the attention inbox.
 Attache has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
+### Getting around
+
+On a desktop window the masthead runs along the top: the Attache mark, then **Home**, **Approvals**, **Brain**, **Connections**, **Jobs** and **Settings** on one line, with the page below in a centred reading column.
+The screen you are on is filled in ink.
+A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
+On Home itself Home carries no number; it shows again from every other screen.
+The logo shows its brass dot while any decision waits.
+When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
+
+Off Home, **Search** in the masthead takes you to the Brain's search field.
+At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
+When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
+When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
+**Connections** also opens with the Reader and its last Source refresh.
+
+On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
+**More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
+
+Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
+Press `?` for the list of keyboard shortcuts.
+Shortcuts do nothing while you type in a field or while a dialog is open.
+The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
+
+### Look
+
 The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
 Headings are set in Georgia, and the briefing sits on an amber page of its own.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
 The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
 
+### Home
+
+Home holds the briefing, your sources, the Inbox and Recently added.
+
 - The briefing summarises what changed, what needs your judgment and what Attache has prepared, one point per line.
-  The counts under it jump to each group; drafts and memory changes open their own screens.
+  The counts under it jump to each group; Drafts and changes to the Brain open Approvals.
   **Away summary** covers the last three days.
 - **Sources** names the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
   Without Replication this Machine is its own Reader.
@@ -132,17 +161,17 @@ The keyboard focus is a blue ring around the control, and the selected screen or
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
   While that draft waits for you or is being sent, the item offers **View draft** instead.
-  Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** on the Drafts screen.
+  Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
-Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
+### Brain
 
-**Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
+The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
 Each memory note has a *Current state* with one dated entry per subject.
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
-Changes that Attache proposes wait in *Memory changes to review* until you apply or reject them.
+Changes that Attache proposes wait in **Approvals**, under *Changes to the Brain*, until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites, with the words it quotes from that evidence.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
@@ -151,7 +180,7 @@ With Replication on, a Proposal made on one Machine shows on every Machine, and 
 Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
 If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
-**Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
+**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first.
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, the session or meeting Consolidation read, a Proposal you approved, or you) and when.
 A change written without your review is marked auto-accepted, or consolidated when Consolidation wrote it.
 **Revert** undoes one change with one click:
@@ -166,12 +195,19 @@ A change can be reverted only while it is still the last word on what it changed
 When a later change overwrote the same fact, or the note was edited outside Attache since, the row says why and offers no **Revert**; revert the later change first.
 Events stay in *History*, which only grows, so they cannot be reverted.
 
-**Drafts** shows each draft with its context and evidence.
+### Approvals
+
+**Approvals** holds everything Attache prepared that waits for your OK: *Drafts to send*, then *Changes to the Brain* (the Proposals described above).
+Approvals is only the page's name: you approve one exact version of a Draft, and you apply or reject a Proposal.
+
+*Drafts to send* shows each draft with its context and evidence.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
 When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.
 **Send** is available only when the connection is authorised to write that kind of action; Attache rechecks everything on the service immediately before sending and marks the draft sent only after the other service confirms it.
 Drafts expire after 48 business hours.
+
+### Jobs
 
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
@@ -194,11 +230,11 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Consolidation:** when the session log entry holds something durable, Attache reads the session again, with the notes that search finds related to it, and writes what it finds to your Brain straight away.
   Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
-  Each change is listed in *Recent saves* on the Memory page, marked as written without review, and one click reverts it.
+  Each change is listed in *Recent saves* on the Brain screen, marked as written without review, and one click reverts it.
   There is no limit on how many changes a session yields, but nothing is written twice: a change that is already waiting for review, or a fact the note already holds, is left out, and your identity record is never changed.
   When a session states a different value for a fact a note already holds, Attache writes the new value and moves the old one to the note's *History* with the reason.
   A session that only mentions or repeats a fact changes nothing.
-  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, beside the Harness switches; on that Machine it then makes Proposals in *Memory changes to review* instead.
+  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, beside the Harness switches; on that Machine it then makes Proposals under *Changes to the Brain* in Approvals instead.
   A Proposal that is a correction shows the current value struck through beside the new one, with the reason and the evidence, and applying it moves the old value to *History*.
   If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
   A Harness's auto-accept switch has no say over Consolidation.
@@ -223,7 +259,7 @@ Uninstalling Attache removes them all.
 ## Meeting captures
 
 A meeting capture is a Markdown file in your data folder's `evidence/captures/` folder whose frontmatter `tags` include `meeting` or `meeting-transcript`, for example the notes and transcript of a meeting that an export routine writes there.
-When a new one arrives, Attache reads it, with the notes that search finds related to it, and writes what it finds to your Brain, the same way it does for a Harness session; with the Consolidation switch off, it makes Proposals in *Memory changes to review* instead.
+When a new one arrives, Attache reads it, with the notes that search finds related to it, and writes what it finds to your Brain, the same way it does for a Harness session; with the Consolidation switch off, it makes Proposals under *Changes to the Brain* in Approvals instead.
 This needs a model connection; without one, the capture is kept and is not read.
 
 - Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
@@ -275,7 +311,7 @@ When Attache starts after the upgrade, it removes the skill folders it installed
   A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
   The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
   Disconnecting a Harness forgets its setting, so connecting it again starts with auto-accept on.
-  A save written without review still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can see and revert it.
+  A save written without review still records the Harness and session, and Recent saves on the Brain screen marks it **auto-accepted**, so you can see and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   A fact is flagged stale only when it is past its Review date; a fact without one is never stale, however old it is.
