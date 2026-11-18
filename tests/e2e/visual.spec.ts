@@ -317,7 +317,7 @@ test("screens", async ({ browser }) => {
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
     await page.screenshot({ path: `test-results/screens/${scheme}-brain-note.png` });
-    await page.goto(`${stack.url}/brain`);
+    await page.goto(`${stack.url}/brain/recent`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
     await page.goto(stack.url);
     await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
@@ -364,7 +364,7 @@ test("screens", async ({ browser }) => {
   await meaning.screenshot({ path: "test-results/screens/dark-settings-meaning-ready.png" });
   await page.goto(`${stack.url}/brain`);
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("When is the cutover plan due for the Orion migration?");
-  await page.locator(".list-item", { hasText: "Orion" }).first().click();
+  await page.locator(".result-item", { hasText: "Orion" }).first().click();
   await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });

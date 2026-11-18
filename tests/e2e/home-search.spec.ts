@@ -193,7 +193,7 @@ test("home: All results in Brain carries the query to the Brain screen's address
   await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
   await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toHaveValue("Helios");
   // More than the six Home showed: every Helios project is among them.
-  for (const title of HELIOS) await expect(page.locator(".split .list-item", { hasText: title }).first()).toBeVisible();
+  for (const title of HELIOS) await expect(page.locator(".result-item", { hasText: title }).first()).toBeVisible();
   // Typing in the Brain keeps the address in step, and Back returns to Home.
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page).toHaveURL(`${stack.url}/brain?q=Orion`);
@@ -628,8 +628,8 @@ test("browse: one disclosure beside the field opens People, Projects, Decisions,
   await browse.click();
   await links.getByRole("link", { name: "Projects" }).click();
   await expect(page).toHaveURL(`${stack.url}/brain?tab=project`);
-  await expect(page.getByRole("tab", { name: "Projects" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator(".list-item", { hasText: "Helios workstream 1" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Collections" }).getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "true");
+  await expect(page.locator(".note-list-item", { hasText: "Helios workstream 1" })).toBeVisible();
 });
 
 test("narrow: the prompt fits at 320 and 375 px and at 200% zoom, and the keycap gives way while the shortcut still works", async () => {
@@ -656,12 +656,12 @@ test("narrow: the prompt fits at 320 and 375 px and at 200% zoom, and the keycap
   await field(page).fill("Postmark");
   let release!: () => void;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route(/\/api\/v1\/memory\/search\?q=Postmark$/, (route) => held.then(() => route.continue()), { times: 1 });
+  await page.route(/\/api\/v1\/memory\/search\?q=Postmark&limit=50$/, (route) => held.then(() => route.continue()), { times: 1 });
   await results(page).getByRole("option", { name: /Email vendor/ }).click();
   await expect(page).toHaveURL(/\/brain\?root=data&path=/);
   await expect(page.locator('[data-subject="Decision"]')).toBeVisible();
   release();
-  await expect(page.locator(".split .list-item").first()).toBeVisible();
+  await expect(page.locator(".result-item").first()).toBeVisible();
   // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
   const noteInView = () =>
     page.locator(".split-detail").evaluate((note) => {

@@ -3,6 +3,7 @@ import { post } from "../api.ts";
 import { Link, Time, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
 import { Tag } from "./Tag.tsx";
+import { brainHref, collectionOf } from "../brain.ts";
 
 /** What one change did to its note: a note created or removed, an event, or a fact's old value and new value. */
 export function What({ c }: { c: RecentChangeView }) {
@@ -77,7 +78,7 @@ export function ChangeRow({ c, onReverted, home = false }: { c: RecentChangeView
           {gone ? (
             <span className="recent-change-title">{c.title}</span>
           ) : (
-            <Link to={`/brain?path=${encodeURIComponent(c.relPath)}`} className="recent-change-title" title={c.relPath}>
+            <Link to={brainHref({ view: "library", path: c.relPath, collection: collectionOf(c.relPath) ?? undefined })} className="recent-change-title" title={c.relPath}>
               {c.title}
             </Link>
           )}
