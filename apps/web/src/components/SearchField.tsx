@@ -143,6 +143,8 @@ export function SearchField({ id, className }: { id: string; className?: string 
     if (caret) {
       e.preventDefault();
       field.setSelectionRange(caret.start, caret.end, caret.direction);
+      // Setting the selection does not scroll the text, so show the end the key moved to.
+      field.scrollLeft = e.key === "Home" ? 0 : field.scrollWidth;
     } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!open) {
