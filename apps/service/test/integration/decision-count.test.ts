@@ -25,6 +25,9 @@ function draft(itemKey: string | null, body: string) {
   return svc.app.actions.createDraft({ kind: "github.comment", connectionId: "github", title: body, target: { repo: "acme/web", number: 7 }, payload: { body }, context: {}, attentionItemKey: itemKey, createdBy: "test" });
 }
 
+/** The totals while every feature is on. */
+const count = async () => (await svc.get("/decision-count")) as { inbox: number; drafts: number; proposals: number; signIns: number };
+
 const itemByKey = async (key: string) => ((await svc.get("/attention?state=open,snoozed&limit=500")).items as Array<{ id: string; key: string }>).find((i) => i.key === key)!;
 
 beforeAll(async () => {
@@ -54,42 +57,57 @@ describe("GET /decision-count", () => {
     expect(await svc.get("/decision-count")).toEqual({ inbox: OPEN_ITEMS, drafts: LONE_DRAFTS, proposals: PROPOSALS, signIns: 1 });
   });
 
+  // Each case below counts from the totals it finds, with Inbox items of its own, so it also runs alone.
+
   it("counts a Draft linked to an open Inbox item once, in Drafts, and its item again once the Draft is finished or being sent", async () => {
+    const before = await count();
     const waiting = draft("count:item-0", "reply to item 0");
     draft("count:item-1", "reply to item 1");
-    expect(await svc.get("/decision-count")).toMatchObject({ inbox: OPEN_ITEMS - 2, drafts: LONE_DRAFTS + 2 });
+    expect(await count()).toMatchObject({ inbox: before.inbox - 2, drafts: before.drafts + 2 });
 
     // Rejected: finished, so the item is a decision on Home again.
     await svc.post(`/actions/${waiting.id}/reject`, {});
-    expect(await svc.get("/decision-count")).toMatchObject({ inbox: OPEN_ITEMS - 1, drafts: LONE_DRAFTS + 1 });
+    expect(await count()).toMatchObject({ inbox: before.inbox - 1, drafts: before.drafts + 1 });
 
     // Being sent: not a decision; its item still is.
     const sending = draft("count:item-2", "reply to item 2");
     svc.app.db.prepare("update actions set status = 'executing' where id = ?").run(sending.id);
-    expect(await svc.get("/decision-count")).toMatchObject({ inbox: OPEN_ITEMS - 1, drafts: LONE_DRAFTS + 1 });
+    expect(await count()).toMatchObject({ inbox: before.inbox - 1, drafts: before.drafts + 1 });
     svc.app.db.prepare("update actions set status = 'succeeded' where id = ?").run(sending.id);
   });
 
   it("keeps counting a waiting Draft whose item was snoozed, and counts the snoozed item nowhere", async () => {
+    const before = await count();
     draft("count:item-3", "reply to item 3");
     const item = await itemByKey("count:item-3");
     await svc.post(`/attention/${item.id}/decision`, { decision: "snooze", until: new Date(Date.now() + 3_600_000).toISOString() });
-    expect(await svc.get("/decision-count")).toMatchObject({ inbox: OPEN_ITEMS - 2, drafts: LONE_DRAFTS + 2 });
+    expect(await count()).toMatchObject({ inbox: before.inbox - 1, drafts: before.drafts + 1 });
   });
 
-  it("counts a Draft that ran past its expiry as finished, as the lists do", async () => {
+  it("counts a Draft that ran past its expiry as finished, as the lists do, and the Inbox list that expires it announces it", async () => {
+    const before = await count();
     const stale = draft("count:item-4", "reply to item 4");
     svc.app.db.prepare("update actions set expires_at = ? where id = ?").run(new Date(Date.now() - 1000).toISOString(), stale.id);
-    expect(await svc.get("/decision-count")).toMatchObject({ inbox: OPEN_ITEMS - 2, drafts: LONE_DRAFTS + 2 });
+    const events: string[] = [];
+    const listen = (e: { type: string }) => events.push(e.type);
+    svc.app.bus.on("event", listen);
+    try {
+      await svc.get("/attention?state=open");
+    } finally {
+      svc.app.bus.off("event", listen);
+    }
+    expect(events).toEqual(expect.arrayContaining(["actions.changed", "attention.changed"]));
+    expect(await count()).toMatchObject({ inbox: before.inbox, drafts: before.drafts });
     expect((await svc.get(`/actions/${stale.id}`)).status).toBe("expired");
   });
 
   it("returns off, not zero, for a part whose feature is switched off", async () => {
+    const before = await count();
     await svc.put("/features", { changes: { drafts: false } });
-    expect(await svc.get("/decision-count")).toEqual({ inbox: OPEN_ITEMS - 2, drafts: "off", proposals: PROPOSALS, signIns: 1 });
+    expect(await svc.get("/decision-count")).toEqual({ ...before, drafts: "off" });
 
     await svc.put("/features", { changes: { attention: false }, cascade: true });
-    expect(await svc.get("/decision-count")).toEqual({ inbox: "off", drafts: "off", proposals: PROPOSALS, signIns: 1 });
+    expect(await svc.get("/decision-count")).toEqual({ ...before, inbox: "off", drafts: "off" });
 
     await svc.put("/features", { changes: { attention: true, drafts: true }, cascade: true });
   });

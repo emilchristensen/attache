@@ -96,11 +96,16 @@ export function useNavSignals(): NavSignals {
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the fallback count would show the decision twice, or not at
-  // all, for as long as the slower request takes. Home's rows come from the same held answer. The count route
-  // deduplicates in one query, so its answer counts as soon as it arrives.
+  // all, for as long as the slower request takes. Home's rows come from the same held answer.
   const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
-  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
+  const pairLoading = inbox.loading || drafts.loading;
+  if (!pairLoading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
+  // The count route deduplicates in one query, so its first answer counts at once, whatever the lists are doing. A
+  // later answer waits while Home's rows are being asked again, so the rows and the number beside them change together
+  // (a new item never shows as "1 needs you here" over the empty list it is not in yet).
+  const shownTotals = useRef({ data: totals.data, error: totals.error });
+  if (!(pairLoading && heldInbox.data && shownTotals.current.data)) shownTotals.current = { data: totals.data, error: totals.error };
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const { reload: reloadTotals } = totals;
@@ -115,7 +120,7 @@ export function useNavSignals(): NavSignals {
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
-  const count = countDecisions(totalsAnswer(totals), inputs);
+  const count = countDecisions(totalsAnswer(shownTotals.current), inputs);
   // The dot remembers its last state, because an unknown part must not turn it on or off.
   const lastDot = useRef(false);
   const dot = dotAfter(lastDot.current, count.total);
