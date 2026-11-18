@@ -4,9 +4,9 @@ import { useEffect, type RefObject } from "react";
  * Keep the reader's place on Home when something above it grows or shrinks, as when a meeting prep Heads-up arrives
  * in For you now (and the Inbox's count line with it) while the owner reads the Inbox. Chrome and Firefox do this
  * themselves (scroll anchoring, `overflow-anchor`). Where the browser does not (Safari), this does the same for
- * Home's scroller: it remembers the first thing in view (an area, or a heading, Heads-up or row) and where it was, and
- * when anything in the page changes size, moves the scroller by as much as that moved. At the top of the page nothing
- * moves.
+ * Home's scroller: it remembers what is in view (areas, or headings, Heads-ups and rows) and where each was, and when
+ * anything in the page changes size, moves the scroller by as much as the first of them still on the page moved. At
+ * the top of the page nothing moves.
  */
 /** The parts of an area that can hold the place: For you now's heading and Heads-ups, the Inbox's heading and rows. */
 const PARTS = ".for-you-now-head, [data-heads-up-key], .inbox-head, [data-inbox-row]";
@@ -15,21 +15,23 @@ export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): voi
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller || anchorsItself() || typeof ResizeObserver === "undefined") return;
-    let anchor: { el: Element; top: number } | null = null;
+    // Everything in view, in page order, with where it was: the first one still on the page holds the place (the first
+    // can be the very meeting that just moved up into For you now).
+    let anchors: Array<{ el: Element; top: number }> = [];
     const remember = () => {
       const view = scroller.getBoundingClientRect();
-      // The first thing in view, in page order: an area of Home, or inside For you now and the Inbox their heading or an
-      // entry. As with the browser's own anchoring, a change inside or below it moves nothing, and a change above it keeps
-      // it put.
+      // What is in view, in page order: Home's areas, or inside For you now and the Inbox their heading and entries. As
+      // with the browser's own anchoring, a change inside or below the first moves nothing, and a change above it keeps it put.
       const candidates = [...scroller.children].flatMap((area) => {
         const parts = [...area.querySelectorAll(PARTS)];
         return parts.length ? parts : [area];
       });
-      const el = scroller.scrollTop > 0 ? (candidates.find((c) => c.getBoundingClientRect().bottom > view.top && c.getBoundingClientRect().top < view.bottom) ?? null) : null;
-      anchor = el ? { el, top: el.getBoundingClientRect().top } : null;
+      const inView = scroller.scrollTop > 0 ? candidates.filter((c) => c.getBoundingClientRect().bottom > view.top && c.getBoundingClientRect().top < view.bottom) : [];
+      anchors = inView.map((el) => ({ el, top: el.getBoundingClientRect().top }));
     };
     const keep = () => {
-      if (anchor?.el.isConnected) {
+      const anchor = anchors.find((a) => a.el.isConnected);
+      if (anchor) {
         const moved = anchor.el.getBoundingClientRect().top - anchor.top;
         if (moved !== 0) scroller.scrollTop += moved;
       }

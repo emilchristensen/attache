@@ -445,6 +445,28 @@ describe("a meeting that comes due while the Heads-ups are held", () => {
     for (const holding of [["meeting:b"], [], ["briefing:b1", "meeting:b"]]) expect(keysOf(withArrivedMeetings(held, live, holding, first.placed).slot)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
   });
 
+  it("shows the meeting as it came in for the rest of the hold: a later Calendar refresh does not change its Join", () => {
+    const first = withArrivedMeetings(held, live, ["meeting:a"]);
+    const moved = forYouNow(input("2026-11-18T09:16:00Z", { meetings: [{ ...triage, meeting: { ...triage.meeting!, meetLink: "https://meet.google.com/new-link" } }, handover] }));
+    const again = withArrivedMeetings(held, moved, ["meeting:b"], first.placed).slot;
+    expect(all(again).find((h) => h.key === "meeting:b")!.meeting!.meetLink).toBe("https://meet.google.com/b");
+  });
+
+  it("keeps its place after a progress line that a briefing took the place of", () => {
+    const job = { id: "j1", progress: 0.5, note: null };
+    const withJob = forYouNow(input("2026-11-18T09:14:00Z", { meetings: [triage, handover], briefing: null, briefingJob: job }));
+    const first = withArrivedMeetings(withJob, forYouNow(input("2026-11-18T09:15:00Z", { meetings: [triage, handover], briefing: null, briefingJob: job })), ["progress:j1"]);
+    expect(keysOf(first.slot)).toEqual(["meeting:a", "progress:j1", "meeting:b"]);
+    // The briefing it wrote takes the progress line's place (`inPlaceOf`, as heldSlot gives it): the meeting stays after it.
+    const handedOver = { ...withJob, followers: withJob.followers.map((h) => (h.key === "progress:j1" ? { ...h, key: "briefing:b2", inPlaceOf: "progress:j1" } : h)) };
+    expect(keysOf(withArrivedMeetings(handedOver, live, [], first.placed).slot)).toEqual(["meeting:a", "briefing:b2", "meeting:b"]);
+  });
+
+  it("lets Done or Not now pressed here take an arrived meeting out at once, still held", () => {
+    const first = withArrivedMeetings(held, live, ["meeting:a"]);
+    expect(keysOf(withArrivedMeetings(held, live, ["meeting:b"], first.placed, new Set(["meeting:b"])).slot)).toEqual(["meeting:a", "briefing:b1"]);
+  });
+
   it("brings nothing else in: a briefing or a clock change still waits", () => {
     const later = forYouNow(input("2026-11-18T11:30:00Z", { meetings: [] }));
     expect(withArrivedMeetings(held, later, ["meeting:a"]).slot).toEqual(held);

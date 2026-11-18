@@ -107,6 +107,8 @@ export class App {
   private dataWatcher: FolderWatcher | null = null;
   /** Expires stale drafts and wakes snoozed items; stopped with the app, so it never touches a closed database. */
   private housekeeping: TimerHandle | null = null;
+  /** When the armed housekeeping runs (ms since the epoch). */
+  private housekeepingAt = 0;
 
   constructor(opts: AppOptions = {}) {
     this.paths = resolvePaths(opts.stateDir);
@@ -463,10 +465,12 @@ export class App {
     this.sessions.start();
     this.replication.start();
     this.scheduleHousekeeping();
+    this.bus.on("event", this.onAttentionChanged);
     void this.refreshModel();
   }
 
   async stop() {
+    this.bus.off("event", this.onAttentionChanged);
     if (this.housekeeping) this.clock.clearTimeout(this.housekeeping);
     this.housekeeping = null;
     this.dataWatcher?.stop();
@@ -491,6 +495,9 @@ export class App {
 
   /** Run housekeeping on the service's clock: settle drafts and approvals, wake snoozed items and resolve meeting prep whose meeting ended. */
   private scheduleHousekeeping(): void {
+    if (this.housekeeping) this.clock.clearTimeout(this.housekeeping);
+    const wait = this.untilNextHousekeeping();
+    this.housekeepingAt = this.clock.now().getTime() + wait;
     this.housekeeping = this.clock.setTimeout(() => {
       try {
         this.settleActions();
@@ -498,8 +505,13 @@ export class App {
       } finally {
         this.scheduleHousekeeping();
       }
-    }, this.untilNextHousekeeping());
+    }, wait);
   }
+
+  /** A refresh or another Machine's record can bring a meeting that ends before the armed run: run housekeeping at that end instead. */
+  private readonly onAttentionChanged = (ev: { type: string }) => {
+    if (ev.type === "attention.changed" && this.housekeeping && this.clock.now().getTime() + this.untilNextHousekeeping() < this.housekeepingAt) this.scheduleHousekeeping();
+  };
 
   /**
    * Half a minute, or less when an approval or a meeting ends sooner: an approval goes back to needing
