@@ -132,7 +132,8 @@ function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: 
   if (unconfirmed)
     return (
       <div className="inbox-detail unconfirmed" id={id}>
-        <DeliveryUnconfirmed item={item} draftId={unconfirmed} sourceName={sourceName(item)} canReplace={canDraft} actions={actions} decisions={<Decisions item={item} actions={actions} primaryDone={false} />} />
+        {/* Keyed by the Draft: an open confirmation never carries over to another Draft whose send is unknown. */}
+        <DeliveryUnconfirmed key={unconfirmed} item={item} draftId={unconfirmed} sourceName={sourceName(item)} canReplace={canDraft} actions={actions} decisions={<Decisions item={item} actions={actions} primaryDone={false} />} />
         <div className="inbox-context">{context}</div>
       </div>
     );
