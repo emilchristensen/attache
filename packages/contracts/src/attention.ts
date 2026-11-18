@@ -3,6 +3,37 @@ import type { ActionStatus } from "./actions.ts";
 
 /** API contract: Attention. */
 
+/**
+ * Every Inbox item kind the service raises. A connector can only raise a kind from this list
+ * (`AttentionCandidate.kind` is `InboxKind`), and the Dashboard's kind-to-type map is tested against it,
+ * so a new kind fails a test until the Dashboard gives it a family, word, hue and icon.
+ * An item's `kind` stays a string: a newer Machine can replicate a kind this one does not know.
+ */
+export const INBOX_KINDS = [
+  "deadline",
+  "review_request",
+  "authored_pr",
+  "assigned_issue",
+  "pending_reply",
+  "mention",
+  "invite_response",
+  "meeting_prep",
+  "overdue_work_item",
+  "due_work_item",
+  "fact-review",
+  "replication_blocked",
+  "replication_unauthorized",
+  "replication_prose_versions",
+  "replication_deleted_and_changed",
+] as const;
+
+export type InboxKind = (typeof INBOX_KINDS)[number];
+
+/** The Replication merge notices that become Inbox items, as `replication_<notice kind>`. */
+export const MERGE_NOTICE_KINDS = ["prose_versions", "deleted_and_changed"] as const;
+
+export type MergeNoticeKind = (typeof MERGE_NOTICE_KINDS)[number];
+
 export interface AttentionItemView {
   id: string;
   key: string;
