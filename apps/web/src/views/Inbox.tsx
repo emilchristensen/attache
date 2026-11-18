@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { AttentionItemView, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
@@ -9,6 +9,9 @@ import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
 import { openDraftId } from "../linked-draft.ts";
 import type { InboxCoverage } from "../connection-status.ts";
+import { homeLine } from "../count.ts";
+import { useSignals } from "../nav-signals.ts";
+import { AttentionDot } from "../components/AttentionDot.tsx";
 
 interface Briefing {
   id: string;
@@ -257,13 +260,47 @@ const EMPTY: Record<InboxCoverage, { title: string; body: string }> = {
   incomplete: { title: "Nothing found in the sources that were read", body: "Connections above says what was not read, so this may not be complete." },
 };
 
+/** Nothing is promoted above the Inbox yet; the Heads-ups (#25, #26 of spec #14) fill this with meeting prep items. */
+const NOTHING_PROMOTED: ReadonlySet<string> = new Set();
+
+/**
+ * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
+ * number out, and the line that relates the rows to the decisions when they differ.
+ */
+function InboxHeading({ children, open }: { children: ReactNode; open: boolean }) {
+  const signals = useSignals();
+  const home = signals.count.home;
+  const needYou = home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
+  const line = open ? homeLine(signals.inbox, NOTHING_PROMOTED) : null;
+  return (
+    <>
+      <div className="inbox-head">
+        <div className="inbox-title">
+          <h2 className="heading-section">Inbox</h2>
+          {needYou && (
+            <span className="need-you" data-need-you>
+              <AttentionDot decorative />
+              {needYou}
+            </span>
+          )}
+        </div>
+        {children}
+      </div>
+      {line && <p className="count-line">{line}</p>}
+    </>
+  );
+}
+
 /**
  * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
  * when every source was read, and names what was read otherwise.
  */
 export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage }) {
   const [showHidden, setShowHidden] = useState(false);
-  const items = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=${showHidden ? "dismissed,snoozed" : "open"}` : null, ["attention.changed", "briefing.created", "actions.changed"]);
+  // The open rows are the shell's request behind the count, so the rows, their Retry and the count agree.
+  const open = useSignals().openInbox;
+  const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && showHidden ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "briefing.created", "actions.changed"]);
+  const items = showHidden ? hidden : open;
   const grouped = useMemo(() => {
     const out = new Map<string, AttentionItemView[]>();
     for (const it of items.data?.items ?? []) {
@@ -280,13 +317,13 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     );
   return (
     <div>
-      <div className="section-title">
-        {showHidden ? "Dismissed and snoozed" : "Needs your attention"}
-        <button className="small ghost" style={{ marginLeft: "auto" }} onClick={() => setShowHidden(!showHidden)}>
+      <InboxHeading open={!showHidden}>
+        <button className="small ghost" onClick={() => setShowHidden(!showHidden)}>
           {showHidden ? "Show open" : "Show dismissed"}
         </button>
-      </div>
-      {items.loading && !items.data && <Loading />}
+      </InboxHeading>
+      {showHidden && <div className="section-title">Dismissed and snoozed</div>}
+      {items.loading && !items.data && <Loading label="Loading the Inbox" />}
       <ErrorState error={items.error} retry={items.reload} />
       {items.data && items.data.items.length === 0 && (
         <Empty title={showHidden ? "Nothing dismissed or snoozed" : EMPTY[coverage].title}>{showHidden ? null : EMPTY[coverage].body}</Empty>

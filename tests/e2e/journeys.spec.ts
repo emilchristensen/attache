@@ -254,7 +254,7 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await expect(page.locator('[data-feature-status="attention"]')).toContainText("ready");
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expect(page.getByText(/Overdue: Review rollback runbook/)).toBeVisible();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
   // No microphone control or speech hint anywhere on the Dashboard.
@@ -279,7 +279,7 @@ test("service not reachable: the pairing screen's centred layout, the commands t
 
 test("home: the inbox only, with no chat box or chat shortcut", async () => {
   const page = await journeys.open("/");
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Attache" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
   await expect(page.getByRole("separator")).toHaveCount(0);
@@ -347,7 +347,7 @@ test("look: the Dashboard sets its text in Inter, served by Attache itself, and 
     if (r.request().resourceType() === "font") fonts.push({ url: r.url(), type: r.headers()["content-type"] });
   });
   await page.goto(`${stack.url}/`);
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Inter"?,/);
   expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.replace(/"/g, "") === "Inter" && f.status === "loaded"))).toBe(true);
@@ -386,7 +386,7 @@ const measure = (target: Locator, what: "outline" | "border") =>
 test("look: focus rings, control edges and healthy states, measured on the surfaces they render on, in light and dark", async () => {
   const page = await journeys.newPage();
   await page.goto(`${stack.url}/`);
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const onFeature = page.locator(".briefing").getByRole("button", { name: "Away summary" });
@@ -460,8 +460,22 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
 test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
   const page = await journeys.open("/");
   const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  // Home's decision count sits beside the Inbox heading; with no Draft waiting every row below is a decision here.
+  const needYou = page.locator("[data-need-you]");
+  const countLine = page.locator(".count-line");
+  await expect(needYou).toHaveText(/^\d+ needs? you here$/);
+  await expect(countLine).toHaveCount(0);
+  const before = Number((await needYou.textContent())!.match(/\d+/)![0]);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
+  // The item's decision is now its Draft's, counted once, in Approvals; the line relates the rows to the decisions.
+  await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
+  await expect(countLine).toHaveText(new RegExp(`^${before - 1} items? below needs? you · 1 Draft in Approvals$`));
+  // The line speaks of the open rows, so it leaves with them when the dismissed and snoozed ones show instead.
+  await page.getByRole("button", { name: "Show dismissed" }).click();
+  await expect(countLine).toHaveCount(0);
+  await page.getByRole("button", { name: "Show open" }).click();
+  await expect(countLine).toBeVisible();
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");
@@ -471,6 +485,9 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
   await expect(pr.getByRole("button", { name: "View draft" })).toHaveCount(0);
+  // The rejected Draft is finished, so the item is a decision on Home again.
+  await expect(needYou).toHaveText(new RegExp(`^${before} needs? you here$`));
+  await expect(countLine).toHaveCount(0);
   await page.goto(`${stack.url}/approvals?id=${rejectedId}`);
   await page.getByRole("tab", { name: "Finished" }).click();
   await expect(page.getByRole("button", { name: /Review acme\/web#42/ }).first()).toBeVisible();
@@ -648,7 +665,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
 
 test("reconnection: service restart shows on this Machine's button in the masthead, then recovers state", async () => {
   const page = await journeys.open("/");
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   const machine = page.getByRole("button", { name: /^This Machine/ });
   await stack.stopService();
   await expect(machine).toContainText(/Reconnecting|Disconnected/, { timeout: 20_000 });
@@ -670,7 +687,7 @@ test("narrow screen: the bottom bar, no horizontal overflow, all views reachable
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(1);
   }
   await page.goto(stack.url);
-  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   // Home is the inbox alone, so there is nothing to switch between.
   await expect(page.getByRole("button", { name: "Conversation", exact: true })).toHaveCount(0);
   const navFits = await page.locator(".bottom-bar").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);

@@ -114,8 +114,12 @@ Attache has no chat box: you ask the Brain from your Harness (see Using the Brai
 On a desktop window the masthead runs along the top: the Attache mark, then **Home**, **Approvals**, **Brain**, **Connections**, **Jobs** and **Settings** on one line, with the page below in a centred reading column.
 The screen you are on is filled in ink.
 A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
-On Home itself Home carries no number; it shows again from every other screen.
-The logo shows its brass dot while any decision waits.
+Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
+On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
+When some Inbox items below have a Draft waiting, a line under the heading relates the rows to the decisions, such as "3 items below need you · 1 Draft in Approvals".
+The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
+The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
+When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
 Off Home, **Search** in the masthead takes you to the Brain's search field.
