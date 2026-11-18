@@ -227,9 +227,9 @@
 }
 
 /*
- * The one scroller. It is also the containing block of what is placed inside it (the screen-reader-only lines among
- * them): placed against the window instead, a line far down a long page would stretch the document, and on a phone the
- * whole window would then scroll, taking the masthead off the top and leaving a strip below the bottom bar.
+ * The page is also the containing block of what it positions absolutely (a screen reader's `.sr-only` words), so
+ * nothing far down a long page reaches past it and makes the document itself scroll: the masthead and the bottom bar
+ * stay put when a phone scrolls past the page's end.
  */
 .page {
   position: relative;
