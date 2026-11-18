@@ -1,6 +1,6 @@
 import { plural } from "@attache/contracts";
 import { nameList, type ConnectionsStatus } from "./connection-status.ts";
-import type { DecisionCount, Tally } from "./count.ts";
+import type { DecisionCount } from "./count.ts";
 import { spokenTime } from "./zoned-time.ts";
 
 /**
@@ -33,13 +33,19 @@ export function inboxReach(status: ConnectionsStatus): InboxReach {
   return { kind: "partial", sources, missing: missing.filter((r) => r.state !== "notes_only").map((r) => ({ subject: r.subject, word: r.word })) };
 }
 
+/** Which parts of the decision count a failed request left inexact (`NavSignals.countFailures`). */
+export interface CountFailures {
+  approvals: boolean;
+  signIns: boolean;
+}
+
 export interface EmptyInboxInput {
   count: DecisionCount;
   reach: InboxReach;
   /** How many open items For you now shows above as meeting prep (they are not listed here). */
   above: number;
-  /** A request behind the count failed (as opposed to not having answered yet). */
-  failed: boolean;
+  /** The parts a failed request left inexact (as opposed to not having answered yet). */
+  failed: CountFailures;
   now: number;
   timeZone: string;
 }
@@ -107,27 +113,34 @@ function waitLines(count: DecisionCount): EmptyLine[] {
   return lines;
 }
 
-const uncounted = (t: Tally) => !t.exact && t.count === 0;
+const PARTS = [
+  { key: "approvals", name: "approvals" },
+  { key: "signIns", name: "sign-ins" },
+] as const;
+
+const capital = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
 
 /**
- * The empty Inbox's words, or null while a part of the count has not answered yet (the view keeps loading: a
- * moment's "No open Inbox items." before "Nothing needs you." would be a claim taken back).
+ * The empty Inbox's words, or null while a part of the count is still being asked (the view keeps loading: a
+ * moment's "No open Inbox items." before "Nothing needs you." would be a claim taken back). A part a failed request
+ * left inexact is named: as not counted when nothing of it is known, as not all counted beside a lower bound.
  */
 export function emptyInbox({ count, reach, above, failed, now, timeZone }: EmptyInboxInput): EmptyInbox | null {
-  const missing = [count.approvals.count === 0 && !count.approvals.exact && "approvals", uncounted(count.connections) && "sign-ins"].filter((p): p is string => Boolean(p));
-  const homeUncounted = !count.home.exact && count.home.count === 0;
-  if ((missing.length || homeUncounted) && !failed) return null;
+  const tally = { approvals: count.approvals, signIns: count.connections };
+  // Nothing known of a part, and no failure behind it: it is still being asked.
+  const asking = PARTS.some((p) => !tally[p.key].exact && tally[p.key].count === 0 && !failed[p.key]);
+  if (asking || (!count.home.exact && count.home.count === 0)) return null;
   const clear = count.total.exact && count.total.count === 0 && reach.kind === "all";
   const elsewhere = [count.approvals, count.connections].some((t) => t.count > 0 || !t.exact);
   const lines: EmptyLine[] = [];
   if (above > 0) lines.push(line(MEETINGS_ABOVE));
   lines.push(line(readLine(reach, now, timeZone)));
   lines.push(...waitLines(count));
-  if (missing.length) {
-    const what = nameList(missing);
-    lines.push(line(`${what[0]!.toUpperCase()}${what.slice(1)} could not be counted, so Attache cannot say that nothing needs you.`));
-  }
-  // A failure behind any part that is not exact, a lower bound included, can be asked again.
-  const retry = failed && [count.home, count.approvals, count.connections].some((t) => !t.exact);
+  const lost = PARTS.filter((p) => failed[p.key] && !tally[p.key].exact);
+  const none = lost.filter((p) => tally[p.key].count === 0).map((p) => p.name);
+  const some = lost.filter((p) => tally[p.key].count > 0).map((p) => p.name);
+  if (none.length) lines.push(line(`${capital(nameList(none))} could not be counted, so Attache cannot say that nothing needs you.`));
+  if (some.length) lines.push(line(`${capital(nameList(some))} could not all be counted.`));
+  const retry = lost.length > 0;
   return { title: title(reach, clear, above > 0, elsewhere), clear, lines, retry };
 }

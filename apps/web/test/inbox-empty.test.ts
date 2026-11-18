@@ -23,6 +23,9 @@ function count(home: Tally, approvals: Tally, connections: Tally): DecisionCount
 }
 
 const NOTHING = count(known(0), known(0), known(0));
+/** Which parts of the count a failed request left inexact. */
+const NO_FAILURE = { approvals: false, signIns: false };
+const APPROVALS_FAILED = { approvals: true, signIns: false };
 
 /** A problem row as Home's Connections area has it; only the fields the Inbox reads matter. */
 function row(state: StatusRow["state"], subject: string, word: string, inbox = true): StatusRow {
@@ -34,7 +37,7 @@ const READ_ALL: InboxReach = { kind: "all", sources: 5, lastReadAt: READ_AT };
 const GMAIL_SIGN_IN: InboxReach = { kind: "partial", sources: 4, missing: [{ subject: "Gmail", word: "Sign-in needed" }] };
 
 function input(over: Partial<EmptyInboxInput> = {}): EmptyInboxInput {
-  return { count: NOTHING, reach: READ_ALL, above: 0, failed: false, now: NOW, timeZone: TZ, ...over };
+  return { count: NOTHING, reach: READ_ALL, above: 0, failed: NO_FAILURE, now: NOW, timeZone: TZ, ...over };
 }
 
 describe("inboxReach: what Home's Connections area says was read", () => {
@@ -79,9 +82,10 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
     ["no source known to be read: no claim about what was found", { reach: { kind: "partial", sources: 0, missing: [{ subject: "Every source", word: "Not read yet" }] } }, ["No open Inbox items.", "Not read: Every source (not read yet)."]],
     [
       "Retry beside a lower bound that a failure left",
-      { count: count(known(0), { state: "unknown", count: 1, exact: false }, known(0)), failed: true },
-      ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "At least 1 approval waits on its own page. [approvals]", "[Retry]"],
+      { count: count(known(0), { state: "unknown", count: 1, exact: false }, known(0)), failed: APPROVALS_FAILED },
+      ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "At least 1 approval waits on its own page. [approvals]", "Approvals could not all be counted.", "[Retry]"],
     ],
+    ["a failure beside a part still being asked: nothing to say yet", { count: count(known(0), unknown, unknown), failed: APPROVALS_FAILED }, null],
     [
       "meeting prep above while an approval waits: the list is what is empty",
       { above: 1, count: count(known(1), known(1), known(0)) },
@@ -96,12 +100,12 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
     ["two sign-ins and approvals", { count: count(known(0), known(2), known(2)) }, ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "2 approvals wait on their own page. [approvals]", "2 Connections need your sign-in, above."]],
     [
       "approvals could not be counted: no claim, and Retry",
-      { count: count(known(0), unknown, known(0)), failed: true },
+      { count: count(known(0), unknown, known(0)), failed: APPROVALS_FAILED },
       ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "Approvals could not be counted, so Attache cannot say that nothing needs you.", "[Retry]"],
     ],
     [
       "approvals and sign-ins could not be counted",
-      { count: count(known(0), unknown, unknown), failed: true },
+      { count: count(known(0), unknown, unknown), failed: { approvals: true, signIns: true } },
       ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "Approvals and sign-ins could not be counted, so Attache cannot say that nothing needs you.", "[Retry]"],
     ],
     ["still counting: nothing to say yet", { count: count(known(0), unknown, known(0)) }, null],
@@ -130,8 +134,9 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
   });
 
   it("asks for Retry only when a count request failed", () => {
-    expect(emptyInbox(input({ count: count(known(0), unknown, known(0)), failed: true }))?.retry).toBe(true);
+    expect(emptyInbox(input({ count: count(known(0), unknown, known(0)), failed: APPROVALS_FAILED }))?.retry).toBe(true);
     expect(emptyInbox(input())?.retry).toBe(false);
+    expect(emptyInbox(input({ count: count(known(0), atLimit(100), known(0)) }))?.retry).toBe(false);
   });
 
   it("says Nothing needs you only from an exact zero with every source read", () => {
@@ -140,7 +145,7 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
       { reach: { kind: "notes" } },
       { reach: { kind: "unknown", checking: false } },
       { count: count(known(0), known(1), known(0)) },
-      { count: count(known(0), unknown, known(0)), failed: true },
+      { count: count(known(0), unknown, known(0)), failed: APPROVALS_FAILED },
       { count: count(known(1), known(0), known(0)), above: 1 },
     ];
     for (const c of cases) expect(emptyInbox(input(c))?.clear).toBe(false);

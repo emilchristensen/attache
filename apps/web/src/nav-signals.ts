@@ -4,6 +4,7 @@ import { countDecisions, dotAfter, shownCount, spokenCount, withRows, type Answe
 import type { ApiError } from "./api.ts";
 import { REFRESH_DELAY_MS, useLiveEvent, useResource, type Resource } from "./live.ts";
 import { pairFailure } from "./pair.ts";
+import type { CountFailures } from "./inbox-empty.ts";
 import type { ScreenId } from "./routes.ts";
 
 /**
@@ -48,6 +49,8 @@ export interface NavSignals {
    * and a list it fell back to); null while nothing failed, so an unknown part is only still being asked.
    */
   countRetry: (() => void) | null;
+  /** Which parts of the count a failed request left inexact; all false while nothing failed. */
+  countFailures: CountFailures;
 }
 
 /**
@@ -207,6 +210,12 @@ export function useNavSignals(): NavSignals {
     lastDot.current = dot;
   }, [dot]);
   const status = replication.error ? undefined : replication.data?.status;
+  // Only while the count route has failed do the lists stand in for it, so only then can a list failure lose a part.
+  const routeFailed = countedTotals.kind === "failed";
+  const countFailures: CountFailures = {
+    approvals: routeFailed && (inputs.drafts.kind === "failed" || inputs.proposals.kind === "failed"),
+    signIns: routeFailed && inputs.connections.kind === "failed",
+  };
   const listFailed = [inputs.inbox, inputs.drafts, inputs.proposals, inputs.connections].some((a) => a.kind === "failed");
   const { reload: reloadConnections } = connections;
   const retryCount = useCallback(() => {
@@ -225,7 +234,8 @@ export function useNavSignals(): NavSignals {
     waitingDrafts,
     waitingProposals: { ...proposals, reload: reloadProposals },
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
-    countRetry: countedTotals.kind === "failed" && listFailed ? retryCount : null,
+    countRetry: routeFailed && listFailed ? retryCount : null,
+    countFailures,
   };
 }
 

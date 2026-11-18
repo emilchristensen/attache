@@ -188,11 +188,15 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await expect(rows(page)).toHaveCount(0);
   await expect(inbox(page).getByRole("combobox", { name: "Type" })).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
+  // The count route still answers, and the total stays on the tab; beside a failed list the heading claims nothing.
+  await expect(page).toHaveTitle(/^\(\d+\) Attache$/);
+  await expect(page.locator("[data-need-you]")).toHaveCount(0);
   fails = false;
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(rows(page).first()).toBeVisible();
   await expect(failure(page)).toHaveCount(0);
   await expect(inbox(page).getByRole("combobox", { name: "Type" })).toBeVisible();
+  await expect(page.locator("[data-need-you]")).toBeVisible();
   await page.close();
 });
 
@@ -212,6 +216,7 @@ test("failed: after a good load the Inbox keeps its rows, says how old they are,
   await expect(step).toBeVisible();
   await expect(emptyState(page)).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
+  await expect(page.locator("[data-need-you]")).toHaveCount(0);
   fails = false;
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(failure(page)).toHaveCount(0);

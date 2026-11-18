@@ -51,13 +51,15 @@ const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "do
 
 /**
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
- * number out, the line that relates the rows to the decisions when they differ, and the view controls.
+ * number out, the line that relates the rows to the decisions when they differ, and the view controls. Neither the
+ * number nor the line shows while the open list failed (`failed`).
  */
-function InboxHeading({ id, children, open, above }: { id: string; children?: ReactNode; open: boolean; above: ReadonlySet<string> }) {
+function InboxHeading({ id, children, open, failed = false, above }: { id: string; children?: ReactNode; open: boolean; failed?: boolean; above: ReadonlySet<string> }) {
   const signals = useSignals();
   const home = signals.count.home;
-  const needYou = home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = open ? homeLine(signals.inbox, above, home) : null;
+  // While the open list itself failed the heading makes no claim beside it; the total stays in the shell.
+  const needYou = home.count > 0 && !failed ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
+  const line = open && !failed ? homeLine(signals.inbox, above, home) : null;
   return (
     <>
       <div className="inbox-head">
@@ -300,7 +302,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above }: { attention
   useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0 && reveal === null, settled);
   const empty =
     live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
-      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countRetry !== null, now: clock.now, timeZone: clock.timeZone })
+      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
       : null;
   const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
 
@@ -327,7 +329,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above }: { attention
 
   return (
     <section ref={section} id="inbox" className="inbox" aria-labelledby={heading}>
-      <InboxHeading id={heading} open={!hiddenView && !failure} above={above}>
+      <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null} above={above}>
         <InboxTools
           items={live}
           type={place.type}
