@@ -424,7 +424,7 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const page = await journeys.open("/brain");
   const search = page.getByRole("searchbox", { name: "Search the Brain" });
   await search.fill("When is the cutover plan due for the Orion migration?");
-  const hit = page.locator(".list-item", { hasText: "Orion" }).first();
+  const hit = page.locator(".result-item", { hasText: "Orion" }).first();
   await expect(hit).toBeVisible();
   await hit.focus();
   await page.keyboard.press("Enter");
@@ -759,7 +759,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
   const page = await journeys.open("/brain");
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
-  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator(".result-item").first()).toBeVisible();
 
   await page.locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
   const card = page.locator("[data-meaning-search]");
@@ -773,7 +773,7 @@ test("meaning-based search: search says it matches keywords only, and why, until
   // Once the vectors are built, search ranks by meaning and no longer says it matches keywords only.
   await page.goto(`${stack.url}/brain`);
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
-  await expect(page.locator(".list-item").first()).toBeVisible();
+  await expect(page.locator(".result-item").first()).toBeVisible();
   await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
 });
 
@@ -788,7 +788,7 @@ test("reconnection: service restart shows on this Machine's button in the masthe
   // The Dashboard reaches the service again without a reload.
   await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Brain" }).click();
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Priya Shah");
-  await expect(page.locator(".list-item", { hasText: "Priya" }).first()).toBeVisible();
+  await expect(page.locator(".result-item", { hasText: "Priya" }).first()).toBeVisible();
 });
 
 test("narrow screen: the bottom bar, no horizontal overflow, all views reachable", async () => {
@@ -888,18 +888,18 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
   const page = await journeys.open("/brain?tab=decision");
   await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
   await expect(page.getByRole("button", { name: /capture/i })).toHaveCount(0);
-  await page.locator(".list-item", { hasText: "Email vendor" }).click();
+  await page.locator(".note-list-item", { hasText: "Email vendor" }).click();
   const state = page.locator('[data-subject="Decision"]');
   await expect(state).toContainText("Switch to Postmark for 2027");
   await expect(page.getByText(/was "Keep Nimbus as email vendor for 2027"/)).toBeVisible();
   await expect(page.getByRole("button", { name: /correct|edit/i })).toHaveCount(0);
   // The note panel has nothing to type into.
-  await expect(page.locator(".split textarea, .split input:not([type=search])")).toHaveCount(0);
+  await expect(page.locator(".page textarea, .page input:not([type=search])")).toHaveCount(0);
 
   // Evidence and deliverables open read-only in the evidence drawer.
   for (const tab of ["Evidence", "Deliverables"]) {
-    await page.getByRole("tab", { name: tab }).click();
-    const first = page.locator(".split .list-item").first();
+    await page.getByRole("navigation", { name: "Collections" }).getByRole("link", { name: tab }).click();
+    const first = page.locator(".note-list-item").first();
     await expect(first).toBeVisible();
     await first.click();
     const drawer = page.getByRole("dialog", { name: /Evidence/ });
@@ -926,7 +926,7 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
 
   // Search finds the current value, not the superseded one.
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Which email vendor did we decide on for 2027?");
-  const hit = page.locator(".list-item", { hasText: "Email vendor" }).first();
+  const hit = page.locator(".result-item", { hasText: "Email vendor" }).first();
   await expect(hit).toContainText("Postmark");
   await expect(hit).not.toContainText("History");
 });
@@ -1038,13 +1038,10 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
   await save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
 
-  const page = await journeys.open("/brain");
+  const page = await journeys.open("/brain/recent");
   const recent = page.getByRole("region", { name: "Recent saves" });
-  const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
+  const row = (text: string | RegExp) => recent.locator(".recent-change").filter({ hasText: text });
   await expect(recent).toBeVisible();
-  // The newest few show first; the rest are one click away.
-  await expect(recent.getByRole("listitem")).toHaveCount(5);
-  await recent.getByRole("button", { name: /Show all \d+/ }).click();
   const launchId = await row("21 October").getAttribute("data-change");
   const launch = recent.locator(`[data-change="${launchId}"]`);
   await expect(launch).toContainText("Launch date");
@@ -1059,7 +1056,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
 
   await launch.getByRole("button", { name: "Revert" }).click();
   await expect(page.getByText("Reverted. The revert is listed as a change of its own.")).toBeVisible();
-  const revert = recent.getByRole("listitem").first();
+  const revert = recent.locator(".recent-change").first();
   await expect(revert).toContainText("revert");
   await expect(revert).toContainText("Revert in the Dashboard");
   await expect(revert.locator("ins")).toHaveText("14 October");
@@ -1076,13 +1073,13 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await expect(page.getByText("No matches")).toBeVisible();
 });
 
-/** Where a tab sits in its tab bar: its row, and whether the bar shows all of it. */
-async function tabPlaces(tablist: Locator) {
-  return tablist.evaluate((list) => {
+/** Where each chip of a chip row sits: its row, and whether the row shows all of it. */
+async function chipPlaces(row: Locator) {
+  return row.locator("ul").evaluate((list) => {
     const bar = list.getBoundingClientRect();
-    return [...list.querySelectorAll('[role="tab"]')].map((tab) => {
-      const box = tab.getBoundingClientRect();
-      return { name: tab.textContent, top: Math.round(box.top), height: box.height, shown: box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5 };
+    return [...list.querySelectorAll("a")].map((chip) => {
+      const box = chip.getBoundingClientRect();
+      return { name: chip.textContent, top: Math.round(box.top), height: box.height, shown: box.left >= bar.left - 0.5 && box.right <= bar.right + 0.5 };
     });
   });
 }
@@ -1123,46 +1120,27 @@ test("narrow layout: the Connections page has one name in the masthead, the More
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
 });
 
-test("narrow layout: the Brain's collection tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
+test("narrow layout: the Brain's collections are one row of chips that scrolls sideways, with the chosen one in view", async () => {
   const page = await journeys.open("/brain");
-  for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 900, height: 800 }]) {
     const at = `at ${viewport.width}px`;
     await page.setViewportSize(viewport);
     await page.goto(`${stack.url}/brain?tab=person`);
-    const tablist = page.getByRole("tablist", { name: "Collection" });
-    await expect(tablist.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
-    const places = await tabPlaces(tablist);
-    expect(new Set(places.map((p) => p.top)).size, `collection tabs on one row ${at}`).toBe(1);
-    expect((await tablist.boundingBox())!.height, `the tab bar is one tab high ${at}`).toBeLessThanOrEqual(places[0]!.height + 1);
-    const box = (await tablist.boundingBox())!;
-    expect(box.x + box.width, `the tab bar stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
+    const row = page.getByRole("navigation", { name: "Collections" });
+    await expect(row.getByRole("link", { name: "People" })).toHaveAttribute("aria-current", "true");
+    const places = await chipPlaces(row);
+    expect(new Set(places.map((p) => p.top)).size, `collection chips on one row ${at}`).toBe(1);
+    const box = (await row.boundingBox())!;
+    expect(box.x + box.width, `the chip row stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `no horizontal overflow ${at}`).toBeLessThanOrEqual(0);
-    // The tabs that do not fit are one sideways scroll away, and the bar shows there are more.
-    const more = page.locator(".tabs-scroll.after");
-    const back = page.locator(".tabs-scroll.before");
-    expect(places.find((p) => p.name === "Deliverables")!.shown, `Deliverables is out of view ${at}`).toBe(false);
-    await expect(more).toBeVisible();
-    await expect(back).toBeHidden();
-    await more.click();
-    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `scrolled to Deliverables ${at}`).toBe(true);
-    await expect(back).toBeVisible();
-    await tablist.getByRole("tab", { name: "Deliverables" }).click();
-    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
-    // Opened from a link, the selected tab is in view, and stays in view when Inter arrives after the tabs were laid out in the fallback font.
+    // Opened from a link, the chosen chip is in view, and stays in view when Inter arrives after the chips were laid out in the fallback font.
     const releaseFont = await holdInter(page);
     await page.goto(`${stack.url}/brain?tab=deliverables`, { waitUntil: "commit" });
-    await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
-    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the tabs are laid out before Inter arrives ${at}`).toBe(false);
+    await expect(row.getByRole("link", { name: "Deliverables" })).toHaveAttribute("aria-current", "true");
+    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the chips are laid out before Inter arrives ${at}`).toBe(false);
     releaseFont();
     await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
-    await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
-    // The list follows the tabs at the same distance as the tabs follow the search box.
-    await page.goto(`${stack.url}/brain?tab=project`);
-    await expect(page.locator(".split .list-item").first()).toBeVisible();
-    const search = (await page.getByRole("searchbox", { name: "Search the Brain" }).boundingBox())!;
-    const bar = (await page.locator(".tabs-bar").filter({ has: tablist }).boundingBox())!;
-    const list = (await page.locator(".split .list-item").first().boundingBox())!;
-    expect(Math.round(list.y - (bar.y + bar.height)), `gap below the collection tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
+    await expect.poll(async () => (await chipPlaces(row)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
   }
 });
 
@@ -1172,7 +1150,7 @@ test("narrow layout: a picked note opens in view, Recent saves never start a lin
   // On a phone the note opens below the list, and picking one brings it into view.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${stack.url}/brain?tab=project`);
-  await page.locator(".split .list-item", { hasText: "Atlas launch" }).click();
+  await page.locator(".note-list-item", { hasText: "Atlas launch" }).click();
   await expect(page.getByRole("heading", { name: "Atlas launch", level: 2 })).toBeVisible();
   // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
   const noteInView = () =>
@@ -1184,7 +1162,7 @@ test("narrow layout: a picked note opens in view, Recent saves never start a lin
 
   // A wrapped Recent saves line starts with its words, never with a separator dot.
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto(`${stack.url}/brain`);
+  await page.goto(`${stack.url}/brain/recent`);
   const metas = page.getByRole("region", { name: "Recent saves" }).locator(".recent-change-meta");
   await expect(metas.first()).toBeVisible();
   for (const meta of await metas.all()) expect(await meta.evaluate(lineStarts)).not.toContain("·");
@@ -1220,7 +1198,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await expect(budget).toContainText("review was due 2026-02-01");
 
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Helix budget");
-  const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
+  const hit = page.locator(".result-item", { hasText: "40k EUR" }).first();
   await expect(hit).toContainText("unverified");
 
   // Refreshing the data folder raises one inbox item for the overdue fact, and none for the other.
