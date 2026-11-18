@@ -75,12 +75,14 @@ export function phraseShown(el: Element, phrase: string): PhraseShown {
   return { found: false, inside: false, painted: false, fontSize: 0 };
 }
 
-/** A field's placeholder width in the field's own font, against the room the field gives it. */
+/** A field's placeholder width in the placeholder's own font and letter spacing, against the field's content box. */
 export function placeholderFit(input: HTMLInputElement): { text: number; room: number } {
-  const style = getComputedStyle(input);
+  const style = getComputedStyle(input, "::placeholder");
+  const box = getComputedStyle(input);
   const ctx = document.createElement("canvas").getContext("2d")!;
-  ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-  return { text: ctx.measureText(input.placeholder).width, room: input.clientWidth };
+  ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  ctx.letterSpacing = style.letterSpacing === "normal" ? "0px" : style.letterSpacing;
+  return { text: ctx.measureText(input.placeholder).width, room: input.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight) };
 }
 
 /**

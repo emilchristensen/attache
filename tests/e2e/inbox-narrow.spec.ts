@@ -119,7 +119,11 @@ test("heavy day at 375 px: the first three recovery rehearsal deadlines show the
 });
 
 test("narrow mixed index: stamp and kind first, the whole subject wrapping at 16 px next, then source and due time, even when the source runs onto two lines", async () => {
-  const page = await journeys.open("/");
+  for (const open of journeys.context.pages()) await open.close();
+  const page = await journeys.newPage();
+  // The browser's day is the seeded one, so the due time reads "Due today" even when the run crosses UTC midnight.
+  await page.clock.setFixedTime(new Date(`${TODAY}T12:00:00Z`));
+  await page.goto(`${stack.url}/`);
   await page.setViewportSize({ width: 375, height: 812 });
   await expect(rows(page).first()).toBeVisible();
   for (const row of [rehearsal(page, "region 2"), inboxRow(page, "Add checkout retry"), inboxRow(page, "Contract renewal")]) {
