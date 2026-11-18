@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 /** A modal layer is open (a native dialog, the evidence drawer): keys such as Escape belong to it. */
 export function modalOpen(): boolean {
@@ -6,9 +6,22 @@ export function modalOpen(): boolean {
 }
 
 /**
+ * Whether focus is still where a dialog's closing left it: on what had it before the dialog opened (where the browser
+ * gives it back), inside the dialog, or nowhere. False once the owner moved on.
+ */
+function focusLeftByClose(dialog: HTMLDialogElement, before: HTMLElement | null): boolean {
+  const active = document.activeElement;
+  return !active || active === document.body || active === before || dialog.contains(active) || active.getClientRects().length === 0;
+}
+
+/**
  * A native `<dialog>` shown modally while `open`: the browser traps focus and closes it on Escape. However it
  * closes, `onClose` runs and focus goes back to `opener`, or to wherever it was before the dialog opened, so the
  * owner keeps their place. `afterClose` runs after that, for whatever the owner chose inside the dialog.
+ *
+ * The browser's `close` event comes a task after the dialog closed, and on macOS most of a second later, by when the
+ * owner may have gone on (and the page they went to taken focus). So a dialog this hook closes finishes at once and
+ * ignores the event, and one the browser closed (Escape) gives focus back only while it is where the closing left it.
  */
 export function useModalDialog(
   ref: RefObject<HTMLDialogElement | null>,
@@ -19,22 +32,31 @@ export function useModalDialog(
 ): void {
   const latest = useRef({ onClose, opener, afterClose });
   const before = useRef<HTMLElement | null>(null);
+  // Closings this hook finished itself, whose late close events are still to come and do nothing.
+  const owed = useRef(0);
   useLayoutEffect(() => {
     latest.current = { onClose, opener, afterClose };
   });
+  const finish = useCallback((d: HTMLDialogElement) => {
+    latest.current.onClose();
+    if (focusLeftByClose(d, before.current)) (latest.current.opener?.current ?? before.current)?.focus();
+    latest.current.afterClose?.();
+  }, []);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     const closed = () => {
-      // The close event comes a moment after the dialog closed; if it was shown again in between, it is stale.
+      if (owed.current > 0) {
+        owed.current--;
+        return;
+      }
+      // Shown again since the browser closed it: the event is stale.
       if (d.open) return;
-      latest.current.onClose();
-      (latest.current.opener?.current ?? before.current)?.focus();
-      latest.current.afterClose?.();
+      finish(d);
     };
     d.addEventListener("close", closed);
     return () => d.removeEventListener("close", closed);
-  }, [ref]);
+  }, [ref, finish]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -43,8 +65,10 @@ export function useModalDialog(
       d.showModal();
     } else if (!open && d.open) {
       d.close();
+      owed.current++;
+      finish(d);
     }
-  }, [ref, open]);
+  }, [ref, open, finish]);
 }
 
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
