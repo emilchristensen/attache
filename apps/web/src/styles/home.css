@@ -573,9 +573,10 @@ button.conn-row-line:hover:not(:disabled) {
   .page-inbox :is(button.small, .btn.small, .source-chip) {
     justify-content: center;
   }
-  /* A related note's title wraps inside its chip rather than run past the screen. */
+  /* A related note's title wraps inside its chip rather than run past the screen, even with no space to break at. */
   .page-inbox .source-chip {
     white-space: normal;
+    overflow-wrap: anywhere;
     text-align: left;
   }
   /* Links that stand alone as a line's target: the Connections details and a Recently added note. */

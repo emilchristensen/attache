@@ -82,10 +82,25 @@ async function openPrep(headsUp: Locator): Promise<void> {
   await expect(headsUp.locator("[data-meeting-detail]")).toBeVisible();
 }
 
+/** A related note whose title has no space to break at, as a file name with underscores can be. */
+const UNBROKEN_TITLE = "Pilot_handover_checklist_for_the_client_kiosk_rollout_2026_11_18";
+
+/** The latest briefing as served, with one more related note for every meeting: one whose title cannot wrap at a space. */
+async function routeUnbrokenNote(page: Page) {
+  await page.route("**/api/v1/briefings/latest", async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { briefing: { sections: Array<{ id: string; items: Array<{ related?: unknown[] }> }> } | null };
+    for (const section of body.briefing?.sections ?? [])
+      if (section.id === "meetings") section.items = section.items.map((i) => ({ ...i, related: [...(i.related ?? []), { relPath: "memory/people/nora-lind.md", lines: [1, 3], title: UNBROKEN_TITLE }] }));
+    await route.fulfill({ response: res, json: body });
+  });
+}
+
 /** Home on a phone with both meetings' prep open and the mixed Connections rows. */
 async function phoneHome(): Promise<Page> {
   const page = await journeys.open("/");
   await routeMixedHealth(page);
+  await routeUnbrokenNote(page);
   await page.reload();
   await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
   await expect(meetingHeadsUp(page, "Pilot handover")).toHaveAttribute("data-meeting-phase", "in-progress");
@@ -101,6 +116,8 @@ interface Target {
   height: number;
   /** Where the browser sends a tap at the box's centre and just inside each corner: true when every one reaches it. */
   hit: boolean;
+  /** Its words run past its own box, so part of them is cut off or spills onto a neighbour. */
+  clipped: boolean;
   box: { left: number; top: number; right: number; bottom: number };
 }
 
@@ -134,7 +151,7 @@ async function homeTargets(page: Page): Promise<Target[]> {
       // Document coordinates (every scrolled ancestor added back), so boxes measured at different scroll positions compare.
       let top = r.top;
       for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
-      return { name: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim(), width: r.width, height: r.height, hit, box: { left: r.left, top, right: r.right, bottom: top + r.height } };
+      return { name: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim(), width: r.width, height: r.height, hit, clipped: el.scrollWidth > el.clientWidth + 1, box: { left: r.left, top, right: r.right, bottom: top + r.height } };
     });
   });
 }
@@ -151,9 +168,10 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
     const targets = await homeTargets(page);
     const names = targets.map((t) => t.name);
     // Every control the ticket names is among them: the related note, both meetings' decisions and destinations, Reconnect.
-    for (const name of ["Nora Lind", "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "View details", "Open in Connections"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
+    for (const name of ["Nora Lind", UNBROKEN_TITLE, "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "View details", "Open in Connections"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
     const small = targets.filter((t) => t.width < TARGET - 0.01 || t.height < TARGET - 0.01).map((t) => `${t.name} ${Math.round(t.width)}x${Math.round(t.height)}`);
     expect(small, `${width} px targets under ${TARGET} px`).toEqual([]);
+    expect(targets.filter((t) => t.clipped).map((t) => t.name), `${width} px targets with words cut off`).toEqual([]);
     const blocked = targets.filter((t) => !t.hit).map((t) => t.name);
     expect(blocked, `${width} px targets a tap does not reach`).toEqual([]);
     const touching = targets.flatMap((a, i) => targets.slice(i + 1).filter((b) => overlaps(a.box, b.box)).map((b) => `${a.name} / ${b.name}`));
@@ -166,13 +184,11 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
 
 test("destinations: each meeting's Join and Calendar open its own event", async () => {
   const page = await phoneHome();
-  const items = (await api<{ items: Array<{ key: string; url: string | null }> }>(page, "GET", "/attention?state=open")).items;
   for (const m of [HANDOVER, TRIAGE]) {
     const headsUp = meetingHeadsUp(page, m.summary);
     await expect(headsUp.getByRole("link", { name: "Join" })).toHaveAttribute("href", m.meetLink);
-    const event = items.find((i) => i.key === `gcal:${m.id}`)!;
-    expect(event.url).toBeTruthy();
-    await expect(headsUp.getByRole("link", { name: "Open in Google Calendar" })).toHaveAttribute("href", event.url!);
+    // The fixture calendar's own link for this event.
+    await expect(headsUp.getByRole("link", { name: "Open in Google Calendar" })).toHaveAttribute("href", `https://calendar.google.com/event?eid=${m.id}`);
   }
 });
 
