@@ -28,3 +28,23 @@ export function browserPlatform(): string {
   const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
   return nav.userAgentData?.platform || nav.platform || "";
 }
+
+/** A text field's selection, as `selectionStart`, `selectionEnd` and `selectionDirection` give it. */
+export interface Caret {
+  start: number;
+  end: number;
+  direction: "forward" | "backward" | "none";
+}
+
+/**
+ * Where `Home` or `End` (with `Shift`, selecting) puts the caret in the search field's text of `length`, or null
+ * for any other key. The field moves the caret itself because on macOS these keys scroll the page instead, which
+ * would carry the field and its open results out of view; the combobox pattern keeps them in the text.
+ */
+export function caretAfter(e: Chord, caret: Caret, length: number): Caret | null {
+  if ((e.key !== "Home" && e.key !== "End") || e.ctrlKey || e.metaKey || e.altKey) return null;
+  const to = e.key === "Home" ? 0 : length;
+  if (!e.shiftKey) return { start: to, end: to, direction: "none" };
+  const anchor = caret.direction === "backward" ? caret.end : caret.start;
+  return to < anchor ? { start: to, end: anchor, direction: "backward" } : { start: anchor, end: to, direction: "forward" };
+}

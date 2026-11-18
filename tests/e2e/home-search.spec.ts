@@ -44,6 +44,29 @@ test.afterAll(async () => {
 const field = (page: Page) => page.getByRole("combobox", { name: "Search the Brain" });
 const results = (page: Page) => page.getByRole("listbox", { name: "Results" });
 
+/**
+ * Presses `key` with the editing command macOS gives it (`End` scrolls to the end of the document there), on every
+ * system, so the journey covers what a Mac does whichever system runs it.
+ */
+async function pressAsOnMac(page: Page, key: "Home" | "End") {
+  const command = key === "Home" ? "scrollToBeginningOfDocument" : "scrollToEndOfDocument";
+  const code = key === "Home" ? 36 : 35;
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key, windowsVirtualKeyCode: code, commands: [command] });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key, windowsVirtualKeyCode: code });
+  await cdp.detach();
+}
+
+/** Whether the open results list is no taller than the visible page under its top, and its foot ends inside it. */
+async function resultsFit(page: Page): Promise<{ top: boolean; bottom: boolean }> {
+  return results(page).evaluate((list) => {
+    const area = list.closest(".page")!.getBoundingClientRect();
+    const top = Math.max(0, area.top);
+    const bottom = Math.min(window.innerHeight, area.bottom);
+    return { top: list.getBoundingClientRect().height <= bottom - top, bottom: list.parentElement!.getBoundingClientRect().bottom <= bottom };
+  });
+}
+
 /** The placeholder's width in the field's own font, against the room the field gives it. */
 async function promptFits(page: Page): Promise<{ text: number; room: number }> {
   return field(page).evaluate((input: HTMLInputElement) => {
@@ -198,14 +221,32 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await expect(options.nth(5)).toBeInViewport();
   // The results scroll on their own, so the field the owner types in stays in view.
   await expect(search).toBeInViewport();
+  // Home and End move the caret in the text, also on macOS, where they would otherwise scroll the page away.
+  await search.press("Home");
+  expect(await search.evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(0);
+  await pressAsOnMac(page, "End");
+  expect(await search.evaluate((input: HTMLInputElement) => input.selectionStart)).toBe("Helios".length);
+  expect(await page.locator(".page").evaluate((el) => el.scrollTop)).toBe(0);
   // Refined words bring a new answer, shown from its first result, which Enter would open.
-  await search.press("End");
   await page.keyboard.type(" workstream");
   await expect(search).toHaveValue("Helios workstream");
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
   await expect(options.first()).not.toHaveAttribute("aria-disabled", "true");
   await expect(options.first()).toBeInViewport();
   expect(await results(page).evaluate((el) => el.scrollTop)).toBe(0);
+  // Results that answer while the page is scrolled past the field still fit what shows of the page once it is
+  // scrolled back, so they never hang past its bottom.
+  const pageArea = page.locator(".page");
+  await pageArea.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  expect(await search.evaluate((input) => input.getBoundingClientRect().bottom < input.closest(".page")!.getBoundingClientRect().top)).toBe(true);
+  await search.press("Backspace");
+  await expect(search).toHaveValue("Helios workstrea");
+  await expect(options.first()).not.toHaveAttribute("aria-disabled", "true");
+  await expect.poll(() => resultsFit(page)).toEqual({ top: true, bottom: true });
+  await pageArea.evaluate((el) => el.scrollTo(0, 0));
+  await expect.poll(() => resultsFit(page)).toEqual({ top: true, bottom: true });
+  await page.keyboard.type("m");
+  await expect(options.first()).not.toHaveAttribute("aria-disabled", "true");
 
   // While the answer to new words is on its way, the old results cannot be opened: Enter takes the new words to the Brain.
   let release!: () => void;

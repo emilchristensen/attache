@@ -90,9 +90,31 @@ export function rankingLine(meaning: MeaningStatus): RankingLine {
   return { ranking: "keywords", text: "Ranked by keywords only", reason: why[meaning.state] };
 }
 
+/** The fewest px of results the list keeps when the window is short; the page scrolls for the rest. */
+export const MIN_RESULTS_PX = 160;
+/** Space kept between the results and the bottom of the visible page. */
+export const RESULTS_MARGIN_PX = 12;
+
+/** Where the open results sit, in window px: the list's top, the popup's height under it, and the page's visible part. */
+export interface ResultsGeometry {
+  listTop: number;
+  below: number;
+  visibleTop: number;
+  visibleBottom: number;
+}
+
+/**
+ * The most px the results list may take: what is left of the visible page under it, so the list scrolls on its own
+ * and never pushes the page. A list that starts above the visible page (the page is scrolled) counts from the
+ * page's top, so its height never grows with the scroll; a short window keeps `MIN_RESULTS_PX`.
+ */
+export function resultsRoom({ listTop, below, visibleTop, visibleBottom }: ResultsGeometry): number {
+  return Math.max(MIN_RESULTS_PX, visibleBottom - Math.max(listTop, visibleTop) - below - RESULTS_MARGIN_PX);
+}
+
 /**
  * The chosen result after an arrow key, in a list of `count`, wrapping round; -1 is none chosen.
- * Home and End stay with the text, as they do in any editable field.
+ * Home and End stay with the text, as they do in any editable field (`caretAfter`).
  */
 export function moveActive(active: number, count: number, key: "ArrowDown" | "ArrowUp"): number {
   if (count === 0) return -1;
