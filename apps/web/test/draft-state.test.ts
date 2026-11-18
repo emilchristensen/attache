@@ -248,7 +248,7 @@ describe("a Draft's own page: the fourteen states", () => {
     expect(buttons(s)).toEqual(["Copy my text", "Load v2 [primary]", "Open the pull request"]);
   });
 
-  it("Changed elsewhere into a newer version that then failed to send: the warning and the way to the destination stay, and nothing offers to send", () => {
+  it("Changed elsewhere into a newer version whose delivery outcome is unknown: the warning and the way to the destination stay, and nothing offers to send", () => {
     const s = screen(draft({ version: 3, status: "unknown", receipt: { error: "socket hang up" } }), EDITED);
     expect(s.state).toBe("changed_elsewhere");
     expect(s.notice.lines).toEqual(["This Draft became v3 while you were editing. Your text is not saved, and any approval of v2 no longer applies.", "The outcome could not be verified. The request may have reached GitHub. Check the pull request before you do anything else.", "socket hang up"]);
