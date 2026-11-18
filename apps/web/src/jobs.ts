@@ -23,7 +23,13 @@ export function needsOwner(job: JobView): boolean {
  * The screen calls this once, when both lists first answer; a live update never calls it again.
  */
 export function initialJobId(active: readonly JobView[], ended: readonly JobView[]): string | null {
-  const all = [...active, ...ended].sort(newestFirst);
+  // A job two answers both hold counts once, as the newer of them left it.
+  const byId = new Map<string, JobView>();
+  for (const j of [...active, ...ended]) {
+    const seen = byId.get(j.id);
+    if (!seen || j.updatedAt > seen.updatedAt) byId.set(j.id, j);
+  }
+  const all = [...byId.values()].sort(newestFirst);
   const pick = all.find((j) => j.status === "running") ?? all.find(needsOwner) ?? all[0];
   return pick?.id ?? null;
 }
@@ -149,12 +155,16 @@ export const CANCEL_OUTCOME: Readonly<Record<NonNullable<JobView["cancelOutcome"
   not_started: "Cancelled before it started.",
 };
 const CANCEL_PENDING = "Cancel asked for. Waiting for the work to stop…";
+/** This request's answer when an earlier cancel (another tab, a disconnect) had already stopped the job. */
+const CANCEL_ALREADY = "Already cancelled: the work had stopped before this request.";
 
 /**
  * What the detail pane says about a cancel: its outcome once the service has settled it, "waiting" while running work
- * has been asked to stop, and nothing otherwise. The outcome comes from the job itself, so it is the same after a reload.
+ * has been asked to stop, and nothing otherwise. The outcome comes from the job itself, so it is the same after a reload;
+ * `answer`, the outcome this tab's own Cancel got, only tells apart a job an earlier cancel had already stopped.
  */
-export function cancelNote(job: JobView): string | null {
+export function cancelNote(job: JobView, answer?: string): string | null {
+  if (answer === "too_late" && job.status === "cancelled") return CANCEL_ALREADY;
   if (job.cancelOutcome) return CANCEL_OUTCOME[job.cancelOutcome];
   if (job.cancelRequestedAt && (ACTIVE_STATUSES as readonly string[]).includes(job.status)) return CANCEL_PENDING;
   return null;

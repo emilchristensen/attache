@@ -50,6 +50,14 @@ describe("initialJobId: the job the detail pane opens on, chosen once", () => {
     expect(initialJobId([], finished)).toBe("stopped");
   });
 
+  it("judges a job found twice by its newest state, so a failure that was retried meanwhile does not win", () => {
+    const retried = job({ id: "retried", status: "failed", createdAt: "2026-11-18T10:30:00.000Z", updatedAt: "2026-11-18T10:31:00.000Z" });
+    const now = { ...retried, status: "succeeded" as const, updatedAt: "2026-11-18T10:32:00.000Z" };
+    const stillFailed = job({ id: "still", status: "failed", createdAt: "2026-11-18T10:00:00.000Z" });
+    expect(initialJobId([], [now, stillFailed, retried])).toBe("still");
+    expect(initialJobId([], [retried, stillFailed, now])).toBe("still");
+  });
+
   it("is null when there are no jobs", () => {
     expect(initialJobId([], [])).toBeNull();
   });
@@ -121,6 +129,13 @@ describe("cancelNote: what Cancel reports", () => {
     ["a failure with an old request but no outcome says nothing about stopping", { status: "failed", cancelRequestedAt: "2026-11-18T10:00:00.000Z" }, null],
   ])("%s", (_case, over, expected) => {
     expect(cancelNote(job(over))).toBe(expected);
+  });
+
+  it("says a job was already cancelled when this request found it stopped by an earlier one", () => {
+    const stopped = job({ status: "cancelled", cancelRequestedAt: "2026-11-18T10:00:00.000Z", cancelOutcome: "stopped" });
+    expect(cancelNote(stopped, "too_late")).toBe("Already cancelled: the work had stopped before this request.");
+    expect(cancelNote(stopped, "stopped")).toBe("Stopped: the work ended before it finished.");
+    expect(cancelNote(job({ status: "succeeded", cancelOutcome: "too_late" }), "too_late")).toBe("Already finished: the cancel came after the work was done, so its result stands.");
   });
 });
 

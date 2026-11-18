@@ -246,3 +246,23 @@ test("jobs: a refresh of the open job that fails says so beside what it still sh
   await expect(detail(page)).toHaveAttribute("data-status", "blocked");
   expect(journeys.consoleErrors).toEqual([]);
 });
+
+test("jobs: Cancel says the job was already cancelled when an earlier cancel stopped it first", async () => {
+  const page = await journeys.open("/jobs");
+  const long = await createJob(page, LONG);
+  await page.goto(`${stack.url}/jobs?id=${long.id}`);
+  await expect(detail(page)).toHaveAttribute("data-status", "running");
+  // Another tab cancels first; this tab's request arrives after the work has stopped.
+  const other = await journeys.newPage();
+  await other.goto(`${stack.url}/jobs`);
+  await page.route(`**/api/v1/jobs/${long.id}/cancel`, async (route) => {
+    await api(other, "POST", `/jobs/${long.id}/cancel`);
+    await settled(other, long.id, "cancelled");
+    await route.continue();
+  });
+  await detail(page).getByRole("button", { name: "Cancel" }).click();
+  await expect(detail(page).getByRole("status")).toHaveText("Already cancelled: the work had stopped before this request.");
+  await expect(detail(page)).toHaveAttribute("data-status", "cancelled");
+  await page.unroute(`**/api/v1/jobs/${long.id}/cancel`);
+  expect(journeys.consoleErrors).toEqual([]);
+});
