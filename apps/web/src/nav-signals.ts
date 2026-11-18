@@ -208,13 +208,12 @@ export function useNavSignals(): NavSignals {
   }, [dot]);
   const status = replication.error ? undefined : replication.data?.status;
   const listFailed = [inputs.inbox, inputs.drafts, inputs.proposals, inputs.connections].some((a) => a.kind === "failed");
-  const { reload: reloadProposals } = proposals;
   const { reload: reloadConnections } = connections;
   const retryCount = useCallback(() => {
     reloadPair();
-    reloadProposals();
+    reloadProposalsList();
     reloadConnections();
-  }, [reloadPair, reloadProposals, reloadConnections]);
+  }, [reloadPair, reloadProposalsList, reloadConnections]);
   return {
     badges: { home: badge(count.home, WORDS.home), approvals: badge(count.approvals, WORDS.approvals), connections: badge(count.connections, WORDS.connections) },
     count,
