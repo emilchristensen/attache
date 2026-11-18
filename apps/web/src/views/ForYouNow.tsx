@@ -117,12 +117,13 @@ function useBriefingSchedule(enabled: boolean, now: number): HeadsUpInput["sched
   const row = reads ? r.data?.schedules.find((x) => x.jobKind === "briefing") : undefined;
   const stale = (!!row?.nextRunAt && Date.parse(row.nextRunAt) <= now) || (!!reader?.thisMachine && lapsed && !reader.silent);
   const asked = useRef(now);
-  const { reload } = r;
+  const { reload, loading } = r;
   useEffect(() => {
-    if (!stale || asked.current === now) return;
+    // One request at a time: a newer one would discard the answer on its way.
+    if (!stale || loading || asked.current === now) return;
     asked.current = now;
     reload();
-  }, [stale, now, reload]);
+  }, [stale, loading, now, reload]);
   return row ? { enabled: row.enabled, nextRunAt: row.nextRunAt } : null;
 }
 
