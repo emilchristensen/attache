@@ -52,7 +52,8 @@ No developer tools are needed.
 | Linux (x86_64 with systemd) | `Attache-Installer-<version>-linux-x64.sh` | `sh Attache-Installer-<version>-linux-x64.sh` |
 | Windows 10 or 11 (x86_64) | `Attache-Installer-<version>-windows-x64.cmd` | Double-click it. |
 
-The installer starts Attache as a background service and opens first-run setup in your browser.
+The installer starts Attache as a background service, pairs your browser with a one-time code and opens first-run setup.
+Setup asks only for a data folder; everything else is optional and can wait.
 The releases are not code-signed, so macOS may ask you to right-click the file and choose **Open** the first time.
 
 The [user guide](docs/user-guide.md) covers setup, everyday use, Harness connections, Replication, backups and uninstalling.
