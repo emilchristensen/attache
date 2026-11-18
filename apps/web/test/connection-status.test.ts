@@ -278,5 +278,10 @@ describe("inboxCoverage: what an empty Inbox may claim", () => {
     expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault", { coverage: coverage("partial") }), conn("model")]) })))).toBe("incomplete");
     expect(inboxCoverage(connectionsStatus(withConnections(conn("gmail", { status: "needs_auth" }))))).toBe("incomplete");
     expect(inboxCoverage(connectionsStatus(inputs({ reader: { state: "waiting" } })))).toBe("incomplete");
+    // Problems that hide no Inbox item: the model signed out, a Harness down, a feature other than Attention not ready.
+    expect(inboxCoverage(connectionsStatus(withConnections(conn("model", { status: "needs_auth" }), conn("claude-code", { status: "error" }))))).toBe("all");
+    const sessions = feature("sessions", { readiness: "needs_setup", reason: "Connect a Harness." });
+    expect(inboxCoverage(connectionsStatus(inputs({ connections: ok([conn("vault")]), features: ok([...FEATURES, sessions]) })))).toBe("notes");
+    expect(inboxCoverage(connectionsStatus(inputs({ features: ok([...FEATURES.filter((f) => f.id !== "attention"), feature("attention", { readiness: "unavailable", reason: "x" })]) })))).toBe("incomplete");
   });
 });

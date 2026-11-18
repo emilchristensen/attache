@@ -67,6 +67,8 @@ export interface StatusRow {
   action: StatusAction | null;
   /** This row is a decision behind the logo's dot: only a Connection in `needs_auth`. */
   counted: boolean;
+  /** Inbox items may be missing because of it: false for the model, Harnesses and features other than Attention. */
+  inbox: boolean;
 }
 
 export type ConnectionsStatus =
@@ -150,7 +152,7 @@ function lastReadOf(cs: ConnectionStatus[]): StatusRow["lastRead"] {
   return cs.filter(isReadable).map((c) => ({ name: c.label, at: c.lastSuccessAt }));
 }
 
-const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted"> = { failure: null, lastRead: [], retry: null, counted: false };
+const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true };
 
 function signInRow(c: ConnectionStatus): StatusRow {
   const source = isReadable(c);
@@ -174,6 +176,7 @@ function signInRow(c: ConnectionStatus): StatusRow {
     lastRead: lastReadOf([c]),
     action: { kind: "reconnect", connectionId: c.id },
     counted: c.status === "needs_auth",
+    inbox: source,
   };
 }
 
@@ -193,6 +196,7 @@ function downRow(c: ConnectionStatus, ctx: Context): StatusRow {
     lastRead: lastReadOf([c]),
     retry: source ? retryOf(ctx) : null,
     action: source ? { kind: "refresh", connectionIds: [c.id], label: "Retry now" } : { kind: "open_connections", connectionId: c.id },
+    inbox: source,
   };
 }
 
@@ -267,6 +271,7 @@ function featureRow(f: FeatureStatus): StatusRow | null {
     impact: words[state][1],
     sentence: f.reason ?? `${f.label} is not ready.`,
     action: { kind: "open_settings" },
+    inbox: f.id === "attention",
   };
 }
 
@@ -404,7 +409,9 @@ export type InboxCoverage = "all" | "notes" | "incomplete";
 
 export function inboxCoverage(status: ConnectionsStatus): InboxCoverage {
   if (status.kind === "all_good") return "all";
-  return status.rows.length > 0 && status.rows.every((r) => r.state === "notes_only") ? "notes" : "incomplete";
+  const missing = status.rows.filter((r) => r.inbox);
+  if (!missing.length) return "all";
+  return missing.every((r) => r.state === "notes_only") ? "notes" : "incomplete";
 }
 
 /** The rows that show, and the rest behind one "N more" disclosure. */
