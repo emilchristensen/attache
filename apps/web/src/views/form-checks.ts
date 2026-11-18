@@ -29,10 +29,7 @@ export interface DataFolderForm {
   email: string;
 }
 
-export type DataFolderField = "folder" | "import" | "name" | "email";
-
-/** Loose on purpose: something before and after one @, with a dot in the domain. The service checks nothing more. */
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export type DataFolderField = "folder" | "import" | "name";
 
 export function dataFolderProblems(form: DataFolderForm): Array<FieldProblem<DataFolderField>> {
   const problems: Array<FieldProblem<DataFolderField>> = [];
@@ -44,8 +41,8 @@ export function dataFolderProblems(form: DataFolderForm): Array<FieldProblem<Dat
   if (importFolder && form.importPreview?.folder.trim() !== importFolder) problems.push({ field: "import", message: "Preview the import, or clear this field." });
   const name = form.name.trim();
   const email = form.email.trim();
+  // The service keeps an identity only with a name, and any email beside it; an email alone would be lost.
   if (email && !name) problems.push({ field: "name", message: "Add your name, or clear the email." });
-  if (email && !EMAIL.test(email)) problems.push({ field: "email", message: "Enter an email address such as alex@example.com, or leave it empty." });
   return problems;
 }
 
@@ -55,4 +52,23 @@ export function joinProblems(form: { repository: string; folder: string }): Arra
   if (!form.repository.trim()) problems.push({ field: "repository", message: "Enter the repository your other Machine replicates to." });
   if (!form.folder.trim()) problems.push({ field: "folder", message: "Enter an empty folder for the Brain." });
   return problems;
+}
+
+/** The service's Join refusals the owner fixes in one field; any other refusal belongs to the form as a whole. */
+const JOIN_ERROR_FIELDS: Record<string, "repository" | "folder"> = {
+  invalid_remote: "repository",
+  remote_empty: "repository",
+  remote_refused: "repository",
+  remote_unauthorized: "repository",
+  remote_unreachable: "repository",
+  remote_has_brain: "repository",
+  invalid_path: "folder",
+  not_writable: "folder",
+  not_empty: "folder",
+  needs_data_folder: "folder",
+  already_a_repository: "folder",
+};
+
+export function joinErrorField(code: string | undefined): "repository" | "folder" | null {
+  return (code && JOIN_ERROR_FIELDS[code]) || null;
 }

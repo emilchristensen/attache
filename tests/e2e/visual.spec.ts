@@ -123,8 +123,17 @@ test("screens", async ({ browser }) => {
   await setupScreens(page, "folder");
   const joinBrain = page.getByText("Already use Attache on another Machine?");
   await joinBrain.click();
+  await page.getByRole("button", { name: "Join into this folder" }).click();
+  await expect(page.getByText("Enter the repository your other Machine replicates to.")).toBeVisible();
   await page.waitForTimeout(250);
-  await page.locator(".join-brain").screenshot({ path: "test-results/screens/setup-join.png" });
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.locator(".join-brain").screenshot({ path: `test-results/screens/${scheme}-setup-join.png` });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator(".join-brain").screenshot({ path: "test-results/screens/narrow-setup-join.png" });
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.emulateMedia({ colorScheme: "light" });
   await joinBrain.click();
   await page.getByRole("button", { name: "Use this folder" }).click();
   await expect(page.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
@@ -144,7 +153,10 @@ test("screens", async ({ browser }) => {
   await model.getByRole("textbox", { name: "Model" }).fill("fixture-model");
   await model.getByRole("button", { name: "Connect" }).click();
   await expect(model.getByText("connected", { exact: true })).toBeVisible();
+  await setupScreens(page, "model");
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator('[data-feature-status="attention"]')).toBeVisible();
+  await setupScreens(page, "finish");
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();

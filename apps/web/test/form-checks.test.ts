@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dataFolderProblems, joinProblems, pairingCodeProblem, type DataFolderForm } from "../src/views/form-checks.ts";
+import { dataFolderProblems, joinErrorField, joinProblems, pairingCodeProblem, type DataFolderForm } from "../src/views/form-checks.ts";
 
 describe("pairingCodeProblem", () => {
   it.each([
@@ -38,15 +38,13 @@ describe("dataFolderProblems", () => {
     ["a folder to import that was not previewed", { importFolder: "/home/alex/Notes" }, [["import", "Preview the import, or clear this field."]]],
     ["an import preview of another folder", { importFolder: "/home/alex/Notes", importPreview: { folder: "/home/alex/Vault" } }, [["import", "Preview the import, or clear this field."]]],
     ["an email without a name", { email: "alex@example.com" }, [["name", "Add your name, or clear the email."]]],
-    ["an email that is not one", { name: "Alex", email: "alex" }, [["email", "Enter an email address such as alex@example.com, or leave it empty."]]],
     [
       "several problems, in the order the fields appear",
-      { folder: "", preview: null, importFolder: "/home/alex/Notes", email: "alex" },
+      { folder: "", preview: null, importFolder: "/home/alex/Notes", email: "alex@example.com" },
       [
         ["folder", "Enter a folder for your Brain."],
         ["import", "Preview the import, or clear this field."],
         ["name", "Add your name, or clear the email."],
-        ["email", "Enter an email address such as alex@example.com, or leave it empty."],
       ],
     ],
   ])("names %s", (_, change, expected) => {
@@ -57,6 +55,8 @@ describe("dataFolderProblems", () => {
     ["a previewed import", { importFolder: "/home/alex/Notes", importPreview: { folder: "/home/alex/Notes" } }],
     ["a name without an email", { name: "Alex" }],
     ["a name and an email", { name: "Alex", email: "alex@example.com" }],
+    // The service keeps any email it is given, so Setup does not judge its form.
+    ["an email on a local host", { name: "Alex", email: "alex@localhost" }],
     ["paths with spaces around them", { folder: ` ${READY.folder} `, importFolder: " /home/alex/Notes ", importPreview: { folder: "/home/alex/Notes" } }],
   ])("accepts %s", (_, change) => {
     expect(dataFolderProblems({ ...READY, ...change })).toEqual([]);
@@ -78,5 +78,19 @@ describe("joinProblems", () => {
     ],
   ])("with %s", (_, form, expected) => {
     expect(joinProblems(form).map((p) => [p.field, p.message])).toEqual(expected);
+  });
+});
+
+describe("joinErrorField", () => {
+  it.each(["invalid_remote", "remote_empty", "remote_refused", "remote_unauthorized", "remote_unreachable", "remote_has_brain"])("puts the service's %s on the repository", (code) => {
+    expect(joinErrorField(code)).toBe("repository");
+  });
+
+  it.each(["invalid_path", "not_writable", "not_empty", "needs_data_folder", "already_a_repository"])("puts the service's %s on the folder", (code) => {
+    expect(joinErrorField(code)).toBe("folder");
+  });
+
+  it.each(["git_missing", "busy", "already_set_up", "replication_failed", "offline", undefined])("keeps %s, which no field can fix, for the form", (code) => {
+    expect(joinErrorField(code)).toBeNull();
   });
 });

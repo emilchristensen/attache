@@ -28,9 +28,6 @@ interface ImportPreview {
   note: string;
 }
 
-/** The message Join asks for when the data folder above it is empty. */
-const FOLDER_FOR_JOIN = "Enter a folder for your Brain.";
-
 /**
  * Setup's first step. The data folder and Continue come first; importing a notes folder, the owner's identity and
  * joining another Machine's Brain are optional disclosures below. Continue names the first problem beside its field
@@ -46,9 +43,10 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
   const [importPath, setImportPath] = useState("");
   const [importPreview, setImportPreview] = useState<{ folder: string; result: ImportPreview } | null>(null);
   const [attempted, setAttempted] = useState(false);
-  const [joinNeedsFolder, setJoinNeedsFolder] = useState(false);
+  // What Join found wrong with the data folder, until the folder changes.
+  const [joinFolderProblem, setJoinFolderProblem] = useState<string | null>(null);
   const { busy, run } = useAction();
-  const fields = { folder: useRef<HTMLInputElement>(null), import: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null), email: useRef<HTMLInputElement>(null) };
+  const fields = { folder: useRef<HTMLInputElement>(null), import: useRef<HTMLInputElement>(null), name: useRef<HTMLInputElement>(null) };
   // Once the owner is in the field, a suggestion that arrives late would mix into what they type.
   const [ownersChoice, setOwnersChoice] = useState(false);
   useEffect(() => {
@@ -56,7 +54,10 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
   }, [defaults.data, path, ownersChoice]);
   const form = { folder: path, preview: preview && { folder: preview.folder, writable: preview.result.writable }, importFolder: importPath, importPreview: importPreview && { folder: importPreview.folder }, name, email };
   const problems = attempted ? dataFolderProblems(form) : [];
-  const message = (f: DataFolderField) => problems.find((p) => p.field === f)?.message ?? (f === "folder" && joinNeedsFolder && !path.trim() ? FOLDER_FOR_JOIN : undefined);
+  const message = (f: DataFolderField) => problems.find((p) => p.field === f)?.message ?? (f === "folder" ? joinFolderProblem : undefined);
+  // A preview counts only while its field still holds the folder it was asked for: a late answer for a changed field is dropped.
+  const currentPreview = preview && preview.folder.trim() === path.trim() ? preview : null;
+  const currentImport = importPreview && importPath.trim() && importPreview.folder.trim() === importPath.trim() ? importPreview : null;
   const doPreview = async () => {
     setErr(null);
     const folder = path;
@@ -74,7 +75,7 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
     void run("save", async () => {
       await post("/setup/data-folder", { path });
       if (name.trim()) await post("/setup/identity", { name: name.trim(), email: email.trim(), confirm: true });
-      if (importPreview) await post("/import", { path: importPreview.result.path });
+      if (currentImport) await post("/import", { path: currentImport.result.path });
       onNext();
     });
   };
@@ -96,6 +97,7 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
               onChange={(e) => {
                 setPath(e.target.value);
                 setPreview(null);
+                setJoinFolderProblem(null);
               }}
               spellCheck={false}
               {...fieldProps("data-folder-error", message("folder"), "folder-help")}
@@ -110,15 +112,15 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
           </span>
         </div>
         <ErrorState error={err} />
-        {preview && (
-          <div className={`state ${preview.result.writable ? "partial" : "error"}`} style={{ borderColor: preview.result.writable ? "var(--line)" : undefined }} aria-live="polite">
+        {currentPreview && (
+          <div className={`state ${currentPreview.result.writable ? "partial" : "error"}`} style={{ borderColor: currentPreview.result.writable ? "var(--line)" : undefined }} aria-live="polite">
             <strong style={{ color: "var(--ink)" }}>
-              {preview.result.exists ? "Existing folder" : "New folder"}: {preview.result.path}
+              {currentPreview.result.exists ? "Existing folder" : "New folder"}: {currentPreview.result.path}
             </strong>
-            <span className="small">{preview.result.note}</span>
-            {preview.result.willCreate.length > 0 && <span className="small">Will create: {preview.result.willCreate.join(", ")}</span>}
-            <span className="small">Will modify: {preview.result.willModify.length ? preview.result.willModify.join(", ") : "nothing"}</span>
-            {!preview.result.writable && <span className="error-text small">Attache cannot write here. Choose another folder.</span>}
+            <span className="small">{currentPreview.result.note}</span>
+            {currentPreview.result.willCreate.length > 0 && <span className="small">Will create: {currentPreview.result.willCreate.join(", ")}</span>}
+            <span className="small">Will modify: {currentPreview.result.willModify.length ? currentPreview.result.willModify.join(", ") : "nothing"}</span>
+            {!currentPreview.result.writable && <span className="error-text small">Attache cannot write here. Choose another folder.</span>}
           </div>
         )}
       </div>
@@ -156,7 +158,7 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
               Attache reads it in place and cites it. It does not copy, change or move anything in that folder.
             </span>
           </div>
-          {importPreview && <ImportSummary preview={importPreview.result} />}
+          {currentImport && <ImportSummary preview={currentImport.result} />}
         </Disclosure>
         <Disclosure title="Who is this for?" meta="Optional. Tells your own messages from others'." open={!!(config.identity?.name || config.identity?.email)}>
           <p className="small muted">Saved with the folder as a protected identity record that only Settings can change.</p>
@@ -172,8 +174,7 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
               <label className="field" htmlFor="identity-email">
                 Email
               </label>
-              <input id="identity-email" ref={fields.email} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" {...fieldProps("identity-email-error", message("email"))} />
-              <FieldError id="identity-email-error" message={message("email")} />
+              <input id="identity-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
             </div>
           </div>
         </Disclosure>
@@ -181,8 +182,8 @@ export function DataFolderStep({ config, onNext }: { config: Config; onNext: () 
           <JoinForm
             folder={path}
             primary={false}
-            onFolderMissing={() => {
-              setJoinNeedsFolder(true);
+            onFolderProblem={(text) => {
+              setJoinFolderProblem(text);
               focusField(fields.folder.current);
             }}
             intro="With Replication set up on your other Machine, Attache clones that Brain into the data folder above, which must be empty or new. Leave the import and identity as they are: they come with the Brain."

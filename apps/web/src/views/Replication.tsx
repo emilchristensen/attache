@@ -8,7 +8,7 @@ import { ReplicationMachines } from "./ReplicationMachines.tsx";
 import { tabId, Tabs, type TabItem } from "../components/Tabs.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
 import { FieldError, fieldProps, focusField } from "../components/FieldError.tsx";
-import { joinProblems } from "./form-checks.ts";
+import { joinErrorField, joinProblems } from "./form-checks.ts";
 
 const STATE: Record<ReplicationStatus, { state: string; label: string }> = {
   off: { state: "off", label: "off" },
@@ -88,38 +88,71 @@ function StartForm({ onDone }: { onDone: (v: ReplicationView) => void }) {
 
 /**
  * Clone a Brain another Machine set up into an empty folder, which becomes this Machine's data folder.
- * Setup passes its data folder as `folder`, and `onFolderMissing` to name and focus that field when it is empty.
+ * Setup passes its data folder as `folder`, and `onFolderProblem` to name a problem with that field and focus it.
+ * A problem the owner fixes in one field, found here or by the service, is named beside that field, which gets focus.
  */
-export function JoinForm({ onDone, folder: fixedFolder, onFolderMissing, intro, primary = true }: { onDone: (v: ReplicationView) => void; folder?: string; onFolderMissing?: () => void; intro: string; primary?: boolean }) {
+export function JoinForm({ onDone, folder: fixedFolder, onFolderProblem, intro, primary = true }: { onDone: (v: ReplicationView) => void; folder?: string; onFolderProblem?: (message: string) => void; intro: string; primary?: boolean }) {
   const [remote, setRemote] = useState("");
   const [folder, setFolder] = useState("");
   const [attempted, setAttempted] = useState(false);
+  const [refused, setRefused] = useState<{ field: "repository" | "folder"; message: string } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
   const examples = useFolderExamples(fixedFolder === undefined);
   const target = fixedFolder ?? folder;
-  const repositoryField = useRef<HTMLInputElement>(null);
-  const folderField = useRef<HTMLInputElement>(null);
-  const { error, busy, submit } = useSubmit(onDone);
+  const fields = { repository: useRef<HTMLInputElement>(null), folder: useRef<HTMLInputElement>(null) };
   const problems = attempted ? joinProblems({ repository: remote, folder: target }) : [];
-  const message = (f: "repository" | "folder") => problems.find((p) => p.field === f)?.message;
+  const message = (f: "repository" | "folder") => problems.find((p) => p.field === f)?.message ?? (refused?.field === f ? refused.message : undefined);
+  // Setup's data folder sits above this form, so it is the first field to fix.
+  const point = (field: "repository" | "folder", text: string) => (field === "folder" && fixedFolder !== undefined ? onFolderProblem?.(text) : focusField(fields[field].current));
   const join = (e: FormEvent) => {
-    const found = joinProblems({ repository: remote, folder: target });
-    if (!found.length) return submit(e, () => post<ReplicationView>("/replication/join", { remote, path: target }));
     e.preventDefault();
+    const found = joinProblems({ repository: remote, folder: target });
     setAttempted(true);
-    // Setup's data folder sits above this form, so it is the first field to fix.
-    if (fixedFolder !== undefined && found.some((p) => p.field === "folder")) return onFolderMissing?.();
-    focusField(found[0]!.field === "repository" ? repositoryField.current : folderField.current);
+    setRefused(null);
+    setError(null);
+    if (found.length) return point(found[0]!.field, found[0]!.message);
+    setBusy(true);
+    post<ReplicationView>("/replication/join", { remote, path: target })
+      .then(onDone)
+      .catch((err: ApiError) => {
+        const field = joinErrorField(err.code);
+        if (!field) return setError(err);
+        if (field === "repository" || fixedFolder === undefined) setRefused({ field, message: err.message });
+        point(field, err.message);
+      })
+      .finally(() => setBusy(false));
   };
   return (
     <form className="stack" onSubmit={join} noValidate>
       <p className="small muted">{intro}</p>
-      <RepositoryField id="join-repo" value={remote} onChange={setRemote} message={message("repository")} field={repositoryField} />
+      <RepositoryField
+        id="join-repo"
+        value={remote}
+        onChange={(v) => {
+          setRemote(v);
+          setRefused(null);
+        }}
+        message={message("repository")}
+        field={fields.repository}
+      />
       {fixedFolder === undefined && (
         <div className="field-group">
           <label className="field" htmlFor="join-folder">
             Empty folder for the Brain
           </label>
-          <input id="join-folder" ref={folderField} value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={examples.brain} spellCheck={false} {...fieldProps("join-folder-error", message("folder"), "join-folder-help")} />
+          <input
+            id="join-folder"
+            ref={fields.folder}
+            value={folder}
+            onChange={(e) => {
+              setFolder(e.target.value);
+              setRefused(null);
+            }}
+            placeholder={examples.brain}
+            spellCheck={false}
+            {...fieldProps("join-folder-error", message("folder"), "join-folder-help")}
+          />
           <FieldError id="join-folder-error" message={message("folder")} />
           <span className="help" id="join-folder-help">
             Attache clones the Brain here and uses this folder from then on. It must be empty or new, so two Brains are never mixed; the current data folder is left as it is.

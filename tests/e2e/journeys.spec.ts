@@ -1085,7 +1085,13 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await second.getByRole("button", { name: "Join into this folder" }).click();
     await expect(repository).toBeFocused();
     await expect(repository).toHaveAccessibleDescription(/Enter the repository your other Machine replicates to\./);
+    // A repository the service refuses is named beside the field, which gets focus again.
+    await repository.fill("not a repository");
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(repository).toHaveAttribute("aria-invalid", "true");
+    await expect(repository).toBeFocused();
     await repository.fill(remote);
+    await expect(repository).not.toHaveAttribute("aria-invalid", "true");
     await second.getByRole("button", { name: "Join into this folder" }).click();
     await expect(second.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
     expect(readFileSync(join(other.dataDir, "memory/self.md"), "utf8")).toContain("Test User");
