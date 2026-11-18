@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import type { AttentionItemView, ConnectionStatus, JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, Time, useAction } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
+import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { briefingLines } from "../briefing-text.ts";
 import { openDraftId } from "../linked-draft.ts";
@@ -57,7 +59,7 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
       <div className="title">{item.title}</div>
       <div className="summary">{item.summary}</div>
       <div className="meta">
-        <span className="pill">{SOURCE_LABEL[item.sourceKind] ?? item.sourceKind}</span>
+        <Tag>{SOURCE_LABEL[item.sourceKind] ?? item.sourceKind}</Tag>
         {item.dueAt && <span>due {item.dueAt.slice(0, 10)}</span>}
         <span>
           first seen <Time iso={item.firstSeenAt} />
@@ -67,8 +69,8 @@ function Item({ item, draftsOn, onChanged }: { item: AttentionItemView; draftsOn
             snoozed until {new Date(item.snoozeUntil).toLocaleString()}
           </span>
         )}
-        {item.state === "dismissed" && <StatusPill state="expired" label="dismissed" />}
-        {item.changedSinceDecision && item.state === "open" && <StatusPill state="partial" label="changed since your decision" />}
+        {item.state === "dismissed" && <StateTag state="expired" label="dismissed" />}
+        {item.changedSinceDecision && item.state === "open" && <StateTag state="partial" label="changed since your decision" />}
       </div>
       {item.why && <div className="small muted">Why: {item.why}</div>}
       <div className="item-actions">
@@ -148,7 +150,7 @@ function BriefingOverview({ briefing }: { briefing: Briefing }) {
           {s.title}
         </button>
       ))}
-      {fresh && <span className="pill accent">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</span>}
+      {fresh && <Tag hue="blue">{briefing.kind === "away" ? `${fresh} while away` : `${fresh} since last briefing`}</Tag>}
     </div>
   );
 }
@@ -256,7 +258,7 @@ export function Coverage({ connections }: { connections: ConnectionStatus[] }) {
     <div className="coverage" aria-label="Source freshness">
       {sources.map((s) => (
         <div key={s.id} className="src" data-source={s.id}>
-          <StatusPill state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never refreshed").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
+          <StateTag state={s.status === "connected" ? (s.coverage?.state ?? "never_run") : s.status} label={s.status === "connected" ? (s.coverage?.state === "empty" ? "up to date" : (s.coverage?.state ?? "never refreshed").replace(/_/g, " ")) : s.status.replace(/_/g, " ")} />
           <span>{s.label}</span>
           <span className="when">
             {s.lastSuccessAt ? (

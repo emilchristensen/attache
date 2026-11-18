@@ -1,0 +1,591 @@
+/* Shared components that more than one screen shows. One screen's own rules live in its own file. */
+
+/* ---- icons, tags, the attention dot, type icons ----------------------------------- */
+
+/* `components/icons.tsx`: line icons in the current text colour. */
+svg.icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* `components/Tag.tsx`: a plain exception label. No green: a healthy state is `.state-text`. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-tag);
+  background: var(--sunken);
+  color: var(--ink-2);
+  font: 600 12px/1 var(--font);
+  white-space: nowrap;
+}
+.tag.attention {
+  background: var(--attn-soft);
+  color: var(--attn-ink);
+}
+.tag.danger {
+  background: var(--red-soft);
+  color: var(--danger);
+}
+.tag.outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tag.hue {
+  background: var(--c-soft);
+  color: var(--c);
+}
+
+/* `components/StateTag.tsx`: a healthy state, in words and nothing else, quieter than the name beside it. */
+.state-text {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* `components/AttentionDot.tsx`: the logo's brass dot inside the Dashboard. */
+.attention-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--attn);
+}
+
+/* `components/TypeIcon.tsx`: a 19 px stroked glyph in its hue, stamped on that hue's tint. */
+.type-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--c-soft);
+  color: var(--c);
+}
+.type-icon.sm {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+}
+.type-icon svg.icon {
+  stroke-width: 1.8;
+}
+/* Forced colours drop the tint: the stamp keeps an edge so it still reads as one. */
+@media (forced-colors: active) {
+  .type-icon {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ---- the logo -------------------------------------------------------------------- */
+
+/* The logo keeps its own colours, so a change to the theme leaves it alone. */
+.logo {
+  flex-shrink: 0;
+  display: block;
+}
+.logo-case {
+  fill: var(--logo-copper);
+  stroke: var(--logo-copper);
+}
+.logo-case rect {
+  stroke: none;
+}
+.logo-dot {
+  fill: var(--logo-brass);
+}
+
+/* ---- surfaces ---------------------------------------------------------------------- */
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 14px 16px;
+}
+.card.flat {
+  background: transparent;
+}
+.card h3 {
+  margin-bottom: 4px;
+}
+.card + .card {
+  margin-top: 10px;
+}
+.card h4 {
+  font-size: var(--fs-control);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-top: 6px;
+}
+
+/* One thing in a list of cards: an Inbox item, a Proposal, a Connection that is not set up. */
+.item {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item + .item {
+  margin-top: 8px;
+}
+.item .title {
+  font-weight: 600;
+  font-size: var(--fs-body);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.item .summary {
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+}
+.item .meta {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* `.item .meta` sets a gap of its own, which must not narrow the dots' gap. */
+.item .meta.separated {
+  column-gap: 16px;
+}
+.item .item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+/* A list beside its detail (Memory, Drafts, Jobs). */
+.split {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+/* Scrolled to on a narrow screen, with the page's own top margin above it. */
+.split-detail {
+  min-width: 0;
+  scroll-margin-top: 16px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.list > .list-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  /* Square, so the divider below each row runs straight instead of curling up at its ends. */
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: inherit;
+  font-weight: 400;
+  white-space: normal;
+}
+.list > .list-item:hover {
+  background: var(--row-hover);
+}
+/* Selected: a fill and an ink bar, never an outline, so it cannot be mistaken for focus. */
+.list > .list-item[aria-current="true"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  font-size: var(--fs-control);
+}
+.kv dt {
+  color: var(--ink-3);
+}
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 10px;
+  color: var(--ink-2);
+}
+.timeline time {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  height: 5px;
+  background: var(--sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.4s ease;
+}
+
+/* ---- loading, empty, error ------------------------------------------------------------ */
+
+.state {
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  padding: 20px;
+  text-align: center;
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.state.error {
+  border-style: solid;
+  border-color: var(--red);
+  color: var(--ink-2);
+  text-align: left;
+  align-items: flex-start;
+}
+.state.error strong {
+  color: var(--danger);
+}
+.state.partial {
+  border-style: solid;
+  border-color: var(--amber);
+  color: var(--ink-2);
+  text-align: left;
+  align-items: flex-start;
+}
+
+/* A still placeholder: no shimmer or pulse. */
+.skeleton {
+  background: var(--sunken);
+  border-radius: var(--r-tag);
+  height: 14px;
+}
+
+.toast-host {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+  width: min(520px, calc(100vw - 24px));
+}
+.toast {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  font-size: var(--fs-control);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.toast.error {
+  border-color: var(--red);
+}
+.toast.ok {
+  border-color: var(--green);
+}
+.toast button {
+  margin-left: auto;
+}
+
+/* ---- citations and sources --------------------------------------------------------------- */
+
+.cite {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  border: none;
+  cursor: pointer;
+  vertical-align: 1px;
+  line-height: 1.6;
+}
+.cite:hover:not(:disabled) {
+  background: var(--highlight);
+}
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* A button: the control outline, not the decorative rule. */
+.source-chip {
+  font-size: var(--fs-meta);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: var(--r-sm);
+  padding: 4px 9px;
+  cursor: pointer;
+  color: var(--ink-2);
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+}
+.source-chip b {
+  color: var(--link);
+}
+.source-chip .path {
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- the evidence panel ---------------------------------------------------------------------- */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop);
+  z-index: 40;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(720px, 100vw);
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+  box-shadow: var(--shadow);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+}
+.drawer-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px 30px;
+}
+
+.source-view {
+  font-family: var(--mono);
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  background: var(--sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  overflow-x: auto;
+}
+.source-view .line {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source-view .ln {
+  color: var(--ink-3);
+  text-align: right;
+  padding-right: 12px;
+  user-select: none;
+  border-right: 1px solid var(--rule);
+}
+.source-view .tx {
+  padding-left: 12px;
+}
+.source-view .line.hl {
+  background: var(--highlight);
+}
+.source-view .line.hl .ln {
+  color: var(--link);
+  font-weight: 700;
+}
+
+/* ---- a Proposal (Home and Memory) --------------------------------------------------------------- */
+
+.proposal-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-meta);
+}
+.proposal-parts li {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.proposal-parts .part-kind {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.proposal-parts li[data-part="notes"] > span:last-child {
+  white-space: pre-wrap;
+}
+/* A correction strikes the value it replaces, so the old and the new value read side by side. */
+.proposal-parts del {
+  color: var(--ink-3);
+  text-decoration-thickness: 1px;
+}
+/* The words a Proposal rests on, laid out like its parts: a label column, then the quote. */
+.proposal-evidence {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+}
+.proposal-evidence figcaption {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+/* Quotes are roman: the face has no italic. */
+.proposal-evidence blockquote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--key);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* ---- a change to the Brain (Home's Recently added and Memory's Recent saves) ------------------------ */
+
+.recent-changes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.recent-change {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+}
+.recent-change:first-child {
+  border-top: none;
+}
+.recent-change-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.recent-change-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recent-change-title {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.recent-change-what {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.recent-change .change-values {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+.recent-change .change-values strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.recent-change .change-old {
+  color: var(--ink-3);
+}
+.recent-change .change-new {
+  text-decoration: none;
+  color: var(--ink);
+}
+.recent-change-meta {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+}
+.recent-change-why {
+  font-size: var(--fs-meta);
+  color: var(--amber);
+}
+
+@media (max-width: 900px) {
+  /* Never wider than the window, however wide a row inside wants to be. */
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  /* One line each, so a wrapped line never starts with a separator dot. */
+  .item .proposal-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .item .proposal-meta > *::before {
+    content: none;
+  }
+}

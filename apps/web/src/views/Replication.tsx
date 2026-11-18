@@ -2,12 +2,13 @@ import { useState, type FormEvent } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
-import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
 import { tabId, Tabs, type TabItem } from "../components/Tabs.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
 
-const PILL: Record<ReplicationStatus, { state: string; label: string }> = {
+const STATE: Record<ReplicationStatus, { state: string; label: string }> = {
   off: { state: "off", label: "off" },
   up_to_date: { state: "ok", label: "up to date" },
   offline: { state: "partial", label: "offline" },
@@ -177,13 +178,13 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
         <dt>Repository</dt>
         <dd className="mono">{view.remote}</dd>
         <dt>Last up to date</dt>
-        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} /> : "not yet"}</dd>
+        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} standalone /> : "not yet"}</dd>
         <dt>Last checked</dt>
         <dd>
-          <Time iso={view.lastCheckedAt} />
+          <Time iso={view.lastCheckedAt} standalone />
         </dd>
         <dt>Last sent</dt>
-        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} /> : "nothing sent from this Machine yet"}</dd>
+        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} standalone /> : "nothing sent from this Machine yet"}</dd>
       </dl>
       <Problem view={view} />
       <div className="row">
@@ -202,14 +203,14 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
 export function ReplicationCard({ dataFolder }: { dataFolder: string | null }) {
   const view = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
   const v = view.data;
-  const pill = v ? PILL[v.status] : null;
+  const shown = v ? STATE[v.status] : null;
   return (
     <section className="card stack" aria-labelledby="replication-title" data-replication={v?.status}>
       <div className="row">
         <h3 id="replication-title" style={{ flex: 1 }}>
           Replication
         </h3>
-        {pill && <StatusPill state={pill.state} label={pill.label} />}
+        {shown && <StateTag state={shown.state} label={shown.label} />}
       </div>
       <p className="small muted">Keeps the Brain the same on every Machine you own, with its history, through a private git repository. Drafts, approvals, connections and secrets stay on the Machine they were made on.</p>
       {view.loading && !v && <Loading lines={2} />}

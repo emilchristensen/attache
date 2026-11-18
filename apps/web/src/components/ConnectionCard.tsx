@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
 import { api, post, put } from "../api.ts";
-import { MarkdownInline, StatusPill, Time, useAction } from "./ui.tsx";
+import { MarkdownInline, Time, useAction } from "./ui.tsx";
+import { StateTag } from "./StateTag.tsx";
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
@@ -20,7 +21,7 @@ export function CoverageDetail({ coverage }: { coverage: Coverage | null }) {
   return (
     <div className="stack-sm">
       <div className="row small">
-        <StatusPill state={coverage.state} label={COVERAGE_TEXT[coverage.state] ?? coverage.state} />
+        <StateTag state={coverage.state} label={COVERAGE_TEXT[coverage.state] ?? coverage.state} />
         <span className="muted">
           {coverage.items} item{coverage.items === 1 ? "" : "s"} · <Time iso={coverage.at} />
         </span>
@@ -102,7 +103,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
           <h3>{status.label}</h3>
           <p className="small muted">{builtin ? "Where Attache keeps your memory, evidence and deliverables as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description}</p>
         </div>
-        <StatusPill state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
+        <StateTag state={status.status} label={status.status === "not_configured" ? "not connected" : status.status.replace(/_/g, " ")} />
       </div>
 
       {configured && (
@@ -111,7 +112,7 @@ export function ConnectionCard({ status, definition, onChanged, compact }: Props
           <dd>{status.account ?? "—"}</dd>
           <dt>Last success</dt>
           <dd>
-            <Time iso={status.lastSuccessAt} />
+            <Time iso={status.lastSuccessAt} standalone />
           </dd>
           {status.lastError && (
             <>

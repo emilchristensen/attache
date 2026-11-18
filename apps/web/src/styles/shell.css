@@ -1,0 +1,165 @@
+/* The frame around every screen: the sidebar, the page, its header, the banner and the narrow bottom bar. */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--nav-w) 1fr;
+  height: 100%;
+}
+
+/* The sidebar: paper beside the canvas, quiet rows, the current screen filled with ink. */
+.nav {
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 10px;
+  gap: 1px;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 16px;
+  font: 700 21px/1 var(--serif);
+  letter-spacing: -0.04em;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  font-weight: 500;
+}
+.nav a:hover {
+  background: var(--row-hover);
+  text-decoration: none;
+  color: var(--ink);
+}
+.nav a[aria-current="page"] {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.nav .count {
+  margin-left: auto;
+  font: 600 12px/1 var(--mono);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.nav .spacer {
+  flex: 1;
+}
+.nav .kbd-hint {
+  padding: 8px 10px;
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+}
+
+.main {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--canvas);
+}
+
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-5) var(--s-6) var(--s-7);
+}
+/* Cap the content, not the page: the page scrolls, and its scrollbar belongs at the window's edge. */
+.page-narrow > * {
+  max-width: 824px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--s-5);
+  flex-wrap: wrap;
+}
+.page-header .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.subtitle {
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+}
+
+.banner {
+  padding: 8px 16px;
+  font-size: var(--fs-control);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.banner.warn {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.banner.danger {
+  background: var(--red-soft);
+  color: var(--danger);
+}
+
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .nav {
+    display: none;
+  }
+  .bottom-nav {
+    display: flex;
+    border-top: 1px solid var(--rule);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    overflow-x: auto;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+  /* Equal widths where the labels allow, and never narrower than a label, so none is cut off. */
+  .bottom-nav a {
+    flex: 1 1 0;
+    min-width: max-content;
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    border-radius: var(--r-sm);
+    white-space: nowrap;
+  }
+  .bottom-nav a[aria-current="page"] {
+    color: var(--on-primary);
+    background: var(--primary);
+  }
+  .page {
+    padding: var(--s-4) var(--s-4) var(--s-6);
+  }
+  h1 {
+    font-size: 30px;
+    line-height: 36px;
+  }
+  h2,
+  .heading-section {
+    font-size: 26px;
+    line-height: 31px;
+  }
+}

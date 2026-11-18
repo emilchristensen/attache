@@ -36,6 +36,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Research, briefing and draft jobs survive closing the browser tab and restarting the service.
 
 Attache has no chat box of its own; you ask the Brain from your Harness.
+Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.

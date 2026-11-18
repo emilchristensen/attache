@@ -1,0 +1,254 @@
+/* What the owner operates: buttons, fields, checkboxes, switches and tabs. */
+
+/* ---- buttons ---------------------------------------------------------------- */
+
+/* Secondary actions are outlined on paper; the primary action is solid ink; a quiet action has no edge. */
+button,
+.btn {
+  font: inherit;
+  font-size: var(--fs-control);
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  /* 36 px tall, the height of a one-line field beside it. */
+  padding: 7px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+button:hover:not(:disabled) {
+  background: var(--sunken);
+}
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 86%, var(--canvas));
+}
+button.danger {
+  color: var(--danger);
+}
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-2);
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+button.ghost.danger {
+  color: var(--danger);
+}
+button.small {
+  padding: 3px 9px;
+  font-size: var(--fs-meta);
+  line-height: 18px;
+}
+@media (pointer: coarse) {
+  button,
+  .btn {
+    min-height: 44px;
+  }
+}
+
+/* ---- fields ----------------------------------------------------------------- */
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="search"],
+input[type="time"],
+input[type="number"],
+input[type="datetime-local"],
+input:not([type]),
+select,
+textarea {
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  background: var(--paper);
+  /* The field's edge (3:1 or better on every surface) is what shows where the field is. */
+  border: 1px solid var(--key);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  line-height: 22px;
+  width: 100%;
+}
+textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: var(--lh-body);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+/* Fields take the same focus ring as every control, drawn just outside the edge. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 1px;
+}
+
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+label.field .help {
+  font-weight: 400;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+}
+label.field input,
+label.field textarea,
+label.field select {
+  font-weight: 400;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.check input {
+  /* Centred on the label's first line, whatever its font size: the label's font makes 1lh its line height. */
+  --check-size: 16px;
+  font: inherit;
+  margin-top: max(0px, calc((1lh - var(--check-size)) / 2));
+  width: var(--check-size);
+  height: var(--check-size);
+  flex-shrink: 0;
+}
+
+/* A switch with its name and description (SwitchRow, Setup's features). */
+.feature-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.feature-row:last-child {
+  border-bottom: none;
+}
+.feature-row > input[type="checkbox"] {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+}
+.feature-row .desc {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.feature-row .deps {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+/* ---- tabs ------------------------------------------------------------------- */
+
+/*
+ * Tabs keep one row. A row wider than its column scrolls sideways, without a
+ * scrollbar: at an end with tabs out of view, the tabs fade out before an
+ * arrow. `Tabs.tsx` reads --tabs-edge to keep the selected tab clear of it.
+ */
+.tabs-bar {
+  /* Plain lengths, so script reads them as numbers: the arrow, then a fade to 40px. */
+  --tabs-arrow: 22px;
+  --tabs-edge: 40px;
+  position: relative;
+  min-width: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.tabs-bar.plain {
+  border-bottom: none;
+}
+.tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs-bar[data-hidden-before] .tabs {
+  mask-image: linear-gradient(to right, transparent var(--tabs-arrow), #000 var(--tabs-edge));
+}
+.tabs-bar[data-hidden-after] .tabs {
+  mask-image: linear-gradient(to left, transparent var(--tabs-arrow), #000 var(--tabs-edge));
+}
+.tabs-bar[data-hidden-before][data-hidden-after] .tabs {
+  mask-image: linear-gradient(to right, transparent var(--tabs-arrow), #000 var(--tabs-edge), #000 calc(100% - var(--tabs-edge)), transparent calc(100% - var(--tabs-arrow)));
+}
+.tabs button {
+  flex: none;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 12px;
+  color: var(--ink-3);
+}
+.tabs button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+/* Inside the tab: the row scrolls, so an outline around it would be cut off. */
+.tabs button:focus-visible {
+  outline-offset: -2px;
+}
+.tabs button[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.tabs-bar > .tabs-scroll {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--tabs-arrow);
+  padding: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-2);
+}
+.tabs-bar > .tabs-scroll:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+.tabs-bar > .tabs-scroll[hidden] {
+  display: none;
+}
+.tabs-scroll.before {
+  left: 0;
+}
+.tabs-scroll.after {
+  right: 0;
+}

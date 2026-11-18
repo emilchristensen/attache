@@ -39,6 +39,11 @@ Attache's own screen, which shows the Brain and the Inbox and takes the owner's 
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
+**Attention dot**:
+The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
+It never means new, unread, changed or offline.
+_Avoid_: badge, notification dot, unread dot
+
 **Harness**:
 The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex or Antigravity.
 It is where the owner asks about the Brain and adds to it.

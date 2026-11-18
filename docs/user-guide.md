@@ -101,6 +101,12 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 **Home** shows the attention inbox.
 Attache has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
+The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
+Headings are set in Georgia, and the briefing sits on an amber page of its own.
+Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
+Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
+The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
+
 - The briefing summarises what changed, what needs your judgment and what Attache has prepared, one point per line.
   The counts under it jump to each group; drafts and memory changes open their own screens.
   **Away summary** covers the last three days.

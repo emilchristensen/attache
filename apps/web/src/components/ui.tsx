@@ -84,22 +84,6 @@ export function ErrorState({ error, retry, title }: { error: ApiError | Error | 
   );
 }
 
-export function StatusPill({ state, label }: { state: string; label?: string }) {
-  const cls = ["ready", "connected", "complete", "empty", "succeeded", "ok", "applied", "open"].includes(state)
-    ? "ok"
-    : ["partial", "needs_setup", "needs_auth", "queued", "running", "draft", "approved", "snoozed", "proposed", "executing", "blocked", "revoked", "unknown", "never_run"].includes(state)
-      ? "warn"
-      : ["error", "failed", "unavailable", "denied", "unauthorized", "offline", "expired", "rejected"].includes(state)
-        ? "danger"
-        : "";
-  return (
-    <span className={`pill ${cls}`}>
-      <span className="dot" aria-hidden />
-      {label ?? state.replace(/_/g, " ")}
-    </span>
-  );
-}
-
 // ---- time --------------------------------------------------------------------------
 
 export function relTime(iso: string | null | undefined): string {
@@ -121,9 +105,14 @@ export function useNow(intervalMs = 30_000) {
   }, [intervalMs]);
 }
 
-export function Time({ iso }: { iso: string | null | undefined }) {
+/** A time relative to now. `standalone` sets it in the 13 px tabular style of a time that stands on its own, such as a value in a list of facts. */
+export function Time({ iso, standalone = false }: { iso: string | null | undefined; standalone?: boolean }) {
   useNow();
-  return <time dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined}>{relTime(iso)}</time>;
+  return (
+    <time className={standalone ? "time" : undefined} dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined}>
+      {relTime(iso)}
+    </time>
+  );
 }
 
 // ---- markdown (safe: raw HTML disabled; markdown-it rejects javascript: links) ---------

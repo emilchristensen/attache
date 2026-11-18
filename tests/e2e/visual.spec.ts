@@ -64,6 +64,18 @@ async function replicationScreens(page: Page) {
   await api(page, "POST", "/replication/off");
 }
 
+/** A Setup step in light, dark and narrow, then back to the desktop light view the journey continues in. */
+async function setupScreens(page: Page, step: string) {
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/screens/${scheme}-setup-${step}.png`, fullPage: true });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: `test-results/screens/narrow-setup-${step}.png`, fullPage: true });
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.emulateMedia({ colorScheme: "light" });
+}
+
 test("screens", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   const page = await ctx.newPage();
@@ -72,7 +84,7 @@ test("screens", async ({ browser }) => {
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
-  await page.screenshot({ path: "test-results/screens/setup-folder.png", fullPage: true });
+  await setupScreens(page, "folder");
   const joinBrain = page.getByText("Already use Attache on another Machine?");
   await joinBrain.click();
   await page.locator(".join-brain").screenshot({ path: "test-results/screens/setup-join.png" });
@@ -81,7 +93,7 @@ test("screens", async ({ browser }) => {
   await page.getByRole("button", { name: "Continue" }).click();
   const gh = page.locator('[data-connection="github"]');
   await gh.getByRole("button", { name: "Set up" }).click();
-  await page.screenshot({ path: "test-results/screens/setup-connections.png", fullPage: true });
+  await setupScreens(page, "connections");
   await gh.getByRole("textbox", { name: "Token" }).fill("ghp_fixturetokenfixturetoken12345678");
   await gh.getByRole("button", { name: "Connect" }).click();
   await expect(gh.getByText("connected", { exact: true })).toBeVisible();
@@ -187,7 +199,7 @@ test("screens", async ({ browser }) => {
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
+  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });

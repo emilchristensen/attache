@@ -203,6 +203,81 @@ test("home: the inbox only, with no chat box or chat shortcut", async () => {
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
+test("look: the Dashboard sets its text in Inter, served by Attache itself, and loads nothing from the internet", async () => {
+  const page = await journeys.newPage();
+  const requests: string[] = [];
+  const fonts: Array<{ url: string; type: string | undefined }> = [];
+  page.on("request", (r) => requests.push(r.url()));
+  page.on("response", (r) => {
+    if (r.request().resourceType() === "font") fonts.push({ url: r.url(), type: r.headers()["content-type"] });
+  });
+  await page.goto(`${stack.url}/`);
+  await expect(page.getByText("Needs your attention")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?Inter"?,/);
+  expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.replace(/"/g, "") === "Inter" && f.status === "loaded"))).toBe(true);
+  expect(fonts).toEqual([{ url: expect.stringMatching(new RegExp(`^${stack.url}/assets/inter-latin-wght-normal-[\\w-]+\\.woff2$`)), type: "font/woff2" }]);
+  expect(requests.filter((u) => !u.startsWith(`${stack.url}/`) && !u.startsWith("data:"))).toEqual([]);
+  await page.close();
+});
+
+/** WCAG contrast of an element's outline or border colour against the opaque surface behind it, as rendered. */
+const measure = (target: Locator, what: "outline" | "border") =>
+  target.evaluate((el, what) => {
+    const parse = (c: string) => {
+      const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c);
+      if (!m) throw new Error(`Unreadable colour ${c}`);
+      return { r: +m[1]!, g: +m[2]!, b: +m[3]!, a: m[4] === undefined ? 1 : +m[4] };
+    };
+    // The surface behind the element: its parents' backgrounds painted from the page down.
+    const layers: string[] = [];
+    for (let n = el.parentElement; n; n = n.parentElement) layers.push(getComputedStyle(n).backgroundColor);
+    type Rgb = { r: number; g: number; b: number };
+    const over = (t: Rgb & { a: number }, below: Rgb): Rgb => ({ r: t.r * t.a + below.r * (1 - t.a), g: t.g * t.a + below.g * (1 - t.a), b: t.b * t.a + below.b * (1 - t.a) });
+    let bg: Rgb = { r: 255, g: 255, b: 255 };
+    for (const c of layers.reverse()) bg = over(parse(c), bg);
+    const style = getComputedStyle(el);
+    // Measured as painted: an outline sits outside, over the surface; a border sits over the control's own fill
+    // (background-clip: border-box), which sits over the surface.
+    const fg = what === "outline" ? over(parse(style.outlineColor), bg) : over(parse(style.borderTopColor), over(parse(style.backgroundColor), bg));
+    const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+      const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x) as [number, number];
+    return { ratio: (hi + 0.05) / (lo + 0.05), width: what === "outline" ? parseFloat(style.outlineWidth) : parseFloat(style.borderTopWidth), style: what === "outline" ? style.outlineStyle : style.borderTopStyle };
+  }, what);
+
+test("look: focus rings, control edges and healthy states, measured on the surfaces they render on, in light and dark", async () => {
+  const page = await journeys.newPage();
+  await page.goto(`${stack.url}/`);
+  await expect(page.getByText("Needs your attention")).toBeVisible();
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const onFeature = page.locator(".briefing").getByRole("button", { name: "Away summary" });
+    const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
+    const onCanvas = page.getByRole("button", { name: "Show dismissed" });
+    // Control edges: a secondary button on the amber briefing and on a card.
+    for (const control of [onFeature, onCard]) {
+      const edge = await measure(control, "border");
+      expect(edge, `${scheme} control edge`).toMatchObject({ width: 1, style: "solid" });
+      expect(edge.ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
+    }
+    // The focus ring: a 3 px outline (never a fill like a selection), at 3:1 or better on every surface it lands on.
+    for (const control of [onFeature, onCard, onCanvas]) {
+      await control.focus();
+      const ring = await measure(control, "outline");
+      expect(ring, `${scheme} focus ring`).toMatchObject({ width: 3, style: "solid" });
+      expect(ring.ratio, `${scheme} focus ring`).toBeGreaterThanOrEqual(3);
+    }
+    // A healthy state is plain words, never a coloured pill.
+    const healthy = page.locator(".coverage").getByText("complete", { exact: true }).first();
+    await expect(healthy).toBeVisible();
+    expect(await healthy.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  }
+  await page.close();
+});
+
 test("search: a hit opens the exact evidence lines, keyboard", async () => {
   const page = await journeys.open("/memory");
   const search = page.getByRole("searchbox", { name: "Search memory" });
@@ -276,6 +351,14 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await expect(page.getByRole("heading", { name: "Drafts and approvals" })).toBeVisible();
   const box = page.getByRole("textbox", { name: "Text" });
   await expect(box).toHaveValue(/reviewed the changes/);
+  // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const edge = await measure(page.locator(".source-chip").first(), "border");
+    expect(edge, `${scheme} citation edge`).toMatchObject({ width: 1, style: "solid" });
+    expect(edge.ratio, `${scheme} citation edge`).toBeGreaterThanOrEqual(3);
+  }
+  await page.emulateMedia({ colorScheme: null });
   await box.fill("Looks good. One question: does the retry respect idempotency keys?");
   await page.getByRole("button", { name: "Save new version" }).click();
   await expect(page.getByText("v2 ·")).toBeVisible();
@@ -691,6 +774,14 @@ async function tabPlaces(tablist: Locator) {
   });
 }
 
+/** Holds back the Inter font until the returned function is called, so the page lays out in the fallback font first. */
+async function holdInter(page: Page): Promise<() => void> {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/assets\/inter-latin-wght-normal-[\w-]+\.woff2$/, (route) => released.then(() => route.continue()), { times: 1 });
+  return release;
+}
+
 /** The first character of every line an element's text runs onto. */
 function lineStarts(el: Element): string[] {
   const starts = new Map<number, { left: number; char: string }>();
@@ -759,9 +850,13 @@ test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phon
     await expect(back).toBeVisible();
     await tablist.getByRole("tab", { name: "Deliverables" }).click();
     await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
-    // Opened from a link, the selected tab is in view.
-    await page.goto(`${stack.url}/memory?tab=deliverables`);
+    // Opened from a link, the selected tab is in view, and stays in view when Inter arrives after the tabs were laid out in the fallback font.
+    const releaseFont = await holdInter(page);
+    await page.goto(`${stack.url}/memory?tab=deliverables`, { waitUntil: "commit" });
     await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
+    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the tabs are laid out before Inter arrives ${at}`).toBe(false);
+    releaseFont();
+    await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
     await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
     // The list follows the tabs at the same distance as the tabs follow the search box.
     await page.goto(`${stack.url}/memory?tab=project`);
@@ -944,7 +1039,7 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await expect(problem).toHaveCount(0);
 
     // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
-    await expect(card.locator('[data-machine="Home PC"] .pill', { hasText: /^Reader$/ })).toBeVisible();
+    await expect(card.locator('[data-machine="Home PC"]').getByText("Reader", { exact: true })).toBeVisible();
     await second.goto(`${other.url}/`);
     const readerLine = second.locator(".reader-line");
     await expect(readerLine).toHaveAttribute("data-reader", "other");

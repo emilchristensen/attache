@@ -1,6 +1,8 @@
 import type { RecentChangeView } from "@attache/contracts";
 import { post } from "../api.ts";
-import { Link, StatusPill, Time, useAction } from "./ui.tsx";
+import { Link, Time, useAction } from "./ui.tsx";
+import { StateTag } from "./StateTag.tsx";
+import { Tag } from "./Tag.tsx";
 
 /** What one change did to its note: a note created or removed, an event, or a fact's old value and new value. */
 export function What({ c }: { c: RecentChangeView }) {
@@ -48,16 +50,16 @@ export function What({ c }: { c: RecentChangeView }) {
  * auto-accept let through. On Home every change is unreviewed, so only
  * Consolidation's are marked there.
  */
-function UnreviewedPill({ c, home }: { c: RecentChangeView; home: boolean }) {
+function UnreviewedTag({ c, home }: { c: RecentChangeView; home: boolean }) {
   if (!c.source.autoAccepted || (home && !c.source.consolidation)) return null;
   return c.source.consolidation ? (
-    <span className="pill" title="Written without asking, because Consolidation found it in a finished session or meeting">
+    <Tag title="Written without asking, because Consolidation found it in a finished session or meeting">
       consolidated
-    </span>
+    </Tag>
   ) : (
-    <span className="pill" title="Written without asking, because auto-accept was on for this Harness">
+    <Tag title="Written without asking, because auto-accept was on for this Harness">
       auto-accepted
-    </span>
+    </Tag>
   );
 }
 
@@ -79,9 +81,9 @@ export function ChangeRow({ c, onReverted, home = false }: { c: RecentChangeView
               {c.title}
             </Link>
           )}
-          {c.revertOf && <StatusPill state="draft" label="revert" />}
-          <UnreviewedPill c={c} home={home} />
-          {c.revertedBy && <StatusPill state="rejected" label="reverted" />}
+          {c.revertOf && <StateTag state="draft" label="revert" />}
+          <UnreviewedTag c={c} home={home} />
+          {c.revertedBy && <StateTag state="rejected" label="reverted" />}
         </div>
         <div className="recent-change-what">
           <What c={c} />

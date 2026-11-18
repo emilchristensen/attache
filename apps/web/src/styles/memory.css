@@ -1,0 +1,39 @@
+/* Memory: a note's Current state, and Recent saves. */
+
+.state-entry {
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+}
+.state-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-areas: "subject value date" ". review review";
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.state-row > strong {
+  grid-area: subject;
+}
+.state-row > .state-value {
+  grid-area: value;
+}
+.state-row > .state-date {
+  grid-area: date;
+}
+.state-row > .state-review {
+  grid-area: review;
+}
+
+.recent-saves {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 720px) {
+  /* Subject and date on one line, the value below at full width. */
+  .state-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "subject date" "value value" "review review";
+  }
+}

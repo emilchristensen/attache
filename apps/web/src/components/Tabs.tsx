@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 export interface TabItem<T extends string> {
   id: T;
@@ -71,25 +71,51 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     setHidden((prev) => (prev.before === next.before && prev.after === next.after ? prev : next));
   }, []);
 
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(list);
-    for (const tab of list.children) observer.observe(tab);
-    list.addEventListener("scroll", measure, { passive: true });
-    return () => {
-      observer.disconnect();
-      list.removeEventListener("scroll", measure);
-    };
-  }, [measure, tabs]);
-
-  useLayoutEffect(() => {
+  const showSelected = useCallback(() => {
     const list = listRef.current;
     const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]');
     if (list && tab) bringIntoView(list, tab);
     measure();
-  }, [selected, measure]);
+  }, [measure]);
+
+  // A layout effect, like the first alignment below: widths are seeded in the same frame, before a font can swap in.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const bar = new ResizeObserver(measure);
+    bar.observe(list);
+    // A tab changes width when Inter replaces the fallback font after the first layout; the focused tab, or else the
+    // selected one, must stay in view. Only a real width change counts, not a height change.
+    const widths = new WeakMap<Element, number>();
+    const tabWidths = new ResizeObserver((entries) => {
+      let changed = false;
+      for (const entry of entries) {
+        const width = entry.borderBoxSize[0]?.inlineSize ?? entry.contentRect.width;
+        const before = widths.get(entry.target);
+        widths.set(entry.target, width);
+        if (before !== undefined && before !== width) changed = true;
+      }
+      if (!changed) return;
+      const focused = list.querySelector<HTMLElement>('[role="tab"]:focus');
+      if (focused) {
+        bringIntoView(list, focused);
+        measure();
+      } else showSelected();
+    });
+    for (const tab of list.children) {
+      // Seed with the width now, so a font swap before the observer's first report still counts as a change.
+      widths.set(tab, tab.getBoundingClientRect().width);
+      tabWidths.observe(tab);
+    }
+    list.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      bar.disconnect();
+      tabWidths.disconnect();
+      list.removeEventListener("scroll", measure);
+    };
+  }, [measure, showSelected, tabs]);
+
+  useLayoutEffect(showSelected, [selected, showSelected]);
 
   const page = (direction: 1 | -1) => {
     const list = listRef.current;

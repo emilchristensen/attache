@@ -1,0 +1,189 @@
+/*
+ * Design tokens: warm paper with blue-black ink in light, deep green slate with pale ink in dark, four role hues,
+ * amber, red and slate for states, and the brass attention dot. Values come from
+ * `docs/design/dashboard-blind-astra/DESIGN.md`; the theme follows the system (prefers-color-scheme), light by default.
+ * `apps/web/test/contrast.test.ts` reads this file and measures every text pair (4.5:1) and non-text pair (3:1) in
+ * both themes on the surfaces they actually sit on, so values change here and nowhere else.
+ */
+
+/* ---- theme-independent ---------------------------------------------------- */
+
+:root {
+  /* Subjects, controls and body text: Inter served by Attache (font.css), then the system sans. */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* Page and section headings: the system's own Georgia, never downloaded. */
+  --serif: Georgia, "Times New Roman", "DejaVu Serif", serif;
+  /* Short times, dates, keys and paths. */
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale (size / line height). */
+  --fs-page: 36px;
+  --lh-page: 42px;
+  --fs-section: 29px;
+  --lh-section: 35px;
+  --fs-detail: 22px;
+  --lh-detail: 28px;
+  --fs-body: 16px;
+  --lh-body: 23px;
+  --fs-control: 14px;
+  --fs-meta: 13px;
+  --lh-meta: 19px;
+
+  /* Spacing on a 4 px base. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 36px;
+  --s-7: 48px;
+
+  /* Radius: 6 controls, 4 tags, 10 cards and the feature spread. List rows are flat. */
+  --r-sm: 6px;
+  --r-tag: 4px;
+  --r: 10px;
+  --r-lg: 10px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --nav-w: 212px;
+  /* The logo keeps the shipped mark's colours in both themes; they are never used for text. */
+  --logo-copper: #ba6249;
+  --logo-brass: #c38942;
+}
+
+/* ---- light ----------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces: the page, then paper for cards, fields and the frame, a sunken step for code and keys,
+     and the amber feature spread for the lead briefing. */
+  --canvas: #f7f6ef;
+  --paper: #fffef8;
+  --sunken: #ecece6;
+  --feature: #f7dfaf;
+  --row-hover: rgba(25, 45, 50, 0.04);
+  --row-on: rgba(25, 45, 50, 0.08);
+
+  /* Ink: the strongest text, secondary text, and metadata. */
+  --ink: #192d32;
+  --ink-2: #46595b;
+  --ink-3: #526466;
+
+  /* Edges: decorative 1 px rules between rows, the outline of a secondary control, the edge of a field. */
+  --rule: #d3d8d0;
+  --line: #798482;
+  --key: #204d57;
+
+  /* Actions: links, the solid ink primary button, the focus ring (an outline, never a fill like selection). */
+  --link: #204d57;
+  --primary: #192d32;
+  --on-primary: #f7f6ef;
+  --focus: #164d84;
+  --highlight: rgba(22, 77, 132, 0.12);
+
+  /* The attention dot and the count beside it. */
+  --attn: #a8701f;
+  --attn-ink: #7a4d00;
+  --attn-soft: rgba(168, 112, 31, 0.14);
+
+  --danger: #a3261c;
+  --shadow: 0 1px 2px rgba(25, 45, 50, 0.06), 0 16px 40px -8px rgba(25, 45, 50, 0.18);
+  --backdrop: rgba(16, 36, 38, 0.6);
+
+  /* Hues: the word and glyph, then the stamp's tint (12% of the hue on paper). */
+  --blue: #164d84;
+  --blue-soft: #e3e9ea;
+  --rust: #8a3d22;
+  --rust-soft: #f1e7de;
+  --plum: #713760;
+  --plum-soft: #eee6e6;
+  --green: #215b48;
+  --green-soft: #e4eae3;
+  --amber: #7a4d00;
+  --amber-soft: #efe9da;
+  --red: #a3261c;
+  --red-soft: #f4e4de;
+  --slate: #4d5e66;
+  --slate-soft: #eaebe6;
+}
+
+/* ---- dark ------------------------------------------------------------------ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --canvas: #192628;
+    --paper: #202f32;
+    --sunken: #263233;
+    --feature: #43351e;
+    --row-hover: rgba(246, 243, 222, 0.05);
+    --row-on: rgba(246, 243, 222, 0.1);
+
+    --ink: #f6f3de;
+    --ink-2: #c0d0c9;
+    --ink-3: #a9bab4;
+
+    --rule: #435554;
+    --line: #91aaa3;
+    --key: #b4ded9;
+
+    --link: #b4ded9;
+    --primary: #f6f3de;
+    --on-primary: #192628;
+    --focus: #a1cdff;
+    --highlight: rgba(161, 205, 255, 0.16);
+
+    --attn: #d9a55a;
+    --attn-ink: #f3c97a;
+    --attn-soft: rgba(217, 165, 90, 0.16);
+
+    --danger: #ffaca3;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 18px 44px -8px rgba(0, 0, 0, 0.6);
+    --backdrop: rgba(5, 12, 13, 0.66);
+
+    /* 16% of the hue on paper. */
+    --blue: #a1cdff;
+    --blue-soft: #354853;
+    --rust: #ffbb96;
+    --rust-soft: #444542;
+    --plum: #f2b6dc;
+    --plum-soft: #42454d;
+    --green: #a4ddc0;
+    --green-soft: #354b49;
+    --amber: #f3c97a;
+    --amber-soft: #42483e;
+    --red: #ffaca3;
+    --red-soft: #444344;
+    --slate: #bccacc;
+    --slate-soft: #39484b;
+  }
+}
+
+/* ---- one hue for a subtree --------------------------------------------------- */
+
+/* `hueClass()` in theme/hues.ts names these. Components inside read --c and --c-soft. */
+.c-blue { --c: var(--blue); --c-soft: var(--blue-soft); }
+.c-rust { --c: var(--rust); --c-soft: var(--rust-soft); }
+.c-plum { --c: var(--plum); --c-soft: var(--plum-soft); }
+.c-green { --c: var(--green); --c-soft: var(--green-soft); }
+.c-amber { --c: var(--amber); --c-soft: var(--amber-soft); }
+.c-red { --c: var(--red); --c-soft: var(--red-soft); }
+.c-slate { --c: var(--slate); --c-soft: var(--slate-soft); }
+
+/* ---- old names ----------------------------------------------------------------- */
+
+/*
+ * The names the screens' inline styles still use from before the redesign, mapped onto the new tokens so every
+ * screen takes the new look before its layout changes. New code uses the new names; a screen's later phase moves
+ * it off these. Remove an alias with its last use (`apps/web/test/tokens-used.test.ts` fails on a missing one).
+ */
+:root {
+  --text: var(--ink);
+  --text-2: var(--ink-2);
+  --muted: var(--ink-3);
+  --warn: var(--amber);
+  --border: var(--rule);
+  --border-strong: var(--line);
+}

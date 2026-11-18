@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { approvalEndedAt, FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, Time, useAction, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { Tabs, type TabItem } from "../components/Tabs.tsx";
@@ -36,8 +37,8 @@ function DraftDetail({ id }: { id: string }) {
   return (
     <div className="stack" data-action-id={d.id} data-status={d.status}>
       <div className="row">
-        <h2 style={{ flex: 1 }}>{d.title}</h2>
-        <StatusPill state={d.status} />
+        <h2 className="detail-title" style={{ flex: 1 }}>{d.title}</h2>
+        <StateTag state={d.status} />
       </div>
       <dl className="kv">
         <dt>Action</dt>
@@ -50,13 +51,23 @@ function DraftDetail({ id }: { id: string }) {
         </dd>
         <dt>Expires</dt>
         <dd>
-          {new Date(d.expiresAt).toLocaleString()} (<Time iso={d.expiresAt} />)
+          <time className="time" dateTime={d.expiresAt}>
+            {new Date(d.expiresAt).toLocaleString()}
+          </time>{" "}
+          (<Time iso={d.expiresAt} standalone />)
         </dd>
         {d.approval && (
           <>
             <dt>Approved</dt>
             <dd>
-              v{d.approval.version} at {new Date(d.approval.approvedAt).toLocaleTimeString()}, valid until {new Date(d.approval.expiresAt).toLocaleTimeString()}
+              v{d.approval.version} at{" "}
+              <time className="time" dateTime={d.approval.approvedAt}>
+                {new Date(d.approval.approvedAt).toLocaleTimeString()}
+              </time>
+              , valid until{" "}
+              <time className="time" dateTime={d.approval.expiresAt}>
+                {new Date(d.approval.expiresAt).toLocaleTimeString()}
+              </time>
             </dd>
           </>
         )}
@@ -228,7 +239,7 @@ export function DraftsView() {
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong>{d.title}</strong>
                   <span className="row small muted">
-                    <StatusPill state={d.status} /> {KIND_LABEL[d.kind] ?? d.kind} · <Time iso={d.updatedAt} />
+                    <StateTag state={d.status} /> {KIND_LABEL[d.kind] ?? d.kind} · <Time iso={d.updatedAt} />
                   </span>
                 </div>
               </button>
