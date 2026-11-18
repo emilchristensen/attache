@@ -673,7 +673,7 @@ test("jobs: work continues after the tab closes; cancellation reports what happe
   await expect(page2.locator("[data-job-id]")).toHaveAttribute("data-status", "running");
   await page2.getByRole("button", { name: "Cancel" }).click();
   await expect(page2.locator("[data-job-id]")).toHaveAttribute("data-status", "cancelled");
-  await expect(page2.getByText("Cancelled: the work stopped before finishing.").first()).toBeVisible();
+  await expect(page2.locator("[data-job-id]").getByRole("status")).toHaveText("Stopped: the work ended before it finished.");
 });
 
 test("wording: counts read as words in the right number, never with (s)", async () => {
@@ -703,8 +703,8 @@ test("wording: counts read as words in the right number, never with (s)", async 
   await expect(page.getByText("1 changed file", { exact: true })).toBeVisible();
 
   await page.goto(`${stack.url}/jobs`);
-  await page.locator(".list-item", { hasText: "Orion migration" }).first().click();
-  await expect(page.locator('[data-event="searched"]').first()).toHaveText(/Searched “.+” — \d+ hits?$/);
+  await page.locator(".job-pick", { hasText: "Orion migration" }).first().click();
+  await expect(page.locator('[data-event="searched"]').first()).toHaveText(/Searched “.+”: \d+ hits?$/);
 
   for (const path of ["/", "/brain", "/approvals", "/jobs", "/connections", "/settings"]) {
     await page.goto(`${stack.url}${path}`);

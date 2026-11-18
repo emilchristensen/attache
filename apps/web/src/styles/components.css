@@ -169,7 +169,7 @@ svg.icon {
   margin-top: 2px;
 }
 
-/* A list beside its detail (Memory, Drafts, Jobs). */
+/* A list beside its detail (the Brain, Jobs). */
 .split {
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
@@ -180,6 +180,56 @@ svg.icon {
 .split-detail {
   min-width: 0;
   scroll-margin-top: 16px;
+}
+
+/*
+ * A detail beside its list (the Brain's reader, Jobs' detail) stays in view and scrolls on its own, so an item picked
+ * far down a long list opens where the owner is looking and the list keeps its place. Its room is the page's visible
+ * height below its top padding (`--page-room`, set by `usePageRoom` in `reveal-detail.ts`) less a margin above and
+ * below. Stacked under the list on a phone, it scrolls with the page.
+ */
+@media (min-width: 721px) {
+  .sticky-detail {
+    /* Until the page has been measured. */
+    --page-room: 100dvh;
+    position: sticky;
+    top: var(--s-4);
+    max-height: calc(var(--page-room) - 2 * var(--s-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* The paper sheet a detail pane reads on (a Brain note, a job), or its placeholder before anything is picked. */
+.note-reader,
+.job-detail,
+.reader-placeholder {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+}
+.note-reader,
+.job-detail {
+  padding: var(--s-5) var(--s-5) var(--s-4);
+  overflow-wrap: anywhere;
+}
+.reader-placeholder {
+  margin: 0;
+  padding: var(--s-6) var(--s-5);
+  color: var(--ink-2);
+}
+/* The kind over a detail's title, in small mono capitals: PERSON, RESEARCH. */
+.reader-kind {
+  margin: 0 0 var(--s-1);
+  font: 600 12px/18px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+/* A ruled section title: the sans heading over a 2 px ink rule, the rows under it. */
+h3.reader-rule {
+  padding-bottom: var(--s-1);
+  border-bottom: 2px solid var(--ink);
 }
 
 .list {

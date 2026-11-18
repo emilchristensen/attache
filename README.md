@@ -40,6 +40,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**
   Research, briefing and draft jobs survive closing the browser tab and restarting the service.
+  Jobs lists them as a quiet table, running work first, where only a failure or a block carries a tag, and Cancel says whether the work stopped or had already finished.
 
 Attache has no chat box of its own; you ask the Brain from your Harness.
 Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
