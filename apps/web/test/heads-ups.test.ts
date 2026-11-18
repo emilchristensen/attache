@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionItemView } from "@attache/contracts";
-import { forYouNow, heldSlot, HEADS_UP_KINDS, MEETING_LEAD_MS, promotedMeetings, withArrivedMeetings, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
+import { endedMeetings, forYouNow, heldSlot, HEADS_UP_KINDS, MEETING_LEAD_MS, promotedMeetings, withArrivedMeetings, RANK, VISIBLE_FOLLOWERS, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKind } from "../src/heads-ups.ts";
 
 const CPH = "Europe/Copenhagen";
 
@@ -420,6 +420,22 @@ describe("the meetings promoted above the Inbox", () => {
   });
 });
 
+describe("a held meeting that ends", () => {
+  // Held at 10:29 with the meeting in progress and the next one below it; the first ends at 10:30.
+  const held = forYouNow(input("2026-11-18T09:29:00Z", { meetings: [handover, triage] }));
+
+  it("is named once its scheduled end has passed, so its place shows that it ended", () => {
+    expect(keysOf(held)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
+    expect(endedMeetings(held, Date.parse("2026-11-18T09:29:59Z"))).toEqual(new Set());
+    expect(endedMeetings(held, Date.parse("2026-11-18T09:30:00Z"))).toEqual(new Set(["meeting:a"]));
+    expect(endedMeetings(held, Date.parse("2026-11-18T10:00:00Z"))).toEqual(new Set(["meeting:a", "meeting:b"]));
+  });
+
+  it("names only meetings: a briefing that leaves on its own clock is not a meeting that ended", () => {
+    expect(endedMeetings(held, Date.parse("2026-11-19T12:00:00Z"))).toEqual(new Set(["meeting:a", "meeting:b"]));
+  });
+});
+
 describe("a meeting that comes due while the Heads-ups are held", () => {
   // Held at 10:14, while only the meeting in progress was timely; at 10:15 the next one comes due.
   const held = forYouNow(input("2026-11-18T09:14:00Z", { meetings: [triage, handover] }));
@@ -465,6 +481,25 @@ describe("a meeting that comes due while the Heads-ups are held", () => {
   it("lets Done or Not now pressed here take an arrived meeting out at once, still held", () => {
     const first = withArrivedMeetings(held, live, ["meeting:a"]);
     expect(keysOf(withArrivedMeetings(held, live, ["meeting:b"], first.placed, new Set(["meeting:b"])).slot)).toEqual(["meeting:a", "briefing:b1"]);
+  });
+
+  it("keeps a later arrival in its place when this tab settles the arrival it came in after", () => {
+    // Two meetings come due in the same minute, below the held meeting in progress; Not now on the first of them.
+    const third = prep("c", "2026-11-18T09:30:00Z", "2026-11-18T10:00:00Z");
+    const both = forYouNow(input("2026-11-18T09:15:00Z", { meetings: [triage, handover, third] }));
+    const first = withArrivedMeetings(held, both, ["meeting:a"]);
+    expect(keysOf(first.slot)).toEqual(["meeting:a", "meeting:b", "meeting:c", "briefing:b1"]);
+    const settled = withArrivedMeetings(held, both, ["meeting:a"], first.placed, new Set(["meeting:b"]));
+    expect(keysOf(settled.slot)).toEqual(["meeting:a", "meeting:c", "briefing:b1"]);
+    // And it stays there for the rest of the hold.
+    expect(keysOf(withArrivedMeetings(held, both, ["meeting:c"], settled.placed, new Set(["meeting:b"])).slot)).toEqual(["meeting:a", "meeting:c", "briefing:b1"]);
+  });
+
+  it("keeps an arrival in its place when the held entry it came in after leaves (Not now on the lead)", () => {
+    const first = withArrivedMeetings(held, live, ["meeting:a"]);
+    // Not now on the lead: the held slot loses it, and the arrival stays at the top, under the briefing that now leads.
+    const without = forYouNow(input("2026-11-18T09:14:00Z", { meetings: [triage, handover], settled: new Set(["meeting:a"]) }));
+    expect(keysOf(withArrivedMeetings(without, live, [], first.placed, new Set(["meeting:a"])).slot)).toEqual(["briefing:b1", "meeting:b"]);
   });
 
   it("brings nothing else in: a briefing or a clock change still waits", () => {
