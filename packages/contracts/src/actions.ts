@@ -7,6 +7,9 @@ export type ActionStatus = "draft" | "approved" | "rejected" | "expired" | "revo
 /** A draft in one of these is not finished: it waits for the owner, or is being sent. */
 export const OPEN_ACTION_STATUSES: readonly ActionStatus[] = ["draft", "approved", "revoked", "executing"];
 
+/** A draft in one of these waits for the owner's decision (approve, approve again, send or reject): the open ones minus `executing`. */
+export const WAITING_ACTION_STATUSES: readonly ActionStatus[] = ["draft", "approved", "revoked"];
+
 /** A draft in one of these is finished: nothing more happens to it, and its attention item can be drafted again. */
 export const FINISHED_ACTION_STATUSES: readonly ActionStatus[] = ["succeeded", "failed", "unknown", "rejected", "expired"];
 

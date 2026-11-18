@@ -77,7 +77,7 @@ export function ChangeRow({ c, onReverted, home = false }: { c: RecentChangeView
           {gone ? (
             <span className="recent-change-title">{c.title}</span>
           ) : (
-            <Link to={`/memory?path=${encodeURIComponent(c.relPath)}`} className="recent-change-title" title={c.relPath}>
+            <Link to={`/brain?path=${encodeURIComponent(c.relPath)}`} className="recent-change-title" title={c.relPath}>
               {c.title}
             </Link>
           )}

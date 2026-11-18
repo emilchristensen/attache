@@ -45,7 +45,6 @@
   --r-lg: 10px;
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --nav-w: 212px;
   /* The logo keeps the shipped mark's colours in both themes; they are never used for text. */
   --logo-copper: #ba6249;
   --logo-brass: #c38942;

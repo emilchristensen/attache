@@ -15,14 +15,19 @@ class LiveHub {
   private listeners = new Set<Listener>();
   private statusListeners = new Set<() => void>();
   status: "connecting" | "open" | "closed" = "connecting";
-  private wasOpen = false;
+  private opened = false;
+
+  /** The stream has been open at least once since the page loaded. */
+  get wasOpen(): boolean {
+    return this.opened;
+  }
 
   start() {
     if (this.es) return;
     this.es = new EventSource(`${API_PREFIX}/events`);
     this.es.onopen = () => {
-      const reconnect = this.wasOpen;
-      this.wasOpen = true;
+      const reconnect = this.opened;
+      this.opened = true;
       this.setStatus("open");
       if (reconnect) this.emit({ type: "reconnected" });
     };
@@ -73,6 +78,15 @@ export function useLiveStatus() {
     (cb) => hub.onStatus(cb),
     () => hub.status,
   );
+}
+
+/**
+ * The live connection as the owner hears of it: `lost` once a stream that was open drops, or when the
+ * first one fails; the first connect after the page loads is not news.
+ */
+export function useLiveConnection(): { status: LiveHub["status"]; lost: boolean } {
+  const status = useLiveStatus();
+  return { status, lost: status === "closed" || (status === "connecting" && hub.wasOpen) };
 }
 
 export function useLiveEvent(handler: Listener) {

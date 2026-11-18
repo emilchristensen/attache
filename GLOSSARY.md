@@ -36,6 +36,7 @@ _Avoid_: Primary Reader, main machine
 
 **Dashboard**:
 Attache's own screen, which shows the Brain and the Inbox and takes the owner's decisions.
+Its screens are Home, Approvals, Brain, Connections, Jobs and Settings.
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
@@ -88,6 +89,11 @@ _Avoid_: Attention item, alert
 A message Attache prepared for the owner to send through a Connection.
 Nothing is sent until the owner approves that exact version.
 _Avoid_: Outgoing message
+
+**Approvals**:
+The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
+It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.
+_Avoid_: Drafts page
 
 **Heads-up**:
 Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.

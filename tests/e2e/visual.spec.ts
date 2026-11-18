@@ -118,13 +118,13 @@ test("screens", async ({ browser }) => {
     await expect(page.getByRole("region", { name: "Recently added" })).toContainText("Nothing was written without your review");
     await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added-empty.png` });
   }
-  // A pending Proposal, so the Memory screens show the review list.
+  // A pending Proposal, so Approvals shows the review list.
   await page.evaluate(async () => {
     const item = { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }, { subject: "Team", value: "Vendor management" }], notes: "Met on the vendor call.\nPrefers email.", events: ["Introduced in the vendor call"], tags: ["vendor"] };
     const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ item, reason: "Introduced in the vendor call", source: { kind: "agent-session", ref: "claude-code/sess-visual", label: "Claude Code session in attache" }, evidence: "Lena from Postmark joined the call; she manages our account and prefers email." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
-  // Recent saves on the Memory screen: a correction, a reverted one, and one a later save overwrote.
+  // Recent saves on the Brain screen: a correction, a reverted one, and one a later save overwrote.
   await harnessSave(stack, [{ action: "create", type: "person", title: "Priya Shah", facts: [{ subject: "Role", value: "Engineering manager for billing" }, { subject: "Prefers", value: "Written updates on Mondays" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Role", value: "Director of platform engineering, owning billing, ledger and the payments roadmap through 2027", reason: "promotion", review: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 10) }] }], { agent: "codex", session: "thread-visual-2" });
   await harnessSave(stack, [{ action: "update", path: "memory/people/priya-shah.md", facts: [{ subject: "Prefers", value: "Written updates on Fridays", reason: "new rhythm" }] }], { agent: "claude-code", session: "6f1c2b0e-visual" });
@@ -159,7 +159,7 @@ test("screens", async ({ browser }) => {
   writeFileSync(priya, readFileSync(priya, "utf8").replace(/\*\*Prefers\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Prefers** (2026-01-10, review 2026-02-01)"));
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
+    for (const [name, path] of [["home", "/"], ["brain", "/brain?tab=person"], ["approvals", "/approvals"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
       await page.goto(`${stack.url}${path}`);
       await page.waitForTimeout(600);
       await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png`, fullPage: false });
@@ -170,46 +170,61 @@ test("screens", async ({ browser }) => {
     await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
     await page.getByRole("region", { name: "Auto-accept" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
     // A note opened read-only, below the review lists.
-    await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+    await page.goto(`${stack.url}/brain?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
-    await page.screenshot({ path: `test-results/screens/${scheme}-memory-note.png` });
-    await page.goto(`${stack.url}/memory`);
+    await page.screenshot({ path: `test-results/screens/${scheme}-brain-note.png` });
+    await page.goto(`${stack.url}/brain`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
     await page.goto(stack.url);
     await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
     await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added.png` });
+    // The frame: this Machine's disclosure under the masthead, then the shortcut sheet.
+    await page.goto(`${stack.url}/jobs`);
+    await page.getByRole("button", { name: /^This Machine/ }).click();
+    await expect(page.getByRole("region", { name: "This Machine" })).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-shell-machine.png` });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-shell-shortcuts.png` });
+    await page.keyboard.press("Escape");
   }
   // Search before and after the meaning model is downloaded.
-  await page.goto(`${stack.url}/memory`);
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await page.goto(`${stack.url}/brain`);
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toBeVisible();
   await page.locator("[data-keywords-only]").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "test-results/screens/dark-memory-keywords-only.png", fullPage: false });
+  await page.screenshot({ path: "test-results/screens/dark-brain-keywords-only.png", fullPage: false });
   await page.goto(`${stack.url}/settings`);
   const meaning = page.locator("[data-meaning-search]");
   await meaning.getByRole("button", { name: /^Download model/ }).click();
   await expect(meaning.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });
   await meaning.screenshot({ path: "test-results/screens/dark-settings-meaning-ready.png" });
-  await page.goto(`${stack.url}/memory`);
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("When is the cutover plan due for the Orion migration?");
+  await page.goto(`${stack.url}/brain`);
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("When is the cutover plan due for the Orion migration?");
   await page.locator(".list-item", { hasText: "Orion" }).first().click();
   await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
   await page.waitForTimeout(300);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [name, path] of [["home", "/"], ["memory", "/memory?tab=person"], ["drafts", "/drafts"], ["jobs", "/jobs"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
+  for (const [name, path] of [["home", "/"], ["brain", "/brain?tab=person"], ["approvals", "/approvals"], ["jobs", "/jobs"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);
     await page.waitForTimeout(500);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });
   }
-  await page.goto(`${stack.url}/memory?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
+  await page.goto(`${stack.url}/brain?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
   await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(500);
-  await page.screenshot({ path: "test-results/screens/narrow-memory-note.png" });
+  await page.screenshot({ path: "test-results/screens/narrow-brain-note.png" });
   await page.goto(stack.url);
   const recentlyAdded = page.getByRole("region", { name: "Recently added" });
   await expect(recentlyAdded.getByRole("listitem").first()).toBeVisible();
   await recentlyAdded.screenshot({ path: "test-results/screens/narrow-home-recently-added.png" });
+  // The bottom bar's More sheet, with the rest of the screens and this Machine.
+  await page.locator(".bottom-bar").getByRole("button", { name: "More" }).click();
+  await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/narrow-shell-more.png" });
+  await page.keyboard.press("Escape");
 });

@@ -1,6 +1,7 @@
 import type { ReaderView } from "@attache/contracts";
 import { useResource } from "../live.ts";
-import { Time } from "../components/ui.tsx";
+import { Link, Time } from "../components/ui.tsx";
+import { Icon } from "../components/icons.tsx";
 
 export const READER_EVENTS = ["reader.changed", "replication.changed", "config.changed"];
 
@@ -35,12 +36,29 @@ export function ReaderLine() {
         <>No Machine is the Reader yet; this Machine learns which one at its next check of the repository. </>
       ) : state === "silent" ? (
         <>
-          {readerName(r)} was the Reader but has been silent since <Time iso={r.heartbeatAt} />, so no Machine reads the sources on a schedule.{" "}
+          {readerName(r)} was the Reader but went silent <Time iso={r.heartbeatAt} />, so no Machine reads the sources on a schedule.{" "}
         </>
       ) : (
         <>{readerName(r)} runs Source refresh and briefings. </>
       )}
       <LastRefresh at={r.lastRefreshAt} />
     </p>
+  );
+}
+
+/**
+ * The persistent warning under the masthead while the Reader is silent: nothing reads the sources on a
+ * schedule, so it stays in view on every screen and size until a Reader renews its lease.
+ */
+export function ReaderWarning() {
+  const r = useResource<ReaderView>("/reader", READER_EVENTS).data;
+  if (!r?.silent) return null;
+  return (
+    <div className="banner danger" role="status" data-reader-warning>
+      <Icon name="warning" />
+      <p>
+        <strong>Not reading.</strong> {readerName(r)} was the Reader but went silent <Time iso={r.heartbeatAt} />, so no Machine reads the sources on a schedule. <Link to="/settings">Machines and Replication</Link>
+      </p>
+    </div>
   );
 }

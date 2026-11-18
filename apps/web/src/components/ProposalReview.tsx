@@ -1,7 +1,7 @@
 import type { MemorySaveItem, ProposalCorrection, ProposalView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Time, useAction } from "./ui.tsx";
+import { Empty, ErrorState, Loading, Time, useAction } from "./ui.tsx";
 
 function headline(item: MemorySaveItem | null, target: string): string {
   if (!item) return `Unreadable change to ${target}`;
@@ -61,43 +61,49 @@ function Parts({ item, corrections }: { item: MemorySaveItem; corrections: reado
   );
 }
 
-/** Pending Proposals, each shown whole and decided with one click. */
+/** Pending Proposals, the changes to the Brain that wait under Approvals, each shown whole and decided with one click. */
 export function ProposalReview() {
   const q = useResource<{ proposals: ProposalView[] }>("/memory/proposals?status=proposed", ["memory.changed"]);
   const { busy, run } = useAction();
   const proposals = q.data?.proposals ?? [];
-  if (!proposals.length) return null;
   const decide = (p: ProposalView, decision: "apply" | "reject") => run(`${decision}:${p.id}`, () => post(`/memory/proposals/${p.id}/${decision}`).then(q.reload), decision === "apply" ? "Applied" : "Rejected");
   return (
-    <section className="card stack-sm" aria-labelledby="proposal-review-heading">
-      <h3 id="proposal-review-heading">Memory changes to review ({proposals.length})</h3>
-      {proposals.map((p) => (
-        <article key={p.id} className="item" data-proposal={p.id} aria-label={headline(p.item, p.target)}>
-          <div className="title">{headline(p.item, p.target)}</div>
-          {p.item ? <Parts item={p.item} corrections={p.corrections} /> : <div className="summary">This Proposal can no longer be read. Reject it to clear it.</div>}
-          {p.evidence && (
-            <figure className="proposal-evidence" data-evidence>
-              <figcaption>Evidence</figcaption>
-              <blockquote>{p.evidence}</blockquote>
-            </figure>
-          )}
-          <div className="meta proposal-meta separated">
-            {p.reason && <span>Why: {p.reason}</span>}
-            {p.source && <span>Source: {p.source}</span>}
-            <span>
-              Proposed by {p.proposedBy} on {p.proposedOn} <Time iso={p.createdAt} />
-            </span>
-          </div>
-          <div className="item-actions">
-            <button className="small primary" disabled={busy !== null || !p.item} onClick={() => void decide(p, "apply")}>
-              Apply
-            </button>
-            <button className="small" disabled={busy !== null} onClick={() => void decide(p, "reject")}>
-              Reject
-            </button>
-          </div>
-        </article>
-      ))}
+    <section className="approvals-section stack-sm" aria-labelledby="proposal-review-heading">
+      <h2 id="proposal-review-heading">Changes to the Brain{proposals.length ? ` (${proposals.length})` : ""}</h2>
+      {q.loading && !q.data && <Loading lines={2} />}
+      <ErrorState error={q.error} retry={q.reload} />
+      {q.data && !proposals.length && <Empty title="No changes to review">A Proposal from a Harness or Consolidation appears here to apply or reject.</Empty>}
+      {proposals.length > 0 && (
+        <div className="card stack-sm">
+          {proposals.map((p) => (
+            <article key={p.id} className="item" data-proposal={p.id} aria-label={headline(p.item, p.target)}>
+              <div className="title">{headline(p.item, p.target)}</div>
+              {p.item ? <Parts item={p.item} corrections={p.corrections} /> : <div className="summary">This Proposal can no longer be read. Reject it to clear it.</div>}
+              {p.evidence && (
+                <figure className="proposal-evidence" data-evidence>
+                  <figcaption>Evidence</figcaption>
+                  <blockquote>{p.evidence}</blockquote>
+                </figure>
+              )}
+              <div className="meta proposal-meta separated">
+                {p.reason && <span>Why: {p.reason}</span>}
+                {p.source && <span>Source: {p.source}</span>}
+                <span>
+                  Proposed by {p.proposedBy} on {p.proposedOn} <Time iso={p.createdAt} />
+                </span>
+              </div>
+              <div className="item-actions">
+                <button className="small primary" disabled={busy !== null || !p.item} onClick={() => void decide(p, "apply")}>
+                  Apply
+                </button>
+                <button className="small" disabled={busy !== null} onClick={() => void decide(p, "reject")}>
+                  Reject
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

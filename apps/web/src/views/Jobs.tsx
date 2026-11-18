@@ -120,7 +120,7 @@ function JobDetail({ id }: { id: string }) {
             </button>
           )}
           {result.actionId && (
-            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => navigate(`/drafts?id=${result.actionId}`)}>
+            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => navigate(`/approvals?id=${result.actionId}`)}>
               Open the draft
             </button>
           )}

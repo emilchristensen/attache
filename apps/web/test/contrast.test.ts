@@ -68,6 +68,8 @@ const PAIRS: Pair[] = [
   ...text(["--link"], SURFACES),
   ...text(["--link"], ROW_STATES, "--paper"),
   ...text(["--attn-ink", "--danger"], SURFACES),
+  // The silent-Reader banner under the masthead: danger words on the red tint.
+  ...text(["--danger"], ["--red-soft"]),
   // The primary button's words on its solid ink, and the selected navigation entry.
   ...text(["--on-primary"], ["--primary"]),
   // Each hue: its kind word on its own stamp, on every surface and on a selected row.

@@ -28,8 +28,8 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
-- **Drafts and approvals.**
-  PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts.
+- **Approvals.**
+  Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
 - **Replication (opt-in).**
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**
@@ -37,6 +37,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 
 Attache has no chat box of its own; you ask the Brain from your Harness.
 Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
+Home, Approvals, Brain, Connections, Jobs and Settings sit in one masthead, or in a bottom bar on a narrow window, and `g` then a letter jumps to each (`?` lists the shortcuts).
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.

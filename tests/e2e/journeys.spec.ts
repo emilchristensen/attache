@@ -279,8 +279,8 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
 });
 
 test("search: a hit opens the exact evidence lines, keyboard", async () => {
-  const page = await journeys.open("/memory");
-  const search = page.getByRole("searchbox", { name: "Search memory" });
+  const page = await journeys.open("/brain");
+  const search = page.getByRole("searchbox", { name: "Search the Brain" });
   await search.fill("When is the cutover plan due for the Orion migration?");
   const hit = page.locator(".list-item", { hasText: "Orion" }).first();
   await expect(hit).toBeVisible();
@@ -312,7 +312,7 @@ test("attention: dismiss persists across reload and briefings; briefing reports 
   await page.reload();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible();
   // The logo's dot says something needs attention.
-  await expect(page.locator(".nav .brand .logo-dot")).toHaveCount(1);
+  await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(1);
   await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toHaveCount(0);
   await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toHaveCount(0);
   await page.getByRole("button", { name: "Show dismissed" }).click();
@@ -336,7 +336,7 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await page.getByRole("link", { name: "Home" }).click();
   await expect(pr.getByRole("button", { name: "Prepare draft" })).toBeVisible();
   await expect(pr.getByRole("button", { name: "View draft" })).toHaveCount(0);
-  await page.goto(`${stack.url}/drafts?id=${rejectedId}`);
+  await page.goto(`${stack.url}/approvals?id=${rejectedId}`);
   await page.getByRole("tab", { name: "Finished" }).click();
   await expect(page.getByRole("button", { name: /Review acme\/web#42/ }).first()).toBeVisible();
   await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "rejected");
@@ -348,7 +348,7 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
   await pr.getByRole("button", { name: "View draft" }).click();
-  await expect(page.getByRole("heading", { name: "Drafts and approvals" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
   const box = page.getByRole("textbox", { name: "Text" });
   await expect(box).toHaveValue(/reviewed the changes/);
   // The citation under the Draft's context is a button: its edge reaches 3:1 on the card it sits on, in both themes.
@@ -373,7 +373,7 @@ test("drafts: prepare, edit, approve, blocked until write is authorised, then ve
   await gh.getByRole("checkbox", { name: /I understand/ }).check();
   await gh.getByRole("button", { name: "Save write permissions" }).click();
   await expect(gh.getByText("Post a comment on a pull request or issue", { exact: false }).first()).toBeVisible();
-  await page.goto(`${stack.url}/drafts`);
+  await page.goto(`${stack.url}/approvals`);
   // The owner steps away and the 15-minute approval ends: the draft goes back to needing approval, and approving again is one click.
   const detail = page.locator("[data-action-id]");
   await expect(detail).toHaveAttribute("data-status", "approved");
@@ -431,7 +431,7 @@ test("wording: counts read as words in the right number, never with (s)", async 
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?, 2 indexed files\./);
   await disconnect.getByRole("button", { name: "Cancel" }).click();
 
-  await page.goto(`${stack.url}/drafts`);
+  await page.goto(`${stack.url}/approvals`);
   await page.getByRole("tab", { name: "Finished" }).click();
   await page.locator(".list-item", { hasText: "acme/web#42" }).first().click();
   await expect(page.getByText("1 changed file", { exact: true })).toBeVisible();
@@ -440,7 +440,7 @@ test("wording: counts read as words in the right number, never with (s)", async 
   await page.locator(".list-item", { hasText: "Orion migration" }).first().click();
   await expect(page.locator('[data-event="searched"]').first()).toHaveText(/Searched “.+” — \d+ hits?$/);
 
-  for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings"]) {
+  for (const path of ["/", "/brain", "/approvals", "/jobs", "/connections", "/settings"]) {
     await page.goto(`${stack.url}${path}`);
     await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
     await page.waitForLoadState("networkidle");
@@ -490,8 +490,8 @@ test("credentials: Settings says which secret store holds them and why", async (
 });
 
 test("meaning-based search: search says it matches keywords only, and why, until the owner downloads the model in Settings", async () => {
-  const page = await journeys.open("/memory");
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  const page = await journeys.open("/brain");
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page.locator("[data-keywords-only]")).toContainText("the meaning model is not downloaded");
   await expect(page.locator(".list-item").first()).toBeVisible();
 
@@ -505,31 +505,32 @@ test("meaning-based search: search says it matches keywords only, and why, until
   await expect(card.getByRole("button", { name: /Download/ })).toHaveCount(0);
 
   // Once the vectors are built, search ranks by meaning and no longer says it matches keywords only.
-  await page.goto(`${stack.url}/memory`);
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Orion");
+  await page.goto(`${stack.url}/brain`);
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Orion");
   await expect(page.locator(".list-item").first()).toBeVisible();
   await expect(page.locator("[data-keywords-only]")).toHaveCount(0);
 });
 
-test("reconnection: service restart shows a banner, then recovers state", async () => {
+test("reconnection: service restart shows on this Machine's button in the masthead, then recovers state", async () => {
   const page = await journeys.open("/");
   await expect(page.getByText("Needs your attention")).toBeVisible();
+  const machine = page.getByRole("button", { name: /^This Machine/ });
   await stack.stopService();
-  await expect(page.getByText(/Reconnecting to the Attache service|Disconnected from the Attache service/)).toBeVisible({ timeout: 20_000 });
+  await expect(machine).toContainText(/Reconnecting|Disconnected/, { timeout: 20_000 });
   await stack.startService();
-  await expect(page.getByText(/Reconnecting to the Attache service|Disconnected from the Attache service/)).toBeHidden({ timeout: 30_000 });
+  await expect(machine).not.toContainText(/Reconnecting|Disconnected/, { timeout: 30_000 });
   // The Dashboard reaches the service again without a reload.
-  await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Memory" }).click();
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Priya Shah");
+  await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Brain" }).click();
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Priya Shah");
   await expect(page.locator(".list-item", { hasText: "Priya" }).first()).toBeVisible();
 });
 
-test("narrow screen: bottom navigation, no horizontal overflow, all views reachable", async () => {
+test("narrow screen: the bottom bar, no horizontal overflow, all views reachable", async () => {
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings"]) {
+  for (const path of ["/", "/brain", "/approvals", "/jobs", "/connections", "/settings"]) {
     await page.goto(`${stack.url}${path}`);
-    await expect(page.locator(".bottom-nav")).toBeVisible();
+    await expect(page.locator(".bottom-bar")).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow, `horizontal overflow on ${path}`).toBeLessThanOrEqual(1);
   }
@@ -537,10 +538,10 @@ test("narrow screen: bottom navigation, no horizontal overflow, all views reacha
   await expect(page.getByText("Needs your attention")).toBeVisible();
   // Home is the inbox alone, so there is nothing to switch between.
   await expect(page.getByRole("button", { name: "Conversation", exact: true })).toHaveCount(0);
-  const navFits = await page.locator(".bottom-nav").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
-  expect(navFits, "bottom navigation fits without scrolling").toBe(true);
-  await page.locator(".bottom-nav").getByRole("link", { name: "Memory" }).click();
-  await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
+  const navFits = await page.locator(".bottom-bar").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+  expect(navFits, "the bottom bar fits without scrolling").toBe(true);
+  await page.locator(".bottom-bar").getByRole("link", { name: "Brain" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
 });
 
 /** Where a page scrolls: the scrollbar of its largest scrolling element, and the column its content sits in. */
@@ -587,7 +588,7 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
     for (const viewport of [{ width: 1280, height: 800 }, { width: 600, height: 800 }]) {
       await page.setViewportSize(viewport);
       let home: PageScroll | undefined;
-      for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings", "/setup"]) {
+      for (const path of ["/", "/brain", "/approvals", "/jobs", "/connections", "/settings", "/setup"]) {
         await page.goto(`${stack.url}${path}`);
         await expect(page.locator(".page > :first-child, main.setup").first()).toBeVisible();
         await page.waitForLoadState("networkidle");
@@ -600,9 +601,12 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
         home ??= s;
         if (path !== "/setup") expect([s.contentLeft, s.contentTop], `${at}: content starts where Home's does`).toEqual([home.contentLeft, home.contentTop]);
         if (viewport.width < 1280) continue;
-        // Wide windows keep the reading columns: Settings and Connections, Home's inbox, and the centred Setup steps.
+        // Wide windows keep the reading columns: Settings and Connections, Home's column centred beside the scrollbar, and the centred Setup steps.
         if (path === "/connections" || path === "/settings") expect(s.contentWidth, `${at}: content column`).toBe(824);
-        if (path === "/") expect(s.contentWidth, `${at}: inbox column`).toBe(920);
+        if (path === "/") {
+          expect(s.contentWidth, `${at}: reading column`).toBeLessThanOrEqual(1072);
+          expect(Math.abs(s.contentLeft - (s.scrollbarLeft - s.contentRight)), `${at}: the reading column is centred`).toBeLessThanOrEqual(1);
+        }
         if (path === "/setup") expect(Math.abs(s.contentLeft - (s.scrollbarLeft - s.contentRight)), `${at}: Setup is centred`).toBeLessThanOrEqual(1);
       }
     }
@@ -611,12 +615,12 @@ test("scrollbars: every page scrolls at the window's right edge, with its conten
   }
 });
 
-test("memory: notes, evidence and deliverables are read-only, with no capture box or correct and edit controls", async () => {
+test("brain: notes, evidence and deliverables are read-only, with no capture box or correct and edit controls", async () => {
   // Notes reach the Brain from a Harness, never from the Dashboard.
   await harnessSave(stack, [{ action: "create", type: "decision", title: "Email vendor", facts: [{ subject: "Decision", value: "Keep Nimbus as email vendor for 2027" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
   await harnessSave(stack, [{ action: "update", path: VENDOR, facts: [{ subject: "Decision", value: "Switch to Postmark for 2027", reason: "Procurement chose Postmark" }] }], { agent: "claude-code", session: "sess-e2e-vendor" });
-  const page = await journeys.open("/memory?tab=decision");
-  await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
+  const page = await journeys.open("/brain?tab=decision");
+  await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
   await expect(page.getByRole("button", { name: /capture/i })).toHaveCount(0);
   await page.locator(".list-item", { hasText: "Email vendor" }).click();
   const state = page.locator('[data-subject="Decision"]');
@@ -655,14 +659,14 @@ test("memory: notes, evidence and deliverables are read-only, with no capture bo
   expect(readFileSync(join(stack.dataDir, VENDOR), "utf8")).not.toContain("Typed in the Dashboard");
 
   // Search finds the current value, not the superseded one.
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Which email vendor did we decide on for 2027?");
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Which email vendor did we decide on for 2027?");
   const hit = page.locator(".list-item", { hasText: "Email vendor" }).first();
   await expect(hit).toContainText("Postmark");
   await expect(hit).not.toContainText("superseded");
 });
 
-test("memory: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
-  const page = await journeys.open("/memory");
+test("approvals: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
+  const page = await journeys.open("/approvals");
   // Proposals arrive from outside the Dashboard; post them with the browser's own session.
   const propose = (body: unknown) =>
     page.evaluate(async (b) => {
@@ -686,7 +690,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   });
   const create = await propose({ item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }], tags: ["vendor"] }, reason: "Introduced in the vendor call" });
 
-  const review = page.getByRole("region", { name: /Memory changes to review/ });
+  const review = page.getByRole("region", { name: /Changes to the Brain/ });
   const card = review.locator(`[data-proposal="${update.id}"]`);
   await expect(card.getByText(`Update ${VENDOR}`)).toBeVisible();
   // A fact the note already holds with another value shows as a correction: the old value and the new one.
@@ -704,7 +708,8 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   await card.getByRole("button", { name: "Apply" }).click();
   await expect(card).toHaveCount(0);
   await newNote.getByRole("button", { name: "Reject" }).click();
-  await expect(review).toHaveCount(0);
+  await expect(review.locator("[data-proposal]")).toHaveCount(0);
+  await expect(review).toContainText("No changes to review");
 
   const file = readFileSync(join(stack.dataDir, VENDOR), "utf8");
   const [current, history] = file.split("## History");
@@ -713,7 +718,7 @@ test("memory: a Proposal shows every part of the change and is applied or reject
   expect(history).toContain('**Decision** was "Switch to Postmark for 2027"');
   expect(history).toContain("Postmark contract signed");
   expect(existsSync(join(stack.dataDir, "memory/people/lena-berg.md"))).toBe(false);
-  await page.goto(`${stack.url}/memory?path=${encodeURIComponent(VENDOR)}&tab=decision`);
+  await page.goto(`${stack.url}/brain?path=${encodeURIComponent(VENDOR)}&tab=decision`);
   await expect(page.locator('[data-subject="Decision"]')).toContainText("Use Postmark from January 2027");
 });
 
@@ -725,7 +730,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await save([{ action: "update", path: atlas, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], "codex", "thread-e2e-3");
   await save([{ action: "create", type: "note", title: "Quasar pricing idea", facts: [{ subject: "Idea", value: "Charge per seat" }] }], "codex", "thread-e2e-4");
 
-  const page = await journeys.open("/memory");
+  const page = await journeys.open("/brain");
   const recent = page.getByRole("region", { name: "Recent saves" });
   const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
   await expect(recent).toBeVisible();
@@ -759,7 +764,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
   await row("Created the note").filter({ hasText: "Quasar pricing idea" }).getByRole("button", { name: "Revert" }).click();
   await expect(row("Removed the note").filter({ hasText: "Quasar pricing idea" })).toBeVisible();
   expect(existsSync(join(stack.dataDir, "memory/notes/quasar-pricing-idea.md"))).toBe(false);
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Quasar");
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Quasar");
   await expect(page.getByText("No matches")).toBeVisible();
 });
 
@@ -802,39 +807,44 @@ function lineStarts(el: Element): string[] {
   return [...starts.values()].map((s) => s.char);
 }
 
-test("narrow layout: the Connections page has one name in the sidebar, the bottom bar and its heading", async () => {
+test("narrow layout: the Connections page has one name in the masthead, the More sheet and its heading", async () => {
   const page = await journeys.open("/connections");
-  const sidebar = page.locator("nav.nav");
-  const bottom = page.locator(".bottom-nav");
-  // One name for the page in the sidebar, the bottom bar and the heading.
+  const masthead = page.locator(".masthead-nav");
+  const bottom = page.locator(".bottom-bar");
+  const more = page.getByRole("dialog", { name: "More" });
+  // One name for the page in the masthead, the More sheet and the heading.
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
-  await expect(sidebar.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
+  await expect(masthead.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(bottom).toBeVisible();
-    await expect(bottom.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
+    await bottom.getByRole("button", { name: "More" }).click();
+    await expect(more.getByRole("link", { name: "Connections", exact: true })).toBeVisible();
+    await expect(more.getByRole("link", { name: "Sources" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Sources" })).toHaveCount(0);
     // Every label shows in full, without an ellipsis, and the bar fits the window.
-    const clipped = await bottom.getByRole("link").evaluateAll((links) => links.filter((a) => a.scrollWidth > a.clientWidth).map((a) => a.textContent));
+    const clipped = await bottom.locator("a, button").evaluateAll((links) => links.filter((a) => a.scrollWidth > a.clientWidth).map((a) => a.textContent));
     expect(clipped, `bottom bar labels cut off at ${width}px`).toEqual([]);
     expect(await bottom.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `bottom bar fits at ${width}px`).toBe(true);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await bottom.getByRole("link", { name: "Memory" }).click();
-  await bottom.getByRole("link", { name: "Connections" }).click();
+  await bottom.getByRole("link", { name: "Brain" }).click();
+  await bottom.getByRole("button", { name: "More" }).click();
+  await more.getByRole("link", { name: "Connections" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Connections");
 });
 
-test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
-  const page = await journeys.open("/memory");
+test("narrow layout: the Brain's collection tabs keep one row and scroll sideways, on a phone and in a wide window's list column", async () => {
+  const page = await journeys.open("/brain");
   for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 800 }, { width: 1360, height: 900 }]) {
     const at = `at ${viewport.width}px`;
     await page.setViewportSize(viewport);
-    await page.goto(`${stack.url}/memory?tab=person`);
-    const tablist = page.getByRole("tablist", { name: "Memory type" });
+    await page.goto(`${stack.url}/brain?tab=person`);
+    const tablist = page.getByRole("tablist", { name: "Collection" });
     await expect(tablist.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
     const places = await tabPlaces(tablist);
-    expect(new Set(places.map((p) => p.top)).size, `Memory tabs on one row ${at}`).toBe(1);
+    expect(new Set(places.map((p) => p.top)).size, `collection tabs on one row ${at}`).toBe(1);
     expect((await tablist.boundingBox())!.height, `the tab bar is one tab high ${at}`).toBeLessThanOrEqual(places[0]!.height + 1);
     const box = (await tablist.boundingBox())!;
     expect(box.x + box.width, `the tab bar stays inside the window ${at}`).toBeLessThanOrEqual(viewport.width);
@@ -852,41 +862,41 @@ test("narrow layout: the Memory tabs keep one row and scroll sideways, on a phon
     await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
     // Opened from a link, the selected tab is in view, and stays in view when Inter arrives after the tabs were laid out in the fallback font.
     const releaseFont = await holdInter(page);
-    await page.goto(`${stack.url}/memory?tab=deliverables`, { waitUntil: "commit" });
+    await page.goto(`${stack.url}/brain?tab=deliverables`, { waitUntil: "commit" });
     await expect(tablist.getByRole("tab", { name: "Deliverables" })).toHaveAttribute("aria-selected", "true");
     expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the tabs are laid out before Inter arrives ${at}`).toBe(false);
     releaseFont();
     await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
     await expect.poll(async () => (await tabPlaces(tablist)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
     // The list follows the tabs at the same distance as the tabs follow the search box.
-    await page.goto(`${stack.url}/memory?tab=project`);
+    await page.goto(`${stack.url}/brain?tab=project`);
     await expect(page.locator(".split .list-item").first()).toBeVisible();
-    const search = (await page.getByRole("searchbox", { name: "Search memory" }).boundingBox())!;
+    const search = (await page.getByRole("searchbox", { name: "Search the Brain" }).boundingBox())!;
     const bar = (await page.locator(".tabs-bar").filter({ has: tablist }).boundingBox())!;
     const list = (await page.locator(".split .list-item").first().boundingBox())!;
-    expect(Math.round(list.y - (bar.y + bar.height)), `gap below the Memory tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
+    expect(Math.round(list.y - (bar.y + bar.height)), `gap below the collection tabs ${at}`).toBe(Math.round(bar.y - (search.y + search.height)));
   }
 });
 
 test("narrow layout: a picked note opens in view, Recent saves never start a line with a dot, and research gets a whole row", async () => {
-  const page = await journeys.open("/memory");
+  const page = await journeys.open("/brain");
 
   // On a phone the note opens below the list, and picking one brings it into view.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${stack.url}/memory?tab=project`);
+  await page.goto(`${stack.url}/brain?tab=project`);
   await page.locator(".split .list-item", { hasText: "Atlas launch" }).click();
   await expect(page.getByRole("heading", { name: "Atlas launch", level: 2 })).toBeVisible();
   // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
   const noteInView = () =>
     page.locator(".split-detail").evaluate((note) => {
       const box = note.getBoundingClientRect();
-      return box.top <= 80 || box.bottom <= document.querySelector(".bottom-nav")!.getBoundingClientRect().top;
+      return box.top <= 80 || box.bottom <= document.querySelector(".bottom-bar")!.getBoundingClientRect().top;
     });
   await expect.poll(noteInView, "the picked note is in view").toBe(true);
 
   // A wrapped Recent saves line starts with its words, never with a separator dot.
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto(`${stack.url}/memory`);
+  await page.goto(`${stack.url}/brain`);
   const metas = page.getByRole("region", { name: "Recent saves" }).locator(".recent-change-meta");
   await expect(metas.first()).toBeVisible();
   for (const meta of await metas.all()) expect(await meta.evaluate(lineStarts)).not.toContain("·");
@@ -913,7 +923,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   const file = join(stack.dataDir, rel);
   writeFileSync(file, readFileSync(file, "utf8").replace(/\*\*Budget\*\* \(\d{4}-\d{2}-\d{2}\)/, "**Budget** (2026-01-10, review 2026-02-01)"));
 
-  const page = await journeys.open(`/memory?path=${encodeURIComponent(rel)}&tab=project`);
+  const page = await journeys.open(`/brain?path=${encodeURIComponent(rel)}&tab=project`);
   const status = page.locator('[data-subject="Status"]');
   const budget = page.locator('[data-subject="Budget"]');
   await expect(status).toContainText(`review after ${inAMonth}`);
@@ -921,7 +931,7 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await expect(budget).toContainText("unverified");
   await expect(budget).toContainText("review was due 2026-02-01");
 
-  await page.getByRole("searchbox", { name: "Search memory" }).fill("Helix budget");
+  await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Helix budget");
   const hit = page.locator(".list-item", { hasText: "40k EUR" }).first();
   await expect(hit).toContainText("unverified");
 
@@ -953,6 +963,10 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(slack.getByText("needs auth", { exact: true })).toBeVisible(cliRun);
   const callout = slack.getByRole("status", { name: "Sign-in needed" });
   await expect(callout).toContainText("claude.ai → Settings → Connectors");
+  // The masthead counts the sign-in beside Connections.
+  const connectionsLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Connections/ });
+  await expect(connectionsLink).toHaveAccessibleName("Connections, 1 sign-in needed");
+  await expect(connectionsLink.locator(".count")).toHaveText("1");
 
   // Reconnecting before the sign-in is fixed says what is still wrong.
   await callout.getByRole("button", { name: "Reconnect" }).click();
@@ -965,6 +979,7 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(page.getByText("Reconnected")).toBeVisible();
   await expect(slack.getByText("connected", { exact: true })).toBeVisible(cliRun);
   await expect(slack.getByRole("status", { name: "Sign-in needed" })).toHaveCount(0);
+  await expect(connectionsLink).toHaveAccessibleName("Connections");
 });
 
 /** Select Check now and wait until the check has finished: the button reads "Checking…" meanwhile. */
@@ -1029,6 +1044,9 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     writeFileSync(join(stack.dataDir, "plan.txt"), "from the Home PC\n");
     await checkNow(card);
     await expect(card.getByText("blocked", { exact: true })).toBeVisible();
+    // Settings carries the named warning in the masthead, from every screen.
+    const settingsLink = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Settings/ });
+    await expect(settingsLink).toHaveAccessibleName("Settings, Replication blocked");
     const problem = card.locator("[data-replication-problem]");
     await expect(problem).toContainText("Replication is blocked");
     await expect(problem).toContainText("plan.txt");
@@ -1037,14 +1055,20 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     await checkNow(card);
     await expect(card.getByText("up to date", { exact: true })).toBeVisible();
     await expect(problem).toHaveCount(0);
+    await expect(settingsLink).toHaveAccessibleName("Settings");
 
     // Both Machines name the Reader, here the Machine that set Replication up, and when it last refreshed every source.
     await expect(card.locator('[data-machine="Home PC"]').getByText("Reader", { exact: true })).toBeVisible();
     await second.goto(`${other.url}/`);
-    const readerLine = second.locator(".reader-line");
+    const readerLine = second.locator(".page .reader-line");
     await expect(readerLine).toHaveAttribute("data-reader", "other");
     await expect(readerLine).toContainText("Home PC runs Source refresh and briefings.");
     await expect(readerLine).toContainText("Last Source refresh");
+    // The masthead's disclosure names this Machine and the Reader.
+    await second.getByRole("button", { name: /^This Machine/ }).click();
+    const machinePanel = second.getByRole("region", { name: "This Machine" });
+    await expect(machinePanel).toContainText("Work Mac");
+    await expect(machinePanel.locator(".reader-line")).toContainText("Home PC runs Source refresh and briefings.");
   } finally {
     await otherCtx.close();
     await other.stop();
@@ -1060,8 +1084,8 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
   expect(existsSync(join(stack.dataDir, ".git"))).toBe(true);
   // Without Replication this Machine is its own Reader again.
   await page.goto(`${stack.url}/`);
-  await expect(page.locator(".reader-line")).toHaveAttribute("data-reader", "alone");
-  await expect(page.locator(".reader-line")).toContainText("This Machine runs Source refresh and briefings.");
+  await expect(page.locator(".page .reader-line")).toHaveAttribute("data-reader", "alone");
+  await expect(page.locator(".page .reader-line")).toContainText("This Machine runs Source refresh and briefings.");
 });
 
 test("wording: no view says sync for reading sources; a source offers Refresh now", async () => {
@@ -1070,7 +1094,7 @@ test("wording: no view says sync for reading sources; a source offers Refresh no
   await expect(gh.getByRole("button", { name: "Refresh now" })).toBeVisible();
   await gh.getByRole("button", { name: "Refresh now" }).click();
   await expect(page.getByText("Refresh started")).toBeVisible();
-  for (const path of ["/", "/memory", "/drafts", "/jobs", "/connections", "/settings"]) {
+  for (const path of ["/", "/brain", "/approvals", "/jobs", "/connections", "/settings"]) {
     await page.goto(`${stack.url}${path}`);
     await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
     await page.waitForLoadState("networkidle");
