@@ -63,15 +63,19 @@ const MEETINGS_ABOVE = "The meeting prep above is open. Not now brings it back h
 
 const line = (text: string, link: EmptyLine["link"] = null): EmptyLine => ({ text, link });
 
-/** "5 sources", "the one source". */
-const sourcesRead = (n: number | null) => (n === null ? "the sources that were read" : n === 1 ? "the one source that was read" : `the ${n} sources that were read`);
+/** "the 5 sources that were read", "the one source that was read". */
+const sourcesRead = (n: number) => (n === 1 ? "the one source that was read" : `the ${n} sources that were read`);
 
-function title(reach: InboxReach, clear: boolean, above: boolean): string {
+/**
+ * The title claims what was found only where something is known to have been read; otherwise it speaks of the list
+ * alone. With meeting prep above, "Nothing else needs your attention." also needs nothing waiting anywhere else.
+ */
+function title(reach: InboxReach, clear: boolean, above: boolean, elsewhere: boolean): string {
   if (clear) return "Nothing needs you.";
   const found = above ? "Nothing else found" : "Nothing found";
-  if (reach.kind === "partial") return `${found} in ${sourcesRead(reach.sources)}.`;
+  if (reach.kind === "partial" && reach.sources) return `${found} in ${sourcesRead(reach.sources)}.`;
   if (reach.kind === "notes") return `${found} in your notes.`;
-  if (above) return reach.kind === "all" ? "Nothing else needs your attention." : "No other open Inbox items.";
+  if (above) return reach.kind === "all" && !elsewhere ? "Nothing else needs your attention." : "No other open Inbox items.";
   return "No open Inbox items.";
 }
 
@@ -97,7 +101,7 @@ function waitLines(count: DecisionCount): EmptyLine[] {
   const { approvals, connections } = count;
   if (approvals.count > 0) {
     const n = `${approvals.exact ? "" : "At least "}${plural(approvals.count, "approval")}`;
-    lines.push(line(`${n} ${approvals.count === 1 && approvals.exact ? "waits on its" : "wait on their"} own page.`, "approvals"));
+    lines.push(line(`${n} ${approvals.count === 1 ? "waits on its" : "wait on their"} own page.`, "approvals"));
   }
   if (connections.count > 0) lines.push(line(connections.count === 1 ? "A Connection needs your sign-in, above." : `${connections.count} Connections need your sign-in, above.`));
   return lines;
@@ -114,6 +118,7 @@ export function emptyInbox({ count, reach, above, failed, now, timeZone }: Empty
   const homeUncounted = !count.home.exact && count.home.count === 0;
   if ((missing.length || homeUncounted) && !failed) return null;
   const clear = count.total.exact && count.total.count === 0 && reach.kind === "all";
+  const elsewhere = [count.approvals, count.connections].some((t) => t.count > 0 || !t.exact);
   const lines: EmptyLine[] = [];
   if (above > 0) lines.push(line(MEETINGS_ABOVE));
   lines.push(line(readLine(reach, now, timeZone)));
@@ -122,5 +127,7 @@ export function emptyInbox({ count, reach, above, failed, now, timeZone }: Empty
     const what = nameList(missing);
     lines.push(line(`${what[0]!.toUpperCase()}${what.slice(1)} could not be counted, so Attache cannot say that nothing needs you.`));
   }
-  return { title: title(reach, clear, above > 0), clear, lines, retry: failed && missing.length > 0 };
+  // A failure behind any part that is not exact, a lower bound included, can be asked again.
+  const retry = failed && [count.home, count.approvals, count.connections].some((t) => !t.exact);
+  return { title: title(reach, clear, above > 0, elsewhere), clear, lines, retry };
 }
