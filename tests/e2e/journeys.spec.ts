@@ -237,8 +237,9 @@ const measure = (target: Locator, what: "outline" | "border") =>
     let bg: Rgb = { r: 255, g: 255, b: 255 };
     for (const c of layers.reverse()) bg = over(parse(c), bg);
     const style = getComputedStyle(el);
-    // A translucent edge is measured as it is painted, over the surface behind it.
-    const fg = over(parse(what === "outline" ? style.outlineColor : style.borderTopColor), bg);
+    // Measured as painted: an outline sits outside, over the surface; a border sits over the control's own fill
+    // (background-clip: border-box), which sits over the surface.
+    const fg = what === "outline" ? over(parse(style.outlineColor), bg) : over(parse(style.borderTopColor), over(parse(style.backgroundColor), bg));
     const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
       const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
       return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
