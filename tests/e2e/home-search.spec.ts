@@ -198,6 +198,14 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await expect(options.nth(5)).toBeInViewport();
   // The results scroll on their own, so the field the owner types in stays in view.
   await expect(search).toBeInViewport();
+  // Refined words bring a new answer, shown from its first result, which Enter would open.
+  await search.press("End");
+  await page.keyboard.type(" workstream");
+  await expect(search).toHaveValue("Helios workstream");
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(options.first()).not.toHaveAttribute("aria-disabled", "true");
+  await expect(options.first()).toBeInViewport();
+  expect(await results(page).evaluate((el) => el.scrollTop)).toBe(0);
 
   // While the answer to new words is on its way, the old results cannot be opened: Enter takes the new words to the Brain.
   let release!: () => void;

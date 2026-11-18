@@ -116,8 +116,11 @@ export function SearchField({ id, className }: { id: string; className?: string 
   useResultsFit(list, expanded, answer);
   const openEvidence = useOpenEvidence();
 
-  // Each new answer chooses its first result, so Enter opens the best match.
-  useEffect(() => setActive(choosable > 0 ? 0 : -1), [answer, choosable]);
+  // Each new answer chooses its first result, so Enter opens the best match, and shows it from the top.
+  useEffect(() => {
+    setActive(choosable > 0 ? 0 : -1);
+    list.current?.scrollTo({ top: 0 });
+  }, [answer, choosable]);
 
   const openHit = (hit: SearchHit) => {
     setOpen(false);
