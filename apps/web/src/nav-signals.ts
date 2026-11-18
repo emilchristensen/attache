@@ -83,8 +83,8 @@ export function useNavSignals(): NavSignals {
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the count would show the decision twice, or not at all, for as
   // long as the slower request takes. Home's rows come from the same held answer, so they match the count.
-  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } });
-  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error }, drafts: { data: drafts.data, error: drafts.error } };
+  const settled = useRef({ inbox: { data: inbox.data, error: inbox.error, askedAt: inbox.askedAt }, drafts: { data: drafts.data, error: drafts.error } });
+  if (!inbox.loading && !drafts.loading) settled.current = { inbox: { data: inbox.data, error: inbox.error, askedAt: inbox.askedAt }, drafts: { data: drafts.data, error: drafts.error } };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
@@ -121,9 +121,9 @@ export function useNavSignals(): NavSignals {
  * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
  * Drafts; the count still waits for the pair.
  */
-function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error">, reload: () => void): Resource<R> {
+function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "askedAt">, reload: () => void): Resource<R> {
   const failed = !inbox.loading && inbox.error ? inbox.error : null;
-  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, reload };
+  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, askedAt: held.askedAt, error: failed ?? held.error, reload };
 }
 
 /** The shell's signals, for the screens inside it. */

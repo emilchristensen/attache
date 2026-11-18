@@ -180,7 +180,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
   const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && hiddenView ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "actions.changed"]);
   const source = hiddenView ? hidden : open;
   const live = source.data?.items ?? null;
-  const list = useInboxList(live, hiddenView ? "hidden" : order, order);
+  const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
   const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
 

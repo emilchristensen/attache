@@ -32,6 +32,7 @@ describe("a row's subject and source line", () => {
     ["a Slack mention shows the message, with the channel on the source line", item("mention", "slack", "Mentioned in #general", { summary: "<@U0SELF|Alex> can you confirm the release date?" }), "@Alex can you confirm the release date?", "Slack · #general"],
     ["Slack's markup reads as words", item("mention", "slack", "Mentioned in Slack", { summary: "<@U0SELF> see <#C01|ops> and <https://x.example/p|the plan>\nsecond line" }), "@someone see #ops and the plan", "Slack"],
     ["Slack's special mentions and escapes read as written", item("mention", "slack", "Mentioned in #ops", { summary: "<!here> <!subteam^S1|@oncall> Check R&amp;D &lt;prod&gt; <!channel>" }), "@here @oncall Check R&D <prod> @channel", "Slack · #ops"],
+    ["a Slack date reads as its fallback text", item("mention", "slack", "Mentioned in #ops", { summary: "Review by <!date^1392734382^{date}|2014-02-18>" }), "Review by 2014-02-18", "Slack · #ops"],
     ["a Slack message without text keeps its title", item("pending_reply", "slack", "Reply to Mira in Slack", { summary: "" }), "Reply to Mira in Slack", "Slack · Mira"],
     [
       "a Confluence mention moves who mentioned to the source line",

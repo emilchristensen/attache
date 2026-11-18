@@ -258,7 +258,10 @@ test("decided rows: a refresh that lands while the decision is sent keeps the re
     const refreshed = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok());
     await api(page, "POST", `/attention/${other}/decision`, { decision: "dismiss" });
     await refreshed;
-    await nextFrame(page);
+    // Home shows that answer (the Inbox and Drafts pair has settled) before the decision is let through.
+    await expect(inboxRow(page, "Prepare release note 22")).toHaveCount(0);
+    // The decision is still on its way, so the row is still open, as that answer has it.
+    await expect(row).not.toHaveAttribute("data-decided");
     const after = page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open") && r.ok());
     release();
     await expect(row).toHaveAttribute("data-decided", "dismiss");

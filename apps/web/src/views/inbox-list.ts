@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { frozenList, ordered, type InboxOrder } from "../inbox-view.ts";
 import type { RowDecision } from "./InboxRow.tsx";
@@ -13,19 +13,23 @@ export interface DecidedEntry {
   item: AttentionItemView;
   decision: RowDecision;
   until: string | null;
-  /**
-   * The latest answer when the decision succeeded; a newer answer that has the item again retires the receipt. Any
-   * answer to a request started earlier is dropped by `useResource` once the reload after the decision starts.
-   */
-  since: readonly AttentionItemView[] | null;
+  /** When the decision succeeded (`performance.now()`): only an answer asked later can retire the receipt. */
+  decidedAt: number;
+}
+
+/** A list answer and when its request was asked (`Resource.askedAt`). */
+export interface ListAnswer {
+  items: readonly AttentionItemView[];
+  askedAt: number | null;
 }
 
 /**
- * Whether a decided row's receipt still stands in `live`: until a newer answer than the one it was decided on has the
- * item again (after Undo, a snooze that ran out, or evidence that changed after a dismissal).
+ * Whether a decided row's receipt still stands: until an answer asked after the decision succeeded has the item again
+ * (after Undo, a snooze that ran out, or evidence that changed after a dismissal). An answer asked earlier may still
+ * have the item, as it was before the decision, and never counts.
  */
-export function receiptStands(entry: DecidedEntry, live: readonly AttentionItemView[]): boolean {
-  return live === entry.since || !live.some((i) => i.id === entry.item.id);
+export function receiptStands(entry: DecidedEntry, answer: ListAnswer): boolean {
+  return answer.askedAt === null || answer.askedAt < entry.decidedAt || !answer.items.some((i) => i.id === entry.item.id);
 }
 
 export type ListEntry = { item: AttentionItemView; decided: DecidedEntry | null };
@@ -44,20 +48,13 @@ const NONE: ReadonlyMap<string, DecidedEntry> = new Map();
 
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, n) => id === b[n]);
 
-export function useInboxList(live: readonly AttentionItemView[] | null, listKey: string, order: InboxOrder): InboxList {
+export function useInboxList(live: readonly AttentionItemView[] | null, askedAt: number | null, listKey: string, order: InboxOrder): InboxList {
   const [snap, setSnap] = useState<{ key: string; ids: readonly string[] } | null>(null);
   // Decided lines belong to one view: a new view starts without the old one's.
   const [decidedIn, setDecidedIn] = useState<{ key: string; map: ReadonlyMap<string, DecidedEntry> }>({ key: listKey, map: new Map() });
   const decisions = decidedIn.key === listKey ? decidedIn.map : NONE;
   const setDecisions = (change: (prev: ReadonlyMap<string, DecidedEntry>) => ReadonlyMap<string, DecidedEntry>) =>
     setDecidedIn((prev) => ({ key: listKey, map: change(prev.key === listKey ? prev.map : NONE) }));
-
-  // The latest answer, read when a decision succeeds: a refresh that landed while the decision was being sent still
-  // has the item, and must not count as the service answering with it again.
-  const latest = useRef(live);
-  useEffect(() => {
-    latest.current = live;
-  }, [live]);
 
   // Items the owner reopened from Hidden in this tab: they come straight back instead of waiting as arrivals.
   const [welcome, setWelcome] = useState<ReadonlySet<string>>(new Set());
@@ -75,9 +72,11 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
 
   // A receipt the service has overtaken gives way to the live item, in the same place.
   useEffect(() => {
-    if (!live || [...decisions.values()].every((d) => receiptStands(d, live))) return;
-    setDecidedIn((prev) => ({ ...prev, map: new Map([...prev.map].filter(([, d]) => receiptStands(d, live))) }));
-  }, [live, decisions]);
+    if (!live) return;
+    const answer = { items: live, askedAt };
+    if ([...decisions.values()].every((d) => receiptStands(d, answer))) return;
+    setDecidedIn((prev) => ({ ...prev, map: new Map([...prev.map].filter(([, d]) => receiptStands(d, answer))) }));
+  }, [live, askedAt, decisions]);
 
   const entries = useMemo<ListEntry[]>(() => {
     if (!frozen || !ids) return [];
@@ -85,10 +84,10 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
     return ids.flatMap((id): ListEntry[] => {
       const d = decisions.get(id);
       const item = byId.get(id);
-      if (d && live && receiptStands(d, live)) return [{ item: d.item, decided: d }];
+      if (d && live && receiptStands(d, { items: live, askedAt })) return [{ item: d.item, decided: d }];
       return item ? [{ item, decided: null }] : [];
     });
-  }, [frozen, ids, decisions, live]);
+  }, [frozen, ids, decisions, live, askedAt]);
 
   return {
     entries,
@@ -98,7 +97,7 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
       setDecisions(() => NONE);
     },
     decided: (item, decision, until) => {
-      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, since: latest.current }));
+      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, decidedAt: performance.now() }));
       if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
     },
   };

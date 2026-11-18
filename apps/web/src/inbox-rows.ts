@@ -85,15 +85,16 @@ const RULES: Readonly<Record<string, Rule>> = {
 
 /**
  * Slack's message markup as words: `<@U1|Alex>` "@Alex", `<@U1>` "@someone", `<#C1|ops>` "#ops", `<!here>` "@here",
- * `<!subteam^S1|@team>` "@team", `<url|label>` "label", then its three escapes (`&amp;`, `&lt;`, `&gt;`) decoded.
+ * `<!subteam^S1|@team>` "@team" and `<!date^…|2014-02-18>` "2014-02-18" (their fallback text), `<url|label>` "label",
+ * then its three escapes (`&amp;`, `&lt;`, `&gt;`) decoded.
  */
 function slackText(text: string): string {
   return (text.split("\n")[0] ?? "")
     .replace(/<@[A-Z0-9]+\|([^>]+)>/g, "@$1")
     .replace(/<@[A-Z0-9]+>/g, "@someone")
     .replace(/<#[A-Z0-9]+\|([^>]+)>/g, "#$1")
-    .replace(/<!([a-z^A-Z0-9]+)\|([^>]+)>/g, "$2")
-    .replace(/<!([a-z]+)[^>]*>/g, "@$1")
+    .replace(/<!(here|channel|everyone)>/g, "@$1")
+    .replace(/<![^|>]+\|([^>]+)>/g, "$1")
     .replace(/<[^|>]+\|([^>]+)>/g, "$1")
     .replace(/<([^>]+)>/g, "$1")
     .replace(/&lt;/g, "<")
