@@ -217,6 +217,11 @@ describe("the lead's development", () => {
     expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: nothingNew })).lead).toMatchObject({ title: "Overdue: Review rollback runbook" });
   });
 
+  it("leads with the item when the summary opens with no words, as the no-model summary does for Other items alone", () => {
+    const other = briefing({ summary: ". 1 new and 0 changed since the last briefing.", sections: [{ id: "other", title: "Other", items: [item("r1", "Replication blocked")] }] });
+    expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: other })).lead).toMatchObject({ title: "Replication blocked", explanation: "About Replication blocked." });
+  });
+
   it("keeps the summary's own first sentence otherwise", () => {
     expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "Nothing needs your attention right now." }) })).lead).toMatchObject({ title: "Nothing needs your attention right now.", explanation: null });
     expect(forYouNow(input("2026-11-18T09:30:00Z", { briefing: briefing({ summary: "2 deadlines.", sections: [] }) })).lead).toMatchObject({ title: "2 deadlines." });

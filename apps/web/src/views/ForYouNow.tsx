@@ -4,7 +4,7 @@ import { forYouNow, type BriefingView, type HeadsUp, type HeadsUpInput, type Hea
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
-import { plural, type ReaderView } from "@attache/contracts";
+import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { Link } from "../components/ui.tsx";
@@ -99,24 +99,30 @@ function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
 }
 
 interface StatusView {
-  reader: Pick<ReaderView, "replicated" | "thisMachine" | "silent">;
+  reader: Pick<ReaderView, "replicated" | "thisMachine" | "silent" | "heartbeatAt">;
   schedules: Array<{ jobKind: string; enabled: boolean; nextRunAt: string | null }>;
 }
 
 /**
  * The scheduler's daily briefing row (`/status`), or null while not known. Only the Reader runs scheduled briefings,
- * so another Machine's own row says nothing about when the next one comes: null there too. Asked again once its
- * next run has passed (the clock ticks every minute and on wake), since a run that wrote no briefing sends no event.
+ * so another Machine's own row, or this Machine's once its Reader lease has lapsed, says nothing about when the next
+ * one comes: null there too. A run that wrote no briefing and a lease that lapsed send no event, so once the next run
+ * or the lease has passed, `/status` is asked again, once per clock tick (every minute and on wake).
  */
 function useBriefingSchedule(enabled: boolean, now: number): HeadsUpInput["schedule"] {
   const r = useResource<StatusView>(enabled ? "/status" : null, ["config.changed", "briefing.created", "reader.changed", "service.resumed"]);
   const reader = r.data?.reader;
-  const row = reader && (!reader.replicated || (reader.thisMachine && !reader.silent)) ? r.data?.schedules.find((x) => x.jobKind === "briefing") : undefined;
-  const due = !!row?.nextRunAt && Date.parse(row.nextRunAt) <= now;
-  const { reload, loading } = r;
+  const lapsed = !!reader?.replicated && (!reader.heartbeatAt || Date.parse(reader.heartbeatAt) + READER_SILENT_AFTER_MS <= now);
+  const reads = !!reader && (!reader.replicated || (reader.thisMachine && !reader.silent && !lapsed));
+  const row = reads ? r.data?.schedules.find((x) => x.jobKind === "briefing") : undefined;
+  const stale = (!!row?.nextRunAt && Date.parse(row.nextRunAt) <= now) || (!!reader?.thisMachine && lapsed && !reader.silent);
+  const asked = useRef(now);
+  const { reload } = r;
   useEffect(() => {
-    if (due && !loading) reload();
-  }, [due, loading, now, reload]);
+    if (!stale || asked.current === now) return;
+    asked.current = now;
+    reload();
+  }, [stale, now, reload]);
   return row ? { enabled: row.enabled, nextRunAt: row.nextRunAt } : null;
 }
 

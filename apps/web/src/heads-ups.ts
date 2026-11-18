@@ -147,14 +147,16 @@ const COUNTS_ONLY = /^\d+ [^,.\d]+(?:, \d+ [^,.\d]+)*\.$/;
 
 /**
  * The concrete development and its short explanation: the summary's first sentence and the one after it. A first
- * sentence that only counts is no development, so then the first new or changed item leads (else the first item),
+ * sentence that only counts, or has no words, is no development, so then the first new or changed item leads (else the first item),
  * with its own summary; the counts stay in the full briefing.
  */
 function headline(b: BriefingView): { title: string; explanation: string | null } {
   const lines = briefingLines(b.summary);
   const first = lines[0]?.text ?? "Your briefing is ready.";
   const items = b.sections.flatMap((s) => s.items);
-  const item = COUNTS_ONLY.test(first) ? (items.find((i) => i.isNew || i.changed) ?? items[0]) : undefined;
+  // No words at all (the no-model summary of Other items alone opens with a bare ".") is no development either.
+  const noDevelopment = COUNTS_ONLY.test(first) || !/\p{L}/u.test(first);
+  const item = noDevelopment ? (items.find((i) => i.isNew || i.changed) ?? items[0]) : undefined;
   if (item) return { title: item.title, explanation: item.summary || null };
   return { title: first, explanation: lines[1]?.text ?? null };
 }
