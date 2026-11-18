@@ -189,7 +189,8 @@ async function mastheadFits(page: Page): Promise<string[]> {
     const box = (sel: string) => inner.querySelector(sel)!.getBoundingClientRect();
     const [brand, nav, tools] = [box(".brand"), box(".masthead-nav"), box(".masthead-tools")];
     const links = [...inner.querySelectorAll(".masthead-nav a")].map((a) => a.getBoundingClientRect());
-    const edge = inner.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).paddingRight);
+    // The column ends inside the padding and the scrollbar gutter the masthead reserves (`clientWidth` leaves it out).
+    const edge = inner.getBoundingClientRect().left + inner.clientLeft + inner.clientWidth - parseFloat(getComputedStyle(inner).paddingRight);
     const problems: string[] = [];
     if (brand.right > nav.left) problems.push("mark overlaps the screens");
     if (Math.max(...links.map((l) => l.right)) > tools.left) problems.push("screens run under the tools");
@@ -208,7 +209,8 @@ async function narrowMastheadFits(page: Page): Promise<string[]> {
     const brand = inner.querySelector<HTMLElement>(".brand")!;
     const button = inner.querySelector(".machine-trigger")!.getBoundingClientRect();
     const live = inner.querySelector<HTMLElement>(".machine-trigger-live")!;
-    const edge = inner.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).paddingRight);
+    // The column ends inside the padding and the scrollbar gutter the masthead reserves (`clientWidth` leaves it out).
+    const edge = inner.getBoundingClientRect().left + inner.clientLeft + inner.clientWidth - parseFloat(getComputedStyle(inner).paddingRight);
     const problems: string[] = [];
     if (button.right > edge + 1) problems.push(`the Machine button leaves the column (${button.right} > ${edge})`);
     if (brand.getBoundingClientRect().right > button.left) problems.push("the mark runs under the Machine button");
