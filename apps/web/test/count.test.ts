@@ -107,7 +107,9 @@ describe("withRows", () => {
   });
   it("takes the fresh answer whole when no answer is held with the rows yet (first load)", () => {
     expect(withRows(fresh, { kind: "waiting" })).toEqual(fresh);
-    expect(withRows(fresh, failed)).toEqual(fresh);
+  });
+  it("keeps counting from the lists on screen when the route failed with them, until the rows are asked again with it", () => {
+    expect(withRows(fresh, failed)).toEqual(failed);
   });
   it("falls back, or waits, as the fresh answer does", () => {
     expect(withRows(failed, shown)).toEqual(failed);

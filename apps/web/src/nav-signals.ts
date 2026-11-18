@@ -89,8 +89,6 @@ export function useNavSignals(): NavSignals {
   const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null, ["actions.changed", "attention.changed"]);
   const proposals = useResource<{ proposals: ProposalView[] }>(`/memory/proposals?status=proposed&limit=${COUNT_LIMITS.proposals}`, ["memory.changed"]);
   const totals = useResource<DecisionTotals>(DECISION_COUNT_PATH, COUNT_EVENTS);
-  // No screen lists the Connections from here, so they are asked only for the fallback, while the route fails.
-  const connections = useResource<ConnectionStatus[]>(totals.error ? "/connections" : null, ["connections.changed"]);
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
 
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
@@ -106,6 +104,9 @@ export function useNavSignals(): NavSignals {
   const rowsShown = settled.current.inbox.data !== null;
   if (!inbox.loading && !drafts.loading && !(rowsShown && totals.loading)) settled.current = { inbox: answerOf(inbox), drafts: answerOf(drafts), totals: answerOf(totals) };
   const { inbox: heldInbox, drafts: heldDrafts, totals: heldTotals } = settled.current;
+  const countedTotals = withRows(totalsAnswer(totals), totalsAnswer(heldTotals));
+  // No screen lists the Connections from here, so they are asked only for the fallback, while the count uses it.
+  const connections = useResource<ConnectionStatus[]>(countedTotals.kind === "failed" ? "/connections" : null, ["connections.changed"]);
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const { reload: reloadTotals } = totals;
@@ -120,7 +121,7 @@ export function useNavSignals(): NavSignals {
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
-  const count = countDecisions(withRows(totalsAnswer(totals), totalsAnswer(heldTotals)), inputs);
+  const count = countDecisions(countedTotals, inputs);
   // The dot remembers its last state, because an unknown part must not turn it on or off.
   const lastDot = useRef(false);
   const dot = dotAfter(lastDot.current, count.total);
