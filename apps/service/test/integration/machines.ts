@@ -140,7 +140,8 @@ export async function startMachines(names: string[], world: WorldOptions = {}): 
     addMachine,
     restart,
     async stop() {
-      for (const m of machines) await m.stop();
+      // Each Machine has its own folders and port, so they stop side by side (one after another took over 10 s on Windows CI).
+      await Promise.all(machines.map((m) => m.stop()));
     },
   };
 }
