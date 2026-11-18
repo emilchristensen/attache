@@ -14,8 +14,12 @@ import { area, meetingHeadsUp, MINUTE, needYou, rowFor, SELF, setCalendar } from
 let stack: Stack;
 let journeys: JourneyBrowser;
 
-/** How long after the run starts the first meeting really ends: room for every step before it, on a slow runner too. */
-const FIRST_ENDS_AFTER_MS = 2 * MINUTE;
+/**
+ * How long after the run starts the first meeting really ends, at least: room for every step before it, on a slow
+ * runner too. It ends half a minute past a minute, between the For you now clock's minute ticks.
+ */
+const FIRST_ENDS_AFTER_MS = 1.5 * MINUTE;
+const firstEnd = () => Math.ceil((Date.now() + FIRST_ENDS_AFTER_MS) / MINUTE) * MINUTE + 30_000;
 
 test.describe.configure({ mode: "serial" });
 
@@ -94,7 +98,9 @@ async function expectDestinations(headsUp: Locator, meeting: Pair["first"]): Pro
 async function toTheOverlap(browser: Browser, pair: Pair, { keyboardOnRow }: { keyboardOnRow: boolean }) {
   const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
   const page = await own.newPage();
-  const ends = Date.now() + FIRST_ENDS_AFTER_MS;
+  // The decision keys on, so the journey can show they decide nothing where a row moved up.
+  if (keyboardOnRow) await page.addInitScript(() => localStorage.setItem("attache.decision-keys", "on"));
+  const ends = firstEnd();
   // Before the first Heads-up: the first meeting's prep shows 40 minutes before its real end.
   await page.clock.install({ time: ends - 42 * MINUTE });
   await routeSignIn(page);
@@ -203,15 +209,19 @@ test("back to back with Not now: the first meeting ends under the keyboard, Ente
   await page.emulateMedia({ colorScheme: null });
   await expect(first.getByRole("link", { name: "Join" })).toBeFocused();
 
-  // The first meeting really ends. Its place shows "Meeting ended" at the same size, the focus lands there, and
-  // Enter neither joins the next call nor anything else.
+  // The first meeting really ends, half a minute past the minute. The browser's clock stands still two seconds before
+  // while the service's catches up, then runs past the end without reaching the next minute tick: its place shows
+  // "Meeting ended" at the same size, the focus lands there, and Enter neither joins the next call nor anything else.
   const height = (await first.boundingBox())!.height;
+  await page.clock.pauseAt(ends - 2_000);
+  await expect(first.getByRole("link", { name: "Join" })).toBeFocused();
   await page.waitForTimeout(Math.max(0, ends + 1_000 - Date.now()));
   const opened: Page[] = [];
   own.context.on("page", (p) => opened.push(p));
-  await advanceTo(page, Date.now());
+  await page.clock.runFor(3_000);
   const ended = area(page).locator("[data-meeting-ended]");
   await expect(ended).toBeFocused();
+  await page.clock.resume();
   await expect(ended).toHaveText(`Meeting ended · ${pair.first.subject}`);
   expect(Math.abs((await ended.boundingBox())!.height - height), "the ended meeting keeps its size").toBeLessThanOrEqual(1);
   await expect(area(page).getByRole("link", { name: "Join" })).toHaveCount(0);
@@ -293,6 +303,44 @@ test("back to back with Done: the keyboard leaves a promoted row in place, Done 
   await expect(second).toHaveCount(0);
   await expectCount(page, base, -2);
   await expect(rowFor(page, pair.second.id)).toHaveCount(0);
+  expect(own.consoleErrors).toEqual([]);
+  await own.close();
+});
+
+test("a row the keyboard is on keeps its place when its meeting moves up, under Group by type and when the meeting is decided elsewhere", async ({ browser }) => {
+  const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
+  const page = await own.newPage();
+  await page.clock.install({ time: new Date() });
+  await page.goto(stack.url);
+  await page.mouse.move(5, 5);
+  const times = await setCalendar(page, stack, [
+    { id: "planning", summary: "Quarterly planning", start: 180, end: 240 },
+    { id: "retro", summary: "Sprint retro", start: 20, end: 50 },
+  ]);
+  await page.reload();
+  await page.locator("#inbox").getByRole("combobox", { name: "View" }).selectOption({ label: "Group by type" });
+  const meetings = page.locator('#inbox [data-family="meetings"]');
+  await expect(meetings.locator(".inbox-family-count")).toHaveText("2");
+  const base = await readCount(page);
+  await rowFor(page, "retro").locator("button[data-row-toggle]").focus();
+  // Its Heads-up comes due: the row's place stays in its family with the focus, and the family counts only the other.
+  await advanceTo(page, Date.parse(times.retro!.start) - 15 * MINUTE + 1_000);
+  await expect(meetingHeadsUp(page, "Sprint retro")).toBeVisible();
+  const stand = meetings.locator("[data-moved-up]");
+  await expect(stand).toBeFocused();
+  await expect(meetings.locator(".inbox-family-count")).toHaveText("1");
+  await expect(meetings.locator("[data-inbox-row]")).toHaveCount(2);
+  await expectCount(page, base, 0);
+  // Done on another Machine: the item leaves the open list, and the place the keyboard is on stays.
+  const id = await stand.getAttribute("data-item-id");
+  await api(page, "POST", `/attention/${id}/decision`, { decision: "done" });
+  await expectCount(page, base, -1);
+  await expect(meetingHeadsUp(page, "Sprint retro")).toHaveCount(0);
+  await expect(stand).toBeFocused();
+  // The keyboard moves on: the place goes.
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#inbox [data-moved-up]")).toHaveCount(0);
+  await page.locator("#inbox").getByRole("combobox", { name: "View" }).selectOption({ label: "Priority order" });
   expect(own.consoleErrors).toEqual([]);
   await own.close();
 });

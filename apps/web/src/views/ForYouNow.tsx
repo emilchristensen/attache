@@ -3,7 +3,7 @@ import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
 import { briefingWritten, endedMeetings, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed, type Slot } from "../heads-ups.ts";
-import { useHeadsUpClock } from "../heads-up-clock.ts";
+import { meetingBoundaries, useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
 import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
@@ -229,7 +229,10 @@ function useDoneHere(items: readonly { id: string }[] | null) {
 export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAbove: (ids: ReadonlySet<string>) => void }) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
-  const clock = useHeadsUpClock();
+  // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
+  const openInbox = useSignals().openInbox;
+  const items = openInbox.data?.items ?? null;
+  const clock = useHeadsUpClock(useMemo(() => meetingBoundaries(items), [items]));
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
@@ -240,9 +243,6 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [context, setContext] = useState(false);
   const [said, setSaid] = useState("");
-  // The open Inbox items: the shell's request behind the count, so a meeting and its Inbox row never disagree.
-  const openInbox = useSignals().openInbox;
-  const items = openInbox.data?.items ?? null;
   const doneHere = useDoneHere(items);
   const doneKeys = useMemo(() => [...doneHere.done].map((id) => `meeting:${id}`), [doneHere.done]);
   const { busy, run } = useAction();

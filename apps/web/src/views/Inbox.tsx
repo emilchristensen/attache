@@ -8,7 +8,7 @@ import type { InboxCoverage } from "../connection-status.ts";
 import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
-import { useHeadsUpClock } from "../heads-up-clock.ts";
+import { meetingBoundaries, useHeadsUpClock } from "../heads-up-clock.ts";
 import { backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
 import { rowText, snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
@@ -201,6 +201,21 @@ function useFocusedRow() {
 }
 
 /**
+ * The item whose row the keyboard is on (`focusedId`) when its meeting moves up into For you now (`above`), as it was
+ * then; null otherwise. It stays while the keyboard does, even once the meeting ends or leaves the open list, until
+ * the row is listed here again (Not now).
+ */
+function useMovedUp(focusedId: string | null, above: ReadonlySet<string>, answered: readonly AttentionItemView[] | null, live: readonly AttentionItemView[] | null): AttentionItemView | null {
+  const [standing, setStanding] = useState<AttentionItemView | null>(null);
+  const promoted = focusedId && above.has(focusedId) ? (answered?.find((i) => i.id === focusedId) ?? null) : null;
+  useEffect(() => {
+    if (promoted && promoted !== standing) setStanding(promoted);
+  }, [promoted, standing]);
+  if (promoted) return promoted;
+  return standing && standing.id === focusedId && !live?.some((i) => i.id === focusedId) ? standing : null;
+}
+
+/**
  * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
  * Show new items.
  */
@@ -229,15 +244,20 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
   const open = useSignals().openInbox;
   const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && hiddenView ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "actions.changed"]);
   const source = hiddenView ? hidden : open;
-  const clock = useHeadsUpClock();
   const answered = source.data?.items ?? null;
+  // Read again when a listed meeting ends, so its row goes at its end, as its Heads-up does.
+  const clock = useHeadsUpClock(useMemo(() => meetingBoundaries(answered), [answered]));
   const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
   // A meeting that moves up while the keyboard is on its row keeps that row's place until the keyboard moves on.
   const focused = useFocusedRow();
-  const kept = !hiddenView && focused.id && above.has(focused.id) && answered?.some((i) => i.id === focused.id) ? focused.id : null;
-  const rows = useMemo(() => (kept && answered ? listedBelow(answered, new Set([...above].filter((id) => id !== kept)), clock.now) : live), [kept, answered, above, clock.now, live]);
+  const keptItem = useMovedUp(hiddenView ? null : focused.id, above, answered, live);
+  const kept = keptItem?.id ?? null;
+  const rows = useMemo(() => {
+    if (!keptItem || !answered) return live;
+    const listed = listedBelow(answered, new Set([...above].filter((id) => id !== keptItem.id)), clock.now);
+    return listed.some((i) => i.id === keptItem.id) ? listed : [...listed, keptItem];
+  }, [keptItem, answered, above, clock.now, live]);
   const list = useInboxList(rows, source.askedAt, hiddenView ? "hidden" : order, order);
-  const keptItem = kept ? answered?.find((i) => i.id === kept) : undefined;
   const keptSubject = keptItem ? rowText(keptItem).subject : null;
   useEffect(() => {
     if (keptSubject) setSaid(`${keptSubject} moved up to For you now.`);
@@ -249,7 +269,7 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
   const typed = useMemo(() => list.entries.filter((e) => withType([e.item], place.type).length > 0), [list.entries, place.type]);
   const arrivals = useMemo(() => withType(list.arrivals, place.type), [list.arrivals, place.type]);
   const expanded = useMemo(() => new Set(place.expanded), [place.expanded]);
-  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded) : null;
+  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded, kept) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
   // The range counts items listed here: a row standing in for a meeting that moved up is not one.
   const listedCount = (entries: readonly ListEntry[]) => entries.filter((e) => e.item.id !== kept).length;

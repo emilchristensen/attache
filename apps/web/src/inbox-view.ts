@@ -121,19 +121,21 @@ export function pageLabel(shown: number, total: number): string {
 export interface FamilyGroup<T> {
   family: FamilyId;
   label: string;
-  /** The rows to show: the first three, or all of them after Show all. */
+  /** The rows to show: the first three, or all of them after Show all, and a row standing in for a meeting that moved up. */
   rows: T[];
   total: number;
   /** How many more rows Show all reveals. */
   hidden: number;
 }
 
-/** Group by type: one group per family present, in family order, each keeping the list's order. */
-export function groupRows<T extends ViewItem>(rows: readonly T[], expanded: ReadonlySet<FamilyId>): Array<FamilyGroup<T>> {
+/** Group by type: one group per family present, in family order, each keeping the list's order. `standIn` keeps its place uncounted. */
+export function groupRows<T extends ViewItem>(rows: readonly T[], expanded: ReadonlySet<FamilyId>, standIn: string | null = null): Array<FamilyGroup<T>> {
   return FAMILIES.flatMap(({ id, label }) => {
     const all = rows.filter((r) => inboxType(r).family === id);
     if (!all.length) return [];
-    const shown = expanded.has(id) ? all : all.slice(0, PREVIEWS);
-    return [{ family: id, label, rows: shown, total: all.length, hidden: all.length - shown.length }];
+    // A row standing in for a meeting that moved up keeps its place but is no item here: not counted, not previewed.
+    const items = all.filter((r) => r.id !== standIn);
+    const previewed = new Set(expanded.has(id) ? items : items.slice(0, PREVIEWS));
+    return [{ family: id, label, rows: all.filter((r) => r.id === standIn || previewed.has(r)), total: items.length, hidden: items.length - previewed.size }];
   });
 }
