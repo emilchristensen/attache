@@ -42,7 +42,8 @@ test.beforeAll(async ({ browser }) => {
     const n = i + 1;
     writeFileSync(join(stack.vaultDir, notePath(n)), `---\ntitle: '${noteTitle(n)}'\n---\n# ${noteTitle(n)}\n\n## Tasks\n- [ ] ${title} 📅 ${day(n <= 3 ? 0 : n)}\n`);
   });
-  journeys = await JourneyBrowser.start(browser, stack.url);
+  // The service dates deadlines in UTC; a browser in UTC too says "Due today" for them at any hour of the run.
+  journeys = await JourneyBrowser.start(browser, stack.url, { timezoneId: "UTC" });
   const page = await journeys.newPage();
   await page.goto(stack.pairUrl());
   await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
