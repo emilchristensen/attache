@@ -230,12 +230,35 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     impact: one ? (MISSING[one.kind]?.short ?? "Items may be missing") : "Their items may be missing",
     // The service also files timeouts and 5xx answers as offline, so this says what is known: they were not reached.
     sentence: one ? `${one.label} could not be reached, so ${missingPhrase(one)} may be missing below.` : `${plural(cs.length, "source")} could not be reached, so their items may be missing below.`,
-    // One row for one state and one remedy, keeping what each source's own read said.
+    // One row for one shared cause and one remedy, keeping what each source's own read said.
     failure: cs.length === 1 ? coverageNote(cs[0]!, "offline") : cs.map((c) => `${c.label}: ${coverageNote(c, "offline") ?? "not reached"}`).join("; "),
     lastRead: lastReadOf(cs),
     retry: retryOf(ctx),
     action: { kind: "refresh", connectionIds: cs.map((c) => c.id), label: "Retry now" },
   };
+}
+
+/** A host name, with its port, inside a recorded reason ("api.github.com", "slack.com:443"). */
+const HOST = /\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\b/gi;
+
+/**
+ * Why a source was not reached, as one comparable phrase: the service files network errors, timeouts and 5xx answers
+ * alike as offline and says which only in its message, so sources share a cause only when their messages match once
+ * each one's own host, case and spacing are set aside. A source that recorded no reason shows no shared cause.
+ */
+function offlineCause(c: ConnectionStatus): string | null {
+  const note = coverageNote(c, "offline");
+  return note ? note.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase() : null;
+}
+
+/** Sources that failed for one shared reason share a row; every other source has its own, in the order given. */
+function byOfflineCause(cs: ConnectionStatus[]): ConnectionStatus[][] {
+  const groups = new Map<string | symbol, ConnectionStatus[]>();
+  for (const c of cs) {
+    const key = offlineCause(c) ?? Symbol(c.id);
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  return [...groups.values()];
 }
 
 function coverageRow(c: ConnectionStatus, state: "denied" | "partial"): StatusRow {
@@ -409,7 +432,7 @@ function connectionRows(cs: ConnectionStatus[], ctx: Context, attentionOn: boole
       else healthy.push(c);
     }
   }
-  if (offline.length) rows.push(offlineRow(offline, ctx));
+  for (const group of byOfflineCause(offline)) rows.push(offlineRow(group, ctx));
   if (unread.length) rows.push(notReadYetRow(unread, ctx));
   return { rows, healthy };
 }

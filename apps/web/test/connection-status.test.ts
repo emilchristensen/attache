@@ -14,6 +14,11 @@ function coverage(state: CoverageState, extra: Partial<Coverage> = {}): Coverage
   return { state, scopes: [], items: 3, at: AT, ...extra };
 }
 
+/** What the service records when a request to `host` never got an answer from the network. */
+function unreached(host: string): Coverage {
+  return coverage("offline", { note: `Network error contacting ${host}: fetch failed` });
+}
+
 function conn(kind: ConnectionStatus["kind"], extra: Partial<ConnectionStatus> = {}): ConnectionStatus {
   const readable = !["model", "claude-code", "codex", "antigravity", "claude-desktop"].includes(kind);
   return {
@@ -156,8 +161,8 @@ describe("connectionsStatus: one case per state", () => {
     expect(row).toMatchObject({ state: "down", subject: "Claude Code", lastRead: [], action: { kind: "open_connections", connectionId: "claude-code" } });
   });
 
-  it("Offline, red, as one row for every source this Machine could not reach", () => {
-    const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") }), conn("slack", { coverage: coverage("offline") })));
+  it("Offline, red, as one row for the sources this Machine could not reach for one shared reason", () => {
+    const row = onlyRow(withConnections(conn("github", { coverage: unreached("api.github.com") }), conn("gmail", { coverage: unreached("gmail.googleapis.com") }), conn("slack", { coverage: unreached("slack.com") })));
     expect(row).toMatchObject({ state: "offline", word: "Offline", hue: "red", icon: "warning", subject: "GitHub, Gmail and Slack", impact: "Their items may be missing", action: { kind: "refresh", connectionIds: ["github", "gmail", "slack"], label: "Retry now" } });
     expect(row.sentence).toBe("3 sources could not be reached, so their items may be missing below.");
     expect(row.lastRead).toHaveLength(3);
@@ -302,7 +307,7 @@ describe("connectionsStatus: findings from review round 1", () => {
   });
 
   it("says a source could not be reached, not that this Machine had no network, since the service also files timeouts and 5xx answers there", () => {
-    const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") })));
+    const row = onlyRow(withConnections(conn("github", { coverage: unreached("api.github.com") }), conn("gmail", { coverage: unreached("gmail.googleapis.com") })));
     expect(row.sentence).toBe("2 sources could not be reached, so their items may be missing below.");
   });
 });
@@ -336,8 +341,8 @@ describe("connectionsStatus: findings from review round 2", () => {
   });
 
   it("keeps each unreached source's own diagnostics in the shared Offline row", () => {
-    const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline", { note: "GitHub answered 503" }) }), conn("slack", { coverage: coverage("offline", { note: "Timed out after 60 seconds" }) })));
-    expect(row.failure).toBe("GitHub: GitHub answered 503; Slack: Timed out after 60 seconds");
+    const row = onlyRow(withConnections(conn("github", { coverage: unreached("api.github.com") }), conn("slack", { coverage: unreached("slack.com") })));
+    expect(row.failure).toBe("GitHub: Network error contacting api.github.com: fetch failed; Slack: Network error contacting slack.com: fetch failed");
   });
 });
 
@@ -363,6 +368,38 @@ describe("connectionsStatus: findings from review round 3", () => {
     const row = onlyRow(inputs({ reader: ok({ ...OTHER_READER, lastRefreshAt: null }) }));
     expect(row).toMatchObject({ key: "not_read_yet:every", action: { kind: "machines" } });
     expect(row.sentence).toBe("Home PC, the Reader, has not finished a Source refresh of every source yet, so items may be missing below.");
+  });
+});
+
+describe("connectionsStatus: Offline sources share a row only for a shared cause", () => {
+  it("gives sources whose reasons differ a row each, since a 5xx and a timeout are not one cause", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: coverage("offline", { note: "GET /search/issues → HTTP 503: unavailable" }) }),
+        conn("slack", { coverage: coverage("offline", { note: "mcp.slack.com did not answer within 60 seconds" }) }),
+      ),
+    );
+    expect(rows.map((r) => [r.key, r.subject])).toEqual([
+      ["offline:github", "GitHub"],
+      ["offline:slack", "Slack"],
+    ]);
+    expect(rows[0]).toMatchObject({ failure: "GET /search/issues → HTTP 503: unavailable", sentence: "GitHub could not be reached, so GitHub reviews, pull requests and assigned issues may be missing below." });
+  });
+
+  it("gives a row each to sources that recorded no reason, since nothing shows a shared cause", () => {
+    const rows = rowsOf(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") })));
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail"]);
+  });
+
+  it("groups by the reason with each source's own host, case and spacing set aside, keeping the first source's place", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: unreached("api.github.com") }),
+        conn("gmail", { coverage: coverage("offline", { note: "GET /gmail/v1/users/me/threads → HTTP 502: bad gateway" }) }),
+        conn("slack", { coverage: coverage("offline", { note: "  network error contacting SLACK.COM:443:   fetch failed " }) }),
+      ),
+    );
+    expect(rows.map((r) => r.key)).toEqual(["offline:github,slack", "offline:gmail"]);
   });
 });
 
