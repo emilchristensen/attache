@@ -78,11 +78,14 @@ export function ApprovalRow({ kind, id, subject, meta, at, open, onToggle, detai
  * A row decided in this visit: one line in its place until the next visit, so nothing below it moves. The line takes
  * focus when the decision was made from it, so the keyboard stays where the owner was.
  */
-export function DecidedRow({ kind, id, words, subject, focus, after }: { kind: ApprovalKind; id: string; words: string; subject: string; focus: boolean; after?: ReactNode }) {
+export function DecidedRow({ kind, id, words, subject, focus, onFocused, after }: { kind: ApprovalKind; id: string; words: string; subject: string; focus: boolean; onFocused?: () => void; after?: ReactNode }) {
   const ref = useRef<HTMLParagraphElement>(null);
+  // Focus once, right after the decision: a later remount (back from Finished) leaves focus where the owner put it.
   useEffect(() => {
-    if (focus) ref.current?.focus();
-  }, [focus]);
+    if (!focus) return;
+    ref.current?.focus();
+    onFocused?.();
+  }, [focus, onFocused]);
   return (
     <li className="approval-row decided" data-approval-row={kind} data-row-id={id} data-decided={words}>
       <div className="approval-line">

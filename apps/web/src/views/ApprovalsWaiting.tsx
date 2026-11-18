@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import type { ActionView, ProposalView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
@@ -55,6 +55,8 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
   const draftEntries = shownEntries(visit.drafts, drafts.data ?? []);
   const proposalEntries = shownEntries(visit.proposals, proposals.data?.proposals ?? []);
   const toggle = (key: string) => setOpen(open === key ? null : key);
+  const { setJustDecided } = visit;
+  const focused = useCallback(() => setJustDecided(null), [setJustDecided]);
   const settled = (id: string) => {
     visit.setJustDecided(id);
     setOpen(null);
@@ -103,10 +105,12 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
       {draftEntries.length > 0 && (
         <ul className="approval-rows">
           {draftEntries.map((e) => {
-            if (e.kind === "decided" && e.decision.state === "done") return <DecidedRow key={e.id} kind="draft" id={e.id} words={e.decision.words} subject={e.decision.subject} focus={visit.justDecided === e.id} />;
+            if (e.kind === "decided" && e.decision.state === "done")
+              return <DecidedRow key={e.id} kind="draft" id={e.id} words={e.decision.words} subject={e.decision.subject} focus={visit.justDecided === e.id} onFocused={focused} />;
             // Live, or held in its place while the decision is with the service.
+            // A held row's decision is with the service (also after a tab switch remounted this list): nothing to press.
             const d = e.kind === "live" ? e.row : (e.decision as { row: ActionView }).row;
-            return <DraftRow key={d.id} d={d} place="waiting" open={open === `d:${d.id}`} onToggle={() => toggle(`d:${d.id}`)} reject={{ run: (row) => void rejectDraft(row), busy: busy !== null }} />;
+            return <DraftRow key={d.id} d={d} place="waiting" open={open === `d:${d.id}`} onToggle={() => toggle(`d:${d.id}`)} reject={{ run: (row) => void rejectDraft(row), busy: busy !== null || e.kind === "decided" }} />;
           })}
         </ul>
       )}
@@ -129,6 +133,7 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
                   words={e.decision.words}
                   subject={e.decision.subject}
                   focus={visit.justDecided === e.id}
+                  onFocused={focused}
                   after={
                     e.decision.note && (
                       <Link to={brainNoteHref(e.decision.note)} className="btn small">
@@ -146,7 +151,7 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
                 p={p}
                 open={open === `p:${p.id}`}
                 onToggle={() => toggle(`p:${p.id}`)}
-                decide={{ apply: (row) => void decideProposal(row, "apply"), reject: (row) => void decideProposal(row, "reject"), busy: busy !== null, refusal: visit.refusals.get(p.id) ?? null }}
+                decide={{ apply: (row) => void decideProposal(row, "apply"), reject: (row) => void decideProposal(row, "reject"), busy: busy !== null || e.kind === "decided", refusal: visit.refusals.get(p.id) ?? null }}
               />
             );
           })}

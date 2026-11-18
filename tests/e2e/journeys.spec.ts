@@ -926,6 +926,7 @@ test("approvals: a Proposal shows every part of the change and is applied or rej
   await page.getByRole("tab", { name: "Finished" }).click();
   await page.getByRole("tab", { name: /^Waiting/ }).click();
   await expect(page.locator('[data-approval-row="proposal"][data-decided]')).toHaveCount(3);
+  await expect(page.getByRole("tab", { name: /^Waiting/ })).toBeFocused();
 
   // On the next visit the decided rows are gone, and Finished lists them with their outcomes, the latest first.
   await page.reload();

@@ -102,9 +102,12 @@ export function useNavSignals(): NavSignals {
     reloadInbox();
     reloadDrafts();
   }, [reloadInbox, reloadDrafts]);
+  const waitingDrafts = heldRows(drafts, inbox.loading, heldDrafts, reloadPair);
   const inputs = {
     inbox: answer(heldInbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
-    drafts: answer(heldDrafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
+    // A Drafts failure counts at once, without waiting for the Inbox: an unknown part only lowers the count to a
+    // lower bound, so it can never count a decision twice; a good answer still waits for its pair.
+    drafts: answer(waitingDrafts, draftsOn, (d) => d, COUNT_LIMITS.drafts),
     proposals: answer(proposals, true, (d) => d.proposals, COUNT_LIMITS.proposals),
     connections: answer(connections, true, (d) => d, null),
   };
@@ -124,7 +127,7 @@ export function useNavSignals(): NavSignals {
     openInbox: heldRows(inbox, drafts.loading, heldInbox, reloadPair),
     drafts: inputs.drafts,
     proposals: inputs.proposals,
-    waitingDrafts: heldRows(drafts, inbox.loading, heldDrafts, reloadPair),
+    waitingDrafts,
     waitingProposals: proposals,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
