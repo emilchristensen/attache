@@ -20,8 +20,10 @@ function focusLeftByClose(dialog: HTMLDialogElement, before: HTMLElement | null)
  * owner keeps their place. `afterClose` runs after that, for whatever the owner chose inside the dialog.
  *
  * The browser's `close` event comes a task after the dialog closed, and on macOS most of a second later, by when the
- * owner may have gone on (and the page they went to taken focus). So a dialog this hook closes finishes at once and
- * ignores the event, and one the browser closed (Escape) gives focus back only while it is where the closing left it.
+ * owner may have gone on (and the page they went to taken focus, or asked for the dialog again). So Escape's `cancel`
+ * hands the closing to `onClose`, a dialog this hook closes finishes at once, and the `close` event finishes only a
+ * closing nothing finished yet (one the browser would not let `cancel` stop), giving focus back only while it is
+ * where the closing left it.
  */
 export function useModalDialog(
   ref: RefObject<HTMLDialogElement | null>,
@@ -32,12 +34,13 @@ export function useModalDialog(
 ): void {
   const latest = useRef({ onClose, opener, afterClose });
   const before = useRef<HTMLElement | null>(null);
-  // Closings this hook finished itself, whose late close events are still to come and do nothing.
-  const owed = useRef(0);
+  // This opening has finished: its late close event does nothing.
+  const settled = useRef(true);
   useLayoutEffect(() => {
     latest.current = { onClose, opener, afterClose };
   });
   const finish = useCallback((d: HTMLDialogElement) => {
+    settled.current = true;
     latest.current.onClose();
     if (focusLeftByClose(d, before.current)) (latest.current.opener?.current ?? before.current)?.focus();
     latest.current.afterClose?.();
@@ -45,27 +48,31 @@ export function useModalDialog(
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    const closed = () => {
-      if (owed.current > 0) {
-        owed.current--;
-        return;
-      }
-      // Shown again since the browser closed it: the event is stale.
-      if (d.open) return;
-      finish(d);
+    // Escape: the owner's state closes the dialog, so asking for it again at once opens it again.
+    const cancelled = (e: Event) => {
+      e.preventDefault();
+      latest.current.onClose();
     };
+    // Shown again since, or finished already: the event is stale.
+    const closed = () => {
+      if (!d.open && !settled.current) finish(d);
+    };
+    d.addEventListener("cancel", cancelled);
     d.addEventListener("close", closed);
-    return () => d.removeEventListener("close", closed);
+    return () => {
+      d.removeEventListener("cancel", cancelled);
+      d.removeEventListener("close", closed);
+    };
   }, [ref, finish]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) {
       before.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      settled.current = false;
       d.showModal();
     } else if (!open && d.open) {
       d.close();
-      owed.current++;
       finish(d);
     }
   }, [ref, open, finish]);

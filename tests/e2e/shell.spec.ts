@@ -468,36 +468,41 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
 });
 
 /**
- * Holds every dialog's `close` event back for `ms`, as Chrome on macOS does (most of a second): the event comes a task
- * after the dialog closed, and nothing says how soon. `window.lateCloses` counts the ones delivered since.
+ * Holds every dialog's `close` event back until `releaseCloses`, as Chrome on macOS does (most of a second): the
+ * event comes a task after the dialog closed, and nothing says how soon.
  */
-async function holdCloseEvents(page: Page, ms: number): Promise<void> {
-  await page.evaluate((ms) => {
-    const w = window as unknown as { lateCloses: number };
-    w.lateCloses = 0;
+async function holdCloseEvents(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { heldCloses: EventTarget[] };
+    w.heldCloses = [];
     const late = new WeakSet<Event>();
     window.addEventListener(
       "close",
       (e) => {
         if (late.has(e)) return;
         e.stopImmediatePropagation();
-        setTimeout(() => {
-          const again = new Event("close");
-          late.add(again);
-          e.target!.dispatchEvent(again);
-          w.lateCloses++;
-        }, ms);
+        w.heldCloses.push(e.target!);
       },
       true,
     );
-  }, ms);
+    (window as unknown as { releaseCloses: () => number }).releaseCloses = () => {
+      const held = w.heldCloses.splice(0);
+      for (const target of held) {
+        const again = new Event("close");
+        late.add(again);
+        target.dispatchEvent(again);
+      }
+      return held.length;
+    };
+  });
 }
 
-const lateCloses = (page: Page) => page.evaluate(() => (window as unknown as { lateCloses: number }).lateCloses);
+/** Delivers the held `close` events; how many there were. */
+const releaseCloses = (page: Page) => page.evaluate(() => (window as unknown as { releaseCloses: () => number }).releaseCloses());
 
-test("sheets: a close the browser reports late gives focus back only where the owner left it, and a choice in the sheet does not wait for it", async () => {
+test("sheets: a close the browser reports late gives focus back only where the owner left it, and nothing waits for it", async () => {
   const page = await journeys.open("/jobs");
-  await holdCloseEvents(page, 1500);
+  await holdCloseEvents(page);
   const trigger = page.getByRole("button", { name: /^This Machine/ });
   const panel = page.getByRole("region", { name: "This Machine" });
   const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -515,15 +520,19 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await page.keyboard.press("Enter");
   const section = page.locator('[data-settings-section="machines"]');
   await expect(section).toBeFocused();
-  expect(await lateCloses(page), "the sheet's close event has not come yet").toBe(0);
-  await expect.poll(() => lateCloses(page)).toBe(1);
+  expect(await releaseCloses(page), "the sheet's close event came late").toBe(1);
   await expect(section, "the late close leaves focus where the owner went").toBeFocused();
-  // Nothing moved meanwhile: focus is back where it was when the sheet opened.
+  // Asked for again right after Escape, the sheet opens again; closed, focus is back where it was when it opened.
   await page.keyboard.press("?");
   await expect(sheet).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
-  await expect.poll(() => lateCloses(page)).toBe(2);
+  await page.keyboard.press("?");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(section).toBeFocused();
+  expect(await releaseCloses(page)).toBe(2);
   await expect(section).toBeFocused();
   // A place chosen in the search palette opens at once, without waiting for the palette's close event.
   await page.getByRole("button", { name: "Search the Brain" }).click();
@@ -533,8 +542,7 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await page.keyboard.press("Enter");
   await expect(palette).toBeHidden();
   await expect(page).toHaveURL(`${stack.url}/jobs`);
-  expect(await lateCloses(page), "the palette's close event has not come yet").toBe(2);
-  await expect.poll(() => lateCloses(page)).toBe(3);
+  expect(await releaseCloses(page), "the palette's close event came late").toBe(1);
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
