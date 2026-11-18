@@ -83,9 +83,29 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     if (!list) return;
     const bar = new ResizeObserver(measure);
     bar.observe(list);
-    // A tab changes width when Inter replaces the fallback font after the first layout; the selected tab must stay in view.
-    const tabWidths = new ResizeObserver(showSelected);
-    for (const tab of list.children) tabWidths.observe(tab);
+    // A tab changes width when Inter replaces the fallback font after the first layout; the focused tab, or else the
+    // selected one, must stay in view. Only a real width change counts, not a height change.
+    const widths = new WeakMap<Element, number>();
+    const tabWidths = new ResizeObserver((entries) => {
+      let changed = false;
+      for (const entry of entries) {
+        const width = entry.borderBoxSize[0]?.inlineSize ?? entry.contentRect.width;
+        const before = widths.get(entry.target);
+        widths.set(entry.target, width);
+        if (before !== undefined && before !== width) changed = true;
+      }
+      if (!changed) return;
+      const focused = list.querySelector<HTMLElement>('[role="tab"]:focus');
+      if (focused) {
+        bringIntoView(list, focused);
+        measure();
+      } else showSelected();
+    });
+    for (const tab of list.children) {
+      // Seed with the width now, so a font swap before the observer's first report still counts as a change.
+      widths.set(tab, tab.getBoundingClientRect().width);
+      tabWidths.observe(tab);
+    }
     list.addEventListener("scroll", measure, { passive: true });
     return () => {
       bar.disconnect();
