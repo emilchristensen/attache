@@ -14,7 +14,7 @@ import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
-import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
+import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { useRowKeys, type RowKey } from "../shortcuts.ts";
@@ -294,7 +294,12 @@ export function Inbox({ attentionOn, draftsOn, connections, above }: { attention
   };
   const toggle = (id: string) => setPlace({ openId: place.openId === id ? null : id });
   const settled = useCallback(() => setPlace({ anchor: null }), [setPlace]);
-  useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0, settled);
+  // Back from a Draft, the row it was opened from is shown first (new items may have moved it past the shown rows).
+  const reveal = place.anchor ? revealRow(place.anchor.id, typed.map((e) => e.item), { grouped: grouped !== null, shown: place.shown, expanded: place.expanded }) : null;
+  useEffect(() => {
+    if (reveal) setPlace(reveal);
+  }, [reveal, setPlace]);
+  useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0 && reveal === null, settled);
   const empty =
     live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
       ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countRetry !== null, now: clock.now, timeZone: clock.timeZone })

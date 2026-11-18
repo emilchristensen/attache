@@ -200,7 +200,10 @@ test("approvals: each group answers for its own request, the Waiting tab and nav
   await expect(waitingTab(page)).toHaveAccessibleName("Waiting");
   await page.unroute(route);
   await page.unroute(proposals);
+  // Retry asks the count again too, so the count is the route's once more, not the lists'.
+  const recount = page.waitForResponse((r) => r.url().includes("/api/v1/decision-count") && r.ok(), { timeout: 5_000 });
   await proposalsGroup(page).getByRole("button", { name: "Retry" }).click();
+  await recount;
   await expect(waitingTab(page)).toHaveAccessibleName("Waiting, 3 waiting");
 
   // Clear them for the journeys after this one.

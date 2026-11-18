@@ -109,38 +109,44 @@ export function promotedMeetings(slot: Slot): ReadonlySet<string> {
   return new Set([slot.lead, ...slot.followers, ...slot.more].flatMap((h) => (h?.meeting ? [h.meeting.itemId] : [])));
 }
 
-/** Where each meeting that came in during a hold went: the key of the entry before it, or null at the top. */
-export type Placed = ReadonlyMap<string, string | null>;
+/**
+ * The meetings that came in during a hold, as they came in: each Heads-up and the key of the entry it came in after
+ * (null at the top).
+ */
+export type Placed = ReadonlyMap<string, { after: string | null; headsUp: HeadsUp }>;
 
 /**
  * While the Heads-ups are held, the slot holds still (`heldSlot`), but a meeting is not kept waiting: the next one
  * comes in on time. A meeting prep Heads-up in `live` that the held slot does not have goes in at its place in the
  * order, but never above the entries the pointer or focus is on (`holding`, their keys; none known: last), so the
- * held lead and its Join keep their place and destination. Where it went is kept (`placed`, passed back in for the
- * rest of the hold), so it stays there when the pointer or focus moves onto it. Nothing else comes in.
+ * held lead and its Join keep their place and destination. Once in, it is held like the rest (`placed`, passed back
+ * in for the rest of the hold): it stays after the entry it came in after (or after the briefing that took that
+ * progress line's place) and shows as it came in, Join included, until this tab settles it (`settled`: Done, Not now).
+ * Nothing else comes in.
  */
-export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[], placed: Placed = new Map()): { slot: Slot; placed: Placed } {
+export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[], kept: Placed = new Map(), settled: ReadonlySet<string> = new Set()): { slot: Slot; placed: Placed } {
+  // What this tab settled during the hold (Done, Not now) leaves at once, as it does for the held entries.
+  const placed: Placed = new Map([...kept].filter(([key]) => !settled.has(key)));
   const entries = [slot.lead, ...slot.followers, ...slot.more].filter((h): h is HeadsUp => h !== null);
   const shown = new Set(entries.map((h) => h.key));
-  const arrived = [live.lead, ...live.followers, ...live.more].filter((h): h is HeadsUp => !!h?.meeting && !shown.has(h.key)).sort(byUrgency);
-  if (!arrived.length) return { slot, placed };
+  const fresh = [live.lead, ...live.followers, ...live.more].filter((h): h is HeadsUp => !!h?.meeting && !shown.has(h.key) && !placed.has(h.key) && !settled.has(h.key)).sort(byUrgency);
+  if (!fresh.length && !placed.size) return { slot, placed };
   const top = slot.lead ? 1 : 0;
   const insert = (list: readonly HeadsUp[], h: HeadsUp, at: number) => [...list.slice(0, at), h, ...list.slice(at)];
-  // Those already in keep their place after the entry they came in after.
-  const kept = [...placed.keys()].flatMap((k) => arrived.filter((h) => h.key === k));
-  let next = kept.reduce<readonly HeadsUp[]>((list, h) => {
-    const after = placed.get(h.key) ?? null;
-    const at = after === null ? top : list.findIndex((e) => e.key === after) + 1;
-    return at > 0 || after === null ? insert(list, h, at) : list;
-  }, entries);
-  const fresh = arrived.filter((h) => !next.includes(h));
+  // Those already in keep their place after the entry they came in after; one whose entry has gone goes last.
+  let next = [...placed.values()]
+    .filter((p) => !shown.has(p.headsUp.key))
+    .reduce<readonly HeadsUp[]>((list, p) => {
+      const after = p.after === null ? top : list.findIndex((e) => e.key === p.after || e.inPlaceOf === p.after) + 1;
+      return insert(list, p.headsUp, after > 0 || p.after === null ? after : list.length);
+    }, entries);
   const held = next.flatMap((h, n) => (holding.includes(h.key) ? [n] : []));
   let from = Math.max(top, held.length ? Math.max(...held) + 1 : next.length);
   const record = new Map(placed);
   for (const h of fresh) {
     const before = next.findIndex((e, n) => n >= from && byUrgency(h, e) < 0);
     const at = before < 0 ? next.length : before;
-    record.set(h.key, at > 0 ? next[at - 1]!.key : null);
+    record.set(h.key, { after: at > 0 ? next[at - 1]!.key : null, headsUp: h });
     next = insert(next, h, at);
     from = at + 1;
   }

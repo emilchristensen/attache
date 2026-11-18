@@ -260,10 +260,50 @@ test("a Draft visit: coming back finds the same row open, where it stood on scre
   await page.goBack();
   await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
   await expect.poll(async () => Math.round((await row.boundingBox())!.y)).toBe(Math.round(before));
-  // Home settled, so the place is the owner's again: scrolling moves it.
-  await page.waitForTimeout(2200);
-  await row.evaluate((el) => (el.closest(".page")!.scrollTop = 0));
+  // The place is the owner's again as soon as they scroll.
+  await page.mouse.move(640, 450);
+  await page.mouse.wheel(0, -300);
   await expect.poll(async () => (await row.boundingBox())!.y).toBeGreaterThan(before);
+  await page.close();
+});
+
+test("a Draft visit: the row comes back even when new items moved it past the shown rows", async () => {
+  const page = await journeys.newPage();
+  await page.goto(stack.url);
+  await expect(rows(page).first()).toBeVisible();
+  const open = (await api<{ items: AttentionItemView[] }>(page, "GET", "/attention?state=open")).items;
+  const target = open.find((i) => i.title.includes(TASKS[9]!))!;
+  // The latest step the Inbox holds (deadlines further out are not raised yet) ranks below the row.
+  const last = TASKS.slice(10).flatMap((t) => open.filter((i) => i.title.includes(t))).at(-1)!;
+  // Items that rank above every other, as many as it takes to put the row last of the first twenty.
+  let ahead = 0;
+  const first = (i: number): AttentionItemView => ({ ...target, id: `ahead-${i}`, key: `ahead-${i}`, title: `Urgent handover ${i}`, priority: 1000, actionId: null, actionStatus: null });
+  await routeOpen(page, (items) => [...Array.from({ length: ahead }, (_, i) => first(i)), ...items.map((i) => (i.id === target.id ? { ...i, actionId: "draft-fixture", actionStatus: "draft" as const } : i))]);
+  await page.reload();
+  const row = inboxRow(page, TASKS[9]!);
+  await expect(row).toBeVisible();
+  ahead = 19 - (await rows(page).evaluateAll((all, id) => all.findIndex((r) => (r as HTMLElement).dataset.itemId === id), target.id));
+  expect(ahead).toBeGreaterThanOrEqual(0);
+  await page.reload();
+  await expect(rows(page).nth(19)).toHaveAttribute("data-item-id", target.id);
+  await openRow(row);
+  await row.evaluate((el) => {
+    const scroller = el.closest(".page")!;
+    scroller.scrollTop += el.getBoundingClientRect().top - window.innerHeight / 2;
+  });
+  const before = (await row.boundingBox())!.y;
+  await row.getByRole("button", { name: "View draft" }).click();
+  await expect(page).toHaveURL(`${stack.url}/approvals/draft-fixture`);
+  // One more arrives while the owner reads the Draft, and the Inbox changes below the row: it is now the 21st.
+  ahead += 1;
+  const asked = page.waitForResponse((r) => isOpenList(new URL(r.url())));
+  await api(page, "POST", `/attention/${last.id}/decision`, { decision: "dismiss" });
+  await asked;
+  await page.goBack();
+  await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(rows(page).nth(20)).toHaveAttribute("data-item-id", target.id);
+  await expect.poll(async () => Math.round((await row.boundingBox())!.y)).toBe(Math.round(before));
+  await api(page, "POST", `/attention/${last.id}/decision`, { decision: "reopen" });
   await page.close();
 });
 

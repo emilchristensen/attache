@@ -74,7 +74,18 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
     [
       "several not read, how many read unknown",
       { reach: { kind: "partial", sources: null, missing: [{ subject: "GitHub and Slack", word: "Offline" }, { subject: "Jira", word: "Not read yet" }] } },
-      ["Nothing found in the sources that were read.", "Not read: GitHub and Slack (offline) and Jira (not read yet)."],
+      ["No open Inbox items.", "Not read: GitHub and Slack (offline) and Jira (not read yet)."],
+    ],
+    ["no source known to be read: no claim about what was found", { reach: { kind: "partial", sources: 0, missing: [{ subject: "Every source", word: "Not read yet" }] } }, ["No open Inbox items.", "Not read: Every source (not read yet)."]],
+    [
+      "Retry beside a lower bound that a failure left",
+      { count: count(known(0), { state: "unknown", count: 1, exact: false }, known(0)), failed: true },
+      ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "At least 1 approval waits on its own page. [approvals]", "[Retry]"],
+    ],
+    [
+      "meeting prep above while an approval waits: the list is what is empty",
+      { above: 1, count: count(known(1), known(1), known(0)) },
+      ["No other open Inbox items.", "The meeting prep above is open. Not now brings it back here.", "All 5 sources were read, last at 09:14.", "1 approval waits on its own page. [approvals]"],
     ],
     ["one source read and one not", { reach: { kind: "partial", sources: 1, missing: [{ subject: "Gmail", word: "Down" }] } }, ["Nothing found in the one source that was read.", "Not read: Gmail (down)."]],
     ["notes only: never that all work is clear", { reach: { kind: "notes" } }, ["Nothing found in your notes.", "No work source is connected, so only your notes were read."]],

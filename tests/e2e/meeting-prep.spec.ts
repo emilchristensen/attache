@@ -115,6 +115,27 @@ test("before: a meeting hours away is an Inbox row, and the quiet line says when
   await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing timely right now. Prep for Design review shows here at ${shows}.`);
 });
 
+test("failure: open Inbox items that could not be read say so with Try again, never that nothing is timely", async () => {
+  const page = await journeys.newPage();
+  for (const p of journeys.context.pages()) if (p !== page) await p.close();
+  await page.route("**/api/v1/attention?state=open*", (route) => route.abort());
+  await page.goto(stack.url);
+  const forYou = area(page);
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Could not check your meetings.");
+  await expect(forYou).not.toContainText("Nothing timely");
+  await page.unroute("**/api/v1/attention?state=open*");
+  await forYou.getByRole("button", { name: "Try again" }).click();
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Nothing timely right now.");
+  // A refresh that fails after a good answer says so too, rather than that nothing is timely.
+  await page.route("**/api/v1/attention?state=open*", (route) => route.abort());
+  await api(page, "POST", "/connections/gcal/refresh");
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Could not check your meetings.");
+  await page.unroute("**/api/v1/attention?state=open*");
+  await forYou.getByRole("button", { name: "Try again" }).click();
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Nothing timely right now.");
+  await page.close();
+});
+
 test("upcoming: 15 minutes before the start the meeting leads, leaves the Inbox, and the count stays the same", async () => {
   const page = await journeys.open("/");
   await expect(needYou(page)).toBeVisible();
@@ -296,6 +317,7 @@ test("hold: with focus on Join, the next meeting still comes in on time below it
   await setCalendar(page, [
     { id: "crit", summary: "Design crit", start: -10, end: 20, meetLink: "https://meet.google.com/cri-tic-now" },
     { id: "hiring", summary: "Hiring sync", start: 20, end: 50, meetLink: "https://meet.google.com/hir-ing-syn" },
+    { id: "budget", summary: "Budget sync", start: 35, end: 60 },
   ]);
   // Loaded afresh, so the new items are rows, not behind Show new items.
   await page.reload();
@@ -321,6 +343,19 @@ test("hold: with focus on Join, the next meeting still comes in on time below it
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
   await expect(lines.first()).toContainText("Hiring sync");
+  // Still held (the pointer stays in the Heads-ups), Not now on the arrived meeting takes it out at once, back to the Inbox.
+  await openPrep(next);
+  await next.getByRole("button", { name: "Not now" }).click();
+  await expect(next).toHaveCount(0);
+  await expect(rowFor(page, "hiring")).toBeVisible();
+  // The next one comes due, still held, and Done takes it out at once.
+  await page.clock.fastForward("15:00");
+  const budget = meetingHeadsUp(page, "Budget sync");
+  await expect(budget).toBeVisible();
+  await openPrep(budget);
+  await budget.getByRole("button", { name: "Done" }).click();
+  await expect(budget).toHaveCount(0);
+  await expect(rowFor(page, "budget")).toHaveCount(0);
   expect(own.consoleErrors).toEqual([]);
   await own.close();
 });
@@ -376,6 +411,21 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
       await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
       expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring, reading at ${place}`).toBeLessThanOrEqual(1);
     }
+    // The first row in view is a meeting that comes due: it moves up into For you now, and the row after it stays put.
+    // Room below the Inbox, so the page can scroll that row to the top edge.
+    await page.addStyleTag({ content: "#inbox { padding-bottom: 1200px; }" });
+    await scrollTo(`#inbox [data-item-key="gcal:later-${safari}"]`, -2);
+    const after = page.locator(`#inbox [data-item-key="gcal:later-${safari}"] + [data-inbox-row]`);
+    const afterKey = await after.getAttribute("data-item-key");
+    const kept = page.locator(`#inbox [data-item-key="${afterKey}"]`);
+    const was = (await kept.boundingBox())!.y;
+    await setCalendar(page, [
+      { id: `later-${safari}`, summary: "Quarterly planning", start: 12, end: 40 },
+      ...[0, 1].map((n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
+    ]);
+    await expect(meetingHeadsUp(page, "Quarterly planning")).toHaveCount(1);
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    expect(Math.abs((await kept.boundingBox())!.y - was), `${safari ? "without" : "with"} scroll anchoring, the row after the promoted one`).toBeLessThanOrEqual(1);
     // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
     const prep = meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync 1`).getByRole("button", { name: "Open prep" });
     await prep.evaluate((el) => {

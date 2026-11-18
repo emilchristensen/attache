@@ -53,9 +53,9 @@ async function refresh(): Promise<void> {
   expect((await svc.waitJob(job.id)).job.status).toBe("succeeded");
 }
 
-async function meetingItem(states = "open,dismissed,snoozed,resolved"): Promise<AttentionItemView | undefined> {
+async function meetingItem(states = "open,dismissed,snoozed,resolved", key = "gcal:handover"): Promise<AttentionItemView | undefined> {
   const { items } = await svc.get<{ items: AttentionItemView[] }>(`/attention?state=${states}`);
-  return items.find((i) => i.key === "gcal:handover");
+  return items.find((i) => i.key === key);
 }
 
 /** Move the service's clock to `at`, running its housekeeping on the way. */
@@ -98,5 +98,24 @@ describe("the calendar Connection's meeting prep window", () => {
     scenario.gcal.events = scenario.gcal.events.map((e) => ({ ...e, start: { dateTime: "2026-11-18T14:00:00+01:00" }, end: { dateTime: "2026-11-18T15:00:00+01:00" } }));
     await refresh();
     expect(await meetingItem("open")).toMatchObject({ state: "open", meeting: { start: "2026-11-18T13:00:00.000Z", end: "2026-11-18T14:00:00.000Z" } });
+  });
+
+  it("resolves a meeting a refresh brings in at its end, though that comes before housekeeping's next run", async () => {
+    const now = clock.now().getTime();
+    const end = now + 5_000;
+    scenario.gcal.events = [
+      ...scenario.gcal.events,
+      {
+        id: "standup",
+        summary: "Standup",
+        start: { dateTime: new Date(now - 10 * MINUTE).toISOString() },
+        end: { dateTime: new Date(end).toISOString() },
+        attendees: [{ email: "alex@example.com", self: true, responseStatus: "accepted" }, { email: "nora@client.example", displayName: "Nora Lind", responseStatus: "accepted" }],
+      },
+    ];
+    await refresh();
+    expect((await meetingItem(undefined, "gcal:standup"))!.state).toBe("open");
+    await moveTo(end);
+    expect((await meetingItem(undefined, "gcal:standup"))!.state).toBe("resolved");
   });
 });
