@@ -168,7 +168,8 @@ _Avoid_: Digest
 The number of decisions that wait for the owner on this Machine, behind the Attention dot, the tab title and the numbers in the navigation.
 It has three parts: open Inbox items whose Draft does not wait (Home), Proposals and waiting Drafts (Approvals), and Connections that need sign-in (Connections).
 Each decision counts once, so an Inbox item whose Draft waits counts as the Draft.
-A part that could not be read fully makes the count a lower bound, written "12+".
+The service counts every part exactly, however many decisions wait.
+When it cannot, the Dashboard counts the lists it has, and a part that could not be read fully makes the count a lower bound, written "12+".
 _Avoid_: unread count, badge count
 
 **Open item**:
