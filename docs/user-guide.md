@@ -122,7 +122,7 @@ The numbers beside Home, Approvals and Connections always add up to the one in t
 When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
-Off Home, **Search** in the masthead takes you to the Brain's search field.
+Off Home, **Search** in the masthead takes you to the Brain's search field; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
 When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
@@ -132,8 +132,12 @@ On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Searc
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
 
 Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
+Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere in the Brain's.
 Press `?` for the list of keyboard shortcuts.
-Shortcuts do nothing while you type in a field or while a dialog is open.
+On Home, `j` and `k` move between Inbox rows and `Enter` opens one; they change nothing.
+The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+No single key ever applies, approves, sends, rejects, reverts or disconnects.
+Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
 
 ### Look
@@ -146,8 +150,17 @@ The keyboard focus is a blue ring around the control, and the selected screen or
 
 ### Home
 
-Home holds For you now, Connections, the Inbox and Recently added.
+Home holds Search the Brain, For you now, Connections, the Inbox and Recently added.
 
+- **Search the Brain** sits under a short line with the word Home and today's date.
+  The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
+  As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
+  The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
+  `Esc` closes the results and keeps what you typed.
+  A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
+  **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
+  Searching starts no job and changes nothing.
+- **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
 - **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
   Every Heads-up says why it is here and when it leaves.
   - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
@@ -174,8 +187,19 @@ Home holds For you now, Connections, the Inbox and Recently added.
   At most three rows show, and the rest wait behind "1 more".
   Only a Connection that needs you to sign in again counts toward the dot.
   An item list is never shown as "nothing to do" while this area shows a problem.
-- Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
+- **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
+  Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
+  A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
+  Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
+  On a narrow window the type comes first, then the whole subject, then the source and time.
+  Select a row to open it in place: the summary, why it is here, its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
+  A decided row stays where it was as one line with **Undo**, so nothing below it moves.
+  The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
+  Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
+  The **Type** menu lists every type with its count and shows one type at a time.
+  The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft.
 - **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
@@ -183,13 +207,14 @@ Home holds For you now, Connections, the Inbox and Recently added.
   Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
-  While that draft waits for you or is being sent, the item offers **View draft** instead.
+  While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
   Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
 ### Brain
 
 The **Brain** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
+Its search field shows up to 20 matching passages, not only the first six, including raw session transcripts that Home's search leaves out, and keeps your words in the address as you type.
 Each memory note has a *Current state* with one dated entry per subject.
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.

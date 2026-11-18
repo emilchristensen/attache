@@ -94,7 +94,7 @@ export function useNavSignals(): NavSignals {
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
   // held until the other has answered too; otherwise the count would show the decision twice, or not at all, for as
   // long as the slower request takes. Home's rows come from the same held answer, so they match the count.
-  const held = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, answeredAt: r.answeredAt });
+  const held = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, answeredAt: r.answeredAt, askedAt: r.askedAt });
   const settled = useRef({ inbox: held(inbox), drafts: held(drafts) });
   if (!inbox.loading && !drafts.loading) settled.current = { inbox: held(inbox), drafts: held(drafts) };
   const { inbox: heldInbox, drafts: heldDrafts } = settled.current;
@@ -144,8 +144,8 @@ export function useNavSignals(): NavSignals {
  * while either list is still asked, so a first answer from one alone never shows as an empty list. Its own failure
  * (`failed`, from `pairFailure`) shows at once with its Retry, without waiting for the other list.
  */
-function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, failed: ApiError | null, reload: () => void): Resource<R> {
-  return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
+function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt" | "askedAt">, failed: ApiError | null, reload: () => void): Resource<R> {
+  return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, askedAt: held.askedAt, reload };
 }
 
 /** The shell's signals, for the screens inside it. */

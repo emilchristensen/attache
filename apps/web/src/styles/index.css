@@ -8,8 +8,10 @@
 @import "./base.css";
 @import "./controls.css";
 @import "./components.css";
+@import "./search.css";
 @import "./shell.css";
 @import "./home.css";
+@import "./inbox.css";
 @import "./approvals.css";
 @import "./brain.css";
 @import "./jobs.css";

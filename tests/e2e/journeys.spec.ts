@@ -6,6 +6,8 @@ import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
 import { approvalRow, approvalRowById, draftsGroup, openApprovalRow, proposalsGroup } from "./approvals.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
+import { lineStarts } from "./layout.ts";
+import { inboxRow, inboxView, openRow } from "./inbox.ts";
 import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
@@ -256,8 +258,8 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
-  await expect(page.getByText(/Overdue: Review rollback runbook/)).toBeVisible();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
+  await expect(inboxRow(page, "Review rollback runbook")).toContainText("Overdue");
+  await expect(inboxRow(page, "Add checkout retry")).toContainText("GitHub · acme/web #42", { timeout: 20_000 });
   // No microphone control or speech hint anywhere on the Dashboard.
   await expect(page.getByRole("button", { name: /talk|microphone|speaking/i })).toHaveCount(0);
   await expect(page.getByText(/stops speech/)).toHaveCount(0);
@@ -278,17 +280,17 @@ test("service not reachable: the pairing screen's centred layout, the commands t
   await page.close();
 });
 
-test("home: the inbox only, with no chat box or chat shortcut", async () => {
+test("home: search and the inbox, with no chat box or chat shortcut", async () => {
   const page = await journeys.open("/");
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message Attache" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conversation" })).toHaveCount(0);
   await expect(page.getByRole("separator")).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Main" }).first()).not.toContainText("ask");
-  // `/` used to jump to the chat box; now it does nothing, wherever you are.
-  await page.goto(`${stack.url}/jobs`);
+  // `/` used to jump to the chat box; now it searches the Brain (home-search.spec.ts has the whole of it).
   await page.keyboard.press("/");
-  await expect(page).toHaveURL(`${stack.url}/jobs`);
+  await expect(page.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
+  await expect(page).toHaveURL(`${stack.url}/`);
 });
 
 test("connections on Home: one green line when all is read, Checking and Could not check when an answer is missing, and Not reading beside the warning", async () => {
@@ -391,11 +393,14 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
-    const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
-    const onCanvas = page.getByRole("button", { name: "Show dismissed" });
+    // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
+    const first = page.locator("#inbox [data-inbox-row]").first();
+    if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
+    const onCard = first.getByRole("button", { name: "Snooze" });
+    const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
     const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
     // Control edges: a secondary button on a card and on the canvas.
-    for (const control of [onCard, onQuiet]) {
+    for (const control of [onCard, onQuiet, onCanvas]) {
       const edge = await measure(control, "border");
       expect(edge, `${scheme} control edge`).toMatchObject({ width: 1, style: "solid" });
       expect(edge.ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
@@ -433,40 +438,53 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
   await expect(drawer).toBeHidden();
 });
 
-test("attention: dismiss persists across reload and briefings; briefing reports coverage", async () => {
+test("attention: a decided row stays in place with Undo; dismiss and snooze persist across reload and briefings", async () => {
   const page = await journeys.open("/");
-  const item = page.locator("article.item", { hasText: "Review rollback runbook" });
-  await item.getByRole("button", { name: "Dismiss" }).click();
-  await expect(item).toBeHidden();
-  const cutover = page.locator("article.item", { hasText: "Send the cutover plan to finance" });
+  const runbook = inboxRow(page, "Review rollback runbook");
+  await openRow(runbook);
+  await runbook.getByRole("button", { name: "Dismiss" }).click();
+  // The row stays where it was as one line, with Undo focused, so nothing below it moves.
+  await expect(runbook).toHaveAttribute("data-decided", "dismiss");
+  await expect(runbook).toContainText("Dismissed: Review rollback runbook");
+  await expect(runbook.getByRole("button", { name: "Undo" })).toBeFocused();
+  // Undo brings the item back in the same place; dismissing again sticks.
+  await runbook.getByRole("button", { name: "Undo" }).click();
+  await expect(runbook).not.toHaveAttribute("data-decided");
+  await expect(runbook.locator("[data-row-toggle]")).toBeFocused();
+  await openRow(runbook);
+  await runbook.getByRole("button", { name: "Dismiss" }).click();
+  await expect(runbook).toHaveAttribute("data-decided", "dismiss");
+  const cutover = inboxRow(page, "Send the cutover plan to finance");
+  await openRow(cutover);
   await cutover.getByRole("button", { name: "Snooze" }).click();
   await cutover.getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
-  await expect(cutover).toBeHidden();
+  await expect(cutover).toHaveAttribute("data-decided", "snooze");
   const forYou = page.getByRole("region", { name: "For you now" });
   await forYou.getByRole("button", { name: "Briefings" }).click();
   await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
   // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
-  // leading); Read briefing opens its points and linked counts.
+  // leading); Read briefing opens its points and linked counts, which jump to the Inbox.
   await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
   await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
-  await expect(page.getByRole("region", { name: "Review queue" })).toBeInViewport();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeInViewport();
   await page.reload();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible();
+  await expect(inboxRow(page, "Add checkout retry")).toBeVisible();
   // The logo's dot says something needs attention.
   await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(1);
-  await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toHaveCount(0);
-  await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Show dismissed" }).click();
-  await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toBeVisible();
-  await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toContainText("snoozed until");
-  await page.getByRole("button", { name: "Show open" }).click();
+  await expect(inboxRow(page, "Review rollback runbook")).toHaveCount(0);
+  await expect(inboxRow(page, "Send the cutover plan to finance")).toHaveCount(0);
+  await inboxView(page, "Hidden");
+  await expect(inboxRow(page, "Review rollback runbook")).toContainText("Dismissed");
+  await expect(inboxRow(page, "Send the cutover plan to finance")).toContainText("Snoozed until");
+  await inboxView(page, "Priority order");
   await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
 });
 
 test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
   const page = await journeys.open("/");
-  const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  const pr = inboxRow(page, "Add checkout retry");
+  await openRow(pr);
   // Home's decision count sits beside the Inbox heading; with no Draft waiting every row below is a decision here.
   const needYou = page.locator("[data-need-you]");
   const countLine = page.locator(".count-line");
@@ -479,10 +497,13 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
   await expect(countLine).toHaveText(new RegExp(`^${before - 1} items? below needs? you · 1 Draft in Approvals$`));
   // The line speaks of the open rows, so it leaves with them when the dismissed and snoozed ones show instead.
-  await page.getByRole("button", { name: "Show dismissed" }).click();
-  await expect(countLine).toHaveCount(0);
-  await page.getByRole("button", { name: "Show open" }).click();
-  await expect(countLine).toBeVisible();
+  await inboxView(page, "Hidden");
+  await expect(countLine).toHaveText("Snoozed and dismissed items. Reopen one to bring it back.");
+  await inboxView(page, "Priority order");
+  await expect(countLine).toHaveText(/Draft in Approvals$/);
+  // The row stays in the list with its Draft's state and View draft.
+  await expect(pr).toContainText("Draft waiting");
+  await openRow(pr);
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");
@@ -511,7 +532,8 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
   const page = await journeys.open("/");
-  const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  const pr = inboxRow(page, "Add checkout retry");
+  await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
   await pr.getByRole("button", { name: "View draft" }).click();
@@ -847,7 +869,7 @@ test("brain: notes, evidence and deliverables are read-only, with no capture box
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("Which email vendor did we decide on for 2027?");
   const hit = page.locator(".list-item", { hasText: "Email vendor" }).first();
   await expect(hit).toContainText("Postmark");
-  await expect(hit).not.toContainText("superseded");
+  await expect(hit).not.toContainText("History");
 });
 
 test("approvals: a Proposal shows every part of the change and is applied or rejected in one click", async () => {
@@ -1014,26 +1036,6 @@ async function holdInter(page: Page): Promise<() => void> {
   return release;
 }
 
-/** The first character of every line an element's text runs onto. */
-function lineStarts(el: Element): string[] {
-  const starts = new Map<number, { left: number; char: string }>();
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node.textContent ?? "";
-    for (let i = 0; i < text.length; i++) {
-      if (!text[i]!.trim()) continue;
-      const range = document.createRange();
-      range.setStart(node, i);
-      range.setEnd(node, i + 1);
-      const box = range.getBoundingClientRect();
-      const line = Math.round(box.top);
-      const first = starts.get(line);
-      if (!first || box.left < first.left) starts.set(line, { left: box.left, char: text[i]! });
-    }
-  }
-  return [...starts.values()].map((s) => s.char);
-}
-
 test("narrow layout: the Connections page has one name in the masthead, the More sheet and its heading", async () => {
   const page = await journeys.open("/connections");
   const masthead = page.locator(".masthead-nav");
@@ -1167,9 +1169,12 @@ test("review dates: a fact shows its Review date, and one past it is marked unve
   await page.locator('[data-connection="vault-data"]').getByRole("button", { name: "Refresh now" }).click();
   await expect(page.getByText("Refresh started")).toBeVisible();
   await page.goto(`${stack.url}/`);
-  const facts = page.getByRole("region", { name: "Facts to check" });
-  await expect(facts.getByText("Review date passed: “Budget” in Helix rollout")).toBeVisible();
-  await expect(facts.getByText(/“Status” in Helix rollout/)).toHaveCount(0);
+  // A fact to check is its own type in the Inbox: a dated page, the words "Fact to check", from the Brain.
+  const fact = inboxRow(page, "Review date passed: “Budget” in Helix rollout");
+  await expect(fact).toHaveAttribute("data-type", "fact-review");
+  await expect(fact).toContainText("Fact to check");
+  await expect(fact.locator(".inbox-source")).toContainText("Brain");
+  await expect(inboxRow(page, /“Status” in Helix rollout/)).toHaveCount(0);
 });
 
 test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, which restores it", async () => {

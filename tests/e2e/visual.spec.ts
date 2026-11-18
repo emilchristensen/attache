@@ -8,6 +8,7 @@ import type { ConnectionStatus } from "../../packages/contracts/src/features.ts"
 import { approvalRow, openApprovalRow } from "./approvals.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
+import { inboxRow, openRow } from "./inbox.ts";
 
 let stack: Stack;
 test.describe.configure({ mode: "serial" });
@@ -242,8 +243,10 @@ test("screens", async ({ browser }) => {
   await expect(page.locator('[data-feature-status="attention"]')).toBeVisible();
   await setupScreens(page, "finish");
   await page.getByRole("button", { name: "Finish setup" }).click();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
-  await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();
+  const pr = inboxRow(page, "Add checkout retry");
+  await expect(pr).toBeVisible({ timeout: 20_000 });
+  await openRow(pr);
+  await pr.getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Briefings" }).click();
   await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
   await page.waitForTimeout(1500);
@@ -319,6 +322,14 @@ test("screens", async ({ browser }) => {
     await page.goto(stack.url);
     await expect(page.getByRole("region", { name: "Recently added" }).getByRole("listitem").first()).toBeVisible();
     await page.getByRole("region", { name: "Recently added" }).screenshot({ path: `test-results/screens/${scheme}-home-recently-added.png` });
+    // Search the Brain on Home: results under the field as the owner types, then Browse open.
+    await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 0));
+    await page.getByRole("combobox", { name: "Search the Brain" }).fill("Priya");
+    await expect(page.getByRole("listbox", { name: "Results" }).getByRole("option").first()).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-home-search.png` });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Browse" }).click();
+    await page.locator(".home-search").screenshot({ path: `test-results/screens/${scheme}-home-browse.png` });
     // The frame: this Machine's disclosure under the masthead, then the shortcut sheet.
     await page.goto(`${stack.url}/jobs`);
     await page.getByRole("button", { name: /^This Machine/ }).click();
@@ -364,6 +375,11 @@ test("screens", async ({ browser }) => {
   const recentlyAdded = page.getByRole("region", { name: "Recently added" });
   await expect(recentlyAdded.getByRole("listitem").first()).toBeVisible();
   await recentlyAdded.screenshot({ path: "test-results/screens/narrow-home-recently-added.png" });
+  await page.getByRole("combobox", { name: "Search the Brain" }).fill("Priya");
+  await expect(page.getByRole("listbox", { name: "Results" }).getByRole("option").first()).toBeVisible();
+  await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/screens/narrow-home-search.png" });
+  await page.keyboard.press("Escape");
   // The bottom bar's More sheet, with the rest of the screens and this Machine.
   await page.locator(".bottom-bar").getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();

@@ -6,6 +6,7 @@
  * (parameter_validation_failed), so the DM search filters on is:dm.
  * Posting is slack_send_message, read back from the channel or thread.
  */
+import type { InboxKind } from "@attache/contracts";
 import type { ConnectorAdapter, AdapterContext, Observation, RefreshResult, ExecuteResult } from "./types.ts";
 import { CoverageTracker } from "./types.ts";
 import { RemoteError, afterWrite } from "./http.ts";
@@ -67,7 +68,7 @@ function messageUrl(m: SlackItem, teamUrl: string | null): string | undefined {
   return `${teamUrl.replace(/\/$/, "")}/archives/${m.channel}/p${m.ts.replace(".", "")}`;
 }
 
-function observation(p: { msg: SlackItem; kind: string; awaiting: boolean; attentionKind: string | null; why: string; teamUrl: string | null }): Observation {
+function observation(p: { msg: SlackItem; kind: string; awaiting: boolean; attentionKind: InboxKind | null; why: string; teamUrl: string | null }): Observation {
   const { msg } = p;
   const url = messageUrl(msg, p.teamUrl);
   const text = msg.text.slice(0, 4000);

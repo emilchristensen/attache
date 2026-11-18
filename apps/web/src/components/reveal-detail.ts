@@ -35,6 +35,8 @@ function reveal(detail: HTMLElement) {
     if (!stacked(detail)) return stop();
     show();
     growing.observe(detail);
+    // The list above it can grow too, as its own answer arrives after the detail's.
+    if (detail.parentElement) growing.observe(detail.parentElement);
     for (const type of OWN_SCROLL) window.addEventListener(type, stop, { capture: true, passive: true });
   });
 }
