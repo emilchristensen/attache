@@ -118,7 +118,7 @@ test("count: while Drafts is still asked, Home keeps loading after the Inbox ans
     let release!: () => void;
     const held = new Promise<void>((r) => (release = r));
     await page.route(drafts, (route) => held.then(() => route.continue()).catch(() => undefined));
-    const answered = Promise.all([page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open")), page.waitForResponse((r) => r.url().endsWith("/api/v1/connections"))]);
+    const answered = Promise.all([page.waitForResponse((r) => r.url().includes("/api/v1/attention?state=open")), page.waitForResponse((r) => r.url().endsWith("/api/v1/decision-count"))]);
     await page.goto(`${stack.url}/`);
     await answered;
     await expect(page.getByRole("status", { name: "Loading the Inbox" })).toBeVisible();

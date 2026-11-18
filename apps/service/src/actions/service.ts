@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { approvalEndedAt, type ActionStatus, type ActionView } from "@attache/contracts";
+import { approvalEndedAt, WAITING_ACTION_STATUSES, type ActionStatus, type ActionView } from "@attache/contracts";
 import { type Db, json, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
@@ -111,6 +111,12 @@ export class ActionService {
       ? this.db.prepare(`select id from actions where status in (${status.map(() => "?").join(",")}) order by updated_at desc limit ?`).all(...status, opts.limit ?? 100)
       : this.db.prepare("select id from actions order by updated_at desc limit ?").all(opts.limit ?? 100)) as Array<{ id: string }>;
     return rows.map((r) => this.get(r.id)!);
+  }
+
+  /** How many Drafts wait for the owner (`WAITING_ACTION_STATUSES`), however many there are. Settle stale ones first. */
+  countWaiting(): number {
+    const row = this.db.prepare(`select count(*) n from actions where status in (${WAITING_ACTION_STATUSES.map(() => "?").join(",")})`).get(...WAITING_ACTION_STATUSES) as { n: number };
+    return Number(row.n);
   }
 
   private require(id: string): ActionView {

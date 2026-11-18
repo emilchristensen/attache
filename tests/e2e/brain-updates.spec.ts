@@ -95,17 +95,48 @@ test("the dot: a request that fails leaves the dot as it was and shows no number
   const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
   await expectTab(page, { dot: true, title: "(1) Attache" });
 
-  // The Proposals list stops answering, and the Proposal is decided elsewhere: the count cannot tell, so the dot
-  // keeps its last state and no number is claimed.
+  // The count route and the Proposals list it falls back to stop answering, and the Proposal is decided elsewhere:
+  // the count cannot tell, so the dot keeps its last state and no number is claimed.
+  await page.route("**/api/v1/decision-count", (route) => route.abort());
   await page.route("**/api/v1/memory/proposals?*", (route) => route.abort());
   await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
   await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
   await expectTab(page, { dot: true, title: "Attache" });
 
   // Read again, the exact zero puts it out.
+  await page.unroute("**/api/v1/decision-count");
   await page.unroute("**/api/v1/memory/proposals?*");
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expectTab(page, { dot: false, title: "Attache" });
+});
+
+test("count: above the lists' limits the count route keeps every number exact, and when it fails the full list shows a lower bound", async () => {
+  const page = await journeys.open("/");
+  const approvals = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Approvals/ });
+  // One more Proposal than the Proposals list returns (its limit is 100).
+  const made: string[] = [];
+  try {
+    for (let i = 0; i < 101; i++) made.push((await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "create", type: "note", title: `Counted note ${i}`, facts: [{ subject: "Status", value: `Draft ${i}` }] }, reason: "count journey" })).id);
+    await expectTab(page, { dot: true, title: "(101) Attache" });
+    await expect(approvals).toHaveAccessibleName("Approvals, 101 waiting");
+    await expect(approvals.locator(".count")).toHaveText("101");
+
+    // The count route fails: the count falls back to the lists, and a full list is a lower bound.
+    await page.route("**/api/v1/decision-count", (route) => route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }));
+    await page.reload();
+    await expectTab(page, { dot: true, title: "(100+) Attache" });
+    await expect(approvals).toHaveAccessibleName("Approvals, at least 100 waiting");
+    await expect(approvals.locator(".count")).toHaveText("100+");
+
+    // It answers again: exact once more.
+    await page.unroute("**/api/v1/decision-count");
+    await page.reload();
+    await expectTab(page, { dot: true, title: "(101) Attache" });
+  } finally {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    for (const id of made) await api(page, "POST", `/memory/proposals/${id}/reject`);
+  }
   await expectTab(page, { dot: false, title: "Attache" });
 });
 

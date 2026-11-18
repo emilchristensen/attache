@@ -108,6 +108,11 @@ export class Proposals {
     return this.index.list(opts).map(toProposalView);
   }
 
+  /** How many Proposals are in this status, without the list's limit. */
+  count(status: ProposalView["status"]): number {
+    return this.index.count(status);
+  }
+
   /** Whether a Proposal with this id exists, whatever its status. */
   has(id: string): boolean {
     return this.current(id) !== null;
