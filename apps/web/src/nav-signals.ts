@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef } from "react
 import { DECISION_COUNT_PATH, WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type DecisionTotals, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
 import { countDecisions, dotAfter, shownCount, spokenCount, withRows, type Answer, type DecisionCount, type Tally, type Totals } from "./count.ts";
 import type { ApiError } from "./api.ts";
-import { useResource, type Resource } from "./live.ts";
+import { REFRESH_DELAY_MS, useLiveEvent, useResource, type Resource } from "./live.ts";
 import { pairFailure } from "./pair.ts";
 import type { ScreenId } from "./routes.ts";
 
@@ -79,8 +79,47 @@ function badge(t: Tally, words: (n: number) => string): Badge | undefined {
 
 const PROBLEM_WORDS: Partial<Record<ReplicationStatus, string>> = { blocked: "Replication blocked", unauthorized: "Replication unauthorized" };
 
-/** Every event after which the count route may answer differently: Inbox items, Drafts, Proposals, sign-ins, features. */
-const COUNT_EVENTS = ["attention.changed", "actions.changed", "briefing.created", "memory.changed", "connections.changed", "config.changed"];
+/**
+ * The events that change the Inbox or Drafts rows. A Draft's status shows on its Inbox item, so the Inbox follows
+ * Draft changes too; housekeeping announces an expired Draft on both events.
+ */
+const ROW_EVENTS = ["attention.changed", "actions.changed", "briefing.created"];
+/** Every event after which the count route may answer differently: the rows' events, and Proposals, sign-ins, features. */
+const COUNT_EVENTS = [...ROW_EVENTS, "memory.changed", "connections.changed", "config.changed"];
+
+/**
+ * Asks the Inbox, Drafts and the count route again after live events, on one timer instead of one each: an event that
+ * changes the rows asks all three together, also when a count asked for another reason (a Proposal) was due a moment
+ * earlier. Otherwise that count could start up to `REFRESH_DELAY_MS` before the rows and answer with a change they
+ * do not show yet. Returns whether such an event waits for its requests to start, so a count answered meanwhile is
+ * held with the rows. A reconnect still asks each resource again on its own (`useResource`).
+ */
+function useRowsAndCountRefresh(reloadRows: () => void, reloadCount: () => void): { readonly current: boolean } {
+  const reload = useRef({ rows: reloadRows, count: reloadCount });
+  reload.current = { rows: reloadRows, count: reloadCount };
+  const rowsDue = useRef(false);
+  const timer = useRef<number | null>(null);
+  useLiveEvent((ev) => {
+    if (!COUNT_EVENTS.includes(ev.type)) return;
+    if (ROW_EVENTS.includes(ev.type)) rowsDue.current = true;
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      if (rowsDue.current) {
+        rowsDue.current = false;
+        reload.current.rows();
+      }
+      reload.current.count();
+    }, REFRESH_DELAY_MS);
+  });
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+  return rowsDue;
+}
 
 /** The count route's answer as the count reads it. Any error, even with an earlier answer kept, falls back to the lists. */
 function totalsAnswer(r: Pick<Resource<DecisionTotals>, "data" | "error">): Totals {
@@ -94,13 +133,24 @@ export function useNavSignals(): NavSignals {
   const feature = (id: string) => (cfg.data ? (cfg.data.features[id] ?? false) : null);
   const attentionOn = feature("attention");
   const draftsOn = feature("drafts");
-  // A Draft's status shows on its Inbox item, so the Inbox follows Draft changes too; housekeeping announces an
-  // expired Draft on both events.
-  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null, ["attention.changed", "actions.changed", "briefing.created"]);
-  const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null, ["actions.changed", "attention.changed"]);
+  // The Inbox, Drafts and the count route are asked again on live events together (`useRowsAndCountRefresh`).
+  const inbox = useResource<{ items: AttentionItemView[] }>(attentionOn ? `/attention?state=open&limit=${COUNT_LIMITS.inbox}` : null);
+  const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null);
   const proposals = useResource<{ proposals: ProposalView[] }>(`/memory/proposals?status=proposed&limit=${COUNT_LIMITS.proposals}`, ["memory.changed"]);
-  const totals = useResource<DecisionTotals>(DECISION_COUNT_PATH, COUNT_EVENTS);
+  const totals = useResource<DecisionTotals>(DECISION_COUNT_PATH);
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+  const { reload: reloadInbox } = inbox;
+  const { reload: reloadDrafts } = drafts;
+  const { reload: reloadTotals } = totals;
+  const reloadRows = useCallback(() => {
+    reloadInbox();
+    reloadDrafts();
+  }, [reloadInbox, reloadDrafts]);
+  const reloadPair = useCallback(() => {
+    reloadRows();
+    reloadTotals();
+  }, [reloadRows, reloadTotals]);
+  const rowsDue = useRowsAndCountRefresh(reloadRows, reloadTotals);
 
   // An Inbox item and its Draft are one decision, counted on Home or in Approvals by the item's Draft status. The two
   // lists are always asked together (the same live events, and one Retry for both), and a new answer from one is
@@ -109,12 +159,14 @@ export function useNavSignals(): NavSignals {
   // The count route deduplicates in one query, so its first answer counts at once, whatever the lists are doing.
   // Once rows are on screen, a refresh holds the rows and the route's answer until all three have answered, and the
   // Inbox and Drafts parts are counted from that held answer (`withRows`): the rows and the number beside them change
-  // together, whichever answers first. Proposals and sign-ins count from the latest answer.
+  // together, whichever answers first. Proposals and sign-ins count from the latest answer. An event that changes the
+  // rows holds them from its arrival, before their requests start (`rowsDue`), so a count already asked for another
+  // reason cannot run ahead of the rows either.
   const held = <R>(r: Resource<R>) => ({ data: r.data, error: r.error, answeredAt: r.answeredAt, askedAt: r.askedAt });
   const settled = useRef({ inbox: held(inbox), drafts: held(drafts), totals: held(totals) });
   const rowsShown = settled.current.inbox.data !== null || settled.current.drafts.data !== null;
   const routeLoading = rowsShown && totals.loading;
-  const pairSettled = !inbox.loading && !drafts.loading && !routeLoading;
+  const pairSettled = !inbox.loading && !drafts.loading && !routeLoading && !(rowsShown && rowsDue.current);
   if (pairSettled) settled.current = { inbox: held(inbox), drafts: held(drafts), totals: held(totals) };
   const { inbox: heldInbox, drafts: heldDrafts, totals: heldTotals } = settled.current;
   const countedTotals = withRows(totalsAnswer(totals), totalsAnswer(heldTotals));
@@ -123,14 +175,6 @@ export function useNavSignals(): NavSignals {
   // A failure is not held for its pair: it shows at once and stays until the pair settles again (`pair.ts`).
   const failures = useRef<{ inbox: ApiError | null; drafts: ApiError | null }>({ inbox: null, drafts: null });
   failures.current = { inbox: pairFailure(failures.current.inbox, inbox, pairSettled), drafts: pairFailure(failures.current.drafts, drafts, pairSettled) };
-  const { reload: reloadInbox } = inbox;
-  const { reload: reloadDrafts } = drafts;
-  const { reload: reloadTotals } = totals;
-  const reloadPair = useCallback(() => {
-    reloadInbox();
-    reloadDrafts();
-    reloadTotals();
-  }, [reloadInbox, reloadDrafts, reloadTotals]);
   const waitingDrafts = heldRows(drafts, inbox.loading || routeLoading, heldDrafts, failures.current.drafts, reloadPair);
   const inputs = {
     inbox: answer(heldInbox, attentionOn, (d) => d.items, COUNT_LIMITS.inbox),
