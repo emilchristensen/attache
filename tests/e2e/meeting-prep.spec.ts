@@ -313,6 +313,14 @@ test("hold: with focus on Join, the next meeting still comes in on time below it
   // The focused Join is the same element, still the current meeting's call.
   await expect(join).toBeFocused();
   await expect(join).toHaveAttribute("href", "https://meet.google.com/cri-tic-now");
+  // It stays where it came in for the rest of the hold: the pointer moves onto it and the focus leaves.
+  const lines = area(page).locator(".heads-up-lines").first().locator(":scope > li");
+  await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
+  await next.hover();
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
+  await expect(lines.first()).toContainText("Hiring sync");
   expect(own.consoleErrors).toEqual([]);
   await own.close();
 });
@@ -344,23 +352,32 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
     const row = inboxRowFor(page, "Send the cutover plan to finance");
     await expect(row).toBeVisible();
     await expect(area(page)).toHaveAttribute("data-for-you-now", /quiet|timely/);
-    // The owner reads the Inbox, scrolled so this row is near the top.
-    await page.evaluate(() => {
-      const row = [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")].find((r) => r.textContent!.includes("Send the cutover plan to finance"))!;
-      const scroller = document.querySelector<HTMLElement>(".page")!;
-      scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 40;
-    });
-    const before = (await row.boundingBox())!.y;
-    // A meeting comes within 15 minutes of its start: its Heads-up arrives above.
-    await setCalendar(page, [
-      { id: `later-${safari}`, summary: "Quarterly planning", start: 180, end: 240 },
-      { id: `soon-${safari}`, summary: safari ? "Vendor sync" : "Partner sync", start: 10, end: 40 },
-    ]);
-    await expect(meetingHeadsUp(page, safari ? "Vendor sync" : "Partner sync")).toHaveCount(1);
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-    expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
+    // The owner reads the Inbox: scrolled so this row is near the top, then so the Inbox heading is a little below the
+    // top, with the Connections line above it in view and For you now out of sight.
+    const scrollTo = (selector: string, below: number) =>
+      page.evaluate(
+        ([sel, gap]) => {
+          const el = sel === "row" ? [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")].find((r) => r.textContent!.includes("Send the cutover plan to finance"))! : document.querySelector<HTMLElement>(sel as string)!;
+          const scroller = document.querySelector<HTMLElement>(".page")!;
+          scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - (gap as number);
+        },
+        [selector, below] as const,
+      );
+    for (const [step, [place, below]] of ([["row", 40], ["#inbox", 60]] as const).entries()) {
+      await scrollTo(place, below);
+      const before = (await row.boundingBox())!.y;
+      // A meeting comes within 15 minutes of its start: its Heads-up arrives above.
+      const subject = `${safari ? "Vendor" : "Partner"} sync ${step + 1}`;
+      await setCalendar(page, [
+        { id: `later-${safari}`, summary: "Quarterly planning", start: 180, end: 240 },
+        ...Array.from({ length: step + 1 }, (_, n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
+      ]);
+      await expect(meetingHeadsUp(page, subject)).toHaveCount(1);
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring, reading at ${place}`).toBeLessThanOrEqual(1);
+    }
     // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
-    const prep = meetingHeadsUp(page, safari ? "Vendor sync" : "Partner sync").getByRole("button", { name: "Open prep" });
+    const prep = meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync 1`).getByRole("button", { name: "Open prep" });
     await prep.evaluate((el) => {
       const scroller = el.closest<HTMLElement>(".page")!;
       scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 40;

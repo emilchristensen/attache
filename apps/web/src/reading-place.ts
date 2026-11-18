@@ -4,10 +4,13 @@ import { useEffect, type RefObject } from "react";
  * Keep the reader's place on Home when something above it grows or shrinks, as when a meeting prep Heads-up arrives
  * in For you now (and the Inbox's count line with it) while the owner reads the Inbox. Chrome and Firefox do this
  * themselves (scroll anchoring, `overflow-anchor`). Where the browser does not (Safari), this does the same for
- * Home's scroller: while the reader is in the Inbox, it remembers the first Inbox row in view and where it was, and
- * when anything in the page changes size, moves the scroller by as much as that row moved. With anything above the
- * Inbox in view, or at the top of the page, nothing moves.
+ * Home's scroller: it remembers the first thing in view (an area, or a heading, Heads-up or row) and where it was, and
+ * when anything in the page changes size, moves the scroller by as much as that moved. At the top of the page nothing
+ * moves.
  */
+/** The parts of an area that can hold the place: For you now's heading and Heads-ups, the Inbox's heading and rows. */
+const PARTS = ".for-you-now-head, [data-heads-up-key], .inbox-head, [data-inbox-row]";
+
 export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -15,11 +18,14 @@ export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): voi
     let anchor: { el: Element; top: number } | null = null;
     const remember = () => {
       const view = scroller.getBoundingClientRect();
-      // Only while the reader is in the Inbox (nothing above it in view, so a change up there is out of sight) and on a
-      // row in view: as the browser's own anchoring does, the place is what the reader sees.
-      const inbox = scroller.querySelector("#inbox");
-      const reading = !!inbox && inbox.getBoundingClientRect().top <= view.top && scroller.scrollTop > 0;
-      const el = reading ? ([...scroller.querySelectorAll("[data-inbox-row]")].find((r) => r.getBoundingClientRect().bottom > view.top && r.getBoundingClientRect().top < view.bottom) ?? null) : null;
+      // The first thing in view, in page order: an area of Home, or inside For you now and the Inbox their heading or an
+      // entry. As with the browser's own anchoring, a change inside or below it moves nothing, and a change above it keeps
+      // it put.
+      const candidates = [...scroller.children].flatMap((area) => {
+        const parts = [...area.querySelectorAll(PARTS)];
+        return parts.length ? parts : [area];
+      });
+      const el = scroller.scrollTop > 0 ? (candidates.find((c) => c.getBoundingClientRect().bottom > view.top && c.getBoundingClientRect().top < view.bottom) ?? null) : null;
       anchor = el ? { el, top: el.getBoundingClientRect().top } : null;
     };
     const keep = () => {

@@ -427,20 +427,26 @@ describe("a meeting that comes due while the Heads-ups are held", () => {
 
   it("comes in on time below the held entry, before the briefing, and the held lead stays as it was", () => {
     expect(keysOf(held)).toEqual(["meeting:a", "briefing:b1"]);
-    const slot = withArrivedMeetings(held, live, ["meeting:a"]);
+    const { slot } = withArrivedMeetings(held, live, ["meeting:a"]);
     expect(slot.lead).toBe(held.lead);
     expect(keysOf(slot)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
     expect(promotedMeetings(slot)).toEqual(new Set(["a", "b"]));
   });
 
   it("never comes in above what the pointer or focus is on", () => {
-    expect(keysOf(withArrivedMeetings(held, live, ["briefing:b1"]))).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
+    expect(keysOf(withArrivedMeetings(held, live, ["briefing:b1"]).slot)).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
     // Held somewhere that is no entry (between rows): it goes last, so nothing moves under the owner.
-    expect(keysOf(withArrivedMeetings(held, live, []))).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
+    expect(keysOf(withArrivedMeetings(held, live, []).slot)).toEqual(["meeting:a", "briefing:b1", "meeting:b"]);
+  });
+
+  it("keeps where it came in for the rest of the hold, also once the pointer or focus moves onto it", () => {
+    const first = withArrivedMeetings(held, live, ["meeting:a"]);
+    expect(keysOf(first.slot)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
+    for (const holding of [["meeting:b"], [], ["briefing:b1", "meeting:b"]]) expect(keysOf(withArrivedMeetings(held, live, holding, first.placed).slot)).toEqual(["meeting:a", "meeting:b", "briefing:b1"]);
   });
 
   it("brings nothing else in: a briefing or a clock change still waits", () => {
     const later = forYouNow(input("2026-11-18T11:30:00Z", { meetings: [] }));
-    expect(withArrivedMeetings(held, later, ["meeting:a"])).toEqual(held);
+    expect(withArrivedMeetings(held, later, ["meeting:a"]).slot).toEqual(held);
   });
 });

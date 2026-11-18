@@ -11,7 +11,7 @@ function placeOf(target: EventTarget | null, attribute: string): string | null {
  * the `attribute` value of the closest element that has one (For you now: each Heads-up's key), so something new can
  * come in below them without moving them.
  */
-export function useHold(attribute = "data-hold-key") {
+export function useHold(attribute: string) {
   const [pointer, setPointer] = useState<string | null | false>(false);
   const [focus, setFocus] = useState<string | null | false>(false);
   const onBlur = useCallback((e: FocusEvent<HTMLElement>) => {

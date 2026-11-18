@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "re
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
-import { briefingWritten, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep } from "../heads-ups.ts";
+import { briefingWritten, forYouNow, heldSlot, promotedMeetings, withArrivedMeetings, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId, type MeetingPrep, type Placed } from "../heads-ups.ts";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
@@ -229,14 +229,17 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
   const frozen = useRef(live);
   // The first briefing to take a progress line's place stays as it came until the hold ends: a later one waits too.
   const handoff = useRef<HeadsUpInput | null>(null);
+  // Where meetings that came due during this hold went, so each stays there until the hold ends.
+  const placed = useRef<Placed>(new Map());
   if (!held) {
     frozen.current = live;
     handoff.current = null;
+    placed.current = new Map();
   } else if (!handoff.current && briefingWritten(frozen.current, live)) handoff.current = live;
   // While held, a meeting that comes due still comes in on time, below what the owner is on (`withArrivedMeetings`).
-  const slot = held
-    ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine, ...doneKeys]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...mine]) }), holding)
-    : forYouNow(live);
+  const arrived = held ? withArrivedMeetings(heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine, ...doneKeys]) }, handoff.current), forYouNow({ ...live, settled: new Set([...live.settled, ...mine]) }), holding, placed.current) : null;
+  if (arrived) placed.current = arrived.placed;
+  const slot = arrived ? arrived.slot : forYouNow(live);
   // This tab's own Got it, Not now and Done only stand in for a hold's frozen input: the live input has them (stored, or decided).
   useEffect(() => {
     if (!held && mine.size) setMine(new Set());

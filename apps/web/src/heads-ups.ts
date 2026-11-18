@@ -16,7 +16,7 @@ import { atTimeOfDay, clockTime, sameDay, spokenTime, startOfDay } from "./zoned
 
 // The rules, as named constants, live in `heads-up-rules.ts`; meeting prep's kind in `heads-up-meeting.ts`.
 export * from "./heads-up-rules.ts";
-export { meetingPrep, promotedMeetings, withArrivedMeetings, type MeetingPrep } from "./heads-up-meeting.ts";
+export { meetingPrep, promotedMeetings, withArrivedMeetings, type MeetingPrep, type Placed } from "./heads-up-meeting.ts";
 
 // ---- inputs ----------------------------------------------------------------------------------------------------------
 
