@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import type { HeadsUp, HeadsUpAction, MeetingPrep } from "../heads-ups.ts";
 import { spokenTime } from "../zoned-time.ts";
 import { Icon } from "../components/icons.tsx";
@@ -171,5 +171,39 @@ export function MeetingLine({ headsUp, open, clock, ...on }: MeetingProps) {
       </div>
       {open && <MeetingDetail headsUp={headsUp} follower open={open} on={on} clock={clock} />}
     </li>
+  );
+}
+
+/**
+ * A held meeting whose scheduled end has passed (`endedMeetings`): its place shows "Meeting ended" and its subject at
+ * the size it had, with nothing to press, until the hold ends, so nothing below it moves and no Join is left that
+ * reaches a call. When the keyboard was in it, the focus lands here (Enter does nothing), not on the next call's Join.
+ */
+export function MeetingEnded({ headsUp, line, height, takeFocus }: { headsUp: HeadsUp; line: boolean; height: number | undefined; takeFocus: boolean }) {
+  const ref = useRef<HTMLElement & HTMLLIElement>(null);
+  const focus = useRef(takeFocus);
+  // On arrival only: the control the keyboard was on has just gone with the content this replaces.
+  useLayoutEffect(() => {
+    if (focus.current) ref.current?.focus({ preventScroll: true });
+  }, []);
+  const Tag = line ? "li" : "article";
+  return (
+    <Tag
+      ref={ref}
+      tabIndex={-1}
+      className={`${line ? "heads-up-line" : "heads-up-lead"} meeting heads-up-ended`}
+      style={height ? { height } : undefined}
+      aria-label={`Meeting ended: ${headsUp.title}`}
+      data-heads-up={headsUp.kind}
+      data-heads-up-key={headsUp.key}
+      data-meeting-ended
+    >
+      <span className="heads-up-line-icon">
+        <Icon name="calendar-notes" size={16} />
+      </span>
+      <p className="heads-up-ended-text">
+        <strong>Meeting ended</strong> · {headsUp.title}
+      </p>
+    </Tag>
   );
 }

@@ -1,5 +1,5 @@
 import { draftHref } from "../routes.ts";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { plural, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
@@ -10,10 +10,10 @@ import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
-import { snoozeChoices } from "../inbox-rows.ts";
+import { rowText, snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { useRowKeys, type RowKey } from "../shortcuts.ts";
-import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
+import { DecidedRow, InboxRow, MovedUpRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
 
 const EMPTY: Record<InboxCoverage, { title: string; body: string }> = {
@@ -115,13 +115,17 @@ interface RowsProps {
   actions: RowActions;
   draftsOn: boolean;
   onUndo: (entry: ListEntry) => void;
+  /** The row the keyboard is on whose meeting moved up into For you now, drawn in its place at its height. */
+  movedUp: { id: string; height: number | undefined } | null;
 }
 
-function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo }: RowsProps) {
+function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo, movedUp }: RowsProps) {
   return (
     <ul className="inbox-rows">
       {entries.map((e) =>
-        e.decided ? (
+        e.item.id === movedUp?.id && !e.decided ? (
+          <MovedUpRow key={e.item.id} item={e.item} height={movedUp.height} />
+        ) : e.decided ? (
           <DecidedRow key={e.item.id} item={e.item} decision={e.decided.decision} until={e.decided.until} onUndo={e.decided.decision === "reopen" ? null : () => onUndo(e)} busy={actions.busy} clock={clock} />
         ) : (
           <InboxRow key={e.item.id} item={e.item} open={openId === e.item.id} onToggle={() => onToggle(e.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} />
@@ -173,6 +177,30 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
 }
 
 /**
+ * The row the keyboard is on (its item id), and each row's height as last drawn while it had the focus. Spread
+ * `focusProps` on the Inbox.
+ */
+function useFocusedRow() {
+  const [id, setId] = useState<string | null>(null);
+  const height = useRef<{ id: string; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const row = id ? document.querySelector<HTMLElement>(`#inbox [data-inbox-row][data-item-id="${CSS.escape(id)}"]:not([data-moved-up])`) : null;
+    if (row && id) height.current = { id, height: row.offsetHeight };
+  });
+  const rowOf = (target: EventTarget | null) => (target instanceof Element ? (target.closest<HTMLElement>("[data-inbox-row]")?.dataset.itemId ?? null) : null);
+  return {
+    id,
+    heightOf: (of: string) => (height.current?.id === of ? height.current.height : undefined),
+    focusProps: {
+      onFocus: (e: FocusEvent<HTMLElement>) => setId(rowOf(e.target)),
+      onBlur: (e: FocusEvent<HTMLElement>) => {
+        if (!rowOf(e.relatedTarget)) setId(null);
+      },
+    },
+  };
+}
+
+/**
  * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
  * Show new items.
  */
@@ -204,7 +232,16 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
   const clock = useHeadsUpClock();
   const answered = source.data?.items ?? null;
   const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
-  const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
+  // A meeting that moves up while the keyboard is on its row keeps that row's place until the keyboard moves on.
+  const focused = useFocusedRow();
+  const kept = !hiddenView && focused.id && above.has(focused.id) && answered?.some((i) => i.id === focused.id) ? focused.id : null;
+  const rows = useMemo(() => (kept && answered ? listedBelow(answered, new Set([...above].filter((id) => id !== kept)), clock.now) : live), [kept, answered, above, clock.now, live]);
+  const list = useInboxList(rows, source.askedAt, hiddenView ? "hidden" : order, order);
+  const keptItem = kept ? answered?.find((i) => i.id === kept) : undefined;
+  const keptSubject = keptItem ? rowText(keptItem).subject : null;
+  useEffect(() => {
+    if (keptSubject) setSaid(`${keptSubject} moved up to For you now.`);
+  }, [keptSubject]);
   useBackFromAbove(above, open.data?.items ?? null, clock.now, list.welcomeBack);
   const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
@@ -214,6 +251,8 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
   const expanded = useMemo(() => new Set(place.expanded), [place.expanded]);
   const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
+  // The range counts items listed here: a row standing in for a meeting that moved up is not one.
+  const listedCount = (entries: readonly ListEntry[]) => entries.filter((e) => e.item.id !== kept).length;
 
   // A decision moves an item between the open list and Hidden, so both are asked again.
   const reloadOpen = open.reload;
@@ -262,7 +301,7 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
     if (first) focusAfter(first, "row");
   };
   const toggle = (id: string) => setPlace({ openId: place.openId === id ? null : id });
-  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
+  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo, movedUp: kept ? { id: kept, height: focused.heightOf(kept) } : null };
 
   if (!attentionOn)
     return (
@@ -272,14 +311,14 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
     );
 
   return (
-    <section id="inbox" className="inbox" aria-labelledby={heading}>
+    <section id="inbox" className="inbox" aria-labelledby={heading} {...focused.focusProps}>
       <InboxHeading id={heading} open={!hiddenView} above={above}>
         <InboxTools
           items={live ?? []}
           type={place.type}
           view={place.view}
           arrivals={arrivals.length}
-          range={grouped ? plural(typed.length, "item") : typed.length > 0 ? pageLabel(shown.length, typed.length) : ""}
+          range={grouped ? plural(listedCount(typed), "item") : listedCount(typed) > 0 ? pageLabel(listedCount(shown), listedCount(typed)) : ""}
           onType={(type) => setPlace({ type, shown: PAGE_SIZE })}
           onView={(view) => {
             setPlace({ view, shown: PAGE_SIZE, openId: null, expanded: [] });
@@ -314,7 +353,7 @@ export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn:
       {!grouped && typed.length > 0 && (
         <div className="inbox-more">
           <span className="inbox-range" data-range>
-            {pageLabel(shown.length, typed.length)}
+            {pageLabel(listedCount(shown), listedCount(typed))}
           </span>
           {shown.length < typed.length && <button onClick={() => setPlace({ shown: place.shown + PAGE_SIZE })}>Load more</button>}
         </div>

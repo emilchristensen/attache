@@ -198,6 +198,30 @@
   margin-top: var(--s-1);
 }
 
+/* A held meeting that ended: the same box at the same size, with only "Meeting ended" and its subject in it. */
+.heads-up-ended {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--ink-2);
+}
+.heads-up-ended .heads-up-line-icon {
+  color: var(--ink-2);
+}
+.heads-up-ended-text {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.heads-up-ended-text strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
 /* Meeting prep: the calendar-and-notes glyph in the meeting hue; Open prep opens below the line or the card. */
 .heads-up-lead.meeting .heads-up-eyebrow svg,
 .heads-up-line.meeting .heads-up-line-icon {
