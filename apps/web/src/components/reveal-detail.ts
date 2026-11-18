@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
 
 /** How long a revealed detail is kept in view while its content loads. */
 const REVEAL_MS = 1500;
@@ -53,4 +53,22 @@ export function useRevealDetail() {
     if (detailRef.current) reveal(detailRef.current);
   }, []);
   return { detailRef, revealDetail };
+}
+
+/**
+ * Gives `el` the room a sticky child has in the page it scrolls in, as `--page-room`: the page's visible height below
+ * its top padding (where sticky positions start), kept up to date as the window changes, so a detail beside its
+ * list (`.sticky-detail`) fits whatever the masthead, banner or bottom bar take.
+ */
+export function usePageRoom(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const page = el?.closest<HTMLElement>(".page");
+    if (!el || !page) return;
+    const measure = () => el.style.setProperty("--page-room", `${page.clientHeight - parseFloat(getComputedStyle(page).paddingTop)}px`);
+    measure();
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(page);
+    return () => sizes.disconnect();
+  }, [ref]);
 }
