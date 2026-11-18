@@ -226,7 +226,13 @@
   background: var(--canvas);
 }
 
+/*
+ * The page is also the containing block of what it positions absolutely (a screen reader's `.sr-only` words), so
+ * nothing far down a long page reaches past it and makes the document itself scroll: the masthead and the bottom bar
+ * stay put when a phone scrolls past the page's end.
+ */
 .page {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding-top: var(--s-5);

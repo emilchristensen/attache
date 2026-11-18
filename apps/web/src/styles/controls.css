@@ -61,10 +61,12 @@ button.small,
   font-size: var(--fs-meta);
   line-height: 18px;
 }
+/* A touch screen's controls are 44 x 44 px targets, however short their word. */
 @media (pointer: coarse) {
   button,
   .btn {
     min-height: 44px;
+    min-width: 44px;
   }
 }
 

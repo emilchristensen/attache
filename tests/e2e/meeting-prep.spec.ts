@@ -8,12 +8,10 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
+import { MINUTE, SELF, setCalendar as setFixtureCalendar, type Meeting } from "./calendar.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
-
-const MINUTE = 60_000;
-const SELF = "alex@example.com";
 
 test.describe.configure({ mode: "serial" });
 
@@ -43,47 +41,8 @@ test.afterAll(async () => {
   await stack?.stop();
 });
 
-interface Meeting {
-  id: string;
-  summary: string;
-  /** Minutes from now. */
-  start: number;
-  end: number;
-  meetLink?: string;
-  attendees?: string[];
-}
-
-const at = (minutes: number) => new Date(Date.now() + minutes * MINUTE).toISOString();
-
-/**
- * Put these meetings on the fixture calendar and read it again with a Source refresh, until the open Inbox has a
- * meeting prep item for each one whose end is still ahead.
- */
-async function setCalendar(page: Page, meetings: readonly Meeting[]): Promise<Record<string, { start: string; end: string }>> {
-  const events = meetings.map((m) => ({
-    id: m.id,
-    summary: m.summary,
-    start: { dateTime: at(m.start) },
-    end: { dateTime: at(m.end) },
-    ...(m.meetLink ? { conferenceUrl: m.meetLink } : {}),
-    attendees: [{ email: SELF, self: true, responseStatus: "accepted" }, ...(m.attendees ?? ["Nora Lind"]).map((name) => ({ email: `${name.split(" ")[0]!.toLowerCase()}@client.example`, displayName: name, responseStatus: "accepted" }))],
-  }));
-  const set = await page.request.post(`${stack.fixtureUrl}/__control/gcal-events`, { data: { events } });
-  expect(set.ok()).toBe(true);
-  await api(page, "POST", "/connections/gcal/refresh");
-  const wanted = Object.fromEntries(events.map((e) => [`gcal:${e.id}`, new Date(e.start.dateTime).toISOString()]));
-  let items: Array<{ key: string; meeting: { start: string; end: string } | null }> = [];
-  await expect
-    .poll(
-      async () => {
-        items = (await api<{ items: typeof items }>(page, "GET", "/attention?state=open")).items.filter((i) => i.key.startsWith("gcal:"));
-        return items.filter((i) => i.meeting && wanted[i.key] === i.meeting.start).map((i) => i.key).sort();
-      },
-      { timeout: 30_000 },
-    )
-    .toEqual(Object.keys(wanted).sort());
-  return Object.fromEntries(items.map((i) => [i.key.slice("gcal:".length), i.meeting!]));
-}
+/** Puts these meetings on this stack's fixture calendar (`setCalendar` in calendar.ts). */
+const setCalendar = (page: Page, meetings: readonly Meeting[]) => setFixtureCalendar(stack, page, meetings);
 
 /** "14:05": an instant's clock time in the browser's zone, as the Dashboard shows it. */
 const clock = (page: Page, iso: string) => page.evaluate((v) => new Date(v).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), iso);
