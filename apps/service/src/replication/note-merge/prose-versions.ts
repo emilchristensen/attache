@@ -1,3 +1,4 @@
+import type { MergeNoticeKind } from "@attache/contracts";
 import { basename } from "node:path";
 import type { MachineRef, MergeNotice } from "../seams.ts";
 import { mergeLines, type MergedChunk } from "./line-merge.ts";
@@ -5,7 +6,7 @@ import { FACTS_PLACEHOLDER, HISTORY_PLACEHOLDER } from "./parts.ts";
 import type { ProseMerge } from "./prose.ts";
 
 /** The `MergeNotice.kind` raised when a note keeps two versions of the same lines. */
-export const PROSE_VERSIONS = "prose_versions";
+export const PROSE_VERSIONS = "prose_versions" satisfies MergeNoticeKind;
 
 const VERSION_PREFIX = "Version from ";
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;

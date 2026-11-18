@@ -1,4 +1,4 @@
-import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState } from "@attache/contracts";
+import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState, InboxKind } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { HttpClient } from "./http.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
@@ -45,7 +45,8 @@ export interface Observation {
 
 export interface AttentionCandidate {
   key: string;
-  kind: string;
+  /** One of the kinds the Dashboard knows; add a new one to `INBOX_KINDS` first. */
+  kind: InboxKind;
   title: string;
   summary: string;
   why: string;

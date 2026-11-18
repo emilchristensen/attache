@@ -509,3 +509,26 @@
     white-space: nowrap;
   }
 }
+
+/* The switch under the Inbox decision keys: they stay off until the owner turns them on here. */
+.shortcut-switch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--s-2);
+  align-items: center;
+  margin-top: var(--s-2);
+  font-size: var(--fs-control);
+}
+.shortcut-switch input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+.shortcut-switch label {
+  font-weight: 600;
+  cursor: pointer;
+}
+.shortcut-switch p {
+  grid-column: 2;
+  margin: 2px 0 0;
+}

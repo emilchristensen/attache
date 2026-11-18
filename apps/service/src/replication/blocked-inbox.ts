@@ -1,4 +1,4 @@
-import type { Coverage, ReplicationView } from "@attache/contracts";
+import type { Coverage, InboxKind, ReplicationView } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { applyCandidates, type CandidateWithSource } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
@@ -14,7 +14,7 @@ function covered(items: number, at: string): Coverage {
   return { state: "complete", scopes: [], items, at };
 }
 
-function item(key: string, kind: string, title: string, why: string, cause: string, at: string): CandidateWithSource {
+function item(key: string, kind: InboxKind, title: string, why: string, cause: string, at: string): CandidateWithSource {
   return {
     key,
     kind,

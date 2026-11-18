@@ -1,0 +1,294 @@
+/*
+ * Home's Inbox: the heading with the decision count and the view controls, then one continuous ruled list.
+ * Colour lives only in the kind stamp and word; rows have flat 1 px rules, no tinted group headers, no coloured bars.
+ */
+
+/* ---- the heading and the view controls ---------------------------------------------------------- */
+
+.inbox {
+  margin-top: var(--s-6);
+}
+.inbox-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-3);
+}
+.inbox-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--s-3);
+  min-width: 0;
+}
+.inbox-title h2 {
+  margin: 0;
+}
+.need-you {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--ink);
+}
+.count-line {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.inbox-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+select.inbox-picker {
+  width: auto;
+  max-width: 100%;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  padding: 7px 10px;
+}
+/* Show new items keeps its place while nothing waits, so its arrival never moves the list. */
+.inbox-show-new:not([data-waiting]) {
+  visibility: hidden;
+}
+
+/* ---- the rows ------------------------------------------------------------------------------------ */
+
+.inbox-rows {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  border-top: 2px solid var(--ink);
+}
+.inbox-row {
+  border-bottom: 1px solid var(--rule);
+}
+/* Kind (stamp and word, about 185 px), the subject with its source line, and the time. */
+.inbox-line {
+  position: relative;
+  display: grid;
+  grid-template-columns: 185px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 14px 4px;
+}
+.inbox-row:not(.decided) > .inbox-line:hover {
+  background: var(--row-hover);
+}
+.inbox-kind {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 700;
+  color: var(--c);
+}
+.inbox-main {
+  min-width: 0;
+}
+/* The subject opens the row; the whole line is its click target. */
+button.inbox-subject {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+button.inbox-subject:hover:not(:disabled) {
+  background: none;
+}
+button.inbox-subject::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.inbox-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--s-2);
+  margin: 2px 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.inbox-time {
+  justify-self: end;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+
+/* ---- an open row ------------------------------------------------------------------------------------ */
+
+.inbox-row.open > .inbox-line {
+  background: var(--row-hover);
+}
+/* The detail lines up under the subject column. */
+.inbox-detail {
+  padding: var(--s-1) var(--s-1) var(--s-4) calc(185px + 14px + 4px);
+}
+.inbox-summary,
+.inbox-why {
+  margin: 0 0 var(--s-2);
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+.inbox-why-label {
+  font-weight: 600;
+}
+.inbox-evidence {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 var(--s-2);
+  padding: 0;
+}
+.inbox-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.inbox-snooze {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* ---- a decided row: one line with Undo, in the row's place ---------------------------------------- */
+
+.inbox-decided {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.inbox-decided strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.inbox-undo {
+  justify-self: end;
+}
+
+/* ---- Group by type, pages ------------------------------------------------------------------------------ */
+
+.inbox-family {
+  margin-top: var(--s-5);
+}
+.inbox-family-title {
+  margin: 0;
+  font: 600 var(--fs-body) / var(--lh-body) var(--font);
+  color: var(--ink);
+}
+.inbox-family-count {
+  font-weight: 400;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.inbox-show-all {
+  margin-top: var(--s-2);
+}
+.inbox-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.inbox-none {
+  margin: var(--s-4) 0 0;
+  color: var(--ink-2);
+}
+
+/* ---- narrow: stamp and kind first, the whole subject next, then source and time ------------------------- */
+
+@media (max-width: 720px) {
+  .inbox-tools {
+    margin-left: 0;
+    flex: 1 1 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .inbox-show-new {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: center;
+  }
+  select.inbox-picker {
+    width: 100%;
+  }
+  .inbox-line {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "kind kind"
+      "subject subject"
+      "source time";
+    row-gap: var(--s-1);
+    padding: var(--s-3) 2px;
+  }
+  .inbox-main {
+    display: contents;
+  }
+  .inbox-kind {
+    grid-area: kind;
+    gap: var(--s-2);
+  }
+  .inbox-kind .type-icon {
+    width: 25px;
+    height: 25px;
+    border-radius: 6px;
+  }
+  .inbox-kind .type-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+  button.inbox-subject {
+    grid-area: subject;
+  }
+  .inbox-source {
+    grid-area: source;
+    margin: 0;
+  }
+  .inbox-time {
+    grid-area: time;
+    align-self: start;
+  }
+  .inbox-row.decided > .inbox-line {
+    grid-template-areas:
+      "kind undo"
+      "subject subject";
+  }
+  .inbox-decided {
+    grid-area: subject;
+  }
+  .inbox-undo {
+    grid-area: undo;
+  }
+  .inbox-detail {
+    padding: 0 2px var(--s-4);
+  }
+}

@@ -4,6 +4,7 @@
  * commit and before talking to the remote, and the credentials git uses.
  * `replication/seams.ts` `defaultSeams()` is the one place they are listed.
  */
+import type { MergeNoticeKind } from "@attache/contracts";
 import { inboxMergeRule } from "../attention/inbox-merge.ts";
 import { proposalMergeRule } from "../memory/proposal-merge.ts";
 import { systemClock, type Clock } from "./clock.ts";
@@ -41,7 +42,8 @@ export interface MergeInput {
 /** Something about a merge the owner should look at, e.g. prose kept in two versions. */
 export interface MergeNotice {
   path: string;
-  kind: string;
+  /** Becomes the Inbox kind `replication_<kind>`; add a new one to `MERGE_NOTICE_KINDS` and `INBOX_KINDS`. */
+  kind: MergeNoticeKind;
   message: string;
   /** A short headline for the inbox item; a generic one naming the path when left out. */
   title?: string;
