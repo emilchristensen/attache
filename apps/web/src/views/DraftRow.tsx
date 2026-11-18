@@ -1,9 +1,12 @@
+import { useId } from "react";
 import type { ActionView } from "@attache/contracts";
 import { Tag } from "../components/Tag.tsx";
 import { Link } from "../components/ui.tsx";
 import { draftAnswers, draftBodyKey, draftOutcome, draftReviewLabel, draftRowText, draftStateTag } from "../approvals.ts";
+import { deliveryCheck } from "../delivery.ts";
 import { draftHref } from "../routes.ts";
 import { ApprovalRow } from "./ApprovalRow.tsx";
+import { DraftNoticeLine } from "./DraftParts.tsx";
 
 /** Where a Draft row stands: waiting for the owner, being sent (In progress), or finished. */
 export type DraftRowPlace = "waiting" | "sending" | "finished";
@@ -37,10 +40,13 @@ function StateWord({ d, place }: { d: ActionView; place: DraftRowPlace }) {
 /**
  * A Draft's row: its subject, then destination, version and the first line of its text. It opens in place
  * read-only; "Review and approve vN" goes to the Draft's own page, where Approve and Send live (never in the list).
- * A waiting Draft also offers Reject here.
+ * A waiting Draft also offers Reject here; a finished one whose send has an unknown outcome leads with Check destination.
  */
 export function DraftRow({ d, place, open, onToggle, reject }: { d: ActionView; place: DraftRowPlace; open: boolean; onToggle: () => void; reject?: { run: (d: ActionView) => void; busy: boolean } }) {
   const text = draftRowText(d);
+  const noticeId = useId();
+  // A send of unknown outcome leads with its warning and Check destination, as on its Inbox item.
+  const check = place === "finished" && d.status === "unknown" ? deliveryCheck({ url: null }, d) : null;
   return (
     <ApprovalRow
       kind="draft"
@@ -61,7 +67,13 @@ export function DraftRow({ d, place, open, onToggle, reject }: { d: ActionView; 
       detail={
         <>
           <DraftPreview d={d} />
+          {check && <DraftNoticeLine notice={check.notice} id={noticeId} />}
           <div className="approval-actions">
+            {check?.href && (
+              <a className="btn primary" href={check.href} target="_blank" rel="noopener noreferrer" aria-describedby={noticeId}>
+                Check destination
+              </a>
+            )}
             {place === "waiting" ? (
               <Link to={draftHref(d.id)} className="btn primary">
                 {draftReviewLabel(d)}

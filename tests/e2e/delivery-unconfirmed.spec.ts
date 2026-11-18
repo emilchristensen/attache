@@ -8,6 +8,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
+import { approvalRowById, openApprovalRow } from "./approvals.ts";
 import { inboxRow, openRow } from "./inbox.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
@@ -112,18 +113,23 @@ test("a send of unknown outcome: back on Home the open row and its place survive
   await expect(row.locator("[data-row-toggle]")).toHaveText(SUBJECT);
   const kinds = await page.locator("#inbox [data-inbox-row] .inbox-kind-word").allTextContents();
   expect(kinds).toEqual(expect.arrayContaining(["Review request", "Pending reply", "Deadline"]));
-  for (const [name, viewport] of [["", { width: 1280, height: 800 }], ["narrow", { width: 360, height: 780 }]] as const) {
+  const captures = [
+    ["light", { width: 1280, height: 800 }],
+    ["dark", { width: 1280, height: 800 }],
+    ["narrow", { width: 360, height: 780 }],
+  ] as const;
+  for (const [name, viewport] of captures) {
     await page.setViewportSize(viewport);
-    for (const scheme of name ? ([null] as const) : (["light", "dark"] as const)) {
-      if (scheme) await page.emulateMedia({ colorScheme: scheme });
-      const prefix = name || scheme;
+    await page.emulateMedia({ colorScheme: name === "dark" ? "dark" : "light" });
+    for (const open of [false, true]) {
+      if (open) await openRow(row);
       await row.scrollIntoViewIfNeeded();
-      await page.screenshot({ path: `test-results/screens/${prefix}-home-inbox-delivery-unconfirmed.png` });
-      await openRow(row);
-      await row.scrollIntoViewIfNeeded();
-      await page.screenshot({ path: `test-results/screens/${prefix}-home-inbox-delivery-unconfirmed-open.png` });
-      await row.locator("[data-row-toggle]").click();
+      // No hover or focus fill on the row in the picture.
+      await page.mouse.move(0, 0);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.screenshot({ path: `test-results/screens/${name}-home-inbox-delivery-unconfirmed${open ? "-open" : ""}.png` });
     }
+    await row.locator("[data-row-toggle]").click();
   }
   await page.emulateMedia({ colorScheme: null });
   await page.close();
@@ -164,11 +170,21 @@ test("from Home after the send: Check destination opens the destination and chan
   await row.getByRole("button", { name: "View the Draft" }).click();
   await expect(page).toHaveURL(new RegExp(`/approvals/${before.actionId}$`));
   await expect(page.locator("[data-receipt]")).toContainText(draft.receipt.url);
-  await page.goBack();
+  await expect(page.locator("[data-receipt]")).toContainText("No, the outcome is unknown");
+  // Approvals lists it under Finished, with the same warning and Check destination first.
+  await page.goto(`${stack.url}/approvals?tab=finished`);
+  const finished = approvalRowById(page, "draft", before.actionId!);
+  await expect(finished.locator(".approval-meta .tag")).toHaveText("Outcome unknown");
+  await openApprovalRow(finished);
+  await expect(finished.locator(".draft-notice")).toContainText("Check the pull request before you do anything else.");
+  await expect(finished.locator(".approval-actions > :is(a, button)").first()).toHaveText("Check destination");
+  await expect(finished.getByRole("link", { name: "Check destination" })).toHaveAttribute("href", draft.receipt.url);
+  await page.goto(stack.url);
+  await openRow(row);
   await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
 
   // Prepare a replacement only opens the choice, with the warning; Cancel leaves everything as it was.
-  const replace = row.getByRole("button", { name: "Prepare a replacement" });
+  const replace = row.getByRole("button", { name: "Prepare a replacement", exact: true });
   await replace.click();
   await expect(replace).toHaveAttribute("aria-expanded", "true");
   const choice = row.getByRole("group", { name: "Prepare a replacement" });

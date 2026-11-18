@@ -199,6 +199,10 @@ button.approval-subject::after {
 .approval-actions:empty {
   display: none;
 }
+.approval-detail .draft-notice {
+  max-width: 68ch;
+  margin-top: var(--s-3);
+}
 
 /* ---- a decided row: one line in the row's place ------------------------------------------------------ */
 
@@ -416,6 +420,9 @@ textarea.draft-box[readonly] {
 }
 .draft-receipt {
   margin: 0;
+}
+.draft-receipt a {
+  overflow-wrap: anywhere;
 }
 
 /* Below the decision: what it was prepared from, then details and history. */
