@@ -9,7 +9,7 @@ import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
-import { groupRows, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
+import { backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { useRowKeys, type RowKey } from "../shortcuts.ts";
@@ -22,8 +22,14 @@ const EMPTY: Record<InboxCoverage, { title: string; body: string }> = {
   incomplete: { title: "Nothing found in the sources that were read", body: "Connections above says what was not read, so this may not be complete." },
 };
 
-/** Nothing is promoted above the Inbox yet; the Heads-ups (#26 of spec #14) fill this with meeting prep items. */
-const NOTHING_PROMOTED: ReadonlySet<string> = new Set();
+/** Every open item is shown above as meeting prep: nothing else waits below. */
+const EMPTY_BELOW = { title: "Nothing else needs your attention", body: "The meeting prep above is open. Not now brings it back here." };
+
+/** The empty open list: nothing needs the owner, or nothing else when the only open items are meeting prep above. */
+function EmptyBelow({ coverage, above }: { coverage: InboxCoverage; above: boolean }) {
+  const words = above ? EMPTY_BELOW : EMPTY[coverage];
+  return <Empty title={words.title}>{words.body}</Empty>;
+}
 
 /** What each decision key decides on the focused row. */
 const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "done", snooze: "snooze", dismiss: "dismiss" };
@@ -32,11 +38,11 @@ const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "do
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
  * number out, the line that relates the rows to the decisions when they differ, and the view controls.
  */
-function InboxHeading({ id, children, open }: { id: string; children: ReactNode; open: boolean }) {
+function InboxHeading({ id, children, open, above }: { id: string; children: ReactNode; open: boolean; above: ReadonlySet<string> }) {
   const signals = useSignals();
   const home = signals.count.home;
   const needYou = home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = open ? homeLine(signals.inbox, NOTHING_PROMOTED) : null;
+  const line = open ? homeLine(signals.inbox, above) : null;
   return (
     <>
       <div className="inbox-head">
@@ -167,10 +173,25 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
 }
 
 /**
- * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
- * when every source was read, and names what was read otherwise.
+ * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
+ * Show new items.
  */
-export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage }) {
+function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionItemView[] | null, now: number, welcomeBack: (ids: readonly string[]) => void): void {
+  const before = useRef(above);
+  useEffect(() => {
+    if (before.current === above) return;
+    const back = live ? backFromAbove(before.current, above, live, now) : [];
+    before.current = above;
+    welcomeBack(back);
+  });
+}
+
+/**
+ * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
+ * when every source was read, and names what was read otherwise. `above` holds the items For you now shows as
+ * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
+ */
+export function Inbox({ attentionOn, draftsOn, coverage, above }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage; above: ReadonlySet<string> }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
@@ -180,8 +201,11 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
   const open = useSignals().openInbox;
   const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && hiddenView ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "actions.changed"]);
   const source = hiddenView ? hidden : open;
-  const live = source.data?.items ?? null;
+  const clock = useHeadsUpClock();
+  const answered = source.data?.items ?? null;
+  const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
   const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
+  useBackFromAbove(above, open.data?.items ?? null, clock.now, list.welcomeBack);
   const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
 
@@ -238,7 +262,6 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     if (first) focusAfter(first, "row");
   };
   const toggle = (id: string) => setPlace({ openId: place.openId === id ? null : id });
-  const clock = useHeadsUpClock();
   const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
 
   if (!attentionOn)
@@ -250,7 +273,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
 
   return (
     <section id="inbox" className="inbox" aria-labelledby={heading}>
-      <InboxHeading id={heading} open={!hiddenView}>
+      <InboxHeading id={heading} open={!hiddenView} above={above}>
         <InboxTools
           items={live ?? []}
           type={place.type}
@@ -271,7 +294,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
       {source.loading && !source.data && <Loading label="Loading the Inbox" />}
       <ErrorState error={source.error} retry={source.reload} />
       {live && list.entries.length === 0 && arrivals.length > 0 && <p className="inbox-none">New items arrived. Show new items adds them.</p>}
-      {live && list.entries.length === 0 && arrivals.length === 0 && <Empty title={hiddenView ? "Nothing snoozed or dismissed" : EMPTY[coverage].title}>{hiddenView ? null : EMPTY[coverage].body}</Empty>}
+      {live && list.entries.length === 0 && arrivals.length === 0 && (hiddenView ? <Empty title="Nothing snoozed or dismissed">{null}</Empty> : <EmptyBelow coverage={coverage} above={above.size > 0 && coverage === "all"} />)}
       {live && typed.length === 0 && list.entries.length > 0 && <p className="inbox-none">No items of this type.</p>}
       {grouped
         ? grouped.map((g) => (

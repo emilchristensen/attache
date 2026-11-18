@@ -57,6 +57,7 @@ interface ItemRow {
   resolved_at: string | null;
   decision: string | null;
   machine: string | null;
+  meeting: string | null;
 }
 
 /**
@@ -92,6 +93,7 @@ export function recordOfRow(r: ItemRow): InboxRecord {
       updatedAt: r.updated_at,
       resolvedAt: r.resolved_at ?? null,
       machine: json(r.machine, null),
+      meeting: json(r.meeting, null),
     },
     decision: json<InboxDecisionPart | null>(r.decision, null),
   };
@@ -120,18 +122,18 @@ export function storeRecord(db: Db, rec: InboxRecord, now: string, briefingId?: 
   const values = [
     rec.id, item.fingerprint, item.kind, item.title, item.summary, item.why, item.sourceKind, item.connectionId, JSON.stringify(item.evidence), item.url, item.dueAt, item.priority,
     derived.state, derived.snoozeUntil, derived.decidedFingerprint, item.firstSeenAt, item.updatedAt, item.draftable ? JSON.stringify(item.draftable) : null,
-    item.resolvedAt, decision ? JSON.stringify(decision) : null, item.machine ? JSON.stringify(item.machine) : null,
+    item.resolvedAt, decision ? JSON.stringify(decision) : null, item.machine ? JSON.stringify(item.machine) : null, item.meeting ? JSON.stringify(item.meeting) : null,
   ] as const;
   const prev = rowByKey(db, rec.key);
   if (!prev) {
     db.prepare(
-      `insert into attention_items (id, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, snooze_until, decided_fingerprint, first_seen_at, updated_at, draftable, resolved_at, decision, machine, item_key, last_briefing_id)
-       values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `insert into attention_items (id, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, snooze_until, decided_fingerprint, first_seen_at, updated_at, draftable, resolved_at, decision, machine, meeting, item_key, last_briefing_id)
+       values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(...values, rec.key, briefingId ?? null);
   } else {
     db.prepare(
       `update attention_items set id = ?, fingerprint = ?, kind = ?, title = ?, summary = ?, why = ?, source_kind = ?, connection_id = ?, evidence = ?, url = ?, due_at = ?, priority = ?,
-         state = ?, snooze_until = ?, decided_fingerprint = ?, first_seen_at = ?, updated_at = ?, draftable = ?, resolved_at = ?, decision = ?, machine = ?, last_briefing_id = ?
+         state = ?, snooze_until = ?, decided_fingerprint = ?, first_seen_at = ?, updated_at = ?, draftable = ?, resolved_at = ?, decision = ?, machine = ?, meeting = ?, last_briefing_id = ?
        where item_key = ?`,
     ).run(...values, briefingId === undefined ? prev.last_briefing_id : briefingId, rec.key);
   }
@@ -156,12 +158,14 @@ function itemOf(c: CandidateWithSource, firstSeenAt: string, now: string, machin
     updatedAt: now,
     resolvedAt: null,
     machine,
+    meeting: c.meeting ?? null,
   };
 }
 
 /** Whether the source said something new about the item, beyond when it last looked. */
 function reworded(prev: InboxItemPart, c: CandidateWithSource): boolean {
-  return prev.title !== c.title || prev.summary !== c.summary || JSON.stringify(prev.draftable) !== JSON.stringify(c.draftable ?? null);
+  const differs = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+  return prev.title !== c.title || prev.summary !== c.summary || differs(prev.draftable, c.draftable ?? null) || differs(prev.meeting, c.meeting ?? null);
 }
 
 /**
@@ -201,7 +205,7 @@ export function applyCandidates(
       if (prev.fingerprint === c.fingerprint && !rec.item.resolvedAt) {
         // Same evidence: refresh what it says without alerting again; it replicates only when its wording changed.
         const again = reworded(rec.item, c);
-        storeRecord(db, { ...rec, item: { ...rec.item, title: c.title, summary: c.summary, evidence: c.evidence, draftable: c.draftable ?? null, ...(again ? { updatedAt: now, machine } : {}) } }, now);
+        storeRecord(db, { ...rec, item: { ...rec.item, title: c.title, summary: c.summary, evidence: c.evidence, draftable: c.draftable ?? null, meeting: c.meeting ?? null, ...(again ? { updatedAt: now, machine } : {}) } }, now);
         if (again) out.touched.push(c.key);
         out.unchanged.push(c.key);
         if (prev.state === "dismissed") out.keptDismissed.push(c.key);
@@ -274,13 +278,20 @@ export function rederiveStates(db: Db, now: string): string[] {
 }
 
 /**
- * End the snoozes whose time has passed by `now`: the only states that change as time passes.
- * Each row takes the state its record gives; the record, its report time included, stays as it is.
- * Returns the keys of the items it woke.
+ * Apply what the passing of time changes by `now`: snoozes that ended wake, and meeting prep items whose
+ * meeting has ended are resolved. Each row takes the state its record gives; the record, its report time
+ * included, stays as it is. Returns the keys of the items whose state changed.
  */
-export function endSnoozes(db: Db, now: string): string[] {
-  const due = db.prepare("select * from attention_items where state = 'snoozed' and snooze_until <= ?").all(now) as unknown as ItemRow[];
+export function passTime(db: Db, now: string): string[] {
+  const due = db.prepare("select * from attention_items where (state = 'snoozed' and snooze_until <= ?) or (meeting is not null and state != 'resolved')").all(now) as unknown as ItemRow[];
   return rederive(db, due, now);
+}
+
+/** The soonest end, after `now`, of a meeting whose prep item has not been resolved; null when there is none. */
+export function nextMeetingEnd(db: Db, now: string): Date | null {
+  const rows = db.prepare("select meeting from attention_items where meeting is not null and state != 'resolved'").all() as Array<{ meeting: string }>;
+  const ends = rows.map((r) => Date.parse(json<{ end?: string }>(r.meeting, {}).end ?? "")).filter((t) => Number.isFinite(t) && t > Date.parse(now));
+  return ends.length ? new Date(Math.min(...ends)) : null;
 }
 
 /** Store each row's state as its record gives it at `now`, where the row held another. Returns the keys it corrected. */
@@ -385,6 +396,7 @@ function toView(r: Record<string, unknown>): AttentionItemView {
     actionStatus: (r.action_status as ActionStatus) ?? null,
     changedSinceDecision: !!r.decided_fingerprint && r.decided_fingerprint !== r.fingerprint,
     draftable: json(r.draftable, null),
+    meeting: json(r.meeting, null),
   };
 }
 
