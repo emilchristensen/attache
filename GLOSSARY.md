@@ -124,6 +124,7 @@ _Avoid_: Outgoing message
 **Approvals**:
 The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
 It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.
+Its Waiting tab holds Drafts to send and Changes to the Brain (and In progress, Drafts being sent); its Finished tab what happened to the rest.
 _Avoid_: Drafts page
 
 **Heads-up**:

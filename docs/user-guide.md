@@ -252,10 +252,29 @@ Events stay in *History*, which only grows, so they cannot be reverted.
 
 ### Approvals
 
-**Approvals** holds everything Attache prepared that waits for your OK: *Drafts to send*, then *Changes to the Brain* (the Proposals described above).
+**Approvals** holds everything Attache prepared that waits for your OK.
 Approvals is only the page's name: you approve one exact version of a Draft, and you apply or reject a Proposal.
 
-*Drafts to send* shows each draft with its context and evidence.
+The **Waiting** tab has two ruled sections, so sending a message and changing the Brain never look alike:
+
+- *Drafts to send*, marked with a blue pen and the word Draft.
+  Each row shows the Draft's subject, where it goes and its version, such as "GitHub comment on acme/web #42 · v2", and the first line of its text.
+  Opening a row shows, read-only, what the Draft answers and its whole text, with **Review and approve vN** (or **Review and send vN** once approved) and **Reject**.
+  **Approve** and **Send** are never in the list: they are on the Draft's own page, with the version in view.
+- *Changes to the Brain*, marked with a plum change glyph and the word Proposal.
+  Each row names the note and the change, the old value and the new one for a correction, such as "Owner: Sam → Nora", or what it adds.
+  Opening a row shows every part, the reason and the evidence (as described above), with **Apply** and **Reject**.
+  When Apply is refused, the reason shows in the row and the row stays, so you can still reject it.
+
+A row you decide stays as one line in its place, such as "Applied · Email vendor", until your next visit, so nothing below it moves.
+A Draft that is being sent shows under *In progress*; it is not counted, since nothing waits for you there.
+"Nothing waits for your OK." shows only when both the Drafts and the Proposals answered with nothing.
+The Drafts and the Proposals are asked for separately, and each section answers for its own: when one cannot be loaded it says so with **Retry**, and keeps the rows it last had with the time they were loaded.
+The Waiting tab and Approvals in the navigation then show what is known as a lower bound, such as "2+".
+
+The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
+
+A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
 When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.

@@ -148,6 +148,35 @@ describe("deciding a Proposal", () => {
   });
 });
 
+describe("the Approvals lists", () => {
+  it("lists decided Proposals in one request, the latest decision first", async () => {
+    const first = await svc.post("/memory/proposals", { item: { action: "create", type: "note", title: "Bike shed", facts: [{ subject: "Colour", value: "Green" }] }, reason: "Chat" });
+    const second = await svc.post("/memory/proposals", { item: { action: "create", type: "note", title: "Plant rota", facts: [{ subject: "Owner", value: "Ida" }] }, reason: "Chat" });
+    const waiting = await svc.post("/memory/proposals", { item: { action: "create", type: "note", title: "Still waiting", facts: [{ subject: "A", value: "1" }] }, reason: "Chat" });
+    // Decided in the opposite order to the one they were made in: the list follows the decisions.
+    await svc.post(`/memory/proposals/${second.id}/reject`);
+    await new Promise((r) => setTimeout(r, 5));
+    await svc.post(`/memory/proposals/${first.id}/apply`);
+    const { proposals } = await svc.get("/memory/proposals?status=applied,rejected");
+    const ids = proposals.map((p: any) => p.id);
+    expect(ids.indexOf(first.id)).toBeLessThan(ids.indexOf(second.id));
+    expect(ids).not.toContain(waiting.id);
+    expect(new Set(proposals.map((p: any) => p.status))).toEqual(new Set(["applied", "rejected"]));
+    expect((await svc.call("GET", "/memory/proposals?status=applied,maybe")).status).toBe(400);
+  });
+
+  it("names the note each Proposal changes by its title", async () => {
+    const update = await svc.post("/memory/proposals", { item: { action: "update", path: "memory/projects/atlas-rollout.md", events: ["Odense kicked off"] }, reason: "Standup" });
+    const create = await svc.post("/memory/proposals", { item: { action: "create", type: "person", title: "Noor Aziz", facts: [{ subject: "Role", value: "Analyst" }] }, reason: "Intro" });
+    expect(update.noteTitle).toBe("Atlas rollout");
+    expect(create.noteTitle).toBe("Noor Aziz");
+    const listed = (await svc.get("/memory/proposals")).proposals;
+    expect(listed.find((p: any) => p.id === update.id).noteTitle).toBe("Atlas rollout");
+    const applied = await svc.post(`/memory/proposals/${create.id}/apply`);
+    expect(applied.noteTitle).toBe("Noor Aziz");
+  });
+});
+
 describe("the briefing", () => {
   it("names what each pending Proposal changes", async () => {
     await svc.post("/memory/proposals", { item: { action: "create", type: "person", title: "Freya Lund", facts: [{ subject: "Role", value: "Designer" }, { subject: "Team", value: "Atlas" }], events: ["Joined in October"] }, reason: "Intro meeting" });

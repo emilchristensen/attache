@@ -199,6 +199,11 @@ export interface ProposalView {
   item: MemorySaveItem | null;
   /** The note it changes, the note it created once applied, or "(new <type>: <title>)" before that. */
   target: string;
+  /**
+   * That note's title: as the note says now for an update or an applied new note, the title it would get for a
+   * waiting one; null when the note cannot be read (deleted, or outside the Brain).
+   */
+  noteTitle: string | null;
   reason: string | null;
   /** The cited evidence, formatted as in the note. */
   source: string | null;

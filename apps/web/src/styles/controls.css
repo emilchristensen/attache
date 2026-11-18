@@ -30,12 +30,14 @@ button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-button.primary {
+button.primary,
+.btn.primary {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
 }
-button.primary:hover:not(:disabled) {
+button.primary:hover:not(:disabled),
+.btn.primary:hover {
   background: color-mix(in srgb, var(--primary) 86%, var(--canvas));
 }
 button.danger {
