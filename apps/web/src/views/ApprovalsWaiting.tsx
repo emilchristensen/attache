@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActionView, ProposalView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
@@ -57,8 +57,17 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
   const toggle = (key: string) => setOpen(open === key ? null : key);
   const { setJustDecided } = visit;
   const focused = useCallback(() => setJustDecided(null), [setJustDecided]);
+  // A decision answered after the owner moved to Finished asks for no focus: the tab they came back by keeps it.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const settled = (id: string) => {
-    visit.setJustDecided(id);
+    if (!mounted.current) return;
+    setJustDecided(id);
     setOpen(null);
   };
 

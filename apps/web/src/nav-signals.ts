@@ -136,10 +136,11 @@ export function useNavSignals(): NavSignals {
 /**
  * One list of the pair as a screen shows it (Home's Inbox rows, Approvals' waiting Drafts): the held answer, loading
  * while either list is still asked, so a first answer from one alone never shows as an empty list. Its own failure
- * shows at once with its Retry, without waiting for the other list; the count still waits for the pair.
+ * shows at once with its Retry, without waiting for the other list, and stays while a Retry is under way, until a
+ * good answer replaces it; a good answer still waits for the pair.
  */
 function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, reload: () => void): Resource<R> {
-  const failed = !own.loading && own.error ? own.error : null;
+  const failed = own.error;
   return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
 }
 
