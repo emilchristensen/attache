@@ -315,6 +315,13 @@ export function ForYouNow({ attentionOn, onAbove }: { attentionOn: boolean; onAb
         Try again
       </button>
     </>
+  ) : openInbox.error && !items ? (
+    <>
+      Could not check your meetings.{" "}
+      <button className="small" onClick={openInbox.reload}>
+        Try again
+      </button>
+    </>
   ) : (
     (slot.quiet ?? "Checking for Heads-ups…")
   );

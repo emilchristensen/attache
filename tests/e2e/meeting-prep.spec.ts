@@ -115,6 +115,20 @@ test("before: a meeting hours away is an Inbox row, and the quiet line says when
   await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing timely right now. Prep for Design review shows here at ${shows}.`);
 });
 
+test("failure: open Inbox items that could not be read say so with Try again, never that nothing is timely", async () => {
+  const page = await journeys.newPage();
+  for (const p of journeys.context.pages()) if (p !== page) await p.close();
+  await page.route("**/api/v1/attention?state=open*", (route) => route.abort());
+  await page.goto(stack.url);
+  const forYou = area(page);
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Could not check your meetings.");
+  await expect(forYou).not.toContainText("Nothing timely");
+  await page.unroute("**/api/v1/attention?state=open*");
+  await forYou.getByRole("button", { name: "Try again" }).click();
+  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Nothing timely right now.");
+  await page.close();
+});
+
 test("upcoming: 15 minutes before the start the meeting leads, leaves the Inbox, and the count stays the same", async () => {
   const page = await journeys.open("/");
   await expect(needYou(page)).toBeVisible();
