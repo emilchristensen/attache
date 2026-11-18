@@ -244,7 +244,7 @@ describe("a held slot", () => {
     const held = input("2026-11-18T09:30:00Z", { briefing: null, briefingJob: job });
     const slot = heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked }));
     expect(slot.lead).toBeNull();
-    expect(slot.followers).toMatchObject([{ key: "briefing:b2", kind: "requested-briefing", actions: ["read-briefing", "got-it"] }]);
+    expect(slot.followers).toMatchObject([{ key: "briefing:b2", kind: "requested-briefing", actions: ["read-briefing", "got-it"], inPlaceOf: "progress:j1" }]);
     expect(slot.quiet).toBeNull();
     // The held entries around it stay where they were, the briefing they came from too.
     const beside = heldSlot(input("2026-11-18T09:30:00Z", { briefingJob: job }), input("2026-11-18T09:31:00Z", { briefing: asked }));
@@ -259,6 +259,11 @@ describe("a held slot", () => {
     expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked, briefingJob: job })))).toEqual([null, "progress:j1"]);
     // Once it has ended, a later job does not keep it.
     expect(keys(heldSlot(held, input("2026-11-18T09:31:00Z", { briefing: asked, briefingJob: { id: "j2", progress: 0, note: null } })))).toEqual([null, "briefing:b2"]);
+  });
+
+  it("shows nothing new until a handoff is given", () => {
+    const held = input("2026-11-18T09:30:00Z", { briefing: null, briefingJob: job });
+    expect(heldSlot(held, null)).toEqual(forYouNow(held));
   });
 
   it("never lets a briefing in without a progress line in its place", () => {

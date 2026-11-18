@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useResource } from "../live.ts";
-import { forYouNow, heldSlot, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId } from "../heads-ups.ts";
+import { briefingWritten, forYouNow, heldSlot, type BriefingView, type HeadsUp, type HeadsUpInput, type HeadsUpKindId } from "../heads-ups.ts";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { useHold } from "../hold.ts";
@@ -71,11 +71,22 @@ function LeadCard({ headsUp, open, onRead, onGotIt }: EntryProps) {
   );
 }
 
-/** A follower: one compact line, its why under it, opening in place. */
+/**
+ * A follower: one compact line, its why under it, opening in place. A briefing that takes a progress line's place
+ * (`inPlaceOf`, the same row) keeps at least that line's height while held, so the lines below it stay put.
+ */
 function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
   const job = headsUp.job;
+  const row = useRef<HTMLLIElement>(null);
+  const progressHeight = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const li = row.current;
+    if (!li) return;
+    if (job) progressHeight.current = li.offsetHeight;
+    li.style.minHeight = headsUp.inPlaceOf && progressHeight.current ? `${progressHeight.current}px` : "";
+  });
   return (
-    <li className="heads-up-line" data-heads-up={headsUp.kind} data-heads-up-key={headsUp.key}>
+    <li ref={row} className="heads-up-line" data-heads-up={headsUp.kind} data-heads-up-key={headsUp.key}>
       <span className="heads-up-line-icon">
         <Icon name={ICON[headsUp.kind]} size={16} />
       </span>
@@ -165,8 +176,13 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
     settled,
   };
   const frozen = useRef(live);
-  if (!held) frozen.current = live;
-  const slot = held ? heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) }, live) : forYouNow(live);
+  // The first briefing to take a progress line's place stays as it came until the hold ends: a later one waits too.
+  const handoff = useRef<HeadsUpInput | null>(null);
+  if (!held) {
+    frozen.current = live;
+    handoff.current = null;
+  } else if (!handoff.current && briefingWritten(frozen.current, live)) handoff.current = live;
+  const slot = held ? heldSlot({ ...frozen.current, settled: new Set([...frozen.current.settled, ...mine]) }, handoff.current) : forYouNow(live);
 
   if (!attentionOn)
     return (
@@ -232,7 +248,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
         {slot.followers.length > 0 && (
           <ul className="heads-up-lines" aria-label={slot.lead ? "Also timely" : "Timely"}>
             {slot.followers.map((h) => (
-              <Line key={h.key} {...entry(h)} />
+              <Line key={h.inPlaceOf ?? h.key} {...entry(h)} />
             ))}
           </ul>
         )}
@@ -240,7 +256,7 @@ export function ForYouNow({ attentionOn }: { attentionOn: boolean }) {
           <Disclosure className="heads-up-more" title={plural(slot.more.length, "more Heads-up")}>
             <ul className="heads-up-lines">
               {slot.more.map((h) => (
-                <Line key={h.key} {...entry(h)} />
+                <Line key={h.inPlaceOf ?? h.key} {...entry(h)} />
               ))}
             </ul>
           </Disclosure>
