@@ -83,10 +83,13 @@
 .search-popup[hidden] {
   display: none;
 }
+/* Its max-height is set from the room left in the page (useResultsFit), so it scrolls on its own. */
 .search-results {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* An older query's results, kept for their height while the new answer comes: dimmed and not choosable. */
 .search-results[data-stale] {

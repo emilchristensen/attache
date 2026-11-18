@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type RefObject } from "react";
 import { plural } from "@attache/contracts";
 import { brainResultsHref, hitDestination, hitKind, hitPlace, INLINE_RESULTS, moveActive, rankingLine, type SearchHit } from "../search.ts";
 import { shownAnswer, useSearchAnswer, type SearchState } from "../search-answer.ts";
@@ -8,6 +8,31 @@ import { Icon } from "./icons.tsx";
 import { StateTag } from "./StateTag.tsx";
 import { Link, navigate } from "./ui.tsx";
 import type { MeaningStatus } from "@attache/contracts";
+
+/** The fewest px of results the list keeps when the window is short; the page scrolls for the rest. */
+const MIN_RESULTS_PX = 160;
+/** Space kept between the results and the bottom of the page. */
+const RESULTS_MARGIN_PX = 12;
+
+/**
+ * Keeps the open results inside the page's visible height: the list scrolls on its own, so moving through the results
+ * never scrolls the field away. Measured on open, on each answer and when the window changes size.
+ */
+function useResultsFit(list: RefObject<HTMLUListElement | null>, open: boolean, answer: unknown) {
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!open || !el) return;
+    const fit = () => {
+      const popup = el.parentElement!.getBoundingClientRect();
+      const below = popup.bottom - el.getBoundingClientRect().bottom;
+      const bottom = el.closest(".page")?.getBoundingClientRect().bottom ?? window.innerHeight;
+      el.style.maxHeight = `${Math.max(MIN_RESULTS_PX, bottom - el.getBoundingClientRect().top - below - RESULTS_MARGIN_PX)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [list, open, answer]);
+}
 
 /** The chord on the keycap, as this system writes it. */
 const KEY_LABEL = searchKeyLabel(browserPlatform());
@@ -86,7 +111,9 @@ export function SearchField({ id, className }: { id: string; className?: string 
   const listId = useId();
   const optionId = (i: number) => `${listId}-option-${i}`;
   const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   const expanded = open && text.trim() !== "";
+  useResultsFit(list, expanded, answer);
   const openEvidence = useOpenEvidence();
 
   // Each new answer chooses its first result, so Enter opens the best match.
@@ -148,7 +175,7 @@ export function SearchField({ id, className }: { id: string; className?: string 
           aria-autocomplete="list"
           aria-expanded={expanded}
           aria-controls={listId}
-          aria-activedescendant={expanded && active >= 0 ? optionId(active) : undefined}
+          aria-activedescendant={expanded && current && active >= 0 ? optionId(active) : undefined}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -163,7 +190,7 @@ export function SearchField({ id, className }: { id: string; className?: string 
       </div>
       {/* The popup keeps focus in the field: a click on a result or a link still works, but the field stays focused. */}
       <div className="search-popup" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>
-        <ul id={listId} role="listbox" aria-label="Results" className="search-results" data-stale={!current || undefined}>
+        <ul ref={list} id={listId} role="listbox" tabIndex={-1} aria-label="Results" className="search-results" data-stale={!current || undefined}>
           {hits.map((hit, i) => (
             <li
               key={hit.chunkId}

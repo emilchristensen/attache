@@ -196,6 +196,8 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await page.keyboard.press("ArrowUp");
   await expect(options.nth(5)).toHaveAttribute("aria-selected", "true");
   await expect(options.nth(5)).toBeInViewport();
+  // The results scroll on their own, so the field the owner types in stays in view.
+  await expect(search).toBeInViewport();
 
   // While the answer to new words is on its way, the old results cannot be opened: Enter takes the new words to the Brain.
   let release!: () => void;
@@ -295,11 +297,25 @@ test("narrow: the prompt fits at 320 and 375 px and at 200% zoom, and the keycap
   await page.locator(".home-head").click();
   await page.keyboard.press("Control+k");
   await expect(field(page)).toBeFocused();
-  // A note opened from Home's results shows in view on a phone, below the Brain's own results.
+  // A note opened from Home's results shows in view on a phone, below the Brain's own results, even when those
+  // results arrive after the note. Chrome's scroll anchoring would hide the problem; Safari does not anchor.
+  await page.addStyleTag({ content: ".page { overflow-anchor: none; }" });
   await field(page).fill("Postmark");
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\/api\/v1\/memory\/search\?q=Postmark$/, (route) => held.then(() => route.continue()), { times: 1 });
   await results(page).getByRole("option", { name: /Email vendor/ }).click();
   await expect(page).toHaveURL(/\/brain\?root=data&path=/);
-  await expect(page.locator('[data-subject="Decision"]')).toBeInViewport();
+  await expect(page.locator('[data-subject="Decision"]')).toBeVisible();
+  release();
+  await expect(page.locator(".split .list-item").first()).toBeVisible();
+  // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
+  const noteInView = () =>
+    page.locator(".split-detail").evaluate((note) => {
+      const box = note.getBoundingClientRect();
+      return box.top <= 80 || box.bottom <= document.querySelector(".bottom-bar")!.getBoundingClientRect().top;
+    });
+  await expect.poll(noteInView, "the opened note is in view").toBe(true);
   await page.goto(`${stack.url}/`);
   await page.locator(".home-head").click();
   await page.keyboard.press("Control+k");
