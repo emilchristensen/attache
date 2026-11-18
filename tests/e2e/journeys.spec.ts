@@ -912,7 +912,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
 
   const page = await journeys.open("/brain/recent");
   const recent = page.getByRole("region", { name: "Recent saves" });
-  const row = (text: string | RegExp) => recent.getByRole("listitem").filter({ hasText: text });
+  const row = (text: string | RegExp) => recent.locator(".recent-change").filter({ hasText: text });
   await expect(recent).toBeVisible();
   const launchId = await row("21 October").getAttribute("data-change");
   const launch = recent.locator(`[data-change="${launchId}"]`);
@@ -928,7 +928,7 @@ test("recent saves: each save shows its Harness and session, and one click rever
 
   await launch.getByRole("button", { name: "Revert" }).click();
   await expect(page.getByText("Reverted. The revert is listed as a change of its own.")).toBeVisible();
-  const revert = recent.getByRole("listitem").first();
+  const revert = recent.locator(".recent-change").first();
   await expect(revert).toContainText("revert");
   await expect(revert).toContainText("Revert in the Dashboard");
   await expect(revert.locator("ins")).toHaveText("14 October");
