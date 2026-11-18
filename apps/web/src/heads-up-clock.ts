@@ -62,13 +62,14 @@ export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpCloc
 export function useHomeClock(): HeadsUpClock {
   const items = useSignals().openInbox.data?.items ?? null;
   const [seen, setSeen] = useState<readonly number[]>([]);
+  const clock = useHeadsUpClock(seen);
+  // Kept until the clock has read them: one that an answer brings just after it passed is read at once, not a minute on.
   useEffect(() => {
     const fresh = meetingBoundaries(items);
     setSeen((prev) => {
-      const now = Date.now();
-      const next = [...new Set([...prev, ...fresh])].filter((b) => b > now).sort((a, b) => a - b);
+      const next = [...new Set([...prev, ...fresh])].filter((b) => b > clock.now).sort((a, b) => a - b);
       return next.length === prev.length && next.every((b, n) => b === prev[n]) ? prev : next;
     });
-  }, [items]);
-  return useHeadsUpClock(seen);
+  }, [items, clock.now]);
+  return clock;
 }

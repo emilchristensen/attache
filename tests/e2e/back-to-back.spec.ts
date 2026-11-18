@@ -307,7 +307,7 @@ test("back to back with Done: the keyboard leaves a promoted row in place, Done 
   await own.close();
 });
 
-test("a row the keyboard is on keeps its place when its meeting moves up, under Group by type, at the meeting's end and when it is decided elsewhere", async ({ browser }) => {
+test("a row the keyboard is on keeps its place when its meeting moves up, under Group by type, when it is decided elsewhere and at its end", async ({ browser }) => {
   const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
   const page = await own.newPage();
   await page.clock.install({ time: new Date() });
@@ -316,35 +316,45 @@ test("a row the keyboard is on keeps its place when its meeting moves up, under 
   const times = await setCalendar(page, stack, [
     { id: "planning", summary: "Quarterly planning", start: 180, end: 240 },
     { id: "retro", summary: "Sprint retro", start: 20, end: 50 },
+    { id: "standup", summary: "Kiosk standup", start: 40, end: 60 },
   ]);
   await page.reload();
   await page.locator("#inbox").getByRole("combobox", { name: "View" }).selectOption({ label: "Group by type" });
   const meetings = page.locator('#inbox [data-family="meetings"]');
-  await expect(meetings.locator(".inbox-family-count")).toHaveText("2");
+  await expect(meetings.locator(".inbox-family-count")).toHaveText("3");
   const base = await readCount(page);
+  const stand = meetings.locator("[data-moved-up]");
+
+  // A Heads-up comes due: the row's place stays in its family with the focus, and the family counts only the others.
   await rowFor(page, "retro").locator("button[data-row-toggle]").focus();
-  // Its Heads-up comes due: the row's place stays in its family with the focus, and the family counts only the other.
   await advanceTo(page, Date.parse(times.retro!.start) - 15 * MINUTE + 1_000);
   await expect(meetingHeadsUp(page, "Sprint retro")).toBeVisible();
-  const stand = meetings.locator("[data-moved-up]");
   await expect(stand).toBeFocused();
-  await expect(meetings.locator(".inbox-family-count")).toHaveText("1");
-  await expect(meetings.locator("[data-inbox-row]")).toHaveCount(2);
+  await expect(meetings.locator(".inbox-family-count")).toHaveText("2");
+  await expect(meetings.locator("[data-inbox-row]")).toHaveCount(3);
   await expectCount(page, base, 0);
-  // Its scheduled end passes with the keyboard still there: the Heads-up goes, and the place stays rather than
-  // turning back into a row for an ended meeting.
-  await advanceTo(page, Date.parse(times.retro!.end) + 1_000);
-  await expect(meetingHeadsUp(page, "Sprint retro")).toHaveCount(0);
-  await expect(stand).toBeFocused();
-  await expect(page.locator('#inbox [data-item-key="gcal:retro"] button[data-row-toggle]')).toHaveCount(0);
-  // Done on another Machine: the item leaves the open list, and the place the keyboard is on stays.
-  const id = await stand.getAttribute("data-item-id");
-  await api(page, "POST", `/attention/${id}/decision`, { decision: "done" });
+  // Done on another Machine while it is above: the item leaves the open list, and the place the keyboard is on stays.
+  await api(page, "POST", `/attention/${await stand.getAttribute("data-item-id")}/decision`, { decision: "done" });
   await expectCount(page, base, -1);
+  await expect(meetingHeadsUp(page, "Sprint retro")).toHaveCount(0);
   await expect(stand).toBeFocused();
   // The keyboard moves on: the place goes.
   await page.keyboard.press("Tab");
-  await expect(page.locator("#inbox [data-moved-up]")).toHaveCount(0);
+  await expect(stand).toHaveCount(0);
+
+  // The next one moves up the same way, and its scheduled end passes with the keyboard still there: the Heads-up
+  // goes, and the place stays rather than turning back into a row for an ended meeting.
+  await rowFor(page, "standup").locator("button[data-row-toggle]").focus();
+  await advanceTo(page, Date.parse(times.standup!.start) - 15 * MINUTE + 1_000);
+  await expect(meetingHeadsUp(page, "Kiosk standup")).toBeVisible();
+  await expect(stand).toBeFocused();
+  await expect(meetings.locator(".inbox-family-count")).toHaveText("1");
+  await advanceTo(page, Date.parse(times.standup!.end) + 1_000);
+  await expect(meetingHeadsUp(page, "Kiosk standup")).toHaveCount(0);
+  await expect(stand).toBeFocused();
+  await expect(page.locator('#inbox [data-item-key="gcal:standup"] button[data-row-toggle]')).toHaveCount(0);
+  await page.keyboard.press("Tab");
+  await expect(stand).toHaveCount(0);
   await page.locator("#inbox").getByRole("combobox", { name: "View" }).selectOption({ label: "Priority order" });
   expect(own.consoleErrors).toEqual([]);
   await own.close();
