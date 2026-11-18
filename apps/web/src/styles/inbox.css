@@ -154,12 +154,22 @@ button.inbox-subject::after {
   font-weight: 600;
 }
 .inbox-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s-2);
+  margin: 0 0 var(--s-2);
+}
+.inbox-evidence ul {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 var(--s-2);
+  margin: 0;
   padding: 0;
+}
+a.source-chip {
+  text-decoration: none;
 }
 .inbox-actions {
   display: flex;

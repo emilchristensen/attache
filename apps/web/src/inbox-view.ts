@@ -37,19 +37,35 @@ export interface FrozenList<T> {
   arrivals: T[];
   /** Snapshot ids no longer in the live list (decided here or elsewhere). */
   gone: string[];
+  /** The snapshot with the welcomed items in their places; the snapshot to keep from now on. */
+  snapshot: string[];
 }
 
-/** The live list seen through a snapshot of ids, so nothing moves until the owner asks for new items. */
-export function frozenList<T extends ViewItem>(snapshot: readonly string[], live: readonly T[], order: InboxOrder): FrozenList<T> {
+/**
+ * The live list seen through a snapshot of ids, so nothing moves until the owner asks for new items. An item in
+ * `welcome` (one the owner brought back from Hidden here) is not held back: it goes in before the first shown row it
+ * outranks, and the rows already shown keep their order.
+ */
+export function frozenList<T extends ViewItem>(snapshot: readonly string[], live: readonly T[], order: InboxOrder, welcome: ReadonlySet<string> = new Set()): FrozenList<T> {
   const byId = new Map(live.map((i) => [i.id, i]));
   const held = new Set(snapshot);
+  const shownRows = snapshot.flatMap((id) => byId.get(id) ?? []);
+  const back = ordered(live.filter((i) => welcome.has(i.id) && !held.has(i.id)), order);
+  // Each welcomed item goes before the first shown row it outranks; `before` maps that row's id to what goes before it.
+  const before = new Map<string, string[]>();
+  const last: string[] = [];
+  for (const item of back) {
+    const next = shownRows.find((r) => COMPARE[order](item, r) < 0);
+    if (next) before.set(next.id, [...(before.get(next.id) ?? []), item.id]);
+    else last.push(item.id);
+  }
+  const kept = [...snapshot.flatMap((id) => [...(before.get(id) ?? []), id]), ...last];
+  const shown = new Set(kept);
   return {
-    rows: snapshot.flatMap((id) => byId.get(id) ?? []),
-    arrivals: ordered(
-      live.filter((i) => !held.has(i.id)),
-      order,
-    ),
+    rows: kept.flatMap((id) => byId.get(id) ?? []),
+    arrivals: ordered(live.filter((i) => !shown.has(i.id)), order),
     gone: snapshot.filter((id) => !byId.has(id)),
+    snapshot: kept,
   };
 }
 

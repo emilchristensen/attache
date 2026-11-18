@@ -12,7 +12,7 @@ export const INBOX_VIEWS: ReadonlyArray<{ id: InboxViewId; label: string }> = [
   { id: "priority", label: "Priority order" },
   { id: "newest", label: "Newest first" },
   { id: "grouped", label: "Group by type" },
-  { id: "hidden", label: "Hidden: snoozed and dismissed" },
+  { id: "hidden", label: "Hidden" },
 ];
 
 export interface InboxPlace {

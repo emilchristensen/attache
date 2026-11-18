@@ -51,6 +51,15 @@ describe("the frozen snapshot", () => {
     expect(ids(list.arrivals)).toEqual(["new-high", "new-low"]);
   });
 
+  it("lets an item the owner brought back here into its place by order, without moving the rest", () => {
+    const live = [it_("a", { priority: 10 }), it_("b", { priority: 90 }), it_("back", { priority: 50 }), it_("new", { priority: 99 })];
+    const list = frozenList(["a", "b"], live, "priority", new Set(["back"]));
+    // "a" and "b" keep their shown order even though "b" now ranks higher; "back" goes before the first row it outranks.
+    expect(ids(list.rows)).toEqual(["back", "a", "b"]);
+    expect(ids(list.arrivals)).toEqual(["new"]);
+    expect(list.snapshot).toEqual(["back", "a", "b"]);
+  });
+
   it("names the rows that left the list, so a decided row can stay in its place", () => {
     expect(frozenList(["a", "b", "c"], [it_("a"), it_("c")], "priority").gone).toEqual(["b"]);
   });

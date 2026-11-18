@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
 import { lineStarts } from "./layout.ts";
+import { inboxRow, inboxView, openRow } from "./inbox.ts";
 import { findParenthesisedPlurals } from "../../scripts/check-docs/plurals.mjs";
 
 const VENDOR = "memory/decisions/email-vendor.md";
@@ -256,8 +257,8 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
-  await expect(page.getByText(/Overdue: Review rollback runbook/)).toBeVisible();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
+  await expect(inboxRow(page, "Review rollback runbook")).toContainText("Overdue");
+  await expect(inboxRow(page, "Add checkout retry")).toContainText("GitHub · acme/web #42", { timeout: 20_000 });
   // No microphone control or speech hint anywhere on the Dashboard.
   await expect(page.getByRole("button", { name: /talk|microphone|speaking/i })).toHaveCount(0);
   await expect(page.getByText(/stops speech/)).toHaveCount(0);
@@ -391,11 +392,13 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
-    const onCard = page.locator(".item").first().getByRole("button", { name: "Evidence" });
-    const onCanvas = page.getByRole("button", { name: "Show dismissed" });
+    const first = page.locator("#inbox [data-inbox-row]").first();
+    await openRow(first);
+    const onCard = first.getByRole("button", { name: "Snooze" });
+    const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
     const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
     // Control edges: a secondary button on a card and on the canvas.
-    for (const control of [onCard, onQuiet]) {
+    for (const control of [onCard, onQuiet, onCanvas]) {
       const edge = await measure(control, "border");
       expect(edge, `${scheme} control edge`).toMatchObject({ width: 1, style: "solid" });
       expect(edge.ratio, `${scheme} control edge`).toBeGreaterThanOrEqual(3);
@@ -433,40 +436,53 @@ test("search: a hit opens the exact evidence lines, keyboard", async () => {
   await expect(drawer).toBeHidden();
 });
 
-test("attention: dismiss persists across reload and briefings; briefing reports coverage", async () => {
+test("attention: a decided row stays in place with Undo; dismiss and snooze persist across reload and briefings", async () => {
   const page = await journeys.open("/");
-  const item = page.locator("article.item", { hasText: "Review rollback runbook" });
-  await item.getByRole("button", { name: "Dismiss" }).click();
-  await expect(item).toBeHidden();
-  const cutover = page.locator("article.item", { hasText: "Send the cutover plan to finance" });
+  const runbook = inboxRow(page, "Review rollback runbook");
+  await openRow(runbook);
+  await runbook.getByRole("button", { name: "Dismiss" }).click();
+  // The row stays where it was as one line, with Undo focused, so nothing below it moves.
+  await expect(runbook).toHaveAttribute("data-decided", "dismiss");
+  await expect(runbook).toContainText("Dismissed: Review rollback runbook");
+  await expect(runbook.getByRole("button", { name: "Undo" })).toBeFocused();
+  // Undo brings the item back in the same place; dismissing again sticks.
+  await runbook.getByRole("button", { name: "Undo" }).click();
+  await expect(runbook).not.toHaveAttribute("data-decided");
+  await expect(runbook.locator("[data-row-toggle]")).toBeFocused();
+  await openRow(runbook);
+  await runbook.getByRole("button", { name: "Dismiss" }).click();
+  await expect(runbook).toHaveAttribute("data-decided", "dismiss");
+  const cutover = inboxRow(page, "Send the cutover plan to finance");
+  await openRow(cutover);
   await cutover.getByRole("button", { name: "Snooze" }).click();
   await cutover.getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
-  await expect(cutover).toBeHidden();
+  await expect(cutover).toHaveAttribute("data-decided", "snooze");
   const forYou = page.getByRole("region", { name: "For you now" });
   await forYou.getByRole("button", { name: "Briefings" }).click();
   await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
   // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
-  // leading); Read briefing opens its points and linked counts.
+  // leading); Read briefing opens its points and linked counts, which jump to the Inbox.
   await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
   await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
-  await expect(page.getByRole("region", { name: "Review queue" })).toBeInViewport();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeInViewport();
   await page.reload();
-  await expect(page.getByText(/Review acme\/web#42/)).toBeVisible();
+  await expect(inboxRow(page, "Add checkout retry")).toBeVisible();
   // The logo's dot says something needs attention.
   await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(1);
-  await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toHaveCount(0);
-  await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Show dismissed" }).click();
-  await expect(page.locator("article.item", { hasText: "Review rollback runbook" })).toBeVisible();
-  await expect(page.locator("article.item", { hasText: "Send the cutover plan to finance" })).toContainText("snoozed until");
-  await page.getByRole("button", { name: "Show open" }).click();
+  await expect(inboxRow(page, "Review rollback runbook")).toHaveCount(0);
+  await expect(inboxRow(page, "Send the cutover plan to finance")).toHaveCount(0);
+  await inboxView(page, "Hidden");
+  await expect(inboxRow(page, "Review rollback runbook")).toContainText("Dismissed");
+  await expect(inboxRow(page, "Send the cutover plan to finance")).toContainText("Snoozed until");
+  await inboxView(page, "Priority order");
   await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
 });
 
 test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
   const page = await journeys.open("/");
-  const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  const pr = inboxRow(page, "Add checkout retry");
+  await openRow(pr);
   // Home's decision count sits beside the Inbox heading; with no Draft waiting every row below is a decision here.
   const needYou = page.locator("[data-need-you]");
   const countLine = page.locator(".count-line");
@@ -479,10 +495,13 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(needYou).toHaveText(new RegExp(`^${before - 1} needs? you here$`));
   await expect(countLine).toHaveText(new RegExp(`^${before - 1} items? below needs? you · 1 Draft in Approvals$`));
   // The line speaks of the open rows, so it leaves with them when the dismissed and snoozed ones show instead.
-  await page.getByRole("button", { name: "Show dismissed" }).click();
-  await expect(countLine).toHaveCount(0);
-  await page.getByRole("button", { name: "Show open" }).click();
-  await expect(countLine).toBeVisible();
+  await inboxView(page, "Hidden");
+  await expect(countLine).toHaveText("Snoozed and dismissed items. Reopen one to bring it back.");
+  await inboxView(page, "Priority order");
+  await expect(countLine).toHaveText(/Draft in Approvals$/);
+  // The row stays in the list with its Draft's state and View draft.
+  await expect(pr).toContainText("Draft waiting");
+  await openRow(pr);
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");
   await expect(draft).toHaveAttribute("data-status", "draft");
@@ -503,7 +522,8 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
 
 test("drafts: prepare, edit, approve, blocked until write is authorised, then verified receipt", async () => {
   const page = await journeys.open("/");
-  const pr = page.locator("article.item", { hasText: "Review acme/web#42" });
+  const pr = inboxRow(page, "Add checkout retry");
+  await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await expect(pr.getByRole("button", { name: "View draft" })).toBeVisible({ timeout: 30_000 });
   await pr.getByRole("button", { name: "View draft" }).click();

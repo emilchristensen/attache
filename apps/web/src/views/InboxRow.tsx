@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
+import { Icon } from "../components/icons.tsx";
 import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { hueClass } from "../theme/hues.ts";
@@ -41,24 +42,31 @@ function evidenceRoot(item: AttentionItemView): string {
 
 function Evidence({ item }: { item: AttentionItemView }) {
   const open = useOpenEvidence();
+  const label = useId();
   const cited = item.evidence.filter((e) => e.relPath || e.url);
   if (!cited.length) return null;
   return (
-    <ul className="inbox-evidence" aria-label="Evidence">
-      {cited.map((e, n) => (
-        <li key={`${e.relPath ?? e.url}:${n}`}>
-          {e.relPath ? (
-            <button className="source-chip" onClick={() => open({ root: evidenceRoot(item), relPath: e.relPath!, lines: e.lines, title: item.title })}>
-              {e.label}
-            </button>
-          ) : (
-            <a href={e.url} target="_blank" rel="noopener noreferrer">
-              {e.label}
-            </a>
-          )}
-        </li>
-      ))}
-    </ul>
+    <div className="inbox-evidence">
+      <span className="inbox-why-label" id={label}>
+        Evidence:
+      </span>
+      <ul aria-labelledby={label}>
+        {cited.map((e, n) => (
+          <li key={`${e.relPath ?? e.url}:${n}`}>
+            {e.relPath ? (
+              <button className="source-chip" onClick={() => open({ root: evidenceRoot(item), relPath: e.relPath!, lines: e.lines, title: item.title })}>
+                {e.label}
+              </button>
+            ) : (
+              <a className="source-chip" href={e.url} target="_blank" rel="noopener noreferrer">
+                {e.label}
+                <Icon name="external" size={13} />
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

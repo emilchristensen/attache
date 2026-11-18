@@ -184,7 +184,13 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
   const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
 
-  const { reload } = source;
+  // A decision moves an item between the open list and Hidden, so both are asked again.
+  const reloadOpen = open.reload;
+  const reloadHidden = hidden.reload;
+  const reload = useCallback(() => {
+    reloadOpen();
+    if (hiddenView) reloadHidden();
+  }, [reloadOpen, reloadHidden, hiddenView]);
   const { decided, undone } = list;
   const decide = useCallback(
     (item: AttentionItemView, decision: RowDecision, until?: string) =>

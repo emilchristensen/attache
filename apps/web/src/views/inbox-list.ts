@@ -32,6 +32,8 @@ export interface InboxList {
 
 const NONE: ReadonlyMap<string, DecidedEntry> = new Map();
 
+const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, n) => id === b[n]);
+
 export function useInboxList(live: readonly AttentionItemView[] | null, listKey: string, order: InboxOrder): InboxList {
   const [snap, setSnap] = useState<{ key: string; ids: readonly string[] } | null>(null);
   // Decided lines belong to one view: a new view starts without the old one's.
@@ -40,16 +42,23 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
   const setDecisions = (change: (prev: ReadonlyMap<string, DecidedEntry>) => ReadonlyMap<string, DecidedEntry>) =>
     setDecidedIn((prev) => ({ key: listKey, map: change(prev.key === listKey ? prev.map : NONE) }));
 
+  // Items the owner reopened from Hidden in this tab: they come straight back instead of waiting as arrivals.
+  const [welcome, setWelcome] = useState<ReadonlySet<string>>(new Set());
+
   const held = snap?.key === listKey ? snap.ids : null;
-  const ids = useMemo(() => {
+  const base = useMemo(() => {
     if (!live) return held;
     const showing = held?.some((id) => decisions.has(id) || live.some((i) => i.id === id));
     return held && showing ? held : ordered(live, order).map((i) => i.id);
   }, [live, held, decisions, order]);
+  const frozen = useMemo(() => (live && base ? frozenList(base, live, order, welcome) : null), [live, base, order, welcome]);
+  const ids = frozen?.snapshot ?? base;
 
   useEffect(() => {
-    if (ids && ids !== held) setSnap({ key: listKey, ids });
-  }, [ids, held, listKey]);
+    if (!ids || (held && sameIds(ids, held))) return;
+    setSnap({ key: listKey, ids });
+    if (ids.some((id) => welcome.has(id))) setWelcome((prev) => new Set([...prev].filter((id) => !ids.includes(id))));
+  }, [ids, held, listKey, welcome]);
 
   // A decided line that was undone gives way to its item once the list has it again.
   useEffect(() => {
@@ -59,7 +68,6 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
     setDecidedIn((prev) => ({ ...prev, map: new Map([...prev.map].filter(([id]) => !back.some((d) => d.item.id === id))) }));
   }, [live, decisions]);
 
-  const frozen = useMemo(() => (live && ids ? frozenList(ids, live, order) : null), [live, ids, order]);
   const entries = useMemo<ListEntry[]>(() => {
     if (!frozen || !ids) return [];
     const byId = new Map(frozen.rows.map((i) => [i.id, i]));
@@ -78,7 +86,10 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
       if (live) setSnap({ key: listKey, ids: ordered(live, order).map((i) => i.id) });
       setDecisions(() => NONE);
     },
-    decided: (item, decision, until) => setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, undone: false })),
+    decided: (item, decision, until) => {
+      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, undone: false }));
+      if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
+    },
     undone: (id) =>
       setDecisions((prev) => {
         const d = prev.get(id);
