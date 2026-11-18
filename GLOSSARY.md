@@ -41,9 +41,14 @@ It holds no conversation.
 _Avoid_: Chat, app, UI, web client
 
 **Search the Brain**:
-Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`.
+Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`, which open the search palette off Home.
 Each result is a passage with its title, kind, file and lines, ranked by meaning and keywords, or by keywords only until meaning-based search is ready.
 It is a read: it starts no job, changes nothing and holds no conversation.
+
+**Search palette**:
+Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd K`, `/`, the masthead's Search or the bottom bar's Search.
+It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
+_Avoid_: Command palette, quick open
 
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
@@ -119,6 +124,7 @@ _Avoid_: Outgoing message
 **Approvals**:
 The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
 It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.
+Its Waiting tab holds Drafts to send and Changes to the Brain (and In progress, Drafts being sent); its Finished tab what happened to the rest.
 _Avoid_: Drafts page
 
 **Heads-up**:

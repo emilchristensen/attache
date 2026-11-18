@@ -10,6 +10,8 @@ export interface EvidenceTarget {
   lines?: [number, number] | undefined;
   title?: string | undefined;
   marker?: string | undefined;
+  /** Runs once the drawer has closed and focus is back on its opener (the search palette reopens where it was). */
+  onClosed?: (() => void) | undefined;
 }
 
 interface DocView {
@@ -34,7 +36,15 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
   return (
     <EvidenceCtx.Provider value={setTarget}>
       {children}
-      {target && <EvidenceDrawer target={target} onClose={() => setTarget(null)} />}
+      {target && (
+        <EvidenceDrawer
+          target={target}
+          onClose={() => {
+            setTarget(null);
+            target.onClosed?.();
+          }}
+        />
+      )}
     </EvidenceCtx.Provider>
   );
 }
@@ -83,7 +93,12 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   }, []);
   useEffect(() => {
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Esc is used up here, so a dialog that opens as the drawer closes (the search palette) does not close with it.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);

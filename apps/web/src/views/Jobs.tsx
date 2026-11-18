@@ -6,6 +6,7 @@ import { Empty, ErrorState, Loading, Markdown, navigate, Time, useAction, useLoc
 import { StateTag } from "../components/StateTag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
+import { draftHref } from "../routes.ts";
 
 const OUTCOME: Record<string, string> = {
   stopped: "Cancelled: the work stopped before finishing.",
@@ -120,7 +121,7 @@ function JobDetail({ id }: { id: string }) {
             </button>
           )}
           {result.actionId && (
-            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => navigate(`/approvals?id=${result.actionId}`)}>
+            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => navigate(draftHref(String(result.actionId)))}>
               Open the draft
             </button>
           )}

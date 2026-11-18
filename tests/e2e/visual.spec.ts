@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
+import { approvalRow, openApprovalRow } from "./approvals.ts";
 import { api } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { inboxRow, openRow } from "./inbox.ts";
@@ -122,6 +123,35 @@ async function routeBadDay(page: Page) {
 }
 
 /** Home's Connections area: the green line as the stack is, then the bad day with its first row and "1 more" open. */
+/**
+ * Approvals with a Draft row and a Proposal row open in place, Finished, a group that failed beside one that loaded,
+ * and the Draft's own page: `prefix` is the scheme, or "narrow".
+ */
+async function approvalsScreens(page: Page, prefix: string) {
+  await page.goto(`${stack.url}/approvals`);
+  const draft = approvalRow(page, "draft", "Add checkout retry");
+  await openApprovalRow(draft);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-open.png` });
+  await openApprovalRow(approvalRow(page, "proposal", "Priya Shah"));
+  await page.waitForTimeout(300);
+  await page.getByRole("region", { name: "Changes to the Brain" }).screenshot({ path: `test-results/screens/${prefix}-approvals-proposal-open.png` });
+  await openApprovalRow(draft);
+  await draft.getByRole("link", { name: /^Review and approve/ }).click();
+  await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-page.png` });
+  await page.goto(`${stack.url}/approvals?tab=finished`);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `test-results/screens/${prefix}-approvals-finished.png` });
+  const drafts = "**/api/v1/actions?status=draft,approved,revoked*";
+  await page.route(drafts, (route) => route.abort());
+  await page.goto(`${stack.url}/approvals`);
+  await expect(page.getByRole("region", { name: "Drafts to send" }).getByRole("alert")).toBeVisible();
+  await page.screenshot({ path: `test-results/screens/${prefix}-approvals-failure.png` });
+  await page.unroute(drafts);
+}
+
 async function homeConnectionsScreens(page: Page) {
   const area = page.getByRole("status", { name: "Connections" });
   const capture = async (path: string) => {
@@ -244,6 +274,9 @@ test("screens", async ({ browser }) => {
     const res = await fetch("/api/v1/memory/proposals", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ item, reason: "The Friday call clashed with the release meeting.", evidence: "Priya asked to go back to written updates on Mondays." }) });
     if (!res.ok) throw new Error(`propose failed: ${res.status}`);
   });
+  // A Proposal already rejected, so Finished has a row.
+  const declined = await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "update", path: "memory/people/priya-shah.md", events: ["Asked to move the billing sync to Wednesdays"] }, reason: "Mentioned in passing." });
+  await api(page, "POST", `/memory/proposals/${declined.id}/reject`);
   // Claude Code connected, so auto-accept is on by default, and one save written without review, so Settings and Recent saves show both.
   await page.evaluate(async () => {
     const res = await fetch("/api/v1/connections/claude-code/configure", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ method: "hooks", fields: {} }) });
@@ -278,6 +311,7 @@ test("screens", async ({ browser }) => {
     await page.locator(".card", { has: page.getByRole("heading", { name: "Service health" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-health.png` });
     await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
     await page.getByRole("region", { name: "Auto-accept" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
+    await approvalsScreens(page, scheme);
     // A note opened read-only, below the review lists.
     await page.goto(`${stack.url}/brain?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
@@ -305,6 +339,16 @@ test("screens", async ({ browser }) => {
     await page.keyboard.press("?");
     await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
     await page.screenshot({ path: `test-results/screens/${scheme}-shell-shortcuts.png` });
+    await page.keyboard.press("Escape");
+    // The search palette off Home: Go to before typing, then a place and passages together.
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Search the Brain" });
+    await expect(palette.getByRole("group", { name: "Go to" })).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-palette-go-to.png` });
+    await page.keyboard.type("Priya");
+    await expect(palette.getByRole("group", { name: "Passages" }).getByRole("option").first()).toBeVisible();
+    await expect(palette.locator("[data-ranking]")).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-palette-search.png` });
     await page.keyboard.press("Escape");
   }
   // Search before and after the meaning model is downloaded.
@@ -336,6 +380,7 @@ test("screens", async ({ browser }) => {
   await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(500);
   await page.screenshot({ path: "test-results/screens/narrow-brain-note.png" });
+  await approvalsScreens(page, "narrow");
   await page.goto(stack.url);
   const recentlyAdded = page.getByRole("region", { name: "Recently added" });
   await expect(recentlyAdded.getByRole("listitem").first()).toBeVisible();
@@ -349,5 +394,15 @@ test("screens", async ({ browser }) => {
   await page.locator(".bottom-bar").getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();
   await page.screenshot({ path: "test-results/screens/narrow-shell-more.png" });
+  await page.keyboard.press("Escape");
+  // The search palette from the bottom bar's Search, off Home.
+  await page.goto(`${stack.url}/jobs`);
+  await page.locator(".bottom-bar").getByRole("button", { name: "Search" }).click();
+  const palette = page.getByRole("dialog", { name: "Search the Brain" });
+  await expect(palette.getByRole("group", { name: "Go to" })).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/narrow-palette-go-to.png" });
+  await page.keyboard.type("Priya");
+  await expect(palette.getByRole("group", { name: "Passages" }).getByRole("option").first()).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/narrow-palette-search.png" });
   await page.keyboard.press("Escape");
 });

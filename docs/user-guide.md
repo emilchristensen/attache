@@ -122,7 +122,7 @@ The numbers beside Home, Approvals and Connections always add up to the one in t
 When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
-Off Home, **Search** in the masthead takes you to the Brain's search field; on Home the search field is the first thing on the page.
+Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
 When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
@@ -130,9 +130,16 @@ When the Reader has gone silent, so no Machine reads your sources on a schedule,
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
+**Search** in the bar puts you in Home's search field on Home and opens the search palette everywhere else.
 
 Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
-Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere in the Brain's.
+Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere they open the search palette.
+The search palette is the same search in a dialog over the screen you are on, with the same results and a **Go to** group above them.
+Before you type, Go to lists every screen and every Settings section; as you type it keeps the places whose name starts with your words, so `repl` finds Machines and Replication and `settings ident` finds Identity.
+Arrow keys move through places and passages, `Enter` opens the chosen one, and **All results in Brain** takes the query to the Brain.
+`Tab` stays inside the palette, `Esc` closes it, and focus goes back to where it was; each time it opens, its field is empty.
+Searching from the palette only reads: it starts no job and changes nothing.
+Each Settings section has its own address (`/settings/identity`, `/settings/machines` and so on), which opens Settings at that section.
 Press `?` for the list of keyboard shortcuts.
 On Home, `j` and `k` move between Inbox rows and `Enter` opens one; they change nothing.
 The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
@@ -254,10 +261,29 @@ Events stay in *History*, which only grows, so they cannot be reverted.
 
 ### Approvals
 
-**Approvals** holds everything Attache prepared that waits for your OK: *Drafts to send*, then *Changes to the Brain* (the Proposals described above).
+**Approvals** holds everything Attache prepared that waits for your OK.
 Approvals is only the page's name: you approve one exact version of a Draft, and you apply or reject a Proposal.
 
-*Drafts to send* shows each draft with its context and evidence.
+The **Waiting** tab has two ruled sections, so sending a message and changing the Brain never look alike:
+
+- *Drafts to send*, marked with a blue pen and the word Draft.
+  Each row shows the Draft's subject, where it goes and its version, such as "GitHub comment on acme/web #42 · v2", and the first line of its text.
+  Opening a row shows, read-only, what the Draft answers and its whole text, with **Review and approve vN** (or **Review and send vN** once approved) and **Reject**.
+  **Approve** and **Send** are never in the list: they are on the Draft's own page, with the version in view.
+- *Changes to the Brain*, marked with a plum change glyph and the word Proposal.
+  Each row names the note and the change, the old value and the new one for a correction, such as "Owner: Sam → Nora", or what it adds.
+  Opening a row shows every part, the reason and the evidence (as described above), with **Apply** and **Reject**.
+  When Apply is refused, the reason shows in the row and the row stays, so you can still reject it.
+
+A row you decide stays as one line in its place, such as "Applied · Email vendor", until your next visit, so nothing below it moves.
+A Draft that is being sent shows under *In progress*; it is not counted, since nothing waits for you there.
+"Nothing waits for your OK." shows only when both the Drafts and the Proposals answered with nothing.
+The Drafts and the Proposals are asked for separately, and each section answers for its own: when one cannot be loaded it says so with **Retry**, and keeps the rows it last had with the time they were loaded.
+The Waiting tab and Approvals in the navigation then show what is known as a lower bound, such as "2+".
+
+The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
+
+A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top.
 Editing creates a new version and cancels any earlier approval.
 **Approve** binds your approval to that exact version for 15 minutes.
 When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.

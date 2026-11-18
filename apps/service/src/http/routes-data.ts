@@ -170,9 +170,9 @@ export function registerDataRoutes(r: Router, app: App) {
   });
   r.get("/memory/changes", (c) => app.memory.listChanges({ ...(c.query("status") ? { status: c.query("status")! } : {}), limit: Number(c.query("limit") ?? 100) }));
   r.get("/memory/proposals", (c) => {
-    const status = c.query("status") ?? "proposed";
-    if (!PROPOSAL_STATUSES.includes(status)) throw new HttpError(400, "invalid_request", `status must be one of ${PROPOSAL_STATUSES.join(", ")}`);
-    return { proposals: app.proposals.list({ status: status as ProposalView["status"], limit: Number(c.query("limit") ?? 100) }) };
+    const statuses = (c.query("status") ?? "proposed").split(",");
+    if (!statuses.every((s) => PROPOSAL_STATUSES.includes(s))) throw new HttpError(400, "invalid_request", `status must be one or more of ${PROPOSAL_STATUSES.join(", ")}, separated by commas`);
+    return { proposals: app.proposals.list({ statuses: statuses as ProposalView["status"][], limit: Number(c.query("limit") ?? 100) }) };
   });
   r.post("/memory/proposals", async (c) => {
     requireFeature(app, "capture");

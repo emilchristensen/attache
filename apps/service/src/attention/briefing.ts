@@ -79,7 +79,7 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
   }
   const drafts = db.prepare("select id, title, status from actions where status in ('draft','approved') order by updated_at desc limit 20").all() as Array<{ id: string; title: string; status: string }>;
   if (drafts.length) sections.set("prepared", { id: "prepared", title: "Prepared for your review", items: drafts.map((d) => ({ id: d.id, title: d.title, summary: d.status === "approved" ? "Approved, not yet sent." : "Draft awaiting your review.", url: null, isNew: false, changed: false })) });
-  const proposals = new ProposalIndex(db).list({ status: "proposed", limit: 20 });
+  const proposals = new ProposalIndex(db).list({ statuses: ["proposed"], limit: 20 });
   if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.target}`, url: null, isNew: false, changed: false })) });
   const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "facts", "other"];
   return {
