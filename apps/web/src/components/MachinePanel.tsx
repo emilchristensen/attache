@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useLiveConnection, useResource } from "../live.ts";
 import { ReaderLine } from "../views/ReaderLine.tsx";
 import { Icon } from "./icons.tsx";
@@ -17,10 +17,17 @@ function useMachineName(): string {
   return useResource<MachineIdentity>("/machine", MACHINE_EVENTS).data?.name ?? "";
 }
 
+const LIVE_TEXT: Record<ReturnType<typeof useLiveConnection>["status"], string> = {
+  connecting: "Connecting to live updates…",
+  open: "Live updates are connected.",
+  reconnecting: "Reconnecting to the Attache service… Work in progress continues in the service.",
+  closed: "Disconnected from the Attache service. Retrying.",
+};
+
 /** The live connection in a sentence: what the owner needs to know when it drops. */
 function LiveLine() {
   const { status, lost } = useLiveConnection();
-  const text = !lost ? "Live updates are connected." : status === "closed" ? "Disconnected from the Attache service. Retrying." : "Reconnecting to the Attache service… Work in progress continues in the service.";
+  const text = LIVE_TEXT[status];
   return (
     <p className={`live-line small${lost ? " lost" : ""}`} data-live={status}>
       {text}
@@ -77,25 +84,26 @@ export function MachineDisclosure() {
     const outside = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
+    // Escape belongs to the topmost layer: a dialog opened over the disclosure (the shortcut sheet) closes first.
     const escape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
       setOpen(false);
       button.current?.focus();
     };
-    // A link inside, followed: the disclosure has done its job.
-    const followed = (e: MouseEvent) => {
-      if ((e.target as Element).closest("a")) setOpen(false);
-    };
-    const panel = root.current;
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
-    panel?.addEventListener("click", followed);
     return () => {
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape);
-      panel?.removeEventListener("click", followed);
     };
   }, [open]);
+  // A link inside, followed: the disclosure has done its job, and focus goes back to its button, not to the page's
+  // start. A React handler, so it runs after the link's own (which navigates) and the link is still there for it.
+  const followed = (e: ReactMouseEvent) => {
+    if (!(e.target as Element).closest("a")) return;
+    setOpen(false);
+    button.current?.focus();
+  };
   return (
     <div className="machine" ref={root} data-lost={lost || undefined}>
       <button ref={button} className="machine-trigger" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
@@ -106,7 +114,7 @@ export function MachineDisclosure() {
         <Icon name="chevron" className="machine-trigger-chevron" />
       </button>
       {open && (
-        <section ref={popover} id={panelId} className="machine-popover" aria-label="This Machine">
+        <section ref={popover} id={panelId} className="machine-popover" aria-label="This Machine" onClick={followed}>
           <MachinePanel />
         </section>
       )}

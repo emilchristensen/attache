@@ -37,9 +37,10 @@ function badge(count: number | null, label: (n: number) => string): Badge | unde
 const PROBLEM_WORDS: Partial<Record<ReplicationStatus, string>> = { blocked: "Replication blocked", unauthorized: "Replication unauthorized" };
 
 export function useNavSignals(): NavSignals {
-  const inbox = useResource<{ items: AttentionItemView[] }>("/attention", ["attention.changed", "actions.changed"]);
-  const drafts = useResource<ActionView[]>(`/actions?status=${WAITING_ACTION_STATUSES.join(",")}`, ["actions.changed"]);
-  const proposals = useResource<{ proposals: ProposalView[] }>("/memory/proposals?status=proposed", ["memory.changed"]);
+  // `config.changed` too: switching Attention or Drafts on or off in Settings adds or drops a badge at once.
+  const inbox = useResource<{ items: AttentionItemView[] }>("/attention", ["attention.changed", "actions.changed", "config.changed"]);
+  const drafts = useResource<ActionView[]>(`/actions?status=${WAITING_ACTION_STATUSES.join(",")}`, ["actions.changed", "config.changed"]);
+  const proposals = useResource<{ proposals: ProposalView[] }>("/memory/proposals?status=proposed", ["memory.changed", "config.changed"]);
   const connections = useResource<ConnectionStatus[]>("/connections", ["connections.changed"]);
   const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
 

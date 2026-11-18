@@ -84,6 +84,18 @@ test("masthead: one line names every screen above a centred reading column, and 
   await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
 });
 
+test("skip link: the first Tab offers Skip to content, which moves focus to the page", async () => {
+  const page = await journeys.open("/jobs");
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  await page.keyboard.press("Tab");
+  const skip = page.getByRole("link", { name: "Skip to content" });
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeInViewport();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("main")).toBeFocused();
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+});
+
 test("routes: Home, Approvals and Brain live at their new addresses, and the old Memory and Drafts routes are gone", async () => {
   const page = await journeys.open("/brain");
   await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();
@@ -160,8 +172,22 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(panel).toContainText("This Machine runs Source refresh and briefings.");
   await expect(panel).toContainText("Live updates are connected.");
   await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings");
+  // Escape belongs to the topmost layer: the shortcut sheet over the disclosure closes first.
+  await page.keyboard.press("?");
+  const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(panel).toBeVisible();
   // Escape closes it and gives focus back to the button.
   await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect(trigger).toBeFocused();
+  // Following its link by keyboard leaves focus on the button, not at the top of the page.
+  await page.keyboard.press("Enter");
+  await panel.getByRole("link", { name: /Machines and Replication/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`${stack.url}/settings`);
   await expect(panel).toBeHidden();
   await expect(trigger).toBeFocused();
 
@@ -170,6 +196,14 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(trigger).toContainText(/Reconnecting|Disconnected/, { timeout: 20_000 });
   await trigger.click();
   await expect(panel).toContainText(/Reconnecting to the Attache service|Disconnected from the Attache service/);
+  await page.keyboard.press("Escape");
+  // On a phone the button shows the state without the Machine's name, and stays inside the window.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
+  await expect(trigger.locator(".machine-trigger-name")).toBeHidden();
+  expect((await trigger.boundingBox())!.x + (await trigger.boundingBox())!.width, "the Machine button fits at 320 px").toBeLessThanOrEqual(320 - 16);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await trigger.click();
   await stack.startService();
   await expect(trigger).not.toContainText(/Reconnecting|Disconnected/, { timeout: 30_000 });
   await expect(panel).toContainText("Live updates are connected.");
@@ -202,6 +236,20 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await page.goto(`${stack.url}/jobs`);
   await expect(page.locator(".page").first()).toBeVisible();
   await expect(page.locator("[data-reader-warning]")).toHaveCount(0);
+
+  // A Reader that goes quiet while the tab is open: its lease runs out with no event, and the warning still arrives.
+  const tab = await journeys.newPage();
+  await tab.clock.install();
+  let lapsed = false;
+  const renewed = { ...silent, silent: false, heartbeatAt: new Date(Date.now() - 29 * 60_000).toISOString() };
+  await tab.route("**/api/v1/reader", (route) => route.fulfill({ json: lapsed ? { ...renewed, silent: true } : renewed }));
+  await tab.goto(`${stack.url}/jobs`);
+  await expect(tab.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  lapsed = true;
+  await tab.clock.runFor(2 * 60_000);
+  await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
+  await tab.close();
 });
 
 test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and More holds Jobs, Connections, Settings and this Machine", async () => {
@@ -254,6 +302,14 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await page.keyboard.press("Escape");
   await expect(more).toBeHidden();
   await expect(bar.getByRole("button", { name: "More" })).toBeFocused();
+
+  // Its Machines and Replication link goes to Settings in the same page, closing the sheet.
+  await bar.getByRole("button", { name: "More" }).click();
+  await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
+  await more.getByRole("link", { name: /Machines and Replication/ }).click();
+  await expect(more).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), "no full page load").toBe(true);
 
   // Search goes to the Brain's search field until Home has its own.
   await bar.getByRole("button", { name: "Search" }).click();

@@ -1,9 +1,26 @@
-import type { ReaderView } from "@attache/contracts";
+import { useEffect } from "react";
+import { READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { Link, Time } from "../components/ui.tsx";
 import { Icon } from "../components/icons.tsx";
 
 export const READER_EVENTS = ["reader.changed", "replication.changed", "config.changed"];
+
+/**
+ * The Reader as the service sees it now. The service decides `silent` when asked, and a lease that simply runs out
+ * sends no event, so this asks again just after the current lease would lapse.
+ */
+function useReader() {
+  const reader = useResource<ReaderView>("/reader", READER_EVENTS);
+  const { data, reload } = reader;
+  useEffect(() => {
+    if (!data?.heartbeatAt || data.silent) return;
+    const lapses = Date.parse(data.heartbeatAt) + READER_SILENT_AFTER_MS - Date.now();
+    const timer = window.setTimeout(reload, Math.max(0, lapses) + 1000);
+    return () => window.clearTimeout(timer);
+  }, [data, reload]);
+  return reader;
+}
 
 /** Which Machine the Reader is, in the owner's words. */
 function readerName(r: ReaderView): string {
@@ -26,7 +43,7 @@ function LastRefresh({ at }: { at: string | null }) {
  * last refreshed, so the owner knows how fresh the inbox is on any Machine.
  */
 export function ReaderLine() {
-  const reader = useResource<ReaderView>("/reader", READER_EVENTS);
+  const reader = useReader();
   const r = reader.data;
   if (!r) return null;
   const state = !r.replicated ? "alone" : !r.machine ? "none" : r.silent ? "silent" : r.thisMachine ? "this" : "other";
@@ -51,7 +68,7 @@ export function ReaderLine() {
  * schedule, so it stays in view on every screen and size until a Reader renews its lease.
  */
 export function ReaderWarning() {
-  const r = useResource<ReaderView>("/reader", READER_EVENTS).data;
+  const r = useReader().data;
   if (!r?.silent) return null;
   return (
     <div className="banner danger" role="status" data-reader-warning>

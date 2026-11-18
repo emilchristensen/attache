@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type RefObject } from "react";
+import { useId, useRef, type MouseEvent as ReactMouseEvent, type RefObject } from "react";
 import { navBadge, type NavSignals } from "../nav-signals.ts";
 import { MORE_SCREENS, screen, type ScreenId } from "../routes.ts";
 import { MachinePanel } from "./MachinePanel.tsx";
@@ -10,17 +10,13 @@ export function MoreSheet({ open, onClose, current, signals, opener }: { open: b
   const ref = useRef<HTMLDialogElement>(null);
   const title = useId();
   useModalDialog(ref, open, onClose, opener);
-  // A followed link closes the sheet: the owner is where they asked to go.
-  useEffect(() => {
-    const d = ref.current;
-    const followed = (e: MouseEvent) => {
-      if ((e.target as Element).closest("a")) onClose();
-    };
-    d?.addEventListener("click", followed);
-    return () => d?.removeEventListener("click", followed);
-  }, [onClose]);
+  // A followed link closes the sheet: the owner is where they asked to go. A React handler, so it runs after the
+  // link's own (which navigates) while the link is still there.
+  const followed = (e: ReactMouseEvent) => {
+    if ((e.target as Element).closest("a")) onClose();
+  };
   return (
-    <dialog ref={ref} className="sheet more-sheet" aria-labelledby={title}>
+    <dialog ref={ref} className="sheet more-sheet" aria-labelledby={title} onClick={followed}>
       <div className="sheet-head">
         <h2 id={title} className="sheet-title">
           More
@@ -34,9 +30,11 @@ export function MoreSheet({ open, onClose, current, signals, opener }: { open: b
           <ScreenLink key={id} screen={screen(id)} current={current === id} badge={navBadge(signals, id, current)} warning={id === "settings" ? signals.settingsWarning : null} warningShown icon />
         ))}
       </nav>
-      <section className="more-machine" aria-label="This Machine">
-        <MachinePanel />
-      </section>
+      {open && (
+        <section className="more-machine" aria-label="This Machine">
+          <MachinePanel />
+        </section>
+      )}
     </dialog>
   );
 }

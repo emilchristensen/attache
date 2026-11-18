@@ -32,6 +32,22 @@
   scrollbar-gutter: stable;
 }
 
+/* The first stop for the keyboard: hidden until focused, then over the masthead's mark. */
+.skip-link {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  z-index: 50;
+  padding: var(--s-2) var(--s-3);
+  background: var(--primary);
+  color: var(--on-primary);
+  border-radius: var(--r-sm);
+  transform: translateY(calc(-100% - var(--s-4)));
+}
+.skip-link:focus {
+  transform: none;
+}
+
 /* ---- the masthead ------------------------------------------------------------------------------ */
 
 .masthead {
@@ -171,6 +187,10 @@
 
 /* ---- the page ---------------------------------------------------------------------------------- */
 
+/* The skip link's target: focus lands on the page, which shows no ring of its own around the whole screen. */
+.main:focus {
+  outline: none;
+}
 .main {
   flex: 1;
   min-height: 0;
@@ -362,7 +382,8 @@
   }
   .masthead-nav,
   .search-launcher,
-  .machine:not([data-lost]) {
+  .machine:not([data-lost]),
+  .machine-trigger-name {
     display: none;
   }
   .bottom-bar {

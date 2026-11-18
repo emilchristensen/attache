@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MACHINE_NAME_MAX } from "@attache/contracts";
+import { MACHINE_NAME_MAX, READER_SILENT_AFTER_MS } from "@attache/contracts";
 
 /**
  * The Reader lease: which Machine runs scheduled Source refresh, briefings and
@@ -12,7 +12,7 @@ import { MACHINE_NAME_MAX } from "@attache/contracts";
 /** The holder renews the lease at least this often while it can reach the repository. */
 export const HEARTBEAT_EVERY_MS = 10 * 60_000;
 /** A lease not renewed for this long has lapsed: its holder is silent. */
-export const LEASE_TTL_MS = 30 * 60_000;
+export const LEASE_TTL_MS = READER_SILENT_AFTER_MS;
 
 export const LeaseRecord = z.object({
   version: z.literal(1),
