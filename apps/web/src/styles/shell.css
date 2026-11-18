@@ -153,7 +153,6 @@
 .machine-trigger-live {
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
 }
 .machine-trigger-name {
@@ -474,7 +473,10 @@
 }
 
 @media (max-width: 720px) {
-  /* On a phone the lost connection's button is a state beside the mark: the chevron gives its room to the state. */
+  /* On a phone the lost connection's button is a state beside the mark: the chevron and the gap give their room to it. */
+  .masthead-inner {
+    gap: var(--s-2);
+  }
   .machine-trigger-chevron {
     display: none;
   }
