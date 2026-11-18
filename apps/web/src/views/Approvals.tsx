@@ -1,8 +1,7 @@
-import { useEffect } from "react";
 import { navigate, useLocation } from "../components/ui.tsx";
 import { Tabs, tabId, type TabItem } from "../components/Tabs.tsx";
 import { useSignals } from "../nav-signals.ts";
-import { approvalsHref, draftAt, draftHref, type ApprovalsTab } from "../routes.ts";
+import { approvalsHref, draftAt, type ApprovalsTab } from "../routes.ts";
 import { ApprovalsFinished } from "./ApprovalsFinished.tsx";
 import { ApprovalsWaiting } from "./ApprovalsWaiting.tsx";
 import { useApprovalsVisit } from "./approvals-visit.ts";
@@ -18,11 +17,6 @@ const PANEL = "approvals-panel";
 export function ApprovalsView() {
   const loc = useLocation();
   const draft = draftAt(loc.path);
-  // The interim link from before the Draft's own page (`/approvals?id=`), still used by older callers.
-  const legacy = loc.search.get("id");
-  useEffect(() => {
-    if (legacy) navigate(draftHref(legacy), { replace: true });
-  }, [legacy]);
   const signals = useSignals();
   // What was decided in this visit stays in place across the tabs and a Draft's page; leaving Approvals ends the visit.
   const visit = useApprovalsVisit();

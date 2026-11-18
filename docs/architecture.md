@@ -387,6 +387,9 @@ The attention engine follows these rules:
 
 - A draft is an action record: kind, connection, target, payload, `payload_hash` (SHA-256 of canonical JSON), `version`, context/evidence, `expires_at`.
 - Editing a draft increments `version` and changes the hash, invalidating any approval.
+  The new text replaces the old one: `action_events` keeps each version's number and hash, not its words.
+- A rejected draft is locked: editing it is refused (`not_editable`), and only `POST /actions/:id/restore` with the version it starts from brings it back, as `draft` at the next version with the same text and a `restored` event, until the draft's own expiry.
+  Restore is refused (`superseded`) while another draft for the same Inbox item is open, and it moves the item's link back to the restored draft.
 - Approval creates `{actionId, version, payloadHash, nonce, expiresAt, approvedBy}`.
   It lasts 15 minutes (`APPROVAL_TTL_MS`), never past the draft's own expiry.
 - When an approval ends unused, the draft goes back to `draft` with the approval cleared, an `approval_expired` event is recorded and `actions.changed` is emitted, so the owner can approve it again.
@@ -612,6 +615,7 @@ Disconnecting a connection deletes its credentials, stops new requests, cancels 
   Approvals (`views/Approvals.tsx`) lists the shell's own waiting Drafts and Proposals (`NavSignals.waitingDrafts`/`waitingProposals`), so its sections, its Waiting tab and the navigation agree; In progress (`executing` Drafts) and Finished (finished Drafts, `GET /memory/proposals?status=applied,rejected`) are its own requests, each failing on its own.
   A failure of the Inbox or Drafts list shows at once and stays until the pair settles again with a good answer (`pair.ts`, `apps/web/test/pair.test.ts`), while their good answers are applied as one pair.
   `approvals.ts` holds its pure rules (row text, when "Nothing waits for your OK." is true, decided rows kept in place, Finished's order; `apps/web/test/approvals.test.ts`); a Draft's own page is `/approvals/<id>` (`routes.ts` `draftHref`, `views/DraftPage.tsx`).
+  `draft-state.ts` is that page as one pure rule: the stored status and the editor's state (unsaved text, blank text, the version it was loaded from) map to one of fourteen states, each with its status word, step line, notice and buttons (`apps/web/test/draft-state.test.ts`, one case per state); the view only draws it and runs the buttons.
   Until the service has a count route (#20 of spec #14) the lists are asked with their default limits, and a full list makes its part a lower bound.
   `shortcuts.ts` is the keymap the shell listens with and `ShortcutSheet` lists behind `?`.
   Search is one shape everywhere: `search.ts` (pure, unit-tested) holds what to ask `GET /memory/search`, what a result says (kind, part, file and lines), where it opens (a memory note in the Brain with the query kept, anything else in the evidence view at the cited lines) and the ranking line; `search-answer.ts` keeps the last answer while a new one loads; `components/SearchField.tsx` is the combobox with its listbox of up to six results that Home shows (`views/HomeSearch.tsx`, with the date and Browse).

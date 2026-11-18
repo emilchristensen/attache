@@ -298,11 +298,29 @@ The Waiting tab and Approvals in the navigation then show what is known as a low
 
 The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
 
-A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top.
-Editing creates a new version and cancels any earlier approval.
-**Approve** binds your approval to that exact version for 15 minutes.
-When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.
-**Send** is available only when the connection is authorised to write that kind of action; Attache rechecks everything on the service immediately before sending and marks the draft sent only after the other service confirms it.
+A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top and Approvals selected in the navigation.
+Its header names the kind of Draft and where it goes, such as "GitHub comment on acme/web #42", then its version, its status and, while it can still be sent, when it expires.
+A step line under it shows where the Draft stands: Draft, Approved, then Sent.
+The message the Draft answers is quoted above its text at every width, and the text itself is the main part of the page, at reading size.
+Under the text one line says what the state means, and the buttons follow, the next step first.
+Whatever you press, the page stays on the same Draft.
+
+- **Approve vN** binds your approval to that exact version for 15 minutes.
+  **Send vN** is shown before that, switched off, with the reason; for a Gmail draft it reads **Create vN in Gmail**, which makes a draft in your Gmail and sends nothing.
+- Typing makes the text unsaved: **Save as vN+1** and **Discard changes** come first, and Approve and Send wait.
+  Saving replaces the text of the old version, which is not kept, and cancels any approval of it; the page says so before you save.
+- When the 15 minutes end before you send, the Draft says when the approval ended and that nothing was sent, and offers **Approve vN again**.
+- **Send** works only when the connection is authorised to write that kind of action.
+  Until then the page says "Cannot send yet." with the reason, and **Open Connections** when the fix is there.
+  Attache rechecks everything on the service immediately before sending and marks the Draft sent only after the other service confirms it.
+- **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
+- **Reject** locks the Draft, and nothing is sent.
+  Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
+- When the other service cannot confirm what happened, the page says the outcome is unknown, with a warning sign, and asks you to check the destination first.
+  It never offers to send that Draft again; prepare a new one from its Inbox item only after you have looked.
+- A Draft that was not sent, or expired, is finished: **Copy text** keeps its words and **Prepare a new Draft** asks Attache for a fresh one.
+- If the Draft changes elsewhere while you are typing, such as in another tab, your words stay in the box: **Copy my text** keeps them, and **Load vN** shows the current Draft.
+
 Drafts expire after 48 business hours.
 
 ### Settings
