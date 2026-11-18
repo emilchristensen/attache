@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useLiveConnection, useResource } from "../live.ts";
 import { ReaderLine } from "../views/ReaderLine.tsx";
+import { modalOpen } from "./dialog.ts";
 import { Icon } from "./icons.tsx";
 import { Link } from "./ui.tsx";
 
@@ -84,9 +85,9 @@ export function MachineDisclosure() {
     const outside = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
-    // Escape belongs to the topmost layer: a dialog opened over the disclosure (the shortcut sheet) closes first.
+    // Escape belongs to the topmost layer: a dialog or drawer opened over the disclosure closes first.
     const escape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+      if (e.key !== "Escape" || modalOpen()) return;
       setOpen(false);
       button.current?.focus();
     };

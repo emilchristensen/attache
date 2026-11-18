@@ -1,5 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
+/** A modal layer is open (a native dialog, the evidence drawer): keys such as Escape belong to it. */
+export function modalOpen(): boolean {
+  return document.querySelector("dialog[open], [aria-modal='true']") !== null;
+}
+
 /**
  * A native `<dialog>` shown modally while `open`: the browser traps focus and closes it on Escape. However it
  * closes, `onClose` runs and focus goes back to `opener`, or to wherever it was before the dialog opened, so the

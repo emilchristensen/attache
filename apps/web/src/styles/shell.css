@@ -137,7 +137,7 @@
 /* ---- this Machine's disclosure ----------------------------------------------------------------- */
 
 .machine-trigger-name {
-  max-width: 12em;
+  max-width: 10em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -148,6 +148,10 @@
 .machine[data-lost] .machine-trigger {
   color: var(--amber);
   border-color: var(--amber);
+}
+/* While the connection is lost the state takes the name's place on the button; the panel still names the Machine. */
+.machine[data-lost] .machine-trigger-name {
+  display: none;
 }
 .machine-trigger-live {
   font-weight: 600;
@@ -362,14 +366,20 @@
   .masthead-inner {
     gap: var(--s-4);
   }
+  .masthead .brand {
+    font-size: 24px;
+  }
+  .masthead-nav a {
+    padding-inline: 7px;
+  }
   .search-launcher-label,
-  .machine:not([data-lost]) .machine-trigger-name {
+  .machine-trigger-name {
     display: none;
   }
 }
 
 /* A narrow window: the bottom bar takes the screens; the masthead keeps the mark, and this Machine only while the live connection is lost. */
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .masthead-inner {
     min-height: 56px;
   }
@@ -382,8 +392,7 @@
   }
   .masthead-nav,
   .search-launcher,
-  .machine:not([data-lost]),
-  .machine-trigger-name {
+  .machine:not([data-lost]) {
     display: none;
   }
   .bottom-bar {

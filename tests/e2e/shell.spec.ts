@@ -158,6 +158,21 @@ test("shortcuts: g then a letter jumps to each screen outside text fields and di
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
+/** The masthead's three parts do not overlap and stay inside its column: every control can be clicked. */
+async function mastheadFits(page: Page): Promise<string[]> {
+  return page.locator(".masthead-inner").evaluate((inner) => {
+    const box = (sel: string) => inner.querySelector(sel)!.getBoundingClientRect();
+    const [brand, nav, tools] = [box(".brand"), box(".masthead-nav"), box(".masthead-tools")];
+    const links = [...inner.querySelectorAll(".masthead-nav a")].map((a) => a.getBoundingClientRect());
+    const edge = inner.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).paddingRight);
+    const problems: string[] = [];
+    if (brand.right > nav.left) problems.push("mark overlaps the screens");
+    if (Math.max(...links.map((l) => l.right)) > tools.left) problems.push("screens run under the tools");
+    if (tools.right > edge + 1) problems.push("tools leave the column");
+    return problems;
+  });
+}
+
 test("this Machine: the masthead disclosure names this Machine and the Reader, and reports a lost live connection", async () => {
   const page = await journeys.open("/jobs");
   const machine = await api<{ name: string }>(page, "GET", "/machine");
@@ -202,12 +217,25 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
   await expect(trigger.locator(".machine-trigger-name")).toBeHidden();
   expect((await trigger.boundingBox())!.x + (await trigger.boundingBox())!.width, "the Machine button fits at 320 px").toBeLessThanOrEqual(320 - 16);
+  // Just above the bottom bar, and where the masthead is widest, nothing overlaps, also with a long name and the lost state.
+  for (const width of [970, 1121]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await mastheadFits(page), `masthead at ${width}px, connection lost`).toEqual([]);
+  }
   await page.setViewportSize({ width: 1360, height: 900 });
   await trigger.click();
   await stack.startService();
   await expect(trigger).not.toContainText(/Reconnecting|Disconnected/, { timeout: 30_000 });
   await expect(panel).toContainText("Live updates are connected.");
   await page.keyboard.press("Escape");
+  await api(page, "PATCH", "/machine", { name: "Emil's MacBook Pro 16-inch" });
+  await expect(trigger).toContainText("Emil's MacBook Pro 16-inch");
+  for (const width of [970, 1121, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await mastheadFits(page), `masthead at ${width}px with a long Machine name`).toEqual([]);
+  }
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await api(page, "PATCH", "/machine", { name: machine.name });
 });
 
 test("Reader: a silent Reader stays in view on every screen and size without opening anything, and Connections names the Reader at once", async () => {
@@ -240,14 +268,18 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   // A Reader that goes quiet while the tab is open: its lease runs out with no event, and the warning still arrives.
   const tab = await journeys.newPage();
   await tab.clock.install();
-  let lapsed = false;
+  let answer: "renewed" | "failing" | "lapsed" = "renewed";
   const renewed = { ...silent, silent: false, heartbeatAt: new Date(Date.now() - 29 * 60_000).toISOString() };
-  await tab.route("**/api/v1/reader", (route) => route.fulfill({ json: lapsed ? { ...renewed, silent: true } : renewed }));
+  await tab.route("**/api/v1/reader", (route) => (answer === "failing" ? route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }) : route.fulfill({ json: answer === "lapsed" ? { ...renewed, silent: true } : renewed })));
   await tab.goto(`${stack.url}/jobs`);
   await expect(tab.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
-  lapsed = true;
+  // The check at the lease's end fails; the Dashboard asks again until it gets an answer.
+  answer = "failing";
   await tab.clock.runFor(2 * 60_000);
+  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  answer = "lapsed";
+  await tab.clock.runFor(60_000);
   await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
   await tab.close();
 });

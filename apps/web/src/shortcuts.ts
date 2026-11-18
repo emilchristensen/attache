@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { modalOpen } from "./components/dialog.ts";
 import { navigate } from "./components/ui.tsx";
 import { SCREENS } from "./routes.ts";
 
@@ -33,11 +34,6 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
 /** Where `g` then `key` jumps, or null. */
 export function jumpTarget(key: string): string | null {
   return SCREENS.find((s) => s.key === key)?.to ?? null;
-}
-
-/** A modal is open (a dialog, the evidence drawer): keys belong to it. */
-function modalOpen(): boolean {
-  return document.querySelector("dialog[open], [aria-modal='true']") !== null;
 }
 
 /** The owner is typing, composing text, holding a modifier, or inside a modal: shortcuts stay out of the way. */
