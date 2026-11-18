@@ -45,6 +45,15 @@ The brass dot on the logo, and beside a count in the Dashboard, that shows somet
 It never means new, unread, changed or offline.
 _Avoid_: badge, notification dot, unread dot
 
+**Pairing**:
+Giving one browser, the command line or a Harness's MCP server its own access to the Attache service on this computer, with a one-time code.
+A paired browser stays paired until the owner removes it in Settings.
+
+**Setup**:
+The five steps that make a Machine ready: data folder, features, Connections, model and schedules, then test and finish.
+Only the data folder is required, and a Machine can instead join the Brain another Machine keeps.
+Setup resumes at the step the owner left.
+
 **Harness**:
 The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex or Antigravity.
 It is where the owner asks about the Brain and adds to it.

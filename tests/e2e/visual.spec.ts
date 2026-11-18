@@ -64,14 +64,36 @@ async function replicationScreens(page: Page) {
   await api(page, "POST", "/replication/off");
 }
 
-/** A Setup step in light, dark and narrow, then back to the desktop light view the journey continues in. */
+/**
+ * A Setup step in light, dark and narrow, then back to the desktop light view the journey continues in.
+ * Each capture is one window as tall as the step, so the sticky Back and Continue sit at its end, where the owner meets them.
+ */
 async function setupScreens(page: Page, step: string) {
+  // A disclosure's chevron turns in 0.15 s.
+  await page.waitForTimeout(250);
+  const shoot = async (width: number, path: string) => {
+    await page.setViewportSize({ width, height: 900 });
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path });
+  };
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.screenshot({ path: `test-results/screens/${scheme}-setup-${step}.png`, fullPage: true });
+    await shoot(1360, `test-results/screens/${scheme}-setup-${step}.png`);
   }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: `test-results/screens/narrow-setup-${step}.png`, fullPage: true });
+  await shoot(390, `test-results/screens/narrow-setup-${step}.png`);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.emulateMedia({ colorScheme: "light" });
+}
+
+/** Pairing and service recovery, the compact centred form, in light, dark and narrow. */
+async function compactScreens(page: Page, name: string) {
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png` });
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: true });
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.emulateMedia({ colorScheme: "light" });
 }
@@ -79,17 +101,43 @@ async function setupScreens(page: Page, step: string) {
 test("screens", async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
   const page = await ctx.newPage();
+  await page.goto(stack.url);
+  await page.getByRole("button", { name: "Pair", exact: true }).click();
+  await expect(page.getByText("Enter the pairing code.")).toBeVisible();
+  await compactScreens(page, "pair");
+  await page.route("**/api/v1/session", (route) => route.abort());
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Attache service is not reachable" })).toBeVisible();
+  await compactScreens(page, "service-unreachable");
+  await page.unroute("**/api/v1/session");
   await page.goto(stack.pairUrl());
   await page.getByRole("textbox", { name: /Data folder/ }).fill(stack.dataDir);
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  await expect(page.getByText("Preview this folder to see what Attache will create in it.")).toBeVisible();
+  await setupScreens(page, "folder-problem");
   await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.getByText("Import an existing Markdown folder or Obsidian vault").click();
   await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
   await page.getByRole("button", { name: "Preview import" }).click();
+  await page.getByText("Who is this for?").click();
   await setupScreens(page, "folder");
   const joinBrain = page.getByText("Already use Attache on another Machine?");
   await joinBrain.click();
-  await page.locator(".join-brain").screenshot({ path: "test-results/screens/setup-join.png" });
+  await page.getByRole("button", { name: "Join into this folder" }).click();
+  await expect(page.getByText("Enter the repository your other Machine replicates to.")).toBeVisible();
+  await page.waitForTimeout(250);
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.locator(".join-brain").screenshot({ path: `test-results/screens/${scheme}-setup-join.png` });
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator(".join-brain").screenshot({ path: "test-results/screens/narrow-setup-join.png" });
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.emulateMedia({ colorScheme: "light" });
   await joinBrain.click();
   await page.getByRole("button", { name: "Use this folder" }).click();
+  await expect(page.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
+  await setupScreens(page, "features");
   await page.getByRole("button", { name: "Continue" }).click();
   const gh = page.locator('[data-connection="github"]');
   await gh.getByRole("button", { name: "Set up" }).click();
@@ -105,7 +153,10 @@ test("screens", async ({ browser }) => {
   await model.getByRole("textbox", { name: "Model" }).fill("fixture-model");
   await model.getByRole("button", { name: "Connect" }).click();
   await expect(model.getByText("connected", { exact: true })).toBeVisible();
+  await setupScreens(page, "model");
   await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.locator('[data-feature-status="attention"]')).toBeVisible();
+  await setupScreens(page, "finish");
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page.getByText(/Review acme\/web#42/)).toBeVisible({ timeout: 20_000 });
   await page.locator("article.item", { hasText: "Review acme/web#42" }).getByRole("button", { name: "Prepare draft" }).click();

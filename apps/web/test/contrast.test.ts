@@ -64,6 +64,8 @@ const PAIRS: Pair[] = [
   ...text(["--ink", "--ink-2", "--ink-3"], SURFACES),
   ...text(["--ink", "--ink-2", "--ink-3"], SOFTS),
   ...text(["--ink", "--ink-2", "--ink-3"], ROW_STATES, "--paper"),
+  // The selected Setup step: its words on the translucent highlight, over the canvas of Setup's left pane.
+  ...text(["--ink", "--ink-2"], ["--highlight"], "--canvas"),
   // Links and the words of the attention count and of danger.
   ...text(["--link"], SURFACES),
   ...text(["--link"], ROW_STATES, "--paper"),
@@ -80,6 +82,8 @@ const PAIRS: Pair[] = [
   // Control edges: the outline of a secondary button and the edge of a field, on every surface they sit on.
   ...graphic(["--line"], ["--canvas", "--paper", "--sunken"]),
   ...graphic(["--key"], SURFACES),
+  // The edge of a field a form found a problem with, beside its message in the same red.
+  ...graphic(["--danger"], ["--canvas", "--paper"]),
   // The primary button's fill against the surface around it.
   ...graphic(["--primary"], SURFACES),
   // The focus ring, offset outside the control, on every surface, tint and row state it can land on.

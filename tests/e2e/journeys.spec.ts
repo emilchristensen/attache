@@ -65,6 +65,46 @@ function classicScrollbarChrome(dir: string): { channel: "chrome" } | { executab
   return { executablePath: launcher };
 }
 
+/** Pairing and service recovery share one compact form, centred in the window at every width without scrolling sideways. */
+async function expectCompactCentred(page: Page, where: string) {
+  const { left, right, width, overflow } = await page.getByRole("main").evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return { left: box.left, right: document.documentElement.clientWidth - box.right, width: box.width, overflow: document.documentElement.scrollWidth - innerWidth };
+  });
+  expect(Math.abs(left - right), `${where}: centred`).toBeLessThanOrEqual(1);
+  expect(width, `${where}: compact`).toBeLessThanOrEqual(480);
+  expect(overflow, `${where}: no sideways scrolling`).toBeLessThanOrEqual(0);
+}
+
+test("pairing: a compact centred form names a missing or wrong code beside the field and puts focus back in it", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 } });
+  try {
+    const page = await ctx.newPage();
+    journeys.watch(page);
+    await page.goto(stack.url);
+    await expect(page.getByRole("heading", { name: "Pair this browser" })).toBeVisible();
+    await expectCompactCentred(page, "pair at 1360px");
+    const code = page.getByRole("textbox", { name: "Pairing code" });
+    const pair = page.getByRole("button", { name: "Pair", exact: true });
+    // Pair is never greyed out: pressing it says what is missing.
+    await code.blur();
+    await pair.click();
+    await expect(code).toBeFocused();
+    await expect(code).toHaveAttribute("aria-invalid", "true");
+    await expect(code).toHaveAccessibleDescription(/Enter the pairing code\./);
+    await code.fill("WRONG234");
+    await expect(code).not.toHaveAttribute("aria-invalid", "true");
+    await pair.click();
+    await expect(code).toHaveAccessibleDescription(/wrong, expired or already used/);
+    await expect(code).toBeFocused();
+    await expect(page.getByText("attache pair --open")).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expectCompactCentred(page, "pair at 375px");
+  } finally {
+    await ctx.close();
+  }
+});
+
 test("setup keeps its place when a step grows taller than the window", async ({ playwright }, testInfo) => {
   const { page, close } = await pageWithClassicScrollbars(playwright, testInfo.outputPath(), { viewport: { width: 1360, height: 900 } });
   try {
@@ -76,6 +116,7 @@ test("setup keeps its place when a step grows taller than the window", async ({ 
     // Previews only read: the folders are left as they are for the onboarding journey.
     await page.getByRole("textbox", { name: /Data folder/ }).fill(stack.dataDir);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await page.getByText("Import an existing Markdown folder or Obsidian vault").click();
     await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
     await page.getByRole("button", { name: "Preview import" }).click();
     await expect(page.getByText(/^Will read 2 Markdown files from /)).toBeVisible();
@@ -96,7 +137,20 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
     await route.continue();
   });
   await page.goto(stack.pairUrl());
-  await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
+  const heading = page.getByRole("heading", { name: "Where should Attache keep your knowledge?" });
+  await expect(heading).toBeVisible();
+  // Two panes: the steps on the left, the form on the right.
+  const progress = page.getByRole("navigation", { name: "Setup progress" });
+  const pane = await page.getByRole("complementary").filter({ has: progress }).boundingBox();
+  const form = await heading.boundingBox();
+  expect(pane!.x + pane!.width, "the steps sit left of the form").toBeLessThan(form!.x);
+  expect(Math.abs(pane!.y - form!.y), "the two panes start level").toBeLessThanOrEqual(8);
+  await expect(progress.getByRole("button", { name: /Data folder/ })).toHaveAttribute("aria-current", "step");
+  // The optional parts are closed disclosures below Continue.
+  const useFolder = page.getByRole("button", { name: "Use this folder" });
+  const importSummary = page.getByText("Import an existing Markdown folder or Obsidian vault");
+  expect((await importSummary.boundingBox())!.y, "Continue comes before the optional parts").toBeGreaterThan((await useFolder.boundingBox())!.y);
+  await expect(page.getByRole("textbox", { name: "Folder to import" })).toBeHidden();
   const folder = page.getByRole("textbox", { name: /Data folder/ });
   await folder.click();
   const answered = page.waitForResponse("**/api/v1/setup/defaults");
@@ -105,21 +159,39 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   await folder.pressSequentially(stack.dataDir);
   await expect(folder).toHaveValue(stack.dataDir);
   await page.unroute("**/api/v1/setup/defaults");
+  // Continue is never greyed out: pressing it names the first problem beside its field and puts focus there.
+  await folder.blur();
+  await useFolder.click();
+  await expect(folder).toBeFocused();
+  await expect(folder).toHaveAttribute("aria-invalid", "true");
+  await expect(folder).toHaveAccessibleDescription(/Preview this folder to see what Attache will create in it\./);
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText(`New folder: ${stack.dataDir}`)).toBeVisible();
   await expect(page.getByText("Will modify: nothing")).toBeVisible();
+  await expect(folder).not.toHaveAttribute("aria-invalid", "true");
+  await importSummary.click();
+  const importFolder = page.getByRole("textbox", { name: "Folder to import" });
   // Example folders are shaped for the computer Attache runs on.
-  await expect(page.getByRole("textbox", { name: "Folder to import" })).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
+  await expect(importFolder).toHaveAttribute("placeholder", join(DOCUMENTS, "Notes"));
   await expectNoMacWording(page, "setup: data folder");
-  await page.getByRole("textbox", { name: "Folder to import" }).fill(stack.vaultDir);
+  await importFolder.fill(stack.vaultDir);
+  // A folder to import that was not previewed is named too, and its closed disclosure opens to show it.
+  await importSummary.click();
+  await expect(importFolder).toBeHidden();
+  await useFolder.click();
+  await expect(importFolder).toBeFocused();
+  await expect(importFolder).toHaveAccessibleDescription(/Preview the import, or clear this field\./);
   await page.getByRole("button", { name: "Preview import" }).click();
   await expect(page.getByText(/^Will read 2 Markdown files from /)).toBeVisible();
   await expect(page.getByText("Files changed in that folder: 0")).toBeVisible();
+  await page.getByText("Who is this for?").click();
   await page.getByRole("textbox", { name: "Name" }).fill("Test User");
   await page.getByRole("textbox", { name: "Email" }).fill("alex@example.com");
-  await page.getByRole("button", { name: "Use this folder" }).click();
+  await useFolder.click();
 
   await expect(page.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
+  await expect(progress.getByRole("button", { name: /Features/ })).toHaveAttribute("aria-current", "step");
+  await expect(progress.getByRole("button", { name: /Data folder/ })).toHaveAccessibleName(/done/);
   // Voice is not a feature any more.
   await expect(page.getByRole("checkbox", { name: /^Voice/ })).toHaveCount(0);
   // Keyboard: toggle drafts off and on with Space, then check the dependency explanation for Background work.
@@ -188,6 +260,21 @@ test("onboarding: pair, choose folder, preview import, features, connections, mo
   // No microphone control or speech hint anywhere on the Dashboard.
   await expect(page.getByRole("button", { name: /talk|microphone|speaking/i })).toHaveCount(0);
   await expect(page.getByText(/stops speech/)).toHaveCount(0);
+});
+
+test("service not reachable: the pairing screen's centred layout, the commands to check the service, and Retry", async () => {
+  const page = await journeys.newPage();
+  await page.route("**/api/v1/session", (route) => route.abort());
+  await page.goto(stack.url);
+  await expect(page.getByRole("heading", { name: "Attache service is not reachable" })).toBeVisible();
+  await expect(page.getByText("attache status")).toBeVisible();
+  await expectCompactCentred(page, "service not reachable at 1360px");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expectCompactCentred(page, "service not reachable at 375px");
+  await page.unroute("**/api/v1/session");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("navigation", { name: "Main" }).first()).toBeVisible();
+  await page.close();
 });
 
 test("home: the inbox only, with no chat box or chat shortcut", async () => {
@@ -1007,9 +1094,26 @@ test("replication: set up in Settings, joined from another Machine's setup, watc
     const second = await otherCtx.newPage();
     journeys.watch(second);
     await second.goto(other.pairUrl());
-    await second.getByRole("textbox", { name: /Data folder/ }).fill(other.dataDir);
+    const dataFolder = second.getByRole("textbox", { name: /Data folder/ });
     await second.getByText("Already use Attache on another Machine?").click();
-    await second.getByRole("textbox", { name: "Repository" }).fill(remote);
+    const repository = second.getByRole("textbox", { name: "Repository" });
+    // With both empty, Setup's data folder comes first: it sits above the Join form.
+    await dataFolder.fill("");
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(dataFolder).toBeFocused();
+    await expect(dataFolder).toHaveAccessibleDescription(/Enter an empty folder for the Brain\./);
+    await expect(repository).toHaveAttribute("aria-invalid", "true");
+    await dataFolder.fill(other.dataDir);
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(repository).toBeFocused();
+    await expect(repository).toHaveAccessibleDescription(/Enter the repository your other Machine replicates to\./);
+    // A repository the service refuses is named beside the field, which gets focus again.
+    await repository.fill("not a repository");
+    await second.getByRole("button", { name: "Join into this folder" }).click();
+    await expect(repository).toHaveAttribute("aria-invalid", "true");
+    await expect(repository).toBeFocused();
+    await repository.fill(remote);
+    await expect(repository).not.toHaveAttribute("aria-invalid", "true");
     await second.getByRole("button", { name: "Join into this folder" }).click();
     await expect(second.getByRole("heading", { name: "Choose what Attache does" })).toBeVisible();
     expect(readFileSync(join(other.dataDir, "memory/self.md"), "utf8")).toContain("Test User");

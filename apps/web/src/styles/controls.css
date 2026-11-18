@@ -122,6 +122,39 @@ label.field select {
   font-weight: 400;
 }
 
+/* A field whose label stands apart, so its message and help can follow it without joining the field's name. */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field-group > .help {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-3);
+}
+
+/* A field a form found a problem with: a red edge, and below it the message with a warning glyph (`FieldError`). */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 500;
+}
+.field-error svg.icon {
+  flex: none;
+  margin-top: 1px;
+}
+
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--primary);

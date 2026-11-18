@@ -67,12 +67,20 @@ Attache no longer has voice; upgrading from a version that had it removes the do
 
 ## First-run setup
 
-Setup has five steps and each works without the ones after it.
+The installer opens the Dashboard with a one-time pairing code, and your browser pairs by itself.
+If the code is missing, wrong or expired, **Pair this browser** asks for it and says what is wrong beside the field; run `attache pair --open` for a new code.
+
+Setup shows its five steps on the left and the current step on the right.
+Each step works without the ones after it, you can go back to any step you have reached, and Setup resumes at the step you left.
+**Continue** is never greyed out: when something is missing, it says what beside the field and puts the cursor there.
 
 1. **Data folder.**
    Choose where Attache stores knowledge (default `~/Documents/Attache`).
-   Preview shows exactly what will be created and confirms that existing files are not modified.
-   You can also point Attache at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
+   Preview shows exactly what will be created and confirms that existing files are not modified; **Use this folder** asks you to preview first.
+   Three optional sections sit below **Use this folder**, closed until you open them.
+   *Import an existing Markdown folder or Obsidian vault* points Attache at your notes; they are read in place and never changed.
+   *Who is this for?* takes your name and email, so Attache can tell your own messages from others'.
+   *Already use Attache on another Machine?* joins the Brain you already have instead of starting a new one (see Replication below).
 2. **Features.**
    Search is always on.
    Saving to memory, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
@@ -590,7 +598,7 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
 
 ## Troubleshooting
 
-- *Attache service is not reachable:* run `attache status`.
+- *Attache service is not reachable:* the Dashboard says so, with **Retry**; run `attache status`, and `attache start` if it is not running.
   `attache service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
   Logs: `logs` in the service state folder (`~/Library/Application Support/Attache/state/logs` on macOS, `~/.local/state/attache/logs` on Linux, `%LOCALAPPDATA%\Attache\state\logs` on Windows).

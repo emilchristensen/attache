@@ -261,6 +261,58 @@ svg.icon {
   transition: width 0.4s ease;
 }
 
+/* ---- disclosure ------------------------------------------------------------------------ */
+
+/* `components/Disclosure.tsx`: a ruled row that opens in place, its title at the card-heading scale. */
+.disclosure {
+  border-top: 1px solid var(--rule);
+}
+.disclosure:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+.disclosure > summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  padding: 14px 0;
+  cursor: pointer;
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure-chevron {
+  color: var(--ink-2);
+  transition: transform 0.15s ease;
+}
+.disclosure[open] > summary .disclosure-chevron {
+  transform: rotate(90deg);
+}
+.disclosure-title {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.disclosure-meta {
+  grid-column: 2;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: 0 0 var(--s-5) 26px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure-chevron {
+    transition: none;
+  }
+}
+
 /* ---- loading, empty, error ------------------------------------------------------------ */
 
 .state {
