@@ -74,6 +74,16 @@ describe("meeting preparation, team recall and pending replies through claude.ai
     expect((await svc.post("/connections/jira/test")).test).toMatchObject({ ok: true });
   });
 
+  it("a browser sign-in that brings a signed-out Jira back refreshes it straight away", async () => {
+    svc.app.db.prepare("update connections set status = 'needs_auth' where id = 'jira'").run();
+    const jiraRefreshes = async () => (await svc.get("/jobs")).filter((j: { kind: string; connectionId?: string }) => j.kind === "source-refresh" && j.connectionId === "jira").length;
+    const before = await jiraRefreshes();
+    const { url } = await svc.post("/connections/jira/oauth/start", { includeWrite: false });
+    const callback = (await fetch(url, { redirect: "manual" })).headers.get("location")!;
+    expect((await fetch(callback, { redirect: "manual" })).headers.get("location")).toMatch(/oauth=ok/);
+    expect(await jiraRefreshes()).toBe(before + 1);
+  });
+
   it("the briefing prepares meetings with related people notes and lists pending replies", async () => {
     await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "person", title: "Mia Jensen", facts: [{ subject: "Role", value: "Design lead at the client; prefers async design review notes" }] }] });
     // Long enough to be indexed as several passages that all match the meeting.

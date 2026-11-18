@@ -17,6 +17,16 @@ function featureForJob(kind: JobKind) {
   return FEATURES.find((f) => f.jobKinds.includes(kind))?.id ?? "jobs";
 }
 
+/**
+ * A source that just recovered its sign-in still shows the failed coverage of its last Source refresh: refresh it now.
+ * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in.
+ */
+function refreshIfRecovered(app: App, id: string, before: string | undefined, ok: boolean) {
+  const rec = app.connections.record(id);
+  if (!ok || !rec || (before !== "needs_auth" && before !== "error") || !rec.readScopes.length || !app.featureEnabled("attention")) return;
+  app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+}
+
 export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- jobs --------------------------------------------------------------------------
   r.get("/jobs", (c) => app.jobs.list({ ...(c.query("status") ? { status: c.query("status")!.split(",") } : {}), limit: Number(c.query("limit") ?? 100) }));
@@ -163,11 +173,8 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const before = app.connections.record(kind)?.status;
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
-    // Saving the method again is how a login made outside Attache is picked up: refresh a recovered source now, as a passed test does.
-    const rec = app.connections.record(kind);
-    if (out.test.ok && rec && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
-      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
-    }
+    // Saving the method again is how a login made outside Attache is picked up.
+    refreshIfRecovered(app, out.status.id, before, out.test.ok);
     return out;
   });
   r.post("/connections/:id/test", async (c) => {
@@ -175,10 +182,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
-    // A connection that just recovered still shows the failed coverage of its last Source refresh: refresh it now.
-    if (out.ok && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
-      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
-    }
+    refreshIfRecovered(app, rec.id, before, out.ok);
     return { test: out, status: app.connections.status(app.connections.requireRecord(c.params.id!)) };
   });
   r.put("/connections/:id/scopes", async (c) => {
@@ -239,6 +243,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const code = c.query("code");
       if (!code) return back("No authorization code returned", false);
       const rec = app.connections.requireRecord(pending.kind);
+      const before = rec.status;
       const adapter = app.connections.adapter(pending.kind);
       try {
         // Exchange the code with the client this sign-in started with; persist it only now that it worked.
@@ -247,6 +252,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
         app.connections.mergeSettings(rec.id, { ...pending.settings, ...res.settings });
         if (res.account) app.db.prepare("update connections set account = ? where id = ?").run(res.account, rec.id);
         const t = await app.connections.test(rec.id);
+        refreshIfRecovered(app, rec.id, before, t.ok);
         return back(t.ok ? `Connected ${adapter.definition.label}` : t.message, t.ok);
       } catch (e) {
         return back((e as Error).message, false);

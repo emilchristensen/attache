@@ -53,6 +53,8 @@ describe("a connection that recovers its sign-in", () => {
   });
 
   it("refreshes after saving the method again, as Reconnect does for a login made outside Attache", async () => {
+    slackServer().status = "connected";
+    expect((await svc.post("/connections/slack/configure", { method: "claude-ai", fields: {} })).test).toMatchObject({ ok: true });
     slackServer().status = "needs-auth";
     await svc.waitJob((await svc.post("/connections/slack/refresh")).job.id);
     expect(await slack()).toMatchObject({ status: "needs_auth", coverage: { state: "unauthorized" } });
@@ -67,6 +69,9 @@ describe("a connection that recovers its sign-in", () => {
   });
 
   it("keeps when a Source refresh last read the source apart from when a sign-in test last passed", async () => {
+    slackServer().status = "connected";
+    expect((await svc.post("/connections/slack/configure", { method: "claude-ai", fields: {} })).test).toMatchObject({ ok: true });
+    await svc.waitJob((await svc.post("/connections/slack/refresh")).job.id);
     const read = (await slack()).lastReadAt as string;
     expect(read).toEqual(expect.any(String));
     slackServer().status = "needs-auth";

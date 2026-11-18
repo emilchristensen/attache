@@ -341,6 +341,31 @@ describe("connectionsStatus: findings from review round 2", () => {
   });
 });
 
+describe("connectionsStatus: findings from review round 3", () => {
+  it("folds a feature into the broken Connection behind its readiness, even when an optional one is only not set up", () => {
+    const sessions = feature("sessions", {
+      readiness: "unavailable",
+      reason: "A Harness: connection needs attention.",
+      dependsOn: { features: [], connections: [{ kinds: ["claude-code"], label: "A Harness", required: true }, { kinds: ["model"], label: "A model", required: false }] },
+    });
+    const i = { ...withConnections(conn("claude-code", { status: "error" }), conn("model", { status: "not_configured", coverage: null })), features: ok([...FEATURES, sessions]) };
+    const row = onlyRow(i);
+    expect(row).toMatchObject({ state: "down", subject: "Claude Code", alsoAffected: ["Sessions"] });
+  });
+
+  it("keeps a partly working feature whose missing optional Connection is only not set up", () => {
+    const drafts = feature("drafts", { readiness: "partial", reason: "Drafts start empty for you to write; Attache cannot prepare them." });
+    const i = { ...withConnections(conn("model", { status: "not_configured", coverage: null })), features: ok([...FEATURES.filter((f) => f.id !== "drafts"), drafts]) };
+    expect(onlyRow(i)).toMatchObject({ state: "partly_working", subject: "Drafts and approvals" });
+  });
+
+  it("on a Machine that is not the Reader, sends the missing full refresh to Machines and Replication instead of reading here", () => {
+    const row = onlyRow(inputs({ reader: ok({ ...OTHER_READER, lastRefreshAt: null }) }));
+    expect(row).toMatchObject({ key: "not_read_yet:every", action: { kind: "machines" } });
+    expect(row.sentence).toBe("Home PC, the Reader, has not finished a Source refresh of every source yet, so items may be missing below.");
+  });
+});
+
 describe("inboxCoverage: what an empty Inbox may claim", () => {
   it("claims every source only on the green line, the notes alone when nothing else is connected, and nothing otherwise", () => {
     expect(inboxCoverage(connectionsStatus(inputs()))).toBe("all");

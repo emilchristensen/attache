@@ -48,20 +48,22 @@ const OVERDUE_RECHECK_MS = 15_000;
  * a scheduled refresh that runs long may send no event that would.
  */
 function useNextRefresh(schedules: Resource<Schedule[]>): string | null {
-  const [now, setNow] = useState(() => Date.now());
+  // Bumped when a timer fires, so the hook runs again and reads the clock afresh.
+  const [tick, setTick] = useState(0);
   const scheduled = schedules.error ? null : (schedules.data?.find((s) => s.jobKind === "source-refresh" && s.enabled)?.nextRunAt ?? null);
   const due = scheduled ? Date.parse(scheduled) : null;
   const { reload } = schedules;
   useEffect(() => {
     if (due === null) return;
-    const wait = due > now ? due - now + 1000 : OVERDUE_RECHECK_MS;
+    // The clock is read when the timer is armed, so a schedule that changes on an open page is timed from now.
+    const left = due - Date.now();
     const timer = window.setTimeout(() => {
-      setNow(Date.now());
+      setTick((n) => n + 1);
       reload();
-    }, wait);
+    }, left > 0 ? left + 1000 : OVERDUE_RECHECK_MS);
     return () => window.clearTimeout(timer);
-  }, [due, now, reload]);
-  return scheduled && due !== null && due > now ? scheduled : null;
+  }, [due, reload, tick]);
+  return scheduled && due !== null && due > Date.now() ? scheduled : null;
 }
 
 /**

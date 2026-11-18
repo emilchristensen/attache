@@ -314,7 +314,9 @@ function notReadingRow(r: ReaderView): StatusRow {
 }
 
 /** Every source answered, but the Reader has stored no finished refresh of every source yet, so nothing is green. */
-function everySourceUnreadRow(ctx: Context): StatusRow {
+function everySourceUnreadRow(reader: ReaderView, ctx: Context): StatusRow {
+  // Only the Reader's own full refresh is recorded, so another Machine sends the owner to the Machines instead.
+  const other = !reader.thisMachine && reader.machine ? reader.machine.name : null;
   return {
     ...BASE,
     key: "not_read_yet:every",
@@ -324,17 +326,20 @@ function everySourceUnreadRow(ctx: Context): StatusRow {
     icon: "question",
     subject: "Every source",
     impact: "Items may be missing",
-    sentence: "No Source refresh of every source has finished yet, so items may be missing below.",
+    sentence: other
+      ? `${other}, the Reader, has not finished a Source refresh of every source yet, so items may be missing below.`
+      : "No Source refresh of every source has finished yet, so items may be missing below.",
     retry: retryOf(ctx),
     // One full refresh: only a refresh of every source is what the Reader records.
-    action: { kind: "refresh_all", label: "Refresh now" },
+    action: other ? { kind: "machines" } : { kind: "refresh_all", label: "Refresh now" },
   };
 }
 
 /**
- * A feature row whose only problems are Connections that already have their own rows: the feature's name joins the
- * row of the first of them (a required one first) instead, since one cause is one row. A feature with a cause of its
- * own keeps its row.
+ * A feature row whose readiness comes only from Connections that already have their own rows: the feature's name joins
+ * the first of those rows instead, since one cause is one row. The service decides readiness from required Connections
+ * (unavailable, needs setup) or, when those are met, from optional ones (partly working), so only those groups count.
+ * A feature with a cause of its own keeps its row.
  */
 function foldIntoConnections(rows: StatusRow[], featureRows: Array<{ row: StatusRow; feature: FeatureStatus }>, connections: ConnectionStatus[]): StatusRow[] {
   const withRow = connections.filter((c) => (c.status === "needs_auth" || c.status === "error") && rows.some((r) => r.key === `sign_in:${c.id}` || r.key === `down:${c.id}`));
@@ -342,7 +347,9 @@ function foldIntoConnections(rows: StatusRow[], featureRows: Array<{ row: Status
   const kept: StatusRow[] = [];
   for (const { row, feature } of featureRows) {
     const unmet = feature.dependsOn.connections.filter((g) => !connections.some((c) => g.kinds.includes(c.kind) && c.status === "connected"));
-    const causes = [...unmet].sort((a, b) => Number(b.required) - Number(a.required)).map((g) => withRow.find((c) => g.kinds.includes(c.kind)));
+    const required = unmet.filter((g) => g.required);
+    const behind = required.length ? required : unmet;
+    const causes = behind.map((g) => withRow.find((c) => g.kinds.includes(c.kind)));
     const first = causes[0];
     if (first && causes.every(Boolean)) folded.set(first.id, [...(folded.get(first.id) ?? []), feature.label]);
     else kept.push(row);
@@ -457,7 +464,7 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   if (attentionOn && workSources.length === 0) rows.push(NOTES_ONLY);
   // Green needs a stored refresh of every source: single reads and sign-in tests do not make the list complete. A
   // problem that already says items may be missing covers it; one that hides no Inbox item does not.
-  if (attentionOn && readerActive && reader.lastRefreshAt === null && rows.every((r) => !r.inbox)) rows.push(everySourceUnreadRow(ctx));
+  if (attentionOn && readerActive && reader.lastRefreshAt === null && rows.every((r) => !r.inbox)) rows.push(everySourceUnreadRow(reader, ctx));
 
   const sources = healthy.filter(isReadable).length;
   const others = healthy.length - sources;
