@@ -15,7 +15,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 
 const fx = await startFixtureServer(port);
-const { state, claude } = installScenarios(fx, { ...(process.env.FIXTURE_SELF_EMAIL ? { selfEmail: process.env.FIXTURE_SELF_EMAIL } : {}) });
+const { claude, state } = installScenarios(fx, { ...(process.env.FIXTURE_SELF_EMAIL ? { selfEmail: process.env.FIXTURE_SELF_EMAIL } : {}) });
 // Browser journeys flip a claude.ai connector's state (e.g. to "needs-auth") from outside the process.
 fx.route("POST", "/__control/claude-server", (req) => {
   const b = req.body as { name: string; status: string };
@@ -28,6 +28,14 @@ fx.route("POST", "/__control/claude-server", (req) => {
 fx.route("POST", "/__control/github-read-back", (req) => {
   state.github.readBackFails = (req.body as { fails: boolean }).fails;
   return { json: { ok: true } };
+});
+// Journeys set the calendar to meetings at times relative to now (meeting prep, back-to-back meetings); a Source
+// refresh of Google Calendar reads them.
+fx.route("POST", "/__control/gcal-events", (req) => {
+  const b = req.body as { events?: unknown };
+  if (!Array.isArray(b.events)) return { status: 400, json: { error: "events must be a list" } };
+  state.gcal.events = b.events as typeof state.gcal.events;
+  return { json: { ok: true, events: state.gcal.events.length } };
 });
 installFixtureModel(fx, "/model");
 // The meaning model a journey downloads from the Dashboard, described to the service by ATTACHE_MEANING_MODEL.

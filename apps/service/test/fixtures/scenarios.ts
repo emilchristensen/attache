@@ -59,6 +59,8 @@ interface CalendarEvent {
   end: { dateTime?: string; date?: string };
   attendees: Array<{ email: string; displayName?: string; self?: boolean; responseStatus: string }>;
   status?: string;
+  /** The call to join, as Google lists a Meet or other conference link. */
+  conferenceUrl?: string;
 }
 
 export interface ScenarioState {

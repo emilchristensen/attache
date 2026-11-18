@@ -7,7 +7,8 @@ import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Link, Loading, useAction } from "../components/ui.tsx";
 import { draftRowText, nothingWaits, proposalRowText } from "../approvals.ts";
 import { shownEntries, type ApprovalsVisit } from "./approvals-visit.ts";
-import { DecidedRow, GroupFailure, KIND_MARK, type ApprovalKind } from "./ApprovalRow.tsx";
+import { DecidedRow, KIND_MARK, type ApprovalKind } from "./ApprovalRow.tsx";
+import { GroupFailure } from "../components/GroupFailure.tsx";
 import { DraftRow } from "./DraftRow.tsx";
 import { brainNoteHref, ProposalRow } from "./ProposalRow.tsx";
 
@@ -101,7 +102,12 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
       proposals.reload();
     });
 
-  const empty = nothingWaits(signals.drafts, signals.proposals) && visit.drafts.decisions.size === 0 && visit.proposals.decisions.size === 0;
+  // The count route counts every waiting decision, whatever these lists answer; only while the count is on the lists
+  // (the route failed) does a failed group drop out of it, and then the Approvals part is a lower bound.
+  const leftOut = !signals.count.approvals.exact;
+  // The lists and the count route answer apart: nothing waits only once the count agrees, so the empty state never
+  // shows beside a Waiting tab that still counts a decision.
+  const empty = nothingWaits(signals.drafts, signals.proposals) && signals.count.approvals.count === 0 && visit.drafts.decisions.size === 0 && visit.proposals.decisions.size === 0;
   const sendingRows = sending.data ?? [];
 
   const draftsGroup = draftsOff ? (
@@ -110,7 +116,7 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
     </p>
   ) : (
     <>
-      <GroupState what="Drafts" resource={drafts} counted />
+      <GroupState what="Drafts" resource={drafts} counted={leftOut} />
       {draftEntries.length > 0 && (
         <ul className="approval-rows">
           {draftEntries.map((e) => {
@@ -129,7 +135,7 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
 
   const proposalsGroup = (
     <>
-      <GroupState what="Proposals" resource={proposals} counted />
+      <GroupState what="Proposals" resource={proposals} counted={leftOut} />
       {proposalEntries.length > 0 && (
         <ul className="approval-rows">
           {proposalEntries.map((e) => {

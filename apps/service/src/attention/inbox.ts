@@ -9,8 +9,9 @@ import {
   applyCandidates,
   decide,
   deleteConnection,
-  endSnoozes,
   forgetItem,
+  nextMeetingEnd,
+  passTime,
   recordByKey,
   rederiveStates,
   resolveConnection,
@@ -86,11 +87,17 @@ export class Inbox {
   }
 
   /**
-   * End snoozes whose time has passed. Only the state this Machine works out from each record
-   * changes; the record keeps its report time, so it never looks newer than another Machine's report.
+   * End snoozes whose time has passed and resolve meeting prep whose meeting has ended. Only the state
+   * this Machine works out from each record changes; the record keeps its report time, so it never looks
+   * newer than another Machine's report.
    */
   wake(): void {
-    if (endSnoozes(this.d.db, this.d.ctx.now()).length) this.d.onChange();
+    if (passTime(this.d.db, this.d.ctx.now()).length) this.d.onChange();
+  }
+
+  /** When `wake` next has a meeting to resolve, so housekeeping can run at that moment; null when none is waiting. */
+  nextMeetingEnd(): Date | null {
+    return nextMeetingEnd(this.d.db, this.d.ctx.now());
   }
 
   /**

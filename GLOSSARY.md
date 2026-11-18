@@ -148,6 +148,11 @@ _Avoid_: Drafts page
 **Heads-up**:
 Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
 Every Heads-up says why it is here and when it leaves; "Got it" puts it away in this browser.
+A meeting prep Heads-up is a view of its Inbox item, not a second item: "Done" decides the item, "Not now" hides only the Heads-up.
+
+**Meeting prep**:
+An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
+From 15 minutes before the start it shows in For you now instead of the Inbox, with Join first once the meeting runs.
 _Avoid_: Occupant, nudge
 
 **For you now**:
@@ -163,10 +168,16 @@ _Avoid_: Digest
 The number of decisions that wait for the owner on this Machine, behind the Attention dot, the tab title and the numbers in the navigation.
 It has three parts: open Inbox items whose Draft does not wait (Home), Proposals and waiting Drafts (Approvals), and Connections that need sign-in (Connections).
 Each decision counts once, so an Inbox item whose Draft waits counts as the Draft.
-A part that could not be read fully makes the count a lower bound, written "12+".
+The service counts every part exactly, however many decisions wait.
+When it cannot, the Dashboard counts the lists it has, and a part that could not be read fully makes the count a lower bound, written "12+".
 _Avoid_: unread count, badge count
 
 **Open item**:
 An Inbox item in the open state, whether or not its Draft waits.
 Open items and the Decision count differ by the items whose Draft waits in Approvals, so the Dashboard says "need you" only of decisions.
+The count line under the Inbox heading relates the two when they differ.
+
+**Recently added**:
+The line under Home's Inbox that opens into every change written to the Brain without the owner's review in the last 7 days: saves a Harness wrote with auto-accept on, and Consolidation's changes, each with Revert where allowed.
+Nothing there is a decision, so it never counts toward the Decision count.
 _Avoid_: Unread item

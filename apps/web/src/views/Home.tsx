@@ -1,26 +1,33 @@
+import { useRef, useState } from "react";
+import { useReadingPlace } from "../reading-place.ts";
 import { useResource } from "../live.ts";
 import { HomeSearch } from "./HomeSearch.tsx";
 import { ForYouNow } from "./ForYouNow.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { HomeConnections, useConnectionsStatus } from "./HomeConnections.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";
-import { inboxCoverage } from "../connection-status.ts";
+
+const NOTHING_ABOVE: ReadonlySet<string> = new Set();
 
 /**
  * Home: Search the Brain, For you now (the Heads-ups), then Connections (can the owner trust what is below?), then
  * the Inbox and what reached the Brain without review. Questions to the Brain happen in the owner's Harness (ADR 0003).
+ * A meeting prep item shown in For you now is not listed in the Inbox (`above`): it is one item, shown once.
  */
 export function Home() {
   const cfg = useResource<{ features: Record<string, boolean> }>("/config", ["config.changed"]);
   const f = cfg.data?.features ?? {};
   const connections = useConnectionsStatus();
+  const [above, setAbove] = useState<ReadonlySet<string>>(NOTHING_ABOVE);
+  const page = useRef<HTMLElement>(null);
+  useReadingPlace(page);
   return (
-    <section className="page page-inbox" aria-label="Home">
+    <section ref={page} className="page page-inbox" aria-label="Home">
       <HomeSearch recall={f.recall} />
-      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} />}
+      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} onAbove={setAbove} />}
       <HomeConnections view={connections} />
-      <Inbox attentionOn={f.attention ?? false} draftsOn={f.drafts ?? false} coverage={inboxCoverage(connections.status)} />
-      {f.recall && <RecentlyAdded />}
+      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} />
+      {f.capture && <RecentlyAdded />}
     </section>
   );
 }

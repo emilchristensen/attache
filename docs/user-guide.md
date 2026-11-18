@@ -116,10 +116,12 @@ The screen you are on is filled in ink.
 A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
-When some Inbox items below have a Draft waiting, a line under the heading relates the rows to the decisions, such as "3 items below need you · 1 Draft in Approvals".
+When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
 The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
-When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
+The count is exact however many decisions wait.
+When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
+A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
@@ -174,11 +176,20 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
     **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
     **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
     Yesterday's briefing never shows as today's.
+  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
+    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
+    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
+    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
+    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
+    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
+    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
   - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
+    Under a meeting it is one line, and **Read briefing** opens why it is there with the briefing.
   - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
-  - When nothing is timely, the area is one quiet line that says when the Reader's next daily briefing is scheduled.
+  - When nothing is timely, the area is one quiet line that says what comes next: when a meeting's prep shows, or when the Reader's next daily briefing is scheduled.
   - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
-  - Got it is remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - Got it and Not now are remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - When a Heads-up arrives while you read further down, the page keeps your place.
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.
@@ -206,12 +217,19 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
   The **Type** menu lists every type with its count and shows one type at a time.
   The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
-  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft.
-- **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
+  When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
+  When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.
+  An empty Inbox says exactly what is known.
+  **Nothing needs you.**, beside the logo without its dot, appears only when no decision waits anywhere and every source was read, and says when they were read.
+  When a source was not read it says "Nothing found in the 4 sources that were read." and names the one that was not; with only your notes connected, "Nothing found in your notes."; when Approvals or a sign-in still wait, "No open Inbox items." and where they wait; and when the count could not be read, that Attache cannot say nothing needs you, with **Retry**.
+  With Attention and briefings switched off the Inbox says so, and that this is not a claim that nothing needs you.
+- **Recently added** is one line under the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  It is not there while Saving to memory is switched off, and it says so with **Retry** when it could not be loaded.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
   **Revert** works as in Recent saves below, and a reverted change stays listed, marked reverted.
-  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
+  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the line says so and has nothing to open.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
   While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
@@ -295,7 +313,7 @@ A row you decide stays as one line in its place, such as "Applied · Email vendo
 A Draft that is being sent shows under *In progress*; it is not counted, since nothing waits for you there.
 "Nothing waits for your OK." shows only when both the Drafts and the Proposals answered with nothing.
 The Drafts and the Proposals are asked for separately, and each section answers for its own: when one cannot be loaded it says so with **Retry**, and keeps the rows it last had with the time they were loaded.
-The Waiting tab and Approvals in the navigation then show what is known as a lower bound, such as "2+".
+The Waiting tab and Approvals in the navigation still count every waiting decision; only when the count could not be read either do they show what is known as a lower bound, such as "2+".
 
 The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
 

@@ -3,27 +3,48 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, useAction } from "../components/ui.tsx";
-import type { InboxCoverage } from "../connection-status.ts";
+import { Empty, Link, Loading, navigate, useAction } from "../components/ui.tsx";
+import { GroupFailure } from "../components/GroupFailure.tsx";
+import { Logo } from "../components/Logo.tsx";
+import type { ConnectionsStatus } from "../connection-status.ts";
+import { emptyInbox, inboxReach, type EmptyInbox } from "../inbox-empty.ts";
+import { approvalsHref, settingsHref } from "../routes.ts";
+import { anchorOf, useReturnToAnchor } from "./inbox-return.ts";
 import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
-import { groupRows, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
+import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { useRowKeys, type RowKey } from "../shortcuts.ts";
 import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
 
-const EMPTY: Record<InboxCoverage, { title: string; body: string }> = {
-  all: { title: "Nothing needs your attention", body: "Items appear here when deadlines approach, reviews are requested, meetings need prep or replies are pending." },
-  notes: { title: "Nothing needs your attention in your notes", body: "No work source is connected, so only your notes were read." },
-  incomplete: { title: "Nothing found in the sources that were read", body: "Connections above says what was not read, so this may not be complete." },
-};
-
-/** Nothing is promoted above the Inbox yet; the Heads-ups (#26 of spec #14) fill this with meeting prep items. */
-const NOTHING_PROMOTED: ReadonlySet<string> = new Set();
+/**
+ * The empty open list: exactly what is known (`inbox-empty.ts`), with the logo without its dot only beside "Nothing
+ * needs you.", a link to Approvals when decisions wait there, and Retry when the count could not be read.
+ */
+function InboxEmpty({ empty, retry }: { empty: EmptyInbox; retry: (() => void) | null }) {
+  return (
+    <div className="inbox-empty" data-inbox-empty={empty.clear ? "clear" : "open"} role="status">
+      {empty.clear && <Logo size={40} attention={false} />}
+      <div className="inbox-empty-words">
+        <p className="inbox-empty-title">{empty.title}</p>
+        {empty.lines.map((l) => (
+          <p key={l.text} className="inbox-empty-line">
+            {l.link === "approvals" ? <Link to={approvalsHref()}>{l.text}</Link> : l.text}
+          </p>
+        ))}
+        {empty.retry && retry && (
+          <button className="small" onClick={retry}>
+            Retry
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** What each decision key decides on the focused row. */
 const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "done", snooze: "snooze", dismiss: "dismiss" };
@@ -32,11 +53,11 @@ const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "do
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
  * number out, the line that relates the rows to the decisions when they differ, and the view controls.
  */
-function InboxHeading({ id, children, open }: { id: string; children: ReactNode; open: boolean }) {
+function InboxHeading({ id, children, open, above }: { id: string; children?: ReactNode; open: boolean; above: ReadonlySet<string> }) {
   const signals = useSignals();
   const home = signals.count.home;
   const needYou = home.count > 0 ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = open ? homeLine(signals.inbox, NOTHING_PROMOTED) : null;
+  const line = open ? homeLine(signals.inbox, above, home) : null;
   return (
     <>
       <div className="inbox-head">
@@ -59,7 +80,8 @@ function InboxHeading({ id, children, open }: { id: string; children: ReactNode;
 }
 
 interface ToolsProps {
-  items: readonly AttentionItemView[];
+  /** The rows the type picker counts; null before the first answer and after a failed one. */
+  items: readonly AttentionItemView[] | null;
   type: string;
   view: InboxViewId;
   arrivals: number;
@@ -72,7 +94,8 @@ interface ToolsProps {
 
 /** The view controls: Show new items in a place kept for it, the one type picker with counts, and the view. */
 function InboxTools({ items, type, view, arrivals, range, onType, onView, onShowNew }: ToolsProps) {
-  const options = useMemo(() => typeOptions(items, type), [items, type]);
+  // Nothing to count (no answer yet, a failed one, or an empty list with no type chosen): no "All types (0)".
+  const options = useMemo(() => (items && (items.length > 0 || type !== ALL_TYPES) ? typeOptions(items, type) : null), [items, type]);
   return (
     <div className="inbox-tools">
       {arrivals === 0 && (
@@ -83,13 +106,15 @@ function InboxTools({ items, type, view, arrivals, range, onType, onView, onShow
       <button className="inbox-show-new" data-show-new data-waiting={arrivals > 0 || undefined} disabled={arrivals === 0} aria-hidden={arrivals === 0 || undefined} tabIndex={arrivals === 0 ? -1 : undefined} onClick={onShowNew}>
         Show {plural(arrivals, "new item")}
       </button>
-      <select className="inbox-picker" aria-label="Type" value={type} onChange={(e) => onType(e.target.value)}>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label} ({o.count})
-          </option>
-        ))}
-      </select>
+      {options && (
+        <select className="inbox-picker" aria-label="Type" value={type} onChange={(e) => onType(e.target.value)}>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label} ({o.count})
+            </option>
+          ))}
+        </select>
+      )}
       <select className="inbox-picker" aria-label="View" value={view} onChange={(e) => onView(e.target.value as InboxViewId)}>
         {INBOX_VIEWS.map((v) => (
           <option key={v.id} value={v.id}>
@@ -167,21 +192,45 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
 }
 
 /**
- * The Inbox list. `coverage` comes from Home's Connections area: an empty list says nothing needs the owner only
- * when every source was read, and names what was read otherwise.
+ * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
+ * Show new items.
  */
-export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage }) {
+function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionItemView[] | null, now: number, welcomeBack: (ids: readonly string[]) => void): void {
+  const before = useRef(above);
+  useEffect(() => {
+    if (before.current === above) return;
+    const back = live ? backFromAbove(before.current, above, live, now) : [];
+    before.current = above;
+    welcomeBack(back);
+  });
+}
+
+/**
+ * The Inbox list. `attentionOn` is null until the feature switches are known. `connections` is Home's Connections area: an empty list says nothing needs the owner only when the
+ * count is exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed
+ * request shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the
+ * rows it keeps and their time. `above` holds the items For you now shows as
+ * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
+ */
+export function Inbox({ attentionOn, draftsOn, connections, above }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; above: ReadonlySet<string> }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
   const hiddenView = place.view === "hidden";
   const order = place.view === "newest" ? "newest" : "priority";
   // The open rows are the shell's request behind the count, so the rows, their Retry and the count agree.
-  const open = useSignals().openInbox;
+  const signals = useSignals();
+  const open = signals.openInbox;
+  const section = useRef<HTMLElement>(null);
   const hidden = useResource<{ items: AttentionItemView[] }>(attentionOn && hiddenView ? "/attention?state=dismissed,snoozed" : null, ["attention.changed", "actions.changed"]);
   const source = hiddenView ? hidden : open;
-  const live = source.data?.items ?? null;
+  // A switched-off feature is not a failure: Home says the Inbox is off instead.
+  const failure = source.error && source.error.code !== "feature_disabled" ? source.error : null;
+  const clock = useHeadsUpClock();
+  const answered = source.data?.items ?? null;
+  const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
   const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
+  useBackFromAbove(above, open.data?.items ?? null, clock.now, list.welcomeBack);
   const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
 
@@ -229,7 +278,11 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     busy: busy !== null,
     prepareDraft: (item) => prepare(item, {}),
     prepareReplacement: (item) => prepare(item, { replaceUnconfirmed: true }),
-    viewDraft: (draftId) => navigate(draftHref(draftId)),
+    viewDraft: (draftId) => {
+      // Coming back from the Draft finds the open row where it stood.
+      setPlace({ anchor: place.openId ? anchorOf(place.openId) : null });
+      navigate(draftHref(draftId));
+    },
   };
   useInboxKeys(live, decide, busy !== null);
 
@@ -240,21 +293,40 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     if (first) focusAfter(first, "row");
   };
   const toggle = (id: string) => setPlace({ openId: place.openId === id ? null : id });
-  const clock = useHeadsUpClock();
+  const settled = useCallback(() => setPlace({ anchor: null }), [setPlace]);
+  useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0, settled);
+  const empty =
+    live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
+      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countRetry !== null, now: clock.now, timeZone: clock.timeZone })
+      : null;
   const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo };
 
+  if (attentionOn === null)
+    return (
+      <section id="inbox" className="inbox" aria-labelledby={heading}>
+        <InboxHeading id={heading} open={false} above={above} />
+        <Loading label="Loading the Inbox" />
+      </section>
+    );
   if (!attentionOn)
     return (
-      <Empty title="Attention and briefings is off" action={<Link to="/settings">Turn it on in Settings</Link>}>
-        Search still works.
-      </Empty>
+      <section id="inbox" className="inbox" aria-labelledby={heading}>
+        <InboxHeading id={heading} open={false} above={above} />
+        <div className="inbox-empty" data-inbox-empty="off" role="status">
+          <div className="inbox-empty-words">
+            <p className="inbox-empty-title">Attention and briefings is off.</p>
+            <p className="inbox-empty-line">Nothing is read for the Inbox, so this is not a claim that nothing needs you. Search still works.</p>
+            <Link to={settingsHref("features")}>Turn it on in Settings</Link>
+          </div>
+        </div>
+      </section>
     );
 
   return (
-    <section id="inbox" className="inbox" aria-labelledby={heading}>
-      <InboxHeading id={heading} open={!hiddenView}>
+    <section ref={section} id="inbox" className="inbox" aria-labelledby={heading}>
+      <InboxHeading id={heading} open={!hiddenView && !failure} above={above}>
         <InboxTools
-          items={live ?? []}
+          items={live}
           type={place.type}
           view={place.view}
           arrivals={arrivals.length}
@@ -270,10 +342,11 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
         {arrivals.length ? `${plural(arrivals.length, "new item")} waiting. Show new items adds them.` : said}
       </p>
       {hiddenView && <p className="count-line">Snoozed and dismissed items. Reopen one to bring it back.</p>}
-      {source.loading && !source.data && <Loading label="Loading the Inbox" />}
-      <ErrorState error={source.error} retry={source.reload} />
-      {live && list.entries.length === 0 && arrivals.length > 0 && <p className="inbox-none">New items arrived. Show new items adds them.</p>}
-      {live && list.entries.length === 0 && arrivals.length === 0 && <Empty title={hiddenView ? "Nothing snoozed or dismissed" : EMPTY[coverage].title}>{hiddenView ? null : EMPTY[coverage].body}</Empty>}
+      {failure && <GroupFailure what={hiddenView ? "Hidden items" : "The Inbox"} error={failure} answeredAt={source.answeredAt} retry={source.reload} retained={live !== null} />}
+      {!failure && ((source.loading && !source.data) || (live && !hiddenView && list.entries.length === 0 && arrivals.length === 0 && !empty)) && <Loading label="Loading the Inbox" />}
+      {!failure && live && list.entries.length === 0 && arrivals.length > 0 && <p className="inbox-none">New items arrived. Show new items adds them.</p>}
+      {!failure && live && list.entries.length === 0 && arrivals.length === 0 && hiddenView && <Empty title="Nothing snoozed or dismissed" />}
+      {empty && <InboxEmpty empty={empty} retry={signals.countRetry} />}
       {live && typed.length === 0 && list.entries.length > 0 && <p className="inbox-none">No items of this type.</p>}
       {grouped
         ? grouped.map((g) => (

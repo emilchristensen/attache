@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ActionStatus, ConnectionStatus } from "@attache/contracts";
-import { countDecisions, dotAfter, homeLine, shownCount, spokenCount, tabTitle, type Answer, type CountInputs, type Tally } from "../src/count.ts";
+import type { ActionStatus, ConnectionStatus, DecisionTotals } from "@attache/contracts";
+import { countDecisions as countFrom, dotAfter, homeLine, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
 
 /** Answers as the Dashboard gets them. */
 const rows = <T>(list: T[], limit: number | null = 100): Answer<T> => ({ kind: "rows", rows: list, limit });
@@ -19,10 +19,105 @@ const connection = (status: ConnectionStatus["status"]) => ({ status });
 /** Nothing waits, every source answered. */
 const quiet: CountInputs = { inbox: rows([], 200), proposals: rows([]), drafts: rows([]), connections: rows([], null) };
 
+/** The count route's answer. */
+const totals = (t: DecisionTotals): Totals => ({ kind: "totals", totals: t });
+/** The count as the lists alone give it: the count route failed, so the module falls back to them. */
+const countDecisions = (lists: CountInputs) => countFrom(failed, lists);
+/** The lists at their limits: what they would say on their own is a lower bound. */
+const fullLists: CountInputs = {
+  inbox: rows(items(200), 200),
+  proposals: rows(proposals(100), 100),
+  drafts: rows(Array.from({ length: 100 }, () => draft("draft")), 100),
+  connections: rows([connection("needs_auth")], null),
+};
+
 /** What a tally reads as: "6", "4+", or "-" for no number, then whether it is exact. */
 const read = (t: Tally) => `${shownCount(t) ?? "-"}${t.exact ? " exact" : ""}`;
 
-describe("countDecisions", () => {
+describe("countDecisions from the count route", () => {
+  it.each<[string, Totals, CountInputs, { total: string; home: string; approvals: string; connections: string }]>([
+    [
+      "exact above every list limit",
+      totals({ inbox: 230, drafts: 102, proposals: 101, signIns: 1 }),
+      fullLists,
+      { total: "434 exact", home: "230 exact", approvals: "203 exact", connections: "1 exact" },
+    ],
+    [
+      "the route's totals win over lists that say otherwise: the Drafts are already left out of the Inbox part",
+      totals({ inbox: 2, drafts: 2, proposals: 1, signIns: 0 }),
+      { inbox: rows([...items(2), ...items(2, "draft")], 200), proposals: rows(proposals(1)), drafts: failed, connections: waiting },
+      { total: "5 exact", home: "2 exact", approvals: "3 exact", connections: "- exact" },
+    ],
+    [
+      "nothing waits: an exact zero",
+      totals({ inbox: 0, drafts: 0, proposals: 0, signIns: 0 }),
+      fullLists,
+      { total: "- exact", home: "- exact", approvals: "- exact", connections: "- exact" },
+    ],
+    [
+      "Attention and briefings off: Home is off, the rest still count exactly",
+      totals({ inbox: "off", drafts: 1, proposals: 1, signIns: 0 }),
+      fullLists,
+      { total: "2 exact", home: "- exact", approvals: "2 exact", connections: "- exact" },
+    ],
+    [
+      "Drafts and approvals off: the Drafts half of Approvals is off",
+      totals({ inbox: 3, drafts: "off", proposals: 1, signIns: 2 }),
+      fullLists,
+      { total: "6 exact", home: "3 exact", approvals: "1 exact", connections: "2 exact" },
+    ],
+    [
+      "first load: no number until the route answers, even when the lists have",
+      { kind: "waiting" },
+      fullLists,
+      { total: "-", home: "-", approvals: "-", connections: "-" },
+    ],
+    [
+      "the route failed: the lists count, and a full list is a lower bound",
+      failed,
+      fullLists,
+      { total: "401+", home: "200+", approvals: "200+", connections: "1 exact" },
+    ],
+    [
+      "the route failed: lists that are not full are still exact",
+      failed,
+      { inbox: rows([item(), item("draft")], 200), proposals: rows(proposals(1)), drafts: rows([draft("draft")]), connections: rows([], null) },
+      { total: "3 exact", home: "1 exact", approvals: "2 exact", connections: "- exact" },
+    ],
+  ])("%s", (_, route, lists, expected) => {
+    const c = countFrom(route, lists);
+    expect({ total: read(c.total), home: read(c.home), approvals: read(c.approvals), connections: read(c.connections) }).toEqual(expected);
+  });
+
+  it("names a counted part known and a switched-off part off", () => {
+    expect(countFrom(totals({ inbox: "off", drafts: "off", proposals: 0, signIns: 3 }), fullLists)).toMatchObject({
+      home: { state: "off" },
+      approvals: { state: "known" },
+      connections: { state: "known", count: 3 },
+      total: { state: "known", count: 3, exact: true },
+    });
+  });
+});
+
+describe("withRows", () => {
+  const shown = totals({ inbox: 4, drafts: 1, proposals: 2, signIns: 0 });
+  const fresh = totals({ inbox: 3, drafts: 2, proposals: 5, signIns: 1 });
+  it("keeps the Inbox and Drafts parts of the answer held with the rows on screen, and takes Proposals and sign-ins as they arrive", () => {
+    expect(withRows(fresh, shown)).toEqual(totals({ inbox: 4, drafts: 1, proposals: 5, signIns: 1 }));
+  });
+  it("takes the fresh answer whole when no answer is held with the rows yet (first load)", () => {
+    expect(withRows(fresh, { kind: "waiting" })).toEqual(fresh);
+  });
+  it("keeps counting from the lists on screen when the route failed with them, until the rows are asked again with it", () => {
+    expect(withRows(fresh, failed)).toEqual(failed);
+  });
+  it("falls back, or waits, as the fresh answer does", () => {
+    expect(withRows(failed, shown)).toEqual(failed);
+    expect(withRows({ kind: "waiting" }, shown)).toEqual({ kind: "waiting" });
+  });
+});
+
+describe("countDecisions from the lists, when the count route failed", () => {
   it.each<[string, CountInputs, { total: string; home: string; approvals: string; connections: string }]>([
     [
       "a live Draft counts once, in Approvals, not as its Inbox item",
@@ -181,23 +276,31 @@ describe("spokenCount", () => {
 });
 
 describe("homeLine", () => {
+  const exact = (n: number): Tally => ({ state: "known", count: n, exact: true });
+  const lower = (n: number): Tally => ({ state: "unknown", count: n, exact: false });
   it("says nothing when the rows below are the decisions", () => {
-    expect(homeLine(rows(items(3), 200), new Set())).toBeNull();
+    expect(homeLine(rows(items(3), 200), new Set(), exact(3))).toBeNull();
   });
   it("relates rows to decisions when an item's Draft waits in Approvals", () => {
-    expect(homeLine(rows([...items(3), item("draft")], 200), new Set())).toBe("3 items below need you · 1 Draft in Approvals");
+    expect(homeLine(rows([...items(3), item("draft")], 200), new Set(), exact(3))).toBe("3 items below need you · 1 Draft in Approvals");
   });
   it("counts a promoted meeting above, once", () => {
     const meeting = item(null, "meeting_prep");
-    expect(homeLine(rows([meeting, ...items(3), item("approved"), item("revoked")], 200), new Set([meeting.id]))).toBe("1 meeting above · 3 items below need you · 2 Drafts in Approvals");
+    expect(homeLine(rows([meeting, ...items(3), item("approved"), item("revoked")], 200), new Set([meeting.id]), exact(4))).toBe("1 meeting above · 3 items below need you · 2 Drafts in Approvals");
   });
   it("uses the singular for one item below", () => {
-    expect(homeLine(rows([item(), item("draft")], 200), new Set())).toBe("1 item below needs you · 1 Draft in Approvals");
+    expect(homeLine(rows([item(), item("draft")], 200), new Set(), exact(1))).toBe("1 item below needs you · 1 Draft in Approvals");
   });
-  it("counts the rows on screen exactly, even when the list is full", () => {
-    expect(homeLine(rows([...items(2), item("draft")], 3), new Set())).toBe("2 items below need you · 1 Draft in Approvals");
+  it("counts the rows on screen when the count is only a lower bound and the list is whole", () => {
+    expect(homeLine(rows([...items(2), item("draft")], 200), new Set(), lower(1))).toBe("2 items below need you · 1 Draft in Approvals");
+  });
+  it("takes the decisions below from the exact count when the list is full, and the Drafts as a lower bound", () => {
+    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), exact(250))).toBe("250 items below need you · at least 1 Draft in Approvals");
+  });
+  it("says at least for both when the list is full and the count is not exact", () => {
+    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), lower(2))).toBe("At least 2 items below need you · at least 1 Draft in Approvals");
   });
   it("says nothing when the Inbox has not answered", () => {
-    expect(homeLine(failed, new Set())).toBeNull();
+    expect(homeLine(failed, new Set(), exact(0))).toBeNull();
   });
 });

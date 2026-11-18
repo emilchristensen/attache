@@ -217,32 +217,6 @@ button.approval-subject::after {
   justify-self: end;
 }
 
-/* ---- a group's own failure ------------------------------------------------------------------------------- */
-
-.group-failure {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--s-2) var(--s-3);
-  margin-top: var(--s-3);
-  padding: var(--s-3) 4px;
-  border-top: 2px solid var(--danger);
-  color: var(--ink);
-}
-.group-failure > svg {
-  color: var(--danger);
-  margin-top: 2px;
-}
-.group-failure p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.group-failure strong {
-  color: var(--danger);
-}
-.group-failure-reason {
-  color: var(--ink-2);
-}
 /* The rows kept after a failure follow the failure's own rule. */
 .group-failure + .approval-rows {
   margin-top: 0;

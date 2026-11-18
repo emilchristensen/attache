@@ -34,6 +34,19 @@ export const MERGE_NOTICE_KINDS = ["prose_versions", "deleted_and_changed"] as c
 
 export type MergeNoticeKind = (typeof MERGE_NOTICE_KINDS)[number];
 
+/**
+ * The meeting a meeting prep item is about, as the calendar Connection read it.
+ * `start` and `end` are instants (ISO 8601 in UTC); the item stays open until `end`.
+ */
+export interface MeetingTimes {
+  start: string;
+  end: string;
+  /** The call to join (Google Meet or another conference link), or null when the meeting has none. */
+  meetLink: string | null;
+  /** The other people invited, by name or email; the owner is left out. */
+  attendees: string[];
+}
+
 export interface AttentionItemView {
   id: string;
   key: string;
@@ -57,6 +70,8 @@ export interface AttentionItemView {
   actionStatus: ActionStatus | null;
   changedSinceDecision: boolean;
   draftable: { actionKind: string; target: Record<string, unknown>; context: Record<string, unknown> } | null;
+  /** Set on meeting prep: when the meeting runs and how to join it; null for every other kind. */
+  meeting: MeetingTimes | null;
 }
 
 export const AttentionDecision = z.object({

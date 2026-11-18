@@ -1,4 +1,4 @@
-import { plural, WAITING_ACTION_STATUSES, type ActionStatus, type ConnectionStatus } from "@attache/contracts";
+import { plural, WAITING_ACTION_STATUSES, type ActionStatus, type ConnectionStatus, type DecisionTotals } from "@attache/contracts";
 
 /**
  * The count behind the logo's dot: the decisions that wait for the owner, in three parts shown in three places.
@@ -8,15 +8,23 @@ import { plural, WAITING_ACTION_STATUSES, type ActionStatus, type ConnectionStat
  * - Approvals: Proposals in `proposed`, plus Drafts in `draft`, `approved` or `revoked`.
  * - Connections: Connections in `needs_auth`.
  *
+ * The parts come from the count route (`GET /decision-count`), whose totals are exact however many items wait. When
+ * the route fails the module falls back to the lists the screens show, which stop at their limits.
+ *
  * Every part is known, at its list limit, unknown (not answered yet, or failed) or off (its feature is switched off).
  * The total is exact only when every part is known or off; otherwise what did answer is a lower bound ("N+"), and
- * when nothing answered there is no number. This module is pure: the hook that asks the lists is `nav-signals.ts`.
+ * when nothing answered there is no number. This module is pure: the hook that asks the route and the lists is
+ * `nav-signals.ts`.
  * The rules and their test table are in `docs/design/dashboard-redesign/fable/spec-dot-and-drafts.md`, part 1.
  */
 
 /** One list as the Dashboard has it now. `limit` is what the request asked for (null: the route has no limit). */
 export type Answer<T> = { kind: "waiting" } | { kind: "failed" } | { kind: "off" } | { kind: "rows"; rows: readonly T[]; limit: number | null };
 
+/** The count route's answer: its totals, or why there are none (yet). */
+export type Totals = { kind: "waiting" } | { kind: "failed" } | { kind: "totals"; totals: DecisionTotals };
+
+/** The lists the count falls back to when the count route fails. */
 export interface CountInputs {
   /** Open Inbox items. */
   inbox: Answer<{ actionStatus: ActionStatus | null }>;
@@ -65,7 +73,42 @@ function sum(tallies: Tally[]): Tally {
   return { state: worst, count: tallies.reduce((n, t) => n + t.count, 0), exact: tallies.every((t) => t.exact) };
 }
 
-export function countDecisions(inputs: CountInputs): DecisionCount {
+/** One of the route's totals as a part: exact, or off. */
+function total(n: number | "off"): Tally {
+  return n === "off" ? { state: "off", count: 0, exact: true } : { state: "known", count: n, exact: true };
+}
+
+const UNKNOWN: Tally = { state: "unknown", count: 0, exact: false };
+
+/**
+ * The count: from the route's totals when it answered; from the lists when it failed. While the route has not
+ * answered yet, the parts are unknown, so a full list never shows "200+" for a moment before the exact number.
+ */
+export function countDecisions(totals: Totals, lists: CountInputs): DecisionCount {
+  if (totals.kind === "failed") return fromLists(lists);
+  if (totals.kind === "waiting") return { home: UNKNOWN, approvals: UNKNOWN, connections: UNKNOWN, total: UNKNOWN };
+  const t = totals.totals;
+  const home = total(t.inbox);
+  const approvals = sum([total(t.proposals), total(t.drafts)]);
+  const connections = total(t.signIns);
+  return { home, approvals, connections, total: sum([home, approvals, connections]) };
+}
+
+/**
+ * The totals to count from while Home's rows are asked again. `fresh` is the route's latest answer; `withShownRows`
+ * the answer held with the Inbox and Drafts rows on screen. The Inbox and Drafts parts change with those rows, so a
+ * number never disagrees with the list beside it; Proposals and sign-ins count as they arrive. With no answer held
+ * yet (first load), the fresh one counts whole; a fresh failure or wait stands as it is. When the route had failed
+ * with the rows on screen, the count stays with those lists (the fallback) until the rows are asked again with the
+ * route, so a recovered route never changes the number beside rows it was not read with.
+ */
+export function withRows(fresh: Totals, withShownRows: Totals): Totals {
+  if (fresh.kind !== "totals" || withShownRows.kind === "waiting") return fresh;
+  if (withShownRows.kind === "failed") return withShownRows;
+  return { kind: "totals", totals: { ...fresh.totals, inbox: withShownRows.totals.inbox, drafts: withShownRows.totals.drafts } };
+}
+
+function fromLists(inputs: CountInputs): DecisionCount {
   const home = source(inputs.inbox, (i) => !draftWaits(i));
   const approvals = sum([source(inputs.proposals, () => true), source(inputs.drafts, (d) => WAITING.has(d.status))]);
   const connections = source(inputs.connections, (c) => c.status === "needs_auth");
@@ -100,21 +143,24 @@ export function tabTitle(total: Tally): string {
 
 /**
  * The line under Home's Inbox heading when its rows and its decisions differ: "1 meeting above · 3 items below need
- * you · 1 Draft in Approvals". `promoted` holds the ids of items shown above as Heads-ups instead of in the list.
- * It speaks of the rows on screen, so its numbers are exact even when the heading's count is a lower bound.
+ * you · 1 Draft in Approvals". `promoted` holds the ids of items shown above as Heads-ups instead of in the list;
+ * `home` is the heading's count. While the list holds every open item the line counts its rows; when the list is
+ * full (more items than it asked for), the decisions below come from the count and the Drafts are a lower bound.
  * Null when every row below is a decision on Home, or when the Inbox has not answered.
  */
-export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, promoted: ReadonlySet<string>): string | null {
+export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, promoted: ReadonlySet<string>, home: Tally): string | null {
   if (inbox.kind !== "rows") return null;
   const above = inbox.rows.filter((i) => promoted.has(i.id) && !draftWaits(i)).length;
   const below = inbox.rows.filter((i) => !promoted.has(i.id));
   const inApprovals = below.filter(draftWaits).length;
   if (above === 0 && inApprovals === 0) return null;
-  const decisions = below.length - inApprovals;
+  const full = inbox.limit !== null && inbox.rows.length >= inbox.limit;
+  const decisions = full && home.exact ? home.count - above : below.length - inApprovals;
+  const atLeast = full && !home.exact ? "At least " : "";
   return [
     above > 0 && plural(above, "meeting") + " above",
-    `${plural(decisions, "item")} below ${decisions === 1 ? "needs" : "need"} you`,
-    inApprovals > 0 && plural(inApprovals, "Draft") + " in Approvals",
+    `${atLeast}${plural(decisions, "item")} below ${decisions === 1 && !atLeast ? "needs" : "need"} you`,
+    inApprovals > 0 && `${full ? "at least " : ""}${plural(inApprovals, "Draft")} in Approvals`,
   ]
     .filter(Boolean)
     .join(" · ");
