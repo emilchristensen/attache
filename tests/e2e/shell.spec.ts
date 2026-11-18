@@ -265,12 +265,13 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await expect(page.locator(".page").first()).toBeVisible();
   await expect(page.locator("[data-reader-warning]")).toHaveCount(0);
 
-  // A long Machine name with no spaces wraps inside the banner on a phone.
-  await page.route("**/api/v1/reader", (route) => route.fulfill({ json: { ...silent, machine: { ...silent.machine, name: "Emils-MacBook-Pro-16-inch-2026-work-laptop" } } }));
+  // A long Machine name with no break in it wraps inside the banner on a phone.
+  const unbroken = "W".repeat(64);
+  await page.route("**/api/v1/reader", (route) => route.fulfill({ json: { ...silent, machine: { ...silent.machine, name: unbroken } } }));
   await page.setViewportSize({ width: 360, height: 800 });
   await page.reload();
   const banner = page.locator("[data-reader-warning]");
-  await expect(banner).toContainText("Emils-MacBook-Pro-16-inch-2026-work-laptop");
+  await expect(banner).toContainText(unbroken);
   expect(await banner.evaluate((el) => el.scrollWidth <= el.clientWidth), "the banner's words stay inside it at 360 px").toBe(true);
   await expect(banner.getByRole("link", { name: "Machines and Replication" })).toBeInViewport();
   await page.unroute("**/api/v1/reader");
@@ -307,8 +308,19 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
   // A first answer that fails is asked again: the warning arrives once the service says the Reader is silent.
   answer = "failing";
+  const firstFailed = tab.waitForResponse((r) => r.url().endsWith("/api/v1/reader") && r.status() === 503);
   await tab.reload();
+  await firstFailed;
   await expect(tab.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  // Let the failed answer settle and its retry be armed before the clock moves on. React schedules its work on
+  // message-channel tasks, which the fake clock leaves alone, so two round trips through one wait for it.
+  const settle = () => tab.evaluate(() => new Promise<void>((r) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => r();
+    channel.port2.postMessage(0);
+  }));
+  await settle();
+  await settle();
   answer = "lapsed";
   await tab.clock.runFor(31_000);
   await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
