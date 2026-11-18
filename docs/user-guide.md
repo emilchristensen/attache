@@ -116,7 +116,7 @@ The screen you are on is filled in ink.
 A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
-When some Inbox items below have a Draft waiting, a line under the heading relates the rows to the decisions, such as "3 items below need you · 1 Draft in Approvals".
+When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
 The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
 The count is exact however many decisions wait.
@@ -217,16 +217,27 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
   The **Type** menu lists every type with its count and shows one type at a time.
   The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
-  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft.
-- **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
+  When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
+  When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.
+  An empty Inbox says exactly what is known.
+  **Nothing needs you.**, beside the logo without its dot, appears only when no decision waits anywhere and every source was read, and says when they were read.
+  When a source was not read it says "Nothing found in the 4 sources that were read." and names the one that was not; with only your notes connected, "Nothing found in your notes."; when Approvals or a sign-in still wait, "No open Inbox items." and where they wait; and when the count could not be read, that Attache cannot say nothing needs you, with **Retry**.
+  With Attention and briefings switched off the Inbox says so, and that this is not a claim that nothing needs you.
+- **Recently added** is one line under the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  It is not there while Saving to memory is switched off, and it says so with **Retry** when it could not be loaded.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
   **Revert** works as in Recent saves below, and a reverted change stays listed, marked reverted.
-  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
+  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the line says so and has nothing to open.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
   While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
   Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
+  When a send's outcome could not be verified, the item stays open and says **Delivery unconfirmed**, after a reload too.
+  Open it and **Check destination** comes first: it opens where the message went, in a new tab, and changes nothing.
+  **View the Draft** shows the original Draft and its receipt.
+  Only if the message did not arrive, **Prepare a replacement** and confirm it to prepare a new Draft; mark the item **Done** if it did arrive.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
 ### Brain
@@ -335,16 +346,41 @@ Whatever you press, the page stays on the same Draft.
 
 Drafts expire after 48 business hours.
 
+### Connections
+
+**Connections** opens with the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
+Below it each Connection you set up is one row in its group: **Notes**, **Work sources**, **Harnesses** and **Model**.
+A row shows the Connection's name, its account (or folder, or the settings file a Harness was installed in), what Attache may read and write there, and when Attache last read it, each in its own column.
+A Connection that works carries no state word; one with a problem says so under its name in the same words Home uses, such as **Down**, **Offline**, **Partly read** or **Not read yet**.
+Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disconnect…**, what Attache reads and its write permissions.
+Connections you have not set up are small tiles under their group; a tile opens across the group into its setup form.
+The Notes group also has **Import a folder**, which reads a Markdown folder or Obsidian vault without changing it.
+
+When a Connection needs you to sign in again, a **Needs you** group comes first with that Connection's row already open, ready to sign in or take a new token.
+**Reconnect** on Home lands there, on that Connection's row, when the fix needs you to type something.
+
 ### Jobs
 
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
+It is a quiet table: each job's title, what it came to in a few words, and the time it started or finished.
+Work that is queued or running comes first, under **Running**; everything that ended follows under **Finished**, newest first, 50 at a time with **Show 50 more**.
+A job that succeeded carries no tag, only what it produced, such as "Answered from 3 sources" or "Draft v2 ready".
+A job that failed carries a red **Failed** tag and one that is blocked an amber **Blocked** tag, each with its reason.
+
+The detail beside the table shows a job's progress, times, result or reason, and its events.
+When you open Jobs it shows the running job, else the newest one that failed or is blocked, else the newest job.
+Live updates change the table, never which job the detail shows; picking a row changes it, and that pick stays in the address, so a reload or a link comes back to it.
+
+Type a question and press **Research** to research it across your notes; the answer is saved as a deliverable you can open from the result.
+**Diagnostics** runs a two-minute self-test that checks background work survives a restart.
+**Cancel** stops queued or running work and says what happened: it stopped, or it had already finished and its result stands.
+**Retry** starts a failed, cancelled or blocked job again.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
-Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 
 Attache remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
-Connect each one you use under Connections → *Harnesses*; the card says exactly which files change before you connect.
+Connect each one you use under Connections → *Harnesses*; its tile says exactly which files change before you connect.
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
@@ -731,12 +767,12 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
   Reinstalling repairs the service without touching data.
   Logs: `logs` in the service state folder (`~/Library/Application Support/Attache/state/logs` on macOS, `~/.local/state/attache/logs` on Linux, `%LOCALAPPDATA%\Attache\state\logs` on Windows).
 - *Pairing code expired:* run `attache pair --open`.
-- *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
-  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
+- *A connection says "Sign-in needed":* its sign-in was rejected or expired, so it moves to **Needs you** at the top of Connections, open, with a **Sign-in needed** box saying what to fix.
+  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** in its row.
   Reconnect tests the connection again and says what is still wrong if it fails.
-  Once it succeeds, Attache refreshes that source straight away so the card stops showing the failed Source refresh.
+  Once it succeeds, Attache refreshes that source straight away, so the row goes back to its group without the failed Source refresh.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
-  If you chose **Sign in with Atlassian** directly, sign in again on the card.
+  If you chose **Sign in with Atlassian** directly, sign in again in its row.
 - *Slack, Gmail or Calendar says Claude Code settings auto-approve its tools:* remove the listed `permissions.allow` rule from `~/.claude/settings.json`.
   Attache approves every connector call itself and will not run while a rule would skip that check.

@@ -14,6 +14,15 @@ export async function openRow(row: Locator): Promise<void> {
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
 }
 
+/** Opens Home's Recently added line into its changes and waits until it has opened; does nothing when it is already open. */
+export async function openRecentlyAdded(page: Page): Promise<void> {
+  const details = page.getByRole("region", { name: "Recently added" }).locator("details");
+  await details.waitFor({ timeout: 15_000 });
+  if (!(await details.evaluate((d) => (d as HTMLDetailsElement).open))) await details.locator("summary").click();
+  // The chevron turns as it opens: wait for the turn to end, so a capture never catches it halfway.
+  await details.locator(".disclosure-chevron").evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+}
+
 /** Picks one of the Inbox views: "Priority order", "Newest first", "Group by type" or "Hidden". */
 export async function inboxView(page: Page, label: string): Promise<void> {
   await page.locator("#inbox").getByRole("combobox", { name: "View" }).selectOption({ label });

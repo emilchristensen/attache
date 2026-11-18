@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, useLocation } from "../components/ui.tsx";
 import { ChipNav } from "../components/ChipNav.tsx";
 import { Icon } from "../components/icons.tsx";
 import { useMenuDismiss } from "../components/menu.ts";
-import { useRevealDetail } from "../components/reveal-detail.ts";
+import { usePageRoom, useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { tabId, Tabs } from "../components/Tabs.tsx";
 import { hitDestination, type SearchAnswer } from "../search.ts";
@@ -179,24 +179,6 @@ function Results({ place, onPick, onClear }: { place: LibraryPlace; onPick: () =
 }
 
 /**
- * Gives `el` the room a sticky child has in the page it scrolls in, as `--page-room`: the page's visible height below
- * its top padding (where sticky positions start), kept up to date as the window changes, so the reader beside the
- * list fits whatever the masthead, banner or bottom bar take.
- */
-function usePageRoom(ref: RefObject<HTMLElement | null>) {
-  useLayoutEffect(() => {
-    const el = ref.current;
-    const page = el?.closest<HTMLElement>(".page");
-    if (!el || !page) return;
-    const measure = () => el.style.setProperty("--page-room", `${page.clientHeight - parseFloat(getComputedStyle(page).paddingTop)}px`);
-    measure();
-    const sizes = new ResizeObserver(measure);
-    sizes.observe(page);
-    return () => sizes.disconnect();
-  }, [ref]);
-}
-
-/**
  * The Library: collections, a collection's notes and the note reader side by side; with a query, every result
  * replaces the collections and the list. On a narrow screen the collections are a row of chips and the reader goes
  * below the list.
@@ -219,7 +201,7 @@ function Library({ place, onClear }: { place: LibraryPlace; onClear: () => void 
       {!searching && <Collections place={place} />}
       <div className="split library-split">
         <div className="library-list">{searching ? <Results place={place} onPick={revealDetail} onClear={onClear} /> : <NoteList place={place} onPick={revealDetail} />}</div>
-        <div ref={detailRef} className="split-detail library-reader">
+        <div ref={detailRef} className="split-detail library-reader sticky-detail">
           {place.path ? (
             <NoteReader key={`${place.root}:${place.path}`} root={place.root} relPath={place.path} />
           ) : (

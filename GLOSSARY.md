@@ -53,6 +53,11 @@ Search results take its place while a query is typed.
 The Brain screen's view of every change to the Brain, newest first, with where each came from and whether Revert can undo it.
 It filters to all changes, those written without review, or those reverted.
 
+**Job**:
+Background work the service runs and records, such as research, a briefing, a Draft's preparation or a Source refresh.
+It keeps running when the browser closes; the Jobs screen lists it under Running until it ends, then under Finished.
+A job that failed or is blocked is named with its reason; Cancel reports whether the work stopped or had already finished.
+
 **Search palette**:
 Search the Brain in a dialog over any screen but Home, opened by `Ctrl K`, `Cmd K`, `/`, the masthead's Search or the bottom bar's Search.
 It shows the same results as Home's field, after a **Go to** group of the screens and Settings sections whose names match what was typed.
@@ -81,7 +86,8 @@ _Avoid_: client, coding agent
 **Connection**:
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
-Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet.
+On that page each Connection is one row in its group (Notes, Work sources, Harnesses, Model) with its account, what it may read and write, and when Attache last read it; one not set up is a small tile, and one that needs sign-in moves to a "Needs you" group at the top, already open.
+Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet, and the page uses the same words.
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
@@ -139,6 +145,10 @@ Each Draft has its own page under Approvals; saving new text makes the next vers
 A rejected Draft is locked: only Restore brings it back, as the next version, until it expires.
 _Avoid_: Outgoing message
 
+**Delivery unconfirmed**:
+The label on an Inbox item whose last Draft was sent but whose outcome could not be verified, so the message may or may not have arrived.
+The open item leads with Check destination; preparing a replacement Draft is a separate, explicit choice, and checking alone never sends, resolves the item or claims delivery.
+
 **Approvals**:
 The Dashboard page that holds everything Attache prepared that waits for the owner's OK: Drafts to send and Proposals to apply.
 It is a page name only: the owner approves one exact version of a Draft, and applies or rejects a Proposal.
@@ -176,4 +186,9 @@ _Avoid_: unread count, badge count
 **Open item**:
 An Inbox item in the open state, whether or not its Draft waits.
 Open items and the Decision count differ by the items whose Draft waits in Approvals, so the Dashboard says "need you" only of decisions.
+The count line under the Inbox heading relates the two when they differ.
+
+**Recently added**:
+The line under Home's Inbox that opens into every change written to the Brain without the owner's review in the last 7 days: saves a Harness wrote with auto-accept on, and Consolidation's changes, each with Revert where allowed.
+Nothing there is a decision, so it never counts toward the Decision count.
 _Avoid_: Unread item

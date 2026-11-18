@@ -24,6 +24,11 @@ fx.route("POST", "/__control/claude-server", (req) => {
   s.status = b.status;
   return { json: { ok: true } };
 });
+// A journey makes GitHub's read-back of a posted comment fail, so a real send ends with an unknown outcome.
+fx.route("POST", "/__control/github-read-back", (req) => {
+  state.github.readBackFails = (req.body as { fails: boolean }).fails;
+  return { json: { ok: true } };
+});
 // Journeys set the calendar to meetings at times relative to now (meeting prep, back-to-back meetings); a Source
 // refresh of Google Calendar reads them.
 fx.route("POST", "/__control/gcal-events", (req) => {
@@ -31,6 +36,15 @@ fx.route("POST", "/__control/gcal-events", (req) => {
   if (!Array.isArray(b.events)) return { status: 400, json: { error: "events must be a list" } };
   state.gcal.events = b.events as typeof state.gcal.events;
   return { json: { ok: true, events: state.gcal.events.length } };
+});
+// Journeys revoke a GitHub token, so GitHub answers 401 to it and the next read signs the Connection out, then
+// restore it (`revoke: false`).
+fx.route("POST", "/__control/github-token", (req) => {
+  const b = req.body as { token?: unknown; revoke?: unknown };
+  if (typeof b.token !== "string" || !b.token || typeof b.revoke !== "boolean") return { status: 400, json: { error: "token (string) and revoke (boolean) are required" } };
+  const others = state.revokedGithubTokens.filter((t) => t !== b.token);
+  state.revokedGithubTokens = b.revoke ? [...others, b.token] : others;
+  return { json: { ok: true, revoked: state.revokedGithubTokens.length } };
 });
 installFixtureModel(fx, "/model");
 // The meaning model a journey downloads from the Dashboard, described to the service by ATTACHE_MEANING_MODEL.

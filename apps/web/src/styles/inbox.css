@@ -189,6 +189,29 @@ a.source-chip {
   gap: var(--s-2);
 }
 
+/* Delivery unconfirmed: the warning above the actions, and the separate choice to prepare a replacement. */
+.inbox-detail .draft-notice {
+  max-width: 68ch;
+  margin-top: var(--s-1);
+}
+.inbox-context {
+  margin-top: var(--s-4);
+}
+.inbox-replace {
+  flex-basis: 100%;
+  max-width: 68ch;
+}
+.inbox-replace-warning {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-control);
+  color: var(--ink);
+}
+.inbox-replace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
 /* ---- a decided row: one line with Undo, in the row's place ---------------------------------------- */
 
 .inbox-decided {
@@ -236,6 +259,50 @@ a.source-chip {
 .inbox-none {
   margin: var(--s-4) 0 0;
   color: var(--ink-2);
+}
+
+/* ---- the empty list: what was read and what waits elsewhere, under the list's own rule ------------------------ */
+
+.inbox-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+  padding: var(--s-4) 4px;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+.inbox-empty .logo {
+  flex: none;
+}
+.inbox-empty-words {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.inbox-empty-words p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.inbox-empty-title {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.inbox-empty-line {
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.inbox-empty-words button {
+  margin-top: var(--s-2);
+}
+/* The rows kept after a failure follow the failure's own rule. */
+.group-failure + .inbox-rows {
+  margin-top: 0;
+  border-top-width: 1px;
 }
 
 /* ---- narrow: stamp and kind first, the whole subject next, then source and time ------------------------- */

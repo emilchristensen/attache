@@ -65,12 +65,15 @@ interface CalendarEvent {
 
 export interface ScenarioState {
   selfEmail: string;
-  github: { login: string; prs: GithubPr[]; comments: Map<string, Array<{ id: number; body: string; html_url: string }>> };
+  /** `readBackFails`: a posted comment cannot be read back (500), so a send ends with an unknown outcome. */
+  github: { login: string; prs: GithubPr[]; comments: Map<string, Array<{ id: number; body: string; html_url: string }>>; readBackFails?: boolean };
   jira: { issues: JiraIssue[]; comments: Map<string, Array<{ id: string; body: string; author: { accountId: string } }>> };
   confluence: { pages: ConfluencePage[]; comments: Array<{ id: string; pageId: string; body: { storage: { value: string } }; version: { authorId: string } }> };
   slack: { selfId: string; messages: SlackFixtureMessage[] };
   gmail: { threads: Map<string, GmailMessage[]>; drafts: Array<{ id: string; threadId: string; body: string }> };
   gcal: { events: CalendarEvent[] };
+  /** GitHub tokens revoked since they were saved: GitHub answers 401 to them, as it does after the owner revokes a token. */
+  revokedGithubTokens: string[];
   nextId: number;
 }
 
@@ -153,6 +156,7 @@ export function createScenarioState(opts: { selfEmail?: string; now?: number } =
         { id: "evt3", summary: "Company holiday", start: { date: localDate(now + 24 * HOUR) }, end: { date: localDate(now + 48 * HOUR) }, attendees: [] },
       ],
     },
+    revokedGithubTokens: [],
     nextId: 1000,
   };
 }
@@ -180,7 +184,6 @@ function mount(fx: FixtureServer, method: string, pattern: string, handler: Hand
 }
 
 const unauthorized: FixtureResponse = { status: 401, json: { message: "Missing or invalid credentials" } };
-const authed = (h: Handler): Handler => (req, p) => (req.headers.authorization ? h(req, p) : unauthorized);
 const json = (data: unknown, status = 200): FixtureResponse => ({ status, json: data });
 const id = (s: ScenarioState) => String(++s.nextId);
 
@@ -189,6 +192,8 @@ const id = (s: ScenarioState) => String(++s.nextId);
 
 function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
   const P = FIXTURE_PREFIX["https://api.github.com"];
+  const revoked = (req: FixtureRequest) => s().revokedGithubTokens.some((t) => req.headers.authorization?.includes(t));
+  const authed = (h: Handler): Handler => (req, p) => (req.headers.authorization && !revoked(req) ? h(req, p) : unauthorized);
   mount(fx, "GET", `${P}/user`, authed(() => ({ json: { login: s().github.login }, headers: { "x-oauth-scopes": "repo" } })));
   mount(fx, "GET", `${P}/search/issues`, authed((req) => {
     const q = req.query.get("q") ?? "";
@@ -212,6 +217,7 @@ function mountGithub(fx: FixtureServer, s: () => ScenarioState) {
     return json(c, 201);
   }));
   mount(fx, "GET", `${P}/repos/:owner/:repo/issues/comments/:id`, authed((_req, [, , cid]) => {
+    if (s().github.readBackFails) return json({ message: "Server Error" }, 500);
     const c = [...s().github.comments.values()].flat().find((x) => String(x.id) === cid);
     return c ? json(c) : json({ message: "Not Found" }, 404);
   }));

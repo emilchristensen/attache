@@ -50,3 +50,17 @@ export async function retestConnection(id: string): Promise<string> {
 export function connectionHref(id?: string): string {
   return id ? `/connections?open=${encodeURIComponent(id)}` : "/connections";
 }
+
+/**
+ * What the form for `method` starts with: the Connection's saved settings for its non-secret fields, only when it was
+ * saved with that method. Saving sends every field again, so a blank one would replace what was saved (GitHub's API
+ * address, a model's base URL); secrets always start blank.
+ */
+export function savedFields(status: ConnectionStatus, method: ConnectionDefinition["authMethods"][number] | undefined): Record<string, string> {
+  if (!method || method.id !== status.authMethod) return {};
+  const filled = method.fields.filter((f) => !f.secret).flatMap((f) => {
+    const v = status.settings[f.id];
+    return typeof v === "string" && v ? [[f.id, v] as const] : [];
+  });
+  return Object.fromEntries(filled);
+}

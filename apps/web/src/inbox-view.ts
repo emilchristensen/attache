@@ -139,3 +139,18 @@ export function groupRows<T extends ViewItem>(rows: readonly T[], expanded: Read
     return [{ family: id, label, rows: all.filter((r) => r.id === standIn || previewed.has(r)), total: items.length, hidden: items.length - previewed.size }];
   });
 }
+
+/**
+ * What the Inbox must show so the row the owner left from is on screen again when they come back from its Draft:
+ * the page it is on now (new items may have moved it past the shown pages), or its family's rows under Group by type
+ * (past the preview). Null when it already shows, or when it is gone.
+ */
+export function revealRow<T extends ViewItem>(id: string, rows: readonly T[], view: { grouped: boolean; shown: number; expanded: readonly FamilyId[] }): { shown: number } | { expanded: FamilyId[] } | null {
+  const at = rows.findIndex((r) => r.id === id);
+  if (at < 0) return null;
+  if (!view.grouped) return at < view.shown ? null : { shown: Math.ceil((at + 1) / PAGE_SIZE) * PAGE_SIZE };
+  const family = inboxType(rows[at]!).family;
+  if (view.expanded.includes(family)) return null;
+  const inFamily = rows.filter((r) => inboxType(r).family === family).findIndex((r) => r.id === id);
+  return inFamily < PREVIEWS ? null : { expanded: [...view.expanded, family] };
+}
