@@ -247,6 +247,13 @@ describe("a Draft's own page: the fourteen states", () => {
     expect(s.notice.lines).toEqual(["This Draft changed while you were editing: it is now Outcome unknown. Your text is not saved.", "The outcome could not be verified. The request may have reached GitHub. Check the pull request before you do anything else.", "socket hang up"]);
     expect(buttons(s)).toEqual(["Copy my text", "Load v2 [primary]", "Open the pull request"]);
   });
+
+  it("Changed elsewhere into a newer version that then failed to send: the warning and the way to the destination stay, and nothing offers to send", () => {
+    const s = screen(draft({ version: 3, status: "unknown", receipt: { error: "socket hang up" } }), EDITED);
+    expect(s.state).toBe("changed_elsewhere");
+    expect(s.notice.lines).toEqual(["This Draft became v3 while you were editing. Your text is not saved, and any approval of v2 no longer applies.", "The outcome could not be verified. The request may have reached GitHub. Check the pull request before you do anything else.", "socket hang up"]);
+    expect(buttons(s)).toEqual(["Copy my text", "Load v3 [primary]", "Open the pull request"]);
+  });
 });
 
 const plainNotice = (...lines: string[]) => ({ tone: "plain", warning: false, lines });

@@ -309,25 +309,20 @@ function unsaved(d: ActionView, base: DraftScreen): DraftScreen {
 
 function changedElsewhere(d: ActionView, editor: DraftEditor, base: DraftScreen): DraftScreen {
   const v = `v${d.version}`;
-  const load = button("load", `Load ${v}`, { primary: true });
-  const copy = button("copy-mine", "Copy my text");
-  if (d.version !== editor.baseVersion) {
-    const wait = `Load ${v} first.`;
-    return {
-      ...base,
-      state: "changed_elsewhere",
-      notice: attention(`This Draft became ${v} while you were editing. Your text is not saved, and any approval of v${editor.baseVersion} no longer applies.`),
-      actions: [copy, load, button("approve", `Approve ${v}`, { disabled: wait }), button("send", sendLabel(d), { disabled: wait })],
-      editor: "on",
-    };
-  }
+  const what =
+    d.version !== editor.baseVersion
+      ? `This Draft became ${v} while you were editing. Your text is not saved, and any approval of v${editor.baseVersion} no longer applies.`
+      : `This Draft changed while you were editing: it is now ${base.status}. Your text is not saved.`;
   // A warning the stored state carries (a failed or unknown send) stays, with the way to check the destination.
-  const lines = [`This Draft changed while you were editing: it is now ${base.status}. Your text is not saved.`, ...(base.notice.warning ? base.notice.lines : [])];
+  const lines = [what, ...(base.notice.warning ? base.notice.lines : [])];
+  const wait = `Load ${v} first.`;
+  // Approve and Send show, waiting, only while the stored Draft could still take them.
+  const waiting = EDITABLE_STATUSES.has(d.status) ? [button("approve", `Approve ${v}`, { disabled: wait }), button("send", sendLabel(d), { disabled: wait })] : [];
   return {
     ...base,
     state: "changed_elsewhere",
     notice: { tone: base.notice.tone === "danger" ? "danger" : "attention", warning: true, lines },
-    actions: [copy, load, ...base.actions.filter((b) => b.id === "open-target")],
+    actions: [button("copy-mine", "Copy my text"), button("load", `Load ${v}`, { primary: true }), ...waiting, ...base.actions.filter((b) => b.id === "open-target")],
     editor: "on",
   };
 }
