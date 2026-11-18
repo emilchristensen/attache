@@ -5,6 +5,7 @@ import { useSignals } from "../nav-signals.ts";
 import { approvalsHref, draftAt, draftHref, type ApprovalsTab } from "../routes.ts";
 import { ApprovalsFinished } from "./ApprovalsFinished.tsx";
 import { ApprovalsWaiting } from "./ApprovalsWaiting.tsx";
+import { useApprovalsVisit } from "./approvals-visit.ts";
 import { DraftPage } from "./DraftPage.tsx";
 
 const PANEL = "approvals-panel";
@@ -23,6 +24,8 @@ export function ApprovalsView() {
     if (legacy) navigate(draftHref(legacy), { replace: true });
   }, [legacy]);
   const signals = useSignals();
+  // What was decided in this visit stays in place across the tabs and a Draft's page; leaving Approvals ends the visit.
+  const visit = useApprovalsVisit();
   if (draft) return <DraftPage id={draft} />;
   const tab: ApprovalsTab = loc.search.get("tab") === "finished" ? "finished" : "waiting";
   const count = signals.badges.approvals;
@@ -39,7 +42,7 @@ export function ApprovalsView() {
         </div>
         <Tabs label="Approvals" tabs={tabs} selected={tab} onSelect={(t) => navigate(approvalsHref(t))} panelId={PANEL} />
         <div id={PANEL} role="tabpanel" aria-labelledby={tabId(PANEL, tab)} className="approvals-panel">
-          {tab === "waiting" ? <ApprovalsWaiting /> : <ApprovalsFinished />}
+          {tab === "waiting" ? <ApprovalsWaiting visit={visit} /> : <ApprovalsFinished />}
         </div>
       </div>
     </div>

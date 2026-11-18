@@ -1,25 +1,18 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ActionView, ProposalView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Link, Loading, useAction } from "../components/ui.tsx";
-import { draftRowText, entryId, nothingWaits, proposalRowText, withDecided, type Entry } from "../approvals.ts";
+import { draftRowText, nothingWaits, proposalRowText } from "../approvals.ts";
+import { shownEntries, type ApprovalsVisit } from "./approvals-visit.ts";
 import { DecidedRow, GroupFailure, KIND_MARK, type ApprovalKind } from "./ApprovalRow.tsx";
 import { DraftRow } from "./DraftRow.tsx";
 import { brainNoteHref, ProposalRow } from "./ProposalRow.tsx";
 
 /** How many Drafts being sent In progress lists. */
 const SENDING_LIMIT = 50;
-
-/** What the owner decided in this visit, so the row stays as one line in its place. */
-interface Decided {
-  words: string;
-  subject: string;
-  /** The note an applied Proposal wrote, for "Open in Brain" on its line. */
-  note?: string;
-}
 
 /** A ruled section with its stamp and word. */
 function Group({ id, kind, title, lead, children }: { id: string; kind: ApprovalKind | null; title: string; lead?: string; children: ReactNode }) {
@@ -45,60 +38,59 @@ function GroupState<T>({ what, resource, counted }: { what: string; resource: Re
   return null;
 }
 
-/** The rows of one list with the ones decided in this visit kept in place; remembers what it showed for the next answer. */
-function useShown<T extends { id: string }>(live: readonly T[], decided: ReadonlyMap<string, Decided>): Array<Entry<T, Decided>> {
-  const shown = useRef<string[]>([]);
-  const entries = withDecided(shown.current, live, decided);
-  shown.current = entries.map(entryId);
-  return entries;
-}
-
 /**
  * Approvals' Waiting tab: Drafts to send, Changes to the Brain, then In progress (Drafts being sent, not counted).
  * The waiting lists are the shell's, the ones behind the count, so the sections, the tab and the navigation agree.
  * Each group answers for its own request; "Nothing waits for your OK." shows only when both answered with nothing.
  */
-export function ApprovalsWaiting() {
+export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
   const signals = useSignals();
   const drafts = signals.waitingDrafts;
   const proposals = signals.waitingProposals;
   const draftsOff = signals.drafts.kind === "off";
   const sending = useResource<ActionView[]>(draftsOff ? null : `/actions?status=executing&limit=${SENDING_LIMIT}`, ["actions.changed", "job"]);
   const [open, setOpen] = useState<string | null>(null);
-  const [decided, setDecided] = useState<ReadonlyMap<string, Decided>>(new Map());
-  const [justDecided, setJustDecided] = useState<string | null>(null);
-  const [refusals, setRefusals] = useState<ReadonlyMap<string, string>>(new Map());
   const { busy, run } = useAction();
 
-  const draftEntries = useShown(drafts.data ?? [], decided);
-  const proposalEntries = useShown(proposals.data?.proposals ?? [], decided);
+  const draftEntries = shownEntries(visit.drafts, drafts.data ?? []);
+  const proposalEntries = shownEntries(visit.proposals, proposals.data?.proposals ?? []);
   const toggle = (key: string) => setOpen(open === key ? null : key);
-  const settle = (id: string, d: Decided) => {
-    setDecided(new Map(decided).set(id, d));
-    setJustDecided(id);
+  const settled = (id: string) => {
+    visit.setJustDecided(id);
     setOpen(null);
   };
 
   const rejectDraft = (d: ActionView) =>
     run(`reject:${d.id}`, async () => {
-      await post(`/actions/${d.id}/reject`, {});
-      settle(d.id, { words: "Rejected", subject: draftRowText(d).subject });
+      visit.drafts.begin(d);
+      try {
+        await post(`/actions/${d.id}/reject`, {});
+      } catch (e) {
+        visit.drafts.drop(d.id);
+        throw e;
+      }
+      visit.drafts.finish(d.id, { words: "Rejected", subject: draftRowText(d).subject });
+      settled(d.id);
       drafts.reload();
     });
   const decideProposal = (p: ProposalView, decision: "apply" | "reject") =>
     run(`${decision}:${p.id}`, async () => {
+      visit.proposals.begin(p);
+      let out: ProposalView;
       try {
-        const out = await post<ProposalView>(`/memory/proposals/${p.id}/${decision}`);
-        settle(p.id, { words: decision === "apply" ? "Applied" : "Rejected", subject: proposalRowText(p).note, ...(decision === "apply" ? { note: out.target } : {}) });
-        proposals.reload();
+        out = await post<ProposalView>(`/memory/proposals/${p.id}/${decision}`);
       } catch (e) {
+        visit.proposals.drop(p.id);
         // A refused Apply keeps the row, open, with the reason; Reject stays available.
-        if (decision === "apply" && (e as ApiError).status >= 400 && (e as ApiError).status < 500) setRefusals(new Map(refusals).set(p.id, (e as ApiError).message));
-        else throw e;
+        if (decision === "apply" && (e as ApiError).status >= 400 && (e as ApiError).status < 500) return visit.refuse(p.id, (e as ApiError).message);
+        throw e;
       }
+      visit.proposals.finish(p.id, { words: decision === "apply" ? "Applied" : "Rejected", subject: proposalRowText(p).note, ...(decision === "apply" ? { note: out.target } : {}) });
+      settled(p.id);
+      proposals.reload();
     });
 
-  const empty = nothingWaits(signals.drafts, signals.proposals) && decided.size === 0;
+  const empty = nothingWaits(signals.drafts, signals.proposals) && visit.drafts.decisions.size === 0 && visit.proposals.decisions.size === 0;
   const sendingRows = sending.data ?? [];
 
   const draftsGroup = draftsOff ? (
@@ -110,13 +102,12 @@ export function ApprovalsWaiting() {
       <GroupState what="Drafts" resource={drafts} counted />
       {draftEntries.length > 0 && (
         <ul className="approval-rows">
-          {draftEntries.map((e) =>
-            e.kind === "decided" ? (
-              <DecidedRow key={e.id} kind="draft" id={e.id} words={e.decision.words} subject={e.decision.subject} focus={justDecided === e.id} />
-            ) : (
-              <DraftRow key={e.row.id} d={e.row} place="waiting" open={open === `d:${e.row.id}`} onToggle={() => toggle(`d:${e.row.id}`)} reject={{ run: (d) => void rejectDraft(d), busy: busy !== null }} />
-            ),
-          )}
+          {draftEntries.map((e) => {
+            if (e.kind === "decided" && e.decision.state === "done") return <DecidedRow key={e.id} kind="draft" id={e.id} words={e.decision.words} subject={e.decision.subject} focus={visit.justDecided === e.id} />;
+            // Live, or held in its place while the decision is with the service.
+            const d = e.kind === "live" ? e.row : (e.decision as { row: ActionView }).row;
+            return <DraftRow key={d.id} d={d} place="waiting" open={open === `d:${d.id}`} onToggle={() => toggle(`d:${d.id}`)} reject={{ run: (row) => void rejectDraft(row), busy: busy !== null }} />;
+          })}
         </ul>
       )}
       {drafts.data?.length === 0 && draftEntries.length === 0 && !drafts.error && <p className="approvals-none">No Drafts wait.</p>}
@@ -128,33 +119,37 @@ export function ApprovalsWaiting() {
       <GroupState what="Proposals" resource={proposals} counted />
       {proposalEntries.length > 0 && (
         <ul className="approval-rows">
-          {proposalEntries.map((e) =>
-            e.kind === "decided" ? (
-              <DecidedRow
-                key={e.id}
-                kind="proposal"
-                id={e.id}
-                words={e.decision.words}
-                subject={e.decision.subject}
-                focus={justDecided === e.id}
-                after={
-                  e.decision.note && (
-                    <Link to={brainNoteHref(e.decision.note)} className="btn small">
-                      Open in Brain
-                    </Link>
-                  )
-                }
-              />
-            ) : (
+          {proposalEntries.map((e) => {
+            if (e.kind === "decided" && e.decision.state === "done")
+              return (
+                <DecidedRow
+                  key={e.id}
+                  kind="proposal"
+                  id={e.id}
+                  words={e.decision.words}
+                  subject={e.decision.subject}
+                  focus={visit.justDecided === e.id}
+                  after={
+                    e.decision.note && (
+                      <Link to={brainNoteHref(e.decision.note)} className="btn small">
+                        Open in Brain
+                      </Link>
+                    )
+                  }
+                />
+              );
+            // Live, or held in its place while the decision is with the service.
+            const p = e.kind === "live" ? e.row : (e.decision as { row: ProposalView }).row;
+            return (
               <ProposalRow
-                key={e.row.id}
-                p={e.row}
-                open={open === `p:${e.row.id}`}
-                onToggle={() => toggle(`p:${e.row.id}`)}
-                decide={{ apply: (p) => void decideProposal(p, "apply"), reject: (p) => void decideProposal(p, "reject"), busy: busy !== null, refusal: refusals.get(e.row.id) ?? null }}
+                key={p.id}
+                p={p}
+                open={open === `p:${p.id}`}
+                onToggle={() => toggle(`p:${p.id}`)}
+                decide={{ apply: (row) => void decideProposal(row, "apply"), reject: (row) => void decideProposal(row, "reject"), busy: busy !== null, refusal: visit.refusals.get(p.id) ?? null }}
               />
-            ),
-          )}
+            );
+          })}
         </ul>
       )}
       {proposals.data?.proposals.length === 0 && proposalEntries.length === 0 && !proposals.error && <p className="approvals-none">No changes to the Brain wait.</p>}

@@ -41,7 +41,7 @@ export function ApprovalsFinished() {
           )}
         </ul>
       )}
-      {rows.length === 0 && draftsAnswered && proposals.data !== null && <p className="approvals-empty">Nothing has finished yet.</p>}
+      {rows.length === 0 && draftsAnswered && proposals.data !== null && !failed(drafts) && !failed(proposals) && <p className="approvals-empty">Nothing has finished yet.</p>}
       {full && <p className="approvals-none">Showing the latest {FINISHED_LIMIT} Drafts and the latest {FINISHED_LIMIT} Proposals.</p>}
     </section>
   );

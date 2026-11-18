@@ -121,23 +121,23 @@ export function useNavSignals(): NavSignals {
     count,
     dot,
     inbox: inputs.inbox,
-    openInbox: homeRows(inbox, drafts.loading, heldInbox, reloadPair),
+    openInbox: heldRows(inbox, drafts.loading, heldInbox, reloadPair),
     drafts: inputs.drafts,
     proposals: inputs.proposals,
-    waitingDrafts: { ...drafts, ...heldDrafts, loading: inbox.loading || drafts.loading, reload: reloadPair },
+    waitingDrafts: heldRows(drafts, inbox.loading, heldDrafts, reloadPair),
     waitingProposals: proposals,
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
   };
 }
 
 /**
- * Home's rows: the held Inbox answer, loading while either list of the pair is still asked, so a first answer from
- * the Inbox alone never shows as an empty list. An Inbox failure shows at once with its Retry, without waiting for
- * Drafts; the count still waits for the pair.
+ * One list of the pair as a screen shows it (Home's Inbox rows, Approvals' waiting Drafts): the held answer, loading
+ * while either list is still asked, so a first answer from one alone never shows as an empty list. Its own failure
+ * shows at once with its Retry, without waiting for the other list; the count still waits for the pair.
  */
-function homeRows<R>(inbox: Resource<R>, draftsLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, reload: () => void): Resource<R> {
-  const failed = !inbox.loading && inbox.error ? inbox.error : null;
-  return { ...inbox, loading: !failed && (inbox.loading || draftsLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
+function heldRows<R>(own: Resource<R>, otherLoading: boolean, held: Pick<Resource<R>, "data" | "error" | "answeredAt">, reload: () => void): Resource<R> {
+  const failed = !own.loading && own.error ? own.error : null;
+  return { ...own, loading: !failed && (own.loading || otherLoading), data: held.data, error: failed ?? held.error, answeredAt: held.answeredAt, reload };
 }
 
 /** The shell's signals, for the screens inside it. */

@@ -84,8 +84,19 @@ test("the dot: a waiting Proposal lights the logo, favicon and tab title, and th
   await nav.getByRole("link", { name: /^Approvals/ }).click();
   const proposal = approvalRow(page, "proposal", "Lena Berg");
   await openApprovalRow(proposal);
+  // The decision's answer arrives only after the list was read again without the Proposal: the row keeps its place
+  // meanwhile and then becomes its one line.
+  const refetched = page.waitForResponse((r) => r.url().includes("/api/v1/memory/proposals?status=proposed") && r.request().method() === "GET");
+  const reject = "**/api/v1/memory/proposals/*/reject";
+  await page.route(reject, async (route) => {
+    const response = await route.fetch();
+    await refetched;
+    await route.fulfill({ response });
+  });
   await proposal.getByRole("button", { name: "Reject" }).click();
+  expect((await (await refetched).json()).proposals).toEqual([]);
   await expect(proposal).toHaveAttribute("data-decided", "Rejected");
+  await page.unroute(reject);
   await expectTab(page, { dot: false, title: "Attache" });
   await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Attache" })).toBeVisible();

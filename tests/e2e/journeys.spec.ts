@@ -922,6 +922,10 @@ test("approvals: a Proposal shows every part of the change and is applied or rej
   await refused.getByRole("button", { name: "Reject" }).click();
   await expect(refused).toHaveAttribute("data-decided", "Rejected");
   await expect(page.locator('[data-approval-row="proposal"]')).toHaveCount(3);
+  // The decided lines stay for the whole visit, also after a look at Finished.
+  await page.getByRole("tab", { name: "Finished" }).click();
+  await page.getByRole("tab", { name: /^Waiting/ }).click();
+  await expect(page.locator('[data-approval-row="proposal"][data-decided]')).toHaveCount(3);
 
   // On the next visit the decided rows are gone, and Finished lists them with their outcomes, the latest first.
   await page.reload();
