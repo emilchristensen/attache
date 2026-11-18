@@ -235,13 +235,21 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await expect(options.first()).toBeInViewport();
   expect(await results(page).evaluate((el) => el.scrollTop)).toBe(0);
   // Results that answer while the page is scrolled past the field still fit what shows of the page once it is
-  // scrolled back, so they never hang past its bottom.
+  // scrolled back, so they never hang past its bottom. The answer is held until the page is scrolled, since typing
+  // scrolls the field back into view.
   const pageArea = page.locator(".page");
-  await pageArea.evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  expect(await search.evaluate((input) => input.getBoundingClientRect().bottom < input.closest(".page")!.getBoundingClientRect().top)).toBe(true);
+  let answer!: () => void;
+  const scrolled = new Promise<void>((resolve) => (answer = resolve));
+  await page.route(/\/api\/v1\/memory\/search\?q=Helios(%20|\+)workstrea&/, (route) => scrolled.then(() => route.continue()), { times: 1 });
   await search.press("Backspace");
   await expect(search).toHaveValue("Helios workstrea");
+  await expect(options.first()).toHaveAttribute("aria-disabled", "true");
+  await pageArea.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  const fieldHidden = () => search.evaluate((input) => input.getBoundingClientRect().bottom < input.closest(".page")!.getBoundingClientRect().top);
+  expect(await fieldHidden()).toBe(true);
+  answer();
   await expect(options.first()).not.toHaveAttribute("aria-disabled", "true");
+  expect(await fieldHidden()).toBe(true);
   await expect.poll(() => resultsFit(page)).toEqual({ top: true, bottom: true });
   await pageArea.evaluate((el) => el.scrollTo(0, 0));
   await expect.poll(() => resultsFit(page)).toEqual({ top: true, bottom: true });
@@ -277,6 +285,17 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await field(page).evaluate((input) => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true })));
   await expect(page).toHaveURL(`${stack.url}/`);
   await expect(results(page)).toBeVisible();
+
+  // Home and End show the caret where they put it when the words are wider than the field.
+  await field(page).fill(`Helios ${"workstream ".repeat(20)}`.trim());
+  const scrollLeft = () => field(page).evaluate((input) => ({ at: input.scrollLeft, end: input.scrollWidth - input.clientWidth }));
+  await pressAsOnMac(page, "Home");
+  expect(await field(page).evaluate((input: HTMLInputElement) => input.selectionStart)).toBe(0);
+  expect((await scrollLeft()).at).toBe(0);
+  await pressAsOnMac(page, "End");
+  const end = await scrollLeft();
+  expect(end.end).toBeGreaterThan(0);
+  expect(end.at).toBeGreaterThanOrEqual(end.end - 1);
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
