@@ -193,45 +193,6 @@ h2.brain-results-title {
 
 /* ---- the note reader --------------------------------------------------------------------------------- */
 
-/*
- * Beside the list, the reader stays in view and scrolls on its own, so a note picked far down a long list opens
- * where the owner is looking and the list keeps its place. Its room is the page's visible height below its top
- * padding (`--page-room`, set by the Library from the page itself) less a margin above and below.
- */
-@media (min-width: 721px) {
-  .library-reader {
-    /* Until the Library has measured the page. */
-    --page-room: 100dvh;
-    position: sticky;
-    top: var(--s-4);
-    max-height: calc(var(--page-room) - 2 * var(--s-4));
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-}
-
-.note-reader,
-.reader-placeholder {
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-lg);
-}
-.note-reader {
-  padding: var(--s-5) var(--s-5) var(--s-4);
-  overflow-wrap: anywhere;
-}
-.reader-placeholder {
-  margin: 0;
-  padding: var(--s-6) var(--s-5);
-  color: var(--ink-2);
-}
-.reader-kind {
-  margin: 0 0 var(--s-1);
-  font: 600 12px/18px var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
 .reader-identity,
 .reader-proposal {
   display: flex;
@@ -257,12 +218,6 @@ h2.brain-results-title {
 .reader-section {
   margin-top: var(--s-5);
 }
-/* A ruled section title: the sans heading over a 2 px ink rule, the rows under it. */
-h3.reader-rule {
-  padding-bottom: var(--s-1);
-  border-bottom: 2px solid var(--ink);
-}
-
 .facts {
   list-style: none;
   margin: 0;
