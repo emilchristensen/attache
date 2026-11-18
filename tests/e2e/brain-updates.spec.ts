@@ -56,6 +56,58 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(0);
 });
 
+/** The dot, favicon and tab title, which follow the one count behind every number in the navigation. */
+async function expectTab(page: Page, want: { dot: boolean; title: string }) {
+  await expect(page).toHaveTitle(want.title);
+  await expect(page.locator(".masthead .brand .logo-dot")).toHaveCount(want.dot ? 1 : 0);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", want.dot ? "/favicon.svg" : "/favicon-quiet.svg");
+}
+
+const lenaBerg = { item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }] }, reason: "Introduced in the vendor call" };
+
+test("the dot: a waiting Proposal lights the logo, favicon and tab title, and they go out when it is decided", async () => {
+  const page = await journeys.open("/");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expectTab(page, { dot: false, title: "Attache" });
+  await expect(page.locator("[data-need-you]")).toHaveCount(0);
+
+  // A Proposal arrives while the page is open: one decision waits, in Approvals.
+  await api(page, "POST", "/memory/proposals", lenaBerg);
+  await expectTab(page, { dot: true, title: "(1) Attache" });
+  await expect(nav.getByRole("link", { name: "Approvals, 1 waiting" }).locator(".count")).toHaveText("1");
+  await expect(page.getByRole("link", { name: "Attache, 1 needs you" })).toBeVisible();
+
+  // Deciding it in Approvals puts the dot out everywhere.
+  await nav.getByRole("link", { name: /^Approvals/ }).click();
+  const proposal = page.getByRole("region", { name: /Changes to the Brain/ }).locator("[data-proposal]");
+  await proposal.getByRole("button", { name: "Reject" }).click();
+  await expect(proposal).toHaveCount(0);
+  await expectTab(page, { dot: false, title: "Attache" });
+  await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Attache" })).toBeVisible();
+});
+
+test("the dot: a request that fails leaves the dot as it was and shows no number, until the count is read again", async () => {
+  const page = await journeys.open("/");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", lenaBerg);
+  await expectTab(page, { dot: true, title: "(1) Attache" });
+
+  // The Proposals list stops answering, and the Proposal is decided elsewhere: the count cannot tell, so the dot
+  // keeps its last state and no number is claimed.
+  await page.route("**/api/v1/memory/proposals?*", (route) => route.abort());
+  await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
+  await expect(nav.getByRole("link", { name: "Approvals" })).toBeVisible();
+  await expectTab(page, { dot: true, title: "Attache" });
+
+  // Read again, the exact zero puts it out.
+  await page.unroute("**/api/v1/memory/proposals?*");
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expectTab(page, { dot: false, title: "Attache" });
+});
+
 test("auto-accept: on by default for a connected Harness, switched off in Settings and kept across reload, and only saves written without review are marked", async () => {
   const page = await journeys.open("/connections");
   // On the full Connections page an unconfigured card opens straight into its setup form.

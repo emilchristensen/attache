@@ -9,12 +9,12 @@ export function spokenName(label: string, news: ReadonlyArray<string | null | un
   return [label, ...news.filter(Boolean)].join(", ");
 }
 
-/** A screen's decision count as it shows: the number alone; the link's name reads it out with its words. */
+/** A screen's decision count as it shows: the number alone ("4", or "4+" for a lower bound); the link's name reads it out with its words. */
 export function BadgeCount({ badge }: { badge: Badge | undefined }) {
   if (!badge) return null;
   return (
     <span className="count" aria-hidden>
-      {badge.count}
+      {badge.shown}
     </span>
   );
 }
