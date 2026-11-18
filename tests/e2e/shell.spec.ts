@@ -79,9 +79,12 @@ test("masthead: one line names every screen above a centred reading column, and 
   await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await expect(home.locator(".count")).toHaveText(/^\d+$/, { timeout: 30_000 });
   await expect(nav.getByRole("link", { name: /^Home, \d+ needs? you$/ })).toBeVisible();
+  // Off Home the launcher opens the search palette in place (home-search.spec.ts has the whole of it).
   await page.getByRole("button", { name: /^Search the Brain/ }).click();
-  await expect(page).toHaveURL(`${stack.url}/brain`);
-  await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Search the Brain" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+  await page.keyboard.press("Escape");
 });
 
 /** The number a link or heading shows, or 0 when it shows none. */
@@ -488,10 +491,19 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), "no full page load").toBe(true);
 
-  // Search goes to the Brain's search field off Home, and focuses Home's own field on Home.
+  // Search opens the search palette off Home, across the whole narrow width, and focuses Home's own field on Home.
   await bar.getByRole("button", { name: "Search" }).click();
-  await expect(page).toHaveURL(`${stack.url}/brain`);
-  await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
+  const palette = page.getByRole("dialog", { name: "Search the Brain" });
+  await expect(palette).toBeVisible();
+  await expect(palette.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
+  await expect(palette.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveCount(15);
+  const fit = await palette.evaluate((d) => ({ left: d.getBoundingClientRect().left, right: window.innerWidth - d.getBoundingClientRect().right, scroll: document.documentElement.scrollWidth - window.innerWidth }));
+  expect(fit.left, "palette left edge").toBeGreaterThanOrEqual(4);
+  expect(fit.right, "palette right edge").toBeGreaterThanOrEqual(4);
+  expect(fit.scroll, "no sideways scroll").toBeLessThanOrEqual(0);
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  await expect(bar.getByRole("button", { name: "Search" })).toBeFocused();
   await bar.getByRole("link", { name: /^Home/ }).click();
   await bar.getByRole("button", { name: "Search" }).click();
   await expect(page).toHaveURL(`${stack.url}/`);

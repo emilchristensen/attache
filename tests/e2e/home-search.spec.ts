@@ -300,7 +300,7 @@ test("home: only the answer to what the field says now can be opened; keys follo
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-test("keys: Ctrl K, Cmd K and / focus Home's field, and off Home they go to the Brain's search", async () => {
+test("keys: Ctrl K, Cmd K and / focus Home's field, and off Home they open the search palette", async () => {
   const page = await journeys.open("/");
   const search = field(page);
   await expect(search).toBeVisible();
@@ -320,11 +320,295 @@ test("keys: Ctrl K, Cmd K and / focus Home's field, and off Home they go to the 
   await expect(sheet.getByRole("table", { name: "Search" })).toContainText("Search the Brain");
   await page.keyboard.press("Escape");
 
+  // On Home no palette opens: the field is already there.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
   await page.goto(`${stack.url}/jobs`);
   await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
   await page.keyboard.press("/");
-  await expect(page).toHaveURL(`${stack.url}/brain`);
-  await expect(page.getByRole("searchbox", { name: "Search the Brain" })).toBeFocused();
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+  await expect(palette(page)).toBeVisible();
+  // `/` opened the palette; it is not typed into its field.
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("");
+});
+
+const palette = (page: Page) => page.getByRole("dialog", { name: "Search the Brain" });
+const goTo = (page: Page) => palette(page).getByRole("group", { name: "Go to" });
+const passages = (page: Page) => palette(page).getByRole("group", { name: "Passages" });
+
+/** Whether `locator`'s element is inside the window, top to bottom. */
+async function inView(locator: ReturnType<Page["locator"]>): Promise<boolean> {
+  return locator.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return box.top >= 0 && box.top < window.innerHeight;
+  });
+}
+
+test("palette: off Home Ctrl K, Cmd K, / and the masthead's launcher open the search in a dialog that keeps focus, closes on Esc and puts focus back", async () => {
+  const page = await journeys.open("/jobs");
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+
+  // The masthead's launcher opens it; the field is focused and empty; Tab and Shift+Tab stay inside.
+  const launcher = page.getByRole("button", { name: "Search the Brain" });
+  await launcher.click();
+  const dialog = palette(page);
+  await expect(dialog).toBeVisible();
+  await expect(field(page)).toBeFocused();
+  for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key);
+    expect(await dialog.evaluate((d) => d.contains(document.activeElement)), `focus after ${key}`).toBe(true);
+  }
+  // One Esc closes it, even with text in the field, and focus goes back to the launcher.
+  await field(page).focus();
+  await page.keyboard.type("Helios");
+  await expect(passages(page).getByRole("option")).toHaveCount(6);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(launcher).toBeFocused();
+
+  // Ctrl K works from a text field and gives focus back to it.
+  await page.goto(`${stack.url}/brain`);
+  const brainSearch = page.getByRole("searchbox", { name: "Search the Brain" });
+  await brainSearch.fill("Orion");
+  await page.keyboard.press("Control+k");
+  await expect(dialog).toBeVisible();
+  await expect(field(page)).toBeFocused();
+  // Each opening starts afresh.
+  await expect(field(page)).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(brainSearch).toBeFocused();
+  await expect(brainSearch).toHaveValue("Orion");
+
+  // Cmd K and `/` too; with nothing focused before, focus goes back to the page.
+  await page.locator("h1").click();
+  await page.keyboard.press("Meta+k");
+  await expect(dialog).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  // Straight after closing, the palette opens again and stays open.
+  await page.keyboard.press("/");
+  await expect(dialog).toBeVisible();
+  // The keys do nothing more while it is open.
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect(await page.evaluate(() => document.querySelector("dialog[open]"))).toBeNull();
+});
+
+/** Goes to `path` and opens the palette once the screen is there. */
+async function openPaletteAt(page: Page, path: string, h1: string) {
+  await page.goto(`${stack.url}${path}`);
+  await expect(page.getByRole("heading", { level: 1, name: h1 })).toBeVisible();
+  await page.keyboard.press("Control+k");
+  await expect(field(page)).toBeFocused();
+}
+
+test("palette: Go to reaches every screen and every Settings section", async () => {
+  const page = await journeys.open("/jobs");
+  await openPaletteAt(page, "/jobs", "Jobs");
+  // With nothing typed, Go to lists every place and there are no passages.
+  const places = goTo(page).getByRole("option");
+  await expect(places).toHaveText([
+    /^Home/,
+    /^Approvals/,
+    /^Brain/,
+    /^Connections/,
+    /^Jobs/,
+    /^Settings, Screen$/,
+    /^Features/,
+    /^Schedules and notifications/,
+    /^Identity/,
+    /^Saving and review/,
+    /^Meaning-based search/,
+    /^Backup and export/,
+    /^Machines and Replication/,
+    /^Paired clients/,
+    /^Service health/,
+  ]);
+  await expect(passages(page)).toHaveCount(0);
+  await expect(places.first()).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Escape");
+
+  const screens: Array<[string, string, string]> = [
+    ["Home", "/", "Home"],
+    ["Approvals", "/approvals", "Approvals"],
+    ["Brain", "/brain", "Brain"],
+    ["Connections", "/connections", "Connections"],
+    ["Jobs", "/jobs", "Jobs"],
+    ["Settings", "/settings", "Settings"],
+  ];
+  for (const [typed, path, h1] of screens) {
+    await openPaletteAt(page, "/connections", "Connections");
+    await field(page).fill(typed);
+    await expect(goTo(page).getByRole("option").first(), typed).toHaveAttribute("aria-selected", "true");
+    await expect(goTo(page).getByRole("option").first()).toContainText(typed);
+    await page.keyboard.press("Enter");
+    await expect(palette(page)).toBeHidden();
+    await expect(page).toHaveURL(`${stack.url}${path}`);
+    await expect(page.getByRole("heading", { level: 1, name: h1 })).toBeVisible();
+  }
+
+  const sections: Array<[string, string, string]> = [
+    ["Features", "features", "Features"],
+    ["Schedules", "schedules", "Schedules and notifications"],
+    ["Identity", "identity", "Identity"],
+    ["Saving", "saving", "Saving and review"],
+    ["Meaning", "meaning-search", "Meaning-based search"],
+    ["Backup", "backup", "Backup and export"],
+    ["Replication", "machines", "Machines and Replication"],
+    ["Paired", "clients", "Paired clients"],
+    ["Service health", "service", "Service health"],
+  ];
+  for (const [typed, id, label] of sections) {
+    await openPaletteAt(page, "/jobs", "Jobs");
+    await field(page).fill(typed);
+    const option = goTo(page).getByRole("option", { name: new RegExp(`^${label}`) });
+    // A mouse click works as Enter does.
+    await option.click();
+    await expect(palette(page)).toBeHidden();
+    await expect(page).toHaveURL(`${stack.url}/settings/${id}`);
+    const section = page.locator(`[data-settings-section="${id}"]`);
+    await expect(section, label).toBeVisible();
+    await expect.poll(() => inView(section), { message: `${label} is scrolled into view` }).toBe(true);
+    await expect(section).toBeFocused();
+  }
+  // Browser Back goes to where the owner was.
+  await page.goBack();
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+});
+
+test("palette: the same results as Home's field open the same places, and searching starts no job and changes nothing", async () => {
+  const page = await journeys.open("/approvals");
+  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
+  const jobsBefore = (await api<Array<{ id: string }>>(page, "GET", "/jobs?limit=100")).length;
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() !== "GET") writes.push(`${r.method()} ${r.url()}`);
+  });
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("Helios");
+  // No place is named Helios: only passages, six of them, the first chosen, with the ranking line and its link.
+  await expect(goTo(page)).toHaveCount(0);
+  const options = passages(page).getByRole("option");
+  await expect(options).toHaveCount(6);
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+  await expect(options.first().locator(".search-hit-kind")).toHaveText("Project");
+  await expect(palette(page).locator("[data-ranking]")).toHaveText("Ranked by keywords only: the meaning model is not downloaded. Settings");
+  await expect(palette(page).getByRole("status")).toHaveText("6 results");
+  await page.keyboard.press("ArrowUp");
+  await expect(options.nth(5)).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowDown");
+  await expect(options.first()).toHaveAttribute("aria-selected", "true");
+
+  // A place and passages together: the place first, and the arrows move from one group to the other.
+  await field(page).fill("brain");
+  await expect(goTo(page).getByRole("option").first()).toHaveText(/^Brain/);
+  await expect(goTo(page).getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+
+  // A miss says so.
+  await field(page).fill("zyxwvut");
+  await expect(palette(page).locator(".search-status")).toHaveText("No passages match “zyxwvut”. Try other words.");
+
+  // Enter opens evidence at the cited lines; closing it brings the palette back with the query and that passage,
+  // not just the first one.
+  await field(page).fill("Orion");
+  await expect(options.nth(1)).toBeVisible();
+  const kinds = await options.locator(".search-hit-kind").allTextContents();
+  const pick = kinds.findIndex((k, i) => i > 0 && !["Person", "Project", "Decision", "Note"].includes(k));
+  expect(pick, `a later result that opens as evidence among ${kinds.join(", ")}`).toBeGreaterThan(0);
+  for (let i = 0; i < pick; i++) await page.keyboard.press("ArrowDown");
+  await expect(options.nth(pick)).toHaveAttribute("aria-selected", "true");
+  const chosen = (await options.nth(pick).locator(".search-hit-place").textContent())!;
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeHidden();
+  const drawer = page.getByRole("dialog", { name: /Evidence/ });
+  await expect(drawer).toBeVisible();
+  await expect(drawer.locator(".line.hl").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(palette(page)).toBeVisible();
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("Orion");
+  await expect(options.nth(pick)).toHaveAttribute("aria-selected", "true");
+  await expect(options.nth(pick).locator(".search-hit-place")).toHaveText(chosen);
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/approvals`);
+  // The next opening starts afresh.
+  await page.keyboard.press("Control+k");
+  await expect(field(page)).toHaveValue("");
+  // Evidence left by Back or Forward does not bring the palette back somewhere else.
+  await field(page).fill("Orion");
+  await options.nth(pick).click();
+  await expect(drawer).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState(null, "", "/jobs");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(palette(page)).toBeHidden();
+  await page.goto(`${stack.url}/approvals`);
+  await expect(page.getByRole("heading", { level: 1, name: "Approvals" })).toBeVisible();
+
+  // A memory note opens in the Brain with the query; All results in Brain carries the query too.
+  await page.keyboard.press("Control+k");
+  await field(page).fill("Postmark");
+  await passages(page).getByRole("option", { name: /Email vendor/ }).click();
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/brain?root=data&path=${encodeURIComponent(VENDOR)}&q=Postmark`);
+  await page.keyboard.press("Control+k");
+  await field(page).fill("Helios");
+  await expect(options).toHaveCount(6);
+  await palette(page).getByRole("link", { name: "All results in Brain" }).click();
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/brain?q=Helios`);
+
+  // Searching started no job and sent nothing but reads.
+  expect(writes).toEqual([]);
+  expect((await api<Array<{ id: string }>>(page, "GET", "/jobs?limit=100")).length).toBe(jobsBefore);
+});
+
+test("palette: a chosen place stays chosen when passages arrive, links in the results close it, and the section already open comes back into view", async () => {
+  const page = await journeys.open("/jobs");
+  await openPaletteAt(page, "/jobs", "Jobs");
+  // "settings" names the screen and, through it, the sections; Features is chosen before the passages answer.
+  await page.keyboard.type("settings");
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveText(/^Features/);
+  await page.keyboard.press("ArrowDown");
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+  await expect(palette(page).getByRole("status")).toHaveText(/\d+ results?/);
+  await expect(goTo(page).getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(`${stack.url}/settings/features`);
+
+  // Choosing the section the address already names brings it back into view, with no new history entry.
+  await openPaletteAt(page, "/settings/identity", "Settings");
+  await page.keyboard.press("Escape");
+  const identity = page.locator('[data-settings-section="identity"]');
+  await expect.poll(() => inView(identity)).toBe(true);
+  await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 0));
+  await page.locator("h1").click();
+  await expect.poll(() => inView(identity)).toBe(false);
+  const entries = await page.evaluate(() => history.length);
+  await page.keyboard.press("Control+k");
+  await field(page).fill("identity");
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeHidden();
+  await expect.poll(() => inView(identity)).toBe(true);
+  await expect(identity).toBeFocused();
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+
+  // The ranking line's Settings link closes the palette and opens meaning-based search, even from Settings.
+  await page.keyboard.press("Control+k");
+  await field(page).fill("Helios");
+  await palette(page).locator("[data-keywords-only]").getByRole("link", { name: "Settings" }).click();
+  await expect(palette(page)).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/settings/meaning-search`);
+  await expect.poll(() => inView(page.locator('[data-settings-section="meaning-search"]'))).toBe(true);
 });
 
 test("browse: one disclosure beside the field opens People, Projects, Decisions, Notes and Recent saves", async () => {

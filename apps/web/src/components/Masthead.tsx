@@ -1,6 +1,5 @@
 import { navBadge, spokenTotal, type NavSignals } from "../nav-signals.ts";
 import { SCREENS, type ScreenId } from "../routes.ts";
-import { launchSearch } from "../search-launch.ts";
 import { Icon } from "./icons.tsx";
 import { Logo } from "./Logo.tsx";
 import { MachineDisclosure } from "./MachinePanel.tsx";
@@ -12,7 +11,7 @@ import { Link } from "./ui.tsx";
  * Machine's disclosure. On a narrow window only the mark stays (and the disclosure while the live connection is
  * lost); the bottom bar takes the screens.
  */
-export function Masthead({ current, signals }: { current: ScreenId | null; signals: NavSignals }) {
+export function Masthead({ current, signals, onSearch }: { current: ScreenId | null; signals: NavSignals; onSearch: () => void }) {
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -27,7 +26,7 @@ export function Masthead({ current, signals }: { current: ScreenId | null; signa
         </nav>
         <div className="masthead-tools">
           {current !== "home" && (
-            <button className="search-launcher" aria-label="Search the Brain" onClick={launchSearch}>
+            <button className="search-launcher" aria-label="Search the Brain" onClick={onSearch}>
               <Icon name="search" />
               <span className="search-launcher-label">Search</span>
             </button>

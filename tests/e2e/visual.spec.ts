@@ -340,6 +340,16 @@ test("screens", async ({ browser }) => {
     await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
     await page.screenshot({ path: `test-results/screens/${scheme}-shell-shortcuts.png` });
     await page.keyboard.press("Escape");
+    // The search palette off Home: Go to before typing, then a place and passages together.
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Search the Brain" });
+    await expect(palette.getByRole("group", { name: "Go to" })).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-palette-go-to.png` });
+    await page.keyboard.type("Priya");
+    await expect(palette.getByRole("group", { name: "Passages" }).getByRole("option").first()).toBeVisible();
+    await expect(palette.locator("[data-ranking]")).toBeVisible();
+    await page.screenshot({ path: `test-results/screens/${scheme}-palette-search.png` });
+    await page.keyboard.press("Escape");
   }
   // Search before and after the meaning model is downloaded.
   await page.goto(`${stack.url}/brain`);
@@ -384,5 +394,15 @@ test("screens", async ({ browser }) => {
   await page.locator(".bottom-bar").getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("dialog", { name: "More" })).toBeVisible();
   await page.screenshot({ path: "test-results/screens/narrow-shell-more.png" });
+  await page.keyboard.press("Escape");
+  // The search palette from the bottom bar's Search, off Home.
+  await page.goto(`${stack.url}/jobs`);
+  await page.locator(".bottom-bar").getByRole("button", { name: "Search" }).click();
+  const palette = page.getByRole("dialog", { name: "Search the Brain" });
+  await expect(palette.getByRole("group", { name: "Go to" })).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/narrow-palette-go-to.png" });
+  await page.keyboard.type("Priya");
+  await expect(palette.getByRole("group", { name: "Passages" }).getByRole("option").first()).toBeVisible();
+  await page.screenshot({ path: "test-results/screens/narrow-palette-search.png" });
   await page.keyboard.press("Escape");
 });
