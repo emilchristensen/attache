@@ -1,0 +1,88 @@
+/* Settings: paired clients, Replication and its Machines. */
+
+/* A paired client: its name and kind, when it was last seen, and Revoke. */
+.client-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 7px 0;
+}
+.client-row + .client-row {
+  border-top: 1px solid var(--line);
+}
+.client-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+/* ---- Replication ------------------------------------------------------------------- */
+
+.replication-facts {
+  margin: 0;
+}
+.replication-problem {
+  padding: 12px 14px;
+  gap: 6px;
+}
+.replication-problem .replication-cause {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.replication-problem b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.replication-off-confirm {
+  padding: 12px 14px;
+  flex: 1 1 100%;
+}
+.replication-off-confirm .mono {
+  overflow-wrap: anywhere;
+}
+.machine-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.machine-row {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.machine-row + .machine-row {
+  border-top: 1px solid var(--line);
+}
+.machine-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.machine-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  margin-right: 2px;
+}
+.machine-standby {
+  margin-top: 4px;
+}
+.preferred-reader select {
+  max-width: 360px;
+}
+
+@media (max-width: 720px) {
+  /* The name on its own line, then when it was last seen beside Revoke. */
+  .client-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .client-name {
+    grid-column: 1 / -1;
+  }
+}

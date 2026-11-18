@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { plural, type JobEvent, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
-import { Empty, ErrorState, Loading, Markdown, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Loading, Markdown, navigate, Time, useAction, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 
@@ -71,7 +72,7 @@ function JobDetail({ id }: { id: string }) {
     <div className="stack" data-job-id={job.id} data-status={job.status}>
       <div className="row">
         <h2 style={{ flex: 1 }}>{job.title}</h2>
-        <StatusPill state={job.status} />
+        <StateTag state={job.status} />
       </div>
       <div className="progress" aria-label="Progress" aria-valuenow={Math.round(job.progress * 100)} role="progressbar">
         <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
@@ -189,7 +190,7 @@ export function JobsView() {
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong style={{ overflowWrap: "anywhere" }}>{j.title}</strong>
                   <span className="row small muted">
-                    <StatusPill state={j.status} />
+                    <StateTag state={j.status} />
                     {j.status === "running" && `${Math.round(j.progress * 100)}%`} <Time iso={j.updatedAt} />
                   </span>
                 </div>

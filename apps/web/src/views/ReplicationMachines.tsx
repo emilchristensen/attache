@@ -2,6 +2,7 @@ import type { ReaderView, ReplicatedMachineView, ReplicationMachinesView } from 
 import { put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { Tag } from "../components/Tag.tsx";
 import { READER_EVENTS } from "./ReaderLine.tsx";
 
 function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMachineView; preferred: boolean; reader: "active" | "silent" | null; busy: boolean; onStandby: (on: boolean) => void }) {
@@ -9,11 +10,11 @@ function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMa
     <li className="machine-row" data-machine={m.name}>
       <div className="machine-head">
         <strong className="machine-name">{m.name}</strong>
-        {m.thisMachine && <span className="pill accent">this Machine</span>}
-        {reader === "active" && <span className="pill ok">Reader</span>}
-        {reader === "silent" && <span className="pill warn">Reader, silent</span>}
-        {preferred && <span className="pill">Preferred Reader</span>}
-        {m.standby && <span className="pill">standby</span>}
+        {m.thisMachine && <Tag hue="indigo">this Machine</Tag>}
+        {reader === "active" && <Tag>Reader</Tag>}
+        {reader === "silent" && <Tag hue="amber">Reader, silent</Tag>}
+        {preferred && <Tag>Preferred Reader</Tag>}
+        {m.standby && <Tag>standby</Tag>}
       </div>
       <p className="small muted">
         {m.lastChangeAt ? (

@@ -2,7 +2,7 @@ import { useId } from "react";
 
 /**
  * The Attache mark: an attaché case in copper, with a brass dot when something needs your attention.
- * Its colours are its own (`.logo` in styles.css), not the theme's; the gaps are cut out, so it sits on any background.
+ * Its colours are its own (`--logo-copper` and `--logo-brass` in styles/tokens.css), not the theme's; the gaps are cut out, so it sits on any background.
  * `attention` defaults to on, the form `public/favicon.svg` and `docs/assets/logo.svg` draw.
  */
 export function Logo({ size = 26, attention = true }: { size?: number; attention?: boolean }) {

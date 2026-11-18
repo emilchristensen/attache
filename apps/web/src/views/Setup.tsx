@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@attache/contracts";
 import { api, patch, post, put, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
-import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
+import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
+import { Tag } from "../components/Tag.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { Logo } from "../components/Logo.tsx";
 import { JoinForm } from "./Replication.tsx";
@@ -206,8 +208,8 @@ export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => 
           <div style={{ flex: 1 }}>
             <label htmlFor={`f-${f.id}`} className="row" style={{ cursor: f.core ? "default" : "pointer" }}>
               <strong>{f.label}</strong>
-              {f.core && <span className="pill">core</span>}
-              <StatusPill state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
+              {f.core && <Tag>core</Tag>}
+              <StateTag state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
             </label>
             <p className="desc">{f.description}</p>
             {(f.dependsOn.features.length > 0 || f.dependsOn.connections.length > 0) && (
@@ -363,7 +365,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
               {result.features.filter((f) => f.enabled).map((f) => (
                 <div key={f.id} className="check-row" data-feature-status={f.id}>
                   <span>{f.label}</span>
-                  <StatusPill state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
+                  <StateTag state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
                   {f.reason && <span className="small muted">{f.reason}</span>}
                 </div>
               ))}
@@ -378,7 +380,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
                 {result.connections.map((c) => (
                   <div key={c.id} className="check-row">
                     <span>{c.label}</span>
-                    <StatusPill state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
+                    <StateTag state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
                     {c.message && <span className="small muted">{c.message}</span>}
                   </div>
                 ))}

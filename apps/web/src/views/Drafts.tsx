@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { approvalEndedAt, FINISHED_ACTION_STATUSES, OPEN_ACTION_STATUSES, plural, type ActionView, type Citation } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, ErrorState, Link, Loading, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
+import { Empty, ErrorState, Link, Loading, navigate, Time, useAction, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { Tabs, type TabItem } from "../components/Tabs.tsx";
@@ -37,7 +38,7 @@ function DraftDetail({ id }: { id: string }) {
     <div className="stack" data-action-id={d.id} data-status={d.status}>
       <div className="row">
         <h2 style={{ flex: 1 }}>{d.title}</h2>
-        <StatusPill state={d.status} />
+        <StateTag state={d.status} />
       </div>
       <dl className="kv">
         <dt>Action</dt>
@@ -228,7 +229,7 @@ export function DraftsView() {
                 <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
                   <strong>{d.title}</strong>
                   <span className="row small muted">
-                    <StatusPill state={d.status} /> {KIND_LABEL[d.kind] ?? d.kind} · <Time iso={d.updatedAt} />
+                    <StateTag state={d.status} /> {KIND_LABEL[d.kind] ?? d.kind} · <Time iso={d.updatedAt} />
                   </span>
                 </div>
               </button>
