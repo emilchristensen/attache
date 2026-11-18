@@ -17,6 +17,8 @@ export interface MeetingPrep {
   phase: "upcoming" | "in-progress";
   /** "14:30 to 15:00", in the current zone. */
   interval: string;
+  /** The scheduled end, as an instant: a held Heads-up shows that its meeting ended once this has passed. */
+  endsAt: number;
   /** The event in Google Calendar, or null when the item has no link. */
   calendarUrl: string | null;
   meetLink: string | null;
@@ -84,6 +86,7 @@ export const meetingPrep: HeadsUpKind = {
             itemId: item.id,
             phase,
             interval: `${from} to ${to}`,
+            endsAt: end,
             calendarUrl: item.url,
             meetLink: item.meeting.meetLink,
             attendees: item.meeting.attendees,
@@ -110,10 +113,19 @@ export function promotedMeetings(slot: Slot): ReadonlySet<string> {
 }
 
 /**
- * The meetings that came in during a hold, as they came in: each Heads-up and the key of the entry it came in after
- * (null at the top).
+ * The keys of the meeting prep Heads-ups in `slot` whose meeting has ended at `now`. A held slot keeps them (nothing
+ * leaves under the owner), so For you now shows each in its place as an inert "Meeting ended" of the same size until
+ * the hold ends: its Join no longer reaches a call, and nothing else takes its place.
  */
-export type Placed = ReadonlyMap<string, { after: string | null; headsUp: HeadsUp }>;
+export function endedMeetings(slot: Slot, now: number): ReadonlySet<string> {
+  return new Set([slot.lead, ...slot.followers, ...slot.more].flatMap((h) => (h?.meeting && h.meeting.endsAt <= now ? [h.key] : [])));
+}
+
+/**
+ * The meetings that came in during a hold, as they came in: each Heads-up and the keys of the entries above it when it
+ * came in, nearest last (none: it came in at the top).
+ */
+export type Placed = ReadonlyMap<string, { after: readonly string[]; headsUp: HeadsUp }>;
 
 /**
  * While the Heads-ups are held, the slot holds still (`heldSlot`), but a meeting is not kept waiting: the next one
@@ -121,7 +133,8 @@ export type Placed = ReadonlyMap<string, { after: string | null; headsUp: HeadsU
  * order, but never above the entries the pointer or focus is on (`holding`, their keys; none known: last), so the
  * held lead and its Join keep their place and destination. Once in, it is held like the rest (`placed`, passed back
  * in for the rest of the hold): it stays after the entry it came in after (or after the briefing that took that
- * progress line's place) and shows as it came in, Join included, until this tab settles it (`settled`: Done, Not now).
+ * progress line's place, or, once this tab took that one out, after the nearest one above it that is left) and shows
+ * as it came in, Join included, until this tab settles it (`settled`: Done, Not now).
  * Nothing else comes in.
  */
 export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly string[], kept: Placed = new Map(), settled: ReadonlySet<string> = new Set()): { slot: Slot; placed: Placed } {
@@ -133,20 +146,20 @@ export function withArrivedMeetings(slot: Slot, live: Slot, holding: readonly st
   if (!fresh.length && !placed.size) return { slot, placed };
   const top = slot.lead ? 1 : 0;
   const insert = (list: readonly HeadsUp[], h: HeadsUp, at: number) => [...list.slice(0, at), h, ...list.slice(at)];
-  // Those already in keep their place after the entry they came in after; one whose entry has gone goes last.
-  let next = [...placed.values()]
-    .filter((p) => !shown.has(p.headsUp.key))
-    .reduce<readonly HeadsUp[]>((list, p) => {
-      const after = p.after === null ? top : list.findIndex((e) => e.key === p.after || e.inPlaceOf === p.after) + 1;
-      return insert(list, p.headsUp, after > 0 || p.after === null ? after : list.length);
-    }, entries);
+  // Those already in keep their place: after the nearest entry that was above them when they came in and is still
+  // here (Done or Not now here can take one out), else at the top.
+  const below = (list: readonly HeadsUp[], after: readonly string[]) => {
+    const found = after.map((key) => list.findIndex((e) => e.key === key || e.inPlaceOf === key)).filter((n) => n >= 0);
+    return found.length ? found[found.length - 1]! + 1 : top;
+  };
+  let next = [...placed.values()].filter((p) => !shown.has(p.headsUp.key)).reduce<readonly HeadsUp[]>((list, p) => insert(list, p.headsUp, below(list, p.after)), entries);
   const held = next.flatMap((h, n) => (holding.includes(h.key) ? [n] : []));
   let from = Math.max(top, held.length ? Math.max(...held) + 1 : next.length);
   const record = new Map(placed);
   for (const h of fresh) {
     const before = next.findIndex((e, n) => n >= from && byUrgency(h, e) < 0);
     const at = before < 0 ? next.length : before;
-    record.set(h.key, { after: at > 0 ? next[at - 1]!.key : null, headsUp: h });
+    record.set(h.key, { after: next.slice(0, at).map((e) => e.key), headsUp: h });
     next = insert(next, h, at);
     from = at + 1;
   }

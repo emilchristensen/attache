@@ -4,10 +4,10 @@
  * follows reading order, and each action reaches its own meeting or Connection. Runs against the real bundled service
  * and the TEST-ONLY fixtures, with two overlapping meetings on the fixture calendar and a mixed Connections answer.
  */
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
-import { SELF, setCalendar } from "./calendar.ts";
+import { meetingHeadsUp, openPrep, SELF, setCalendar } from "./meetings.ts";
 import { openRecentlyAdded, openRow } from "./inbox.ts";
 
 let stack: Stack;
@@ -44,7 +44,7 @@ test.beforeAll(async ({ browser }) => {
   await expect.poll(async () => (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
   // A person note the briefing relates to the meeting in progress, so its prep has a related note to open.
   await harnessSave(stack, [{ action: "create", type: "person", title: "Nora Lind", facts: [{ subject: "Role", value: "Pilot lead at the client; owns the handover" }] }], { agent: "claude-code", session: "narrow-home" });
-  await setCalendar(stack, page, [HANDOVER, TRIAGE]);
+  await setCalendar(page, stack, [HANDOVER, TRIAGE]);
   await api(page, "POST", "/briefings", { kind: "manual" });
   await expect.poll(async () => (await api<{ briefing: unknown }>(page, "GET", "/briefings/latest")).briefing !== null, { timeout: 30_000 }).toBe(true);
   await page.close();
@@ -69,18 +69,7 @@ async function routeMixedHealth(page: Page) {
   });
 }
 
-const area = (page: Page) => page.getByRole("region", { name: "For you now" });
 const connections = (page: Page) => page.getByRole("status", { name: "Connections" });
-const meetingHeadsUp = (page: Page, subject: string) =>
-  area(page)
-    .locator('[data-heads-up="meeting-prep"]')
-    .filter({ has: page.locator(".heads-up-title, .heads-up-line-head strong").getByText(subject, { exact: true }) });
-
-async function openPrep(headsUp: Locator): Promise<void> {
-  const toggle = headsUp.getByRole("button", { name: "Open prep" });
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  await expect(headsUp.locator("[data-meeting-detail]")).toBeVisible();
-}
 
 /** A related note whose title has no space to break at, as a file name with underscores can be. */
 const UNBROKEN_TITLE = "Pilot_handover_checklist_for_the_client_kiosk_rollout_2026_11_18";

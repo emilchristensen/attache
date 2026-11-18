@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -249,6 +249,27 @@ export function DecidedRow({ item, decision, until, onUndo, busy, clock }: { ite
             Undo
           </button>
         )}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * A meeting prep row the keyboard was on when its meeting moved up into For you now: its place keeps the row's size
+ * and says so, with nothing to press, and the focus stays here, until the keyboard moves on. Then the row goes, as
+ * every promoted meeting does: it is one item, shown once.
+ */
+export function MovedUpRow({ item, height }: { item: AttentionItemView; height: number | undefined }) {
+  const ref = useRef<HTMLLIElement>(null);
+  // The row's controls went with it: the focus they had stays in its place.
+  useLayoutEffect(() => ref.current?.focus({ preventScroll: true }), []);
+  return (
+    <li ref={ref} tabIndex={-1} className="inbox-row decided" style={height ? { height } : undefined} data-inbox-row data-row-toggle data-item-id={item.id} data-item-key={item.key} data-type={inboxType(item).id} data-moved-up>
+      <div className="inbox-line">
+        <Kind item={item} />
+        <p className="inbox-decided">
+          <strong>Moved up to For you now:</strong> <span>{rowText(item).subject}</span>
+        </p>
       </div>
     </li>
   );
