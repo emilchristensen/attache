@@ -1,4 +1,5 @@
-/** Layout measurements the journeys share; each runs inside the page with `locator.evaluate`. */
+/** Layout measurements the journeys share; most run inside the page with `locator.evaluate`. */
+import type { Locator } from "@playwright/test";
 
 /** The first character of every line an element's text runs onto. */
 export function lineStarts(el: Element): string[] {
@@ -80,4 +81,52 @@ export function placeholderFit(input: HTMLInputElement): { text: number; room: n
   const ctx = document.createElement("canvas").getContext("2d")!;
   ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
   return { text: ctx.measureText(input.placeholder).width, room: input.clientWidth };
+}
+
+/**
+ * Marks `phrase` in `el`'s text: with `hide` its glyphs turn transparent through a CSS highlight (nothing moves and
+ * the DOM is untouched), without it the mark is lifted. Returns the phrase's box inside the window, or null when it
+ * has none there. Runs inside the page.
+ */
+function markPhrase(el: Element, [phrase, hide]: readonly [string, boolean]): { x: number; y: number; width: number; height: number } | null {
+  const NAME = "phrase-drawn";
+  if (!document.getElementById(NAME)) {
+    const style = document.createElement("style");
+    style.id = NAME;
+    style.textContent = `::highlight(${NAME}) { color: transparent; }`;
+    document.head.append(style);
+  }
+  CSS.highlights.delete(NAME);
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = (node.textContent ?? "").indexOf(phrase);
+    if (at < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + phrase.length);
+    if (hide) CSS.highlights.set(NAME, new Highlight(range));
+    const box = range.getBoundingClientRect();
+    const left = Math.max(0, Math.floor(box.left));
+    const top = Math.max(0, Math.floor(box.top));
+    const right = Math.min(document.documentElement.clientWidth, Math.ceil(box.right));
+    const bottom = Math.min(window.innerHeight, Math.ceil(box.bottom));
+    return right > left && bottom > top ? { x: left, y: top, width: right - left, height: bottom - top } : null;
+  }
+  return null;
+}
+
+/**
+ * Whether the owner sees `phrase` in `el`, by its pixels: hiding just its glyphs must change the picture where it
+ * sits. Words that are clipped, painted over by any layer or drawn invisibly change nothing. Pair it with
+ * `phraseShown`, which asks that every part of the phrase lies inside what clips it.
+ */
+export async function phraseDrawn(el: Locator, phrase: string): Promise<boolean> {
+  const page = el.page();
+  const clip = await el.evaluate(markPhrase, [phrase, false] as const);
+  if (!clip) return false;
+  const shown = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+  await el.evaluate(markPhrase, [phrase, true] as const);
+  const hidden = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+  await el.evaluate(markPhrase, [phrase, false] as const);
+  return !shown.equals(hidden);
 }

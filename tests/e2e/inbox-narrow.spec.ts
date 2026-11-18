@@ -9,7 +9,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
 import { inboxRow, openRow } from "./inbox.ts";
-import { phraseShown, placeholderFit } from "./layout.ts";
+import { phraseDrawn, phraseShown, placeholderFit } from "./layout.ts";
 import { buildAll, ROOT, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -83,6 +83,7 @@ async function expectRegionShown(row: Locator, region: string, where: string): P
   const shown = await subject.evaluate(phraseShown, region);
   expect(shown, `${region} is drawn in its collapsed row (${where})`).toEqual({ found: true, inside: true, painted: true, fontSize: expect.any(Number) });
   expect(shown.fontSize, where).toBeGreaterThanOrEqual(16);
+  expect(await phraseDrawn(subject, region), `${region} changes the pixels where it sits (${where})`).toBe(true);
 }
 
 test("heavy day at 375 px: the first three recovery rehearsal deadlines show their region in the collapsed rows, and the search prompt fits, in light and dark", async () => {
@@ -91,7 +92,11 @@ test("heavy day at 375 px: the first three recovery rehearsal deadlines show the
   await expect(rows(page).first()).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    const fit = await page.getByRole("combobox", { name: "Search the Brain" }).evaluate(placeholderFit);
+    const search = page.getByRole("combobox", { name: "Search the Brain" });
+    await expect(search).toBeVisible();
+    await expect(search).toHaveValue("");
+    await expect(search).toHaveAttribute("placeholder", "Search the Brain");
+    const fit = await search.evaluate(placeholderFit);
     expect(fit.text, `"Search the Brain" fits the field at 375 px (${scheme})`).toBeLessThanOrEqual(fit.room);
     for (const region of FIRST_THREE) await expectRegionShown(rehearsal(page, region), region, `375 px ${scheme}`);
     // The pixels too: three titles that differ only at the end would look the same if the end were cut off.
@@ -133,7 +138,8 @@ test("narrow mixed index: stamp and kind first, the whole subject wrapping at 16
   expect(await row.locator(".inbox-source").evaluate(lines)).toBeGreaterThan(1);
   expect(await row.locator(".inbox-source").evaluate(phraseShown, noteTitle(2))).toMatchObject({ found: true, inside: true, painted: true });
   await expect(row.locator(".inbox-time")).toHaveText("Due today");
-  await rows(page).first().evaluate((el) => el.scrollIntoView({ block: "start" }));
+  // Framed on the rows checked above: the rehearsal deadline, then the pending reply and the review requests.
+  await row.evaluate((el) => el.scrollIntoView({ block: "start" }));
   await page.screenshot({ path: "test-results/screens/narrow-home-inbox-mixed.png" });
   await page.close();
 });
@@ -145,6 +151,7 @@ test("320 px: type, source and due time stay legible on every row, and only the 
   // Only the page scrolls: the window itself moves neither sideways nor down, so the masthead and the bottom bar stay put.
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight), "the window does not scroll down").toBeLessThanOrEqual(0);
+  expect(await page.locator(".page").evaluate((el) => el.scrollWidth - el.clientWidth), "the page does not scroll sideways").toBeLessThanOrEqual(0);
   for (const row of await rows(page).all()) {
     await centre(row);
     const text = await row.evaluate((el) => ({
@@ -178,7 +185,7 @@ test("journey: on a phone the owner picks region 2 by its visible title, opens t
       if ((await row.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "false") continue;
       await centre(row);
       const shown = await row.locator("[data-row-toggle]").evaluate(phraseShown, "region 2");
-      if (shown.found && shown.inside && shown.painted) picked = row;
+      if (shown.found && shown.inside && shown.painted && (await phraseDrawn(row.locator("[data-row-toggle]"), "region 2"))) picked = row;
     }
     expect(picked, "one collapsed row shows region 2").not.toBeNull();
     await openRow(picked!);
