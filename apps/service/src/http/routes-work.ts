@@ -160,8 +160,14 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
+    const before = app.connections.record(kind)?.status;
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
+    // Saving the method again is how a login made outside Attache is picked up: refresh a recovered source now, as a passed test does.
+    const rec = app.connections.record(kind);
+    if (out.test.ok && rec && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
+      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
+    }
     return out;
   });
   r.post("/connections/:id/test", async (c) => {

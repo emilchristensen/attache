@@ -39,30 +39,29 @@ function mapReply<T, U>(r: Reply<T>, f: (t: T) => U): Reply<U> {
   return r.state === "ok" ? { state: "ok", data: f(r.data) } : r;
 }
 
-/** When this Machine's Source refresh runs next, if it is switched on, still ahead and the schedule answered last time. */
-function nextRefresh(schedules: Resource<Schedule[]>, now: number): string | null {
-  if (schedules.error) return null;
-  const next = schedules.data?.find((s) => s.jobKind === "source-refresh" && s.enabled)?.nextRunAt ?? null;
-  return next && Date.parse(next) > now ? next : null;
-}
+/** How often the schedule is asked again while its next run is due but not yet taken: the scheduler ticks this often. */
+const OVERDUE_RECHECK_MS = 15_000;
 
 /**
- * The promised time of the next automatic read stops being promised the moment it is due: the page asks for the
- * schedule again then, since a refresh that runs long may send no event that would.
+ * When this Machine's Source refresh runs next, promised only while that time is ahead and the schedule answered. At
+ * the due time the promise goes and the schedule is asked again, every 15 seconds until it names a later time, since
+ * a scheduled refresh that runs long may send no event that would.
  */
 function useNextRefresh(schedules: Resource<Schedule[]>): string | null {
   const [now, setNow] = useState(() => Date.now());
-  const next = nextRefresh(schedules, now);
+  const scheduled = schedules.error ? null : (schedules.data?.find((s) => s.jobKind === "source-refresh" && s.enabled)?.nextRunAt ?? null);
+  const due = scheduled ? Date.parse(scheduled) : null;
   const { reload } = schedules;
   useEffect(() => {
-    if (!next) return;
+    if (due === null) return;
+    const wait = due > now ? due - now + 1000 : OVERDUE_RECHECK_MS;
     const timer = window.setTimeout(() => {
       setNow(Date.now());
       reload();
-    }, Date.parse(next) - Date.now() + 1000);
+    }, wait);
     return () => window.clearTimeout(timer);
-  }, [next, reload]);
-  return next;
+  }, [due, now, reload]);
+  return scheduled && due !== null && due > now ? scheduled : null;
 }
 
 /**
@@ -181,6 +180,17 @@ function RowAction({ action, describedBy, view }: { action: StatusAction; descri
           aria-describedby={describedBy}
           disabled={busy !== null}
           onClick={() => run("refresh", () => Promise.all(action.connectionIds.map((id) => post(`/connections/${encodeURIComponent(id)}/refresh`))), "Refresh started")}
+        >
+          {action.label}
+        </button>
+      );
+    case "refresh_all":
+      return (
+        <button
+          className="small"
+          aria-describedby={describedBy}
+          disabled={busy !== null}
+          onClick={() => run("refresh", () => post("/jobs", { kind: "source-refresh", title: "Refresh every source", input: { all: true, reason: "manual" } }), "Refresh started")}
         >
           {action.label}
         </button>

@@ -29,6 +29,7 @@ function conn(kind: ConnectionStatus["kind"], extra: Partial<ConnectionStatus> =
     settings: {},
     lastAttemptAt: AT,
     lastSuccessAt: LAST_OK,
+    lastReadAt: readable ? LAST_OK : null,
     lastError: null,
     coverage: readable ? coverage("complete") : null,
     authMethod: "token",
@@ -150,9 +151,9 @@ describe("connectionsStatus: one case per state", () => {
     expect(row).toMatchObject({ state: "down", subject: "GitHub", failure: "GitHub answered 503" });
   });
 
-  it("Down for a Harness tests it again, and has no last read since it has no Source refresh", () => {
+  it("Down for a Harness offers Open in Connections, and has no last read since it has no Source refresh", () => {
     const row = onlyRow(withConnections(conn("claude-code", { status: "error", lastError: "Not installed" })));
-    expect(row).toMatchObject({ state: "down", subject: "Claude Code", lastRead: [], action: { kind: "test", connectionId: "claude-code", label: "Retry now" } });
+    expect(row).toMatchObject({ state: "down", subject: "Claude Code", lastRead: [], action: { kind: "open_connections", connectionId: "claude-code" } });
   });
 
   it("Offline, red, as one row for every source this Machine could not reach", () => {
@@ -189,7 +190,7 @@ describe("connectionsStatus: one case per state", () => {
   });
 
   it("Not read yet, slate with a question mark, with no invented last-read time, as one row for every new source", () => {
-    const row = onlyRow(withConnections(conn("jira", { coverage: null, lastSuccessAt: null }), conn("gcal", { coverage: coverage("never_run"), lastSuccessAt: null })));
+    const row = onlyRow(withConnections(conn("jira", { coverage: null, lastSuccessAt: null, lastReadAt: null }), conn("gcal", { coverage: coverage("never_run"), lastSuccessAt: null, lastReadAt: null })));
     expect(row).toMatchObject({ state: "not_read_yet", word: "Not read yet", hue: "slate", icon: "question", subject: "Jira and Google Calendar", action: { kind: "refresh", connectionIds: ["jira", "gcal"], label: "Refresh now" } });
     expect(row.lastRead).toEqual([{ name: "Jira", at: null }, { name: "Google Calendar", at: null }]);
   });
@@ -257,9 +258,9 @@ describe("connectionsStatus: rules for every row", () => {
     expect(rows.find((r) => r.state === "down")!.retry).toEqual({ kind: "none" });
   });
 
-  it("takes last-read times only from stored success times", () => {
-    const row = onlyRow(withConnections(conn("slack", { status: "error", lastSuccessAt: null, lastAttemptAt: AT })));
-    expect(row.lastRead).toEqual([{ name: "Slack", at: null }]);
+  it("takes last-read times only from a stored finished read, never from a passed sign-in test", () => {
+    expect(onlyRow(withConnections(conn("slack", { status: "error", lastReadAt: null, lastSuccessAt: AT }))).lastRead).toEqual([{ name: "Slack", at: null }]);
+    expect(onlyRow(withConnections(conn("slack", { status: "error", lastReadAt: LAST_OK, lastSuccessAt: AT }))).lastRead).toEqual([{ name: "Slack", at: LAST_OK }]);
   });
 
   it("gives every row a word, a colour, an icon, a sentence and at most one button", () => {
@@ -275,7 +276,7 @@ describe("connectionsStatus: rules for every row", () => {
 describe("connectionsStatus: findings from review round 1", () => {
   it("is not green before the Reader stored a refresh of every source: one Not read yet row for every source", () => {
     const row = onlyRow(inputs({ reader: ok({ ...THIS_READER, lastRefreshAt: null }) }));
-    expect(row).toMatchObject({ state: "not_read_yet", subject: "Every source", action: { kind: "refresh", connectionIds: ["vault", "github", "gmail", "slack"], label: "Refresh now" } });
+    expect(row).toMatchObject({ state: "not_read_yet", subject: "Every source", action: { kind: "refresh_all", label: "Refresh now" } });
   });
 
   it("names a refused scope Access denied even when the service's overall state is partial", () => {
@@ -296,13 +297,47 @@ describe("connectionsStatus: findings from review round 1", () => {
   });
 
   it("shows no last-read time for a source that was never read, even after a successful test", () => {
-    const row = onlyRow(withConnections(conn("jira", { coverage: null, lastSuccessAt: AT })));
+    const row = onlyRow(withConnections(conn("jira", { coverage: null, lastSuccessAt: AT, lastReadAt: null })));
     expect(row.lastRead).toEqual([{ name: "Jira", at: null }]);
   });
 
   it("says a source could not be reached, not that this Machine had no network, since the service also files timeouts and 5xx answers there", () => {
     const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline") }), conn("gmail", { coverage: coverage("offline") })));
     expect(row.sentence).toBe("2 sources could not be reached, so their items may be missing below.");
+  });
+});
+
+describe("connectionsStatus: findings from review round 2", () => {
+  it("folds a feature whose unmet Connections are each broken with a row of their own into the first of them", () => {
+    const sessions = feature("sessions", {
+      readiness: "unavailable",
+      reason: "A Harness: connection needs attention.",
+      dependsOn: { features: [], connections: [{ kinds: ["claude-code"], label: "A Harness", required: true }, { kinds: ["model"], label: "A model", required: false }] },
+    });
+    const i = { ...withConnections(conn("claude-code", { status: "error" }), conn("model", { status: "needs_auth" })), features: ok([...FEATURES, sessions]) };
+    const rows = rowsOf(i);
+    expect(rows.map((r) => r.state)).toEqual(["sign_in", "down"]);
+    expect(rows.find((r) => r.subject === "Claude Code")!.alsoAffected).toEqual(["Sessions"]);
+  });
+
+  it("sends a Harness in error to Connections, where it can be set up again, and tests the model again", () => {
+    expect(onlyRow(withConnections(conn("claude-code", { status: "error" }))).action).toEqual({ kind: "open_connections", connectionId: "claude-code" });
+    expect(onlyRow(withConnections(conn("model", { status: "error" }))).action).toEqual({ kind: "test", connectionId: "model", label: "Retry now" });
+  });
+
+  it("refreshes every source in one full refresh when none has finished, which is what the Reader records", () => {
+    expect(onlyRow(inputs({ reader: ok({ ...THIS_READER, lastRefreshAt: null }) })).action).toEqual({ kind: "refresh_all", label: "Refresh now" });
+  });
+
+  it("still says no full refresh has finished when an unrelated model or Harness problem is listed", () => {
+    const rows = rowsOf({ ...withConnections(conn("model", { status: "needs_auth" })), reader: ok({ ...THIS_READER, lastRefreshAt: null }) });
+    expect(rows.map((r) => r.key)).toEqual(["sign_in:model", "not_read_yet:every"]);
+    expect(inboxCoverage(connectionsStatus({ ...withConnections(conn("model", { status: "needs_auth" })), reader: ok({ ...THIS_READER, lastRefreshAt: null }) }))).toBe("incomplete");
+  });
+
+  it("keeps each unreached source's own diagnostics in the shared Offline row", () => {
+    const row = onlyRow(withConnections(conn("github", { coverage: coverage("offline", { note: "GitHub answered 503" }) }), conn("slack", { coverage: coverage("offline", { note: "Timed out after 60 seconds" }) })));
+    expect(row.failure).toBe("GitHub: GitHub answered 503; Slack: Timed out after 60 seconds");
   });
 });
 

@@ -39,6 +39,7 @@ export type StatusAction =
   | { kind: "reconnect"; connectionId: string }
   | { kind: "refresh"; connectionIds: string[]; label: "Retry now" | "Refresh now" }
   | { kind: "test"; connectionId: string; label: "Retry now" }
+  | { kind: "refresh_all"; label: "Refresh now" }
   | { kind: "retry_check" }
   | { kind: "open_connections"; connectionId?: string }
   | { kind: "open_settings" }
@@ -156,13 +157,9 @@ function retryOf(ctx: Context): StatusRow["retry"] {
   return ctx.nextReadAt ? { kind: "at", at: ctx.nextReadAt } : null;
 }
 
-/** A source no Source refresh has finished for yet: no stored read, whatever a sign-in test recorded. */
-function neverRead(c: ConnectionStatus): boolean {
-  return !c.coverage || c.coverage.state === "never_run" || c.coverage.state === "not_configured";
-}
-
+/** When each source was last read, from the stored finished Source refresh; a passed sign-in test never counts. */
 function lastReadOf(cs: ConnectionStatus[]): StatusRow["lastRead"] {
-  return cs.filter(isReadable).map((c) => ({ name: c.label, at: neverRead(c) ? null : c.lastSuccessAt }));
+  return cs.filter(isReadable).map((c) => ({ name: c.label, at: c.lastReadAt }));
 }
 
 const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox" | "alsoAffected"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true, alsoAffected: [] };
@@ -208,8 +205,14 @@ function downRow(c: ConnectionStatus, ctx: Context): StatusRow {
     failure: c.status === "error" ? c.lastError : coverageNote(c, "error"),
     lastRead: lastReadOf([c]),
     retry: source ? retryOf(ctx) : null,
-    // A Connection in error comes back through a test; a read that failed comes back through another read.
-    action: c.status === "error" ? { kind: "test", connectionId: c.id, label: "Retry now" } : { kind: "refresh", connectionIds: [c.id], label: "Retry now" },
+    // A read that failed comes back through another read and the model through a test; a Harness may need its hooks
+    // installed again, which only setting it up again on Connections does.
+    action:
+      c.status !== "error"
+        ? { kind: "refresh", connectionIds: [c.id], label: "Retry now" }
+        : source || c.kind === "model"
+          ? { kind: "test", connectionId: c.id, label: "Retry now" }
+          : { kind: "open_connections", connectionId: c.id },
     inbox: source,
   };
 }
@@ -227,6 +230,8 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
     impact: one ? (MISSING[one.kind]?.short ?? "Items may be missing") : "Their items may be missing",
     // The service also files timeouts and 5xx answers as offline, so this says what is known: they were not reached.
     sentence: one ? `${one.label} could not be reached, so ${missingPhrase(one)} may be missing below.` : `${plural(cs.length, "source")} could not be reached, so their items may be missing below.`,
+    // One row for one state and one remedy, keeping what each source's own read said.
+    failure: cs.length === 1 ? coverageNote(cs[0]!, "offline") : cs.map((c) => `${c.label}: ${coverageNote(c, "offline") ?? "not reached"}`).join("; "),
     lastRead: lastReadOf(cs),
     retry: retryOf(ctx),
     action: { kind: "refresh", connectionIds: cs.map((c) => c.id), label: "Retry now" },
@@ -309,7 +314,7 @@ function notReadingRow(r: ReaderView): StatusRow {
 }
 
 /** Every source answered, but the Reader has stored no finished refresh of every source yet, so nothing is green. */
-function everySourceUnreadRow(sources: ConnectionStatus[], ctx: Context): StatusRow {
+function everySourceUnreadRow(ctx: Context): StatusRow {
   return {
     ...BASE,
     key: "not_read_yet:every",
@@ -321,22 +326,25 @@ function everySourceUnreadRow(sources: ConnectionStatus[], ctx: Context): Status
     impact: "Items may be missing",
     sentence: "No Source refresh of every source has finished yet, so items may be missing below.",
     retry: retryOf(ctx),
-    action: { kind: "refresh", connectionIds: sources.map((c) => c.id), label: "Refresh now" },
+    // One full refresh: only a refresh of every source is what the Reader records.
+    action: { kind: "refresh_all", label: "Refresh now" },
   };
 }
 
 /**
- * A feature row whose only problem is a Connection that already has its own row: the feature's name joins that row
- * instead, since one cause is one row. A feature with a cause of its own keeps its row.
+ * A feature row whose only problems are Connections that already have their own rows: the feature's name joins the
+ * row of the first of them (a required one first) instead, since one cause is one row. A feature with a cause of its
+ * own keeps its row.
  */
 function foldIntoConnections(rows: StatusRow[], featureRows: Array<{ row: StatusRow; feature: FeatureStatus }>, connections: ConnectionStatus[]): StatusRow[] {
-  const broken = connections.filter((c) => c.status === "needs_auth" || c.status === "error");
+  const withRow = connections.filter((c) => (c.status === "needs_auth" || c.status === "error") && rows.some((r) => r.key === `sign_in:${c.id}` || r.key === `down:${c.id}`));
   const folded = new Map<string, string[]>();
   const kept: StatusRow[] = [];
   for (const { row, feature } of featureRows) {
-    const groups = feature.dependsOn.connections.filter((g) => !connections.some((c) => g.kinds.includes(c.kind) && c.status === "connected"));
-    const cause = groups.length > 0 ? broken.find((c) => groups.every((g) => g.kinds.includes(c.kind))) : undefined;
-    if (cause && rows.some((r) => r.key === `sign_in:${cause.id}` || r.key === `down:${cause.id}`)) folded.set(cause.id, [...(folded.get(cause.id) ?? []), feature.label]);
+    const unmet = feature.dependsOn.connections.filter((g) => !connections.some((c) => g.kinds.includes(c.kind) && c.status === "connected"));
+    const causes = [...unmet].sort((a, b) => Number(b.required) - Number(a.required)).map((g) => withRow.find((c) => g.kinds.includes(c.kind)));
+    const first = causes[0];
+    if (first && causes.every(Boolean)) folded.set(first.id, [...(folded.get(first.id) ?? []), feature.label]);
     else kept.push(row);
   }
   const merged = rows.map((r) => {
@@ -447,8 +455,9 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   else if (!readerActive) rows.push(notReadingRow(reader));
   const workSources = connections.filter((c) => inUse(c) && isReadable(c) && c.kind !== "vault");
   if (attentionOn && workSources.length === 0) rows.push(NOTES_ONLY);
-  // Green needs a stored refresh of every source: single reads and sign-in tests do not make the list complete.
-  if (rows.length === 0 && attentionOn && reader.lastRefreshAt === null) rows.push(everySourceUnreadRow(healthy.filter(isReadable), ctx));
+  // Green needs a stored refresh of every source: single reads and sign-in tests do not make the list complete. A
+  // problem that already says items may be missing covers it; one that hides no Inbox item does not.
+  if (attentionOn && readerActive && reader.lastRefreshAt === null && rows.every((r) => !r.inbox)) rows.push(everySourceUnreadRow(ctx));
 
   const sources = healthy.filter(isReadable).length;
   const others = healthy.length - sources;
