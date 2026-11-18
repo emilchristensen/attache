@@ -36,3 +36,38 @@ export function screenAt(path: string): ScreenId | null {
 /** The narrow bottom bar's tabs; the rest of the screens are under More. */
 export const BOTTOM_BAR_SCREENS: readonly ScreenId[] = ["home", "approvals", "brain"];
 export const MORE_SCREENS: readonly ScreenId[] = ["jobs", "connections", "settings"];
+
+/** The Settings section groups, in the section list's order. */
+export type SettingsGroup = "Attache" | "Brain" | "Machines" | "Service";
+
+export interface SettingsSection {
+  id: string;
+  label: string;
+  group: SettingsGroup;
+}
+
+/**
+ * Every Settings section, each at `/settings/<id>`. The search palette's Go to group reaches each one; Settings
+ * shows the section the address names (#32 of spec #14 turns these into a section list).
+ */
+export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
+  { id: "features", label: "Features", group: "Attache" },
+  { id: "schedules", label: "Schedules and notifications", group: "Attache" },
+  { id: "identity", label: "Identity", group: "Attache" },
+  { id: "saving", label: "Saving and review", group: "Brain" },
+  { id: "meaning-search", label: "Meaning-based search", group: "Brain" },
+  { id: "backup", label: "Backup and export", group: "Brain" },
+  { id: "machines", label: "Machines and Replication", group: "Machines" },
+  { id: "clients", label: "Paired clients", group: "Machines" },
+  { id: "service", label: "Service health", group: "Service" },
+];
+
+export function settingsHref(id: string): string {
+  return `/settings/${id}`;
+}
+
+/** The Settings section `path` names, or null for Settings itself, another screen or an unknown section. */
+export function settingsSectionAt(path: string): string | null {
+  const id = path.startsWith("/settings/") ? path.slice("/settings/".length) : null;
+  return SETTINGS_SECTIONS.some((s) => s.id === id) ? id : null;
+}

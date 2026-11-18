@@ -122,7 +122,7 @@ The numbers beside Home, Approvals and Connections always add up to the one in t
 When a list could not be read in full, or a request failed, the number is a lower bound, such as "12+", and a part that is not known adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
 
-Off Home, **Search** in the masthead takes you to the Brain's search field; on Home the search field is the first thing on the page.
+Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
 When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
@@ -130,9 +130,16 @@ When the Reader has gone silent, so no Machine reads your sources on a schedule,
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
+**Search** in the bar puts you in Home's search field on Home and opens the search palette everywhere else.
 
 Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
-Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere in the Brain's.
+Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere they open the search palette.
+The search palette is the same search in a dialog over the screen you are on, with the same results and a **Go to** group above them.
+Before you type, Go to lists every screen and every Settings section; as you type it keeps the places whose name starts with your words, so `repl` finds Machines and Replication and `settings ident` finds Identity.
+Arrow keys move through places and passages, `Enter` opens the chosen one, and **All results in Brain** takes the query to the Brain.
+`Tab` stays inside the palette, `Esc` closes it, and focus goes back to where it was; each time it opens, its field is empty.
+Searching from the palette only reads: it starts no job and changes nothing.
+Each Settings section has its own address (`/settings/identity`, `/settings/machines` and so on), which opens Settings at that section.
 Press `?` for the list of keyboard shortcuts.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.

@@ -3,7 +3,6 @@ import { modalOpen } from "./components/dialog.ts";
 import { navigate } from "./components/ui.tsx";
 import { SCREENS } from "./routes.ts";
 import { browserPlatform, isSearchChord, SEARCH_SLASH, searchKeyLabel } from "./search-keys.ts";
-import { launchSearch } from "./search-launch.ts";
 
 /**
  * The Dashboard's keyboard shortcuts: one keymap the shell listens with and the shortcut sheet lists.
@@ -33,8 +32,8 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     title: "Search",
     rows: [
-      { keys: [searchKeyLabel(browserPlatform())], does: "Search the Brain, even from a text field" },
-      { keys: [SEARCH_SLASH], does: "Search the Brain" },
+      { keys: [searchKeyLabel(browserPlatform())], does: "Search the Brain or go to a screen or setting, even from a text field" },
+      { keys: [SEARCH_SLASH], does: "Search the Brain or go to a screen or setting" },
     ],
   },
   { title: "Help", rows: [{ keys: [SHEET_KEY], does: "Show this list of shortcuts" }] },
@@ -53,8 +52,8 @@ export function shortcutsIgnore(e: KeyboardEvent): boolean {
   return modalOpen();
 }
 
-/** Listens for the jumps and `?` while the shell is mounted. */
-export function useShortcuts(openSheet: () => void): void {
+/** Listens for the jumps, `?` and the search keys (`search` focuses Home's field or opens the palette) while the shell is mounted. */
+export function useShortcuts(openSheet: () => void, search: () => void): void {
   useEffect(() => {
     let jumpUntil = 0;
     const onKey = (e: KeyboardEvent) => {
@@ -62,7 +61,7 @@ export function useShortcuts(openSheet: () => void): void {
       if (!e.defaultPrevented && !e.isComposing && isSearchChord(e) && !modalOpen()) {
         e.preventDefault();
         jumpUntil = 0;
-        launchSearch();
+        search();
         return;
       }
       if (e.defaultPrevented || shortcutsIgnore(e)) {
@@ -85,10 +84,10 @@ export function useShortcuts(openSheet: () => void): void {
         openSheet();
       } else if (e.key === SEARCH_SLASH) {
         e.preventDefault();
-        launchSearch();
+        search();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openSheet]);
+  }, [openSheet, search]);
 }

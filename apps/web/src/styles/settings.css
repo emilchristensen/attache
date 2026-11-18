@@ -86,3 +86,11 @@
     grid-column: 1 / -1;
   }
 }
+
+/* A section the search palette's Go to opened takes focus without a ring around the whole section. */
+.settings-section {
+  scroll-margin-top: var(--s-5);
+}
+.settings-section:focus {
+  outline: none;
+}
