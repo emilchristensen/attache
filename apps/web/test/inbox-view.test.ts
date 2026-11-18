@@ -60,8 +60,8 @@ describe("the frozen snapshot", () => {
     expect(list.snapshot).toEqual(["back", "a", "b"]);
   });
 
-  it("names the rows that left the list, so a decided row can stay in its place", () => {
-    expect(frozenList(["a", "b", "c"], [it_("a"), it_("c")], "priority").gone).toEqual(["b"]);
+  it("leaves out rows that left the live list", () => {
+    expect(ids(frozenList(["a", "b", "c"], [it_("a"), it_("c")], "priority").rows)).toEqual(["a", "c"]);
   });
 });
 

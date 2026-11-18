@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { ALL_TYPES, PAGE_SIZE } from "./inbox-view.ts";
+import { FAMILIES, type FamilyId } from "./inbox-types.ts";
 
 /**
- * The Inbox view the owner chose and their place in it (the type, the view, how many rows Load more has shown and
- * the open row), kept for this tab in sessionStorage so a visit to a Draft and back finds it as it was.
+ * The Inbox view the owner chose and their place in it (the type, the view, how many rows Load more has shown, the
+ * families Show all opened and the open row), kept for this tab in sessionStorage so a visit to a Draft and back finds it as it was.
  */
 
 export type InboxViewId = "priority" | "newest" | "grouped" | "hidden";
@@ -19,11 +20,13 @@ export interface InboxPlace {
   view: InboxViewId;
   type: string;
   shown: number;
+  /** Families Show all opened under Group by type. */
+  expanded: FamilyId[];
   openId: string | null;
 }
 
 const STORAGE_KEY = "attache.inbox.place";
-export const DEFAULT_PLACE: InboxPlace = { view: "priority", type: ALL_TYPES, shown: PAGE_SIZE, openId: null };
+export const DEFAULT_PLACE: InboxPlace = { view: "priority", type: ALL_TYPES, shown: PAGE_SIZE, expanded: [], openId: null };
 
 /** A stored place, or the default when it is missing, unreadable or from an older shape. */
 export function parsePlace(raw: string | null): InboxPlace {
@@ -34,6 +37,7 @@ export function parsePlace(raw: string | null): InboxPlace {
       view: INBOX_VIEWS.some((v) => v.id === p.view) ? p.view! : DEFAULT_PLACE.view,
       type: typeof p.type === "string" && p.type ? p.type : ALL_TYPES,
       shown: Number.isInteger(p.shown) && p.shown! >= PAGE_SIZE ? p.shown! : PAGE_SIZE,
+      expanded: Array.isArray(p.expanded) ? FAMILIES.map((f) => f.id).filter((id) => p.expanded!.includes(id)) : [],
       openId: typeof p.openId === "string" ? p.openId : null,
     };
   } catch {

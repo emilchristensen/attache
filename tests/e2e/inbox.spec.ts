@@ -22,6 +22,11 @@ const RELEASE_TASKS = Array.from({ length: 24 }, (_, i) => `Prepare release note
 /** A subject long enough to wrap at 360 px, whose last words tell it apart. */
 const LONG = "Confirm the recovery rehearsal schedule with the platform team for the Copenhagen region";
 
+/** The release notes, with `moved` due on a later day than the others' pattern. */
+function releaseNote(moved: string | null = null): string {
+  return `# Release\n\n## Tasks\n${RELEASE_TASKS.map((t, i) => `- [ ] ${t} 📅 ${day(t === moved ? 13 : 3 + (i % 10))}`).join("\n")}\n- [ ] ${LONG} 📅 ${day(2)}\n`;
+}
+
 async function refreshNotes(page: Page): Promise<void> {
   await api(page, "POST", `/connections/${notesId}/refresh`);
 }
@@ -29,7 +34,7 @@ async function refreshNotes(page: Page): Promise<void> {
 test.beforeAll(async ({ browser }) => {
   buildAll();
   stack = await startStack();
-  writeFileSync(join(stack.vaultDir, "Projects/Release.md"), `# Release\n\n## Tasks\n${RELEASE_TASKS.map((t, i) => `- [ ] ${t} 📅 ${day(3 + (i % 10))}`).join("\n")}\n- [ ] ${LONG} 📅 ${day(2)}\n`);
+  writeFileSync(join(stack.vaultDir, "Projects/Release.md"), releaseNote());
   journeys = await JourneyBrowser.start(browser, stack.url);
   const page = await journeys.newPage();
   await page.goto(stack.pairUrl());
@@ -155,6 +160,9 @@ test("type picker and views: counts in the options, one type, Newest first, Grou
   await expect(deadlines.locator("[data-inbox-row]")).toHaveCount(3);
   await deadlines.getByRole("button", { name: /^Show all \d+$/ }).click();
   await expect(deadlines.locator("[data-inbox-row]")).toHaveCount(RELEASE_TASKS.length + 3);
+  // Show all is part of the place kept for the tab, as after a visit to a Draft.
+  await page.reload();
+  await expect(deadlines.locator("[data-inbox-row]")).toHaveCount(RELEASE_TASKS.length + 3);
   // No tinted group header and no coloured bar on a row.
   expect(await deadlines.locator("h3").evaluate((h) => getComputedStyle(h).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
   expect(await deadlines.locator("[data-inbox-row]").first().evaluate((r) => getComputedStyle(r).borderLeftWidth)).toBe("0px");
@@ -206,6 +214,21 @@ test("arrivals: a new item waits behind Show new items, without scrolling the pa
   await expect(arrived).toBeVisible();
   await expect(arrived.locator("[data-row-toggle]")).toBeFocused();
   await expect(showNew).toBeHidden();
+  await page.close();
+});
+
+test("decided rows: a dismissed item whose evidence changes comes back in its place, marked changed", async () => {
+  const page = await journeys.open("/");
+  const row = inboxRow(page, "Prepare release note 23");
+  await openRow(row);
+  await row.getByRole("button", { name: "Dismiss" }).click();
+  await expect(row).toHaveAttribute("data-decided", "dismiss");
+  // The note moves the task's due date: the service reopens the item, and the receipt gives way to it in place.
+  writeFileSync(join(stack.vaultDir, "Projects/Release.md"), releaseNote("Prepare release note 23"));
+  await refreshNotes(page);
+  await expect(row).not.toHaveAttribute("data-decided", { timeout: 30_000 });
+  await expect(row).toContainText("Changed since your decision");
+  await expect(row.locator(".inbox-time")).toHaveText(/^Due \d+ \w{3}$/);
   await page.close();
 });
 
@@ -272,6 +295,10 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   await typePicker(page).selectOption({ label: deadline });
   await expect(rows(page).first()).toHaveAttribute("data-type", "deadline");
   await inboxView(page, "Newest first");
+  // Group by type keeps Show new items' place too, with the count in it.
+  await inboxView(page, "Group by type");
+  await expect(page.locator(".inbox-tools-range")).toHaveText(/^\d+ items$/);
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
   await inboxView(page, "Priority order");
   const long = inboxRow(page, LONG);
   await long.scrollIntoViewIfNeeded();

@@ -9,7 +9,6 @@ import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import { useHeadsUpClock } from "../heads-up-clock.ts";
 import { groupRows, PAGE_SIZE, pageLabel, typeOptions, withType } from "../inbox-view.ts";
-import type { FamilyId } from "../inbox-types.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { useRowKeys, type RowKey } from "../shortcuts.ts";
@@ -63,8 +62,8 @@ interface ToolsProps {
   type: string;
   view: InboxViewId;
   arrivals: number;
-  /** The visible range, which fills Show new items' place on a narrow window while nothing waits. */
-  range: string | null;
+  /** The visible range (or the count under Group by type), which fills Show new items' place on a narrow window while nothing waits. */
+  range: string;
   onType: (type: string) => void;
   onView: (view: InboxViewId) => void;
   onShowNew: () => void;
@@ -75,7 +74,7 @@ function InboxTools({ items, type, view, arrivals, range, onType, onView, onShow
   const options = useMemo(() => typeOptions(items, type), [items, type]);
   return (
     <div className="inbox-tools">
-      {range && arrivals === 0 && (
+      {arrivals === 0 && (
         <span className="inbox-tools-range" aria-hidden>
           {range}
         </span>
@@ -172,7 +171,6 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
  */
 export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolean; draftsOn: boolean; coverage: InboxCoverage }) {
   const [place, setPlace] = useInboxPlace();
-  const [expanded, setExpanded] = useState<ReadonlySet<FamilyId>>(new Set());
   const [said, setSaid] = useState("");
   const heading = useId();
   const hiddenView = place.view === "hidden";
@@ -188,6 +186,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
 
   const typed = useMemo(() => list.entries.filter((e) => withType([e.item], place.type).length > 0), [list.entries, place.type]);
   const arrivals = useMemo(() => withType(list.arrivals, place.type), [list.arrivals, place.type]);
+  const expanded = useMemo(() => new Set(place.expanded), [place.expanded]);
   const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
 
@@ -198,7 +197,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
     reloadOpen();
     if (hiddenView) reloadHidden();
   }, [reloadOpen, reloadHidden, hiddenView]);
-  const { decided, undone } = list;
+  const { decided } = list;
   const decide = useCallback(
     (item: AttentionItemView, decision: RowDecision, until?: string) =>
       void run(`decide:${item.id}`, async () => {
@@ -212,7 +211,6 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
   const undo = (e: ListEntry) =>
     void run(`undo:${e.item.id}`, async () => {
       await post(`/attention/${e.item.id}/decision`, { decision: "reopen" });
-      undone(e.item.id);
       focusAfter(e.item.id, "row");
       reload();
     });
@@ -257,11 +255,10 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
           type={place.type}
           view={place.view}
           arrivals={arrivals.length}
-          range={!grouped && typed.length > 0 ? pageLabel(shown.length, typed.length) : null}
+          range={grouped ? plural(typed.length, "item") : typed.length > 0 ? pageLabel(shown.length, typed.length) : ""}
           onType={(type) => setPlace({ type, shown: PAGE_SIZE })}
           onView={(view) => {
-            setPlace({ view, shown: PAGE_SIZE, openId: null });
-            setExpanded(new Set());
+            setPlace({ view, shown: PAGE_SIZE, openId: null, expanded: [] });
           }}
           onShowNew={showNew}
         />
@@ -272,7 +269,8 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
       {hiddenView && <p className="count-line">Snoozed and dismissed items. Reopen one to bring it back.</p>}
       {source.loading && !source.data && <Loading label="Loading the Inbox" />}
       <ErrorState error={source.error} retry={source.reload} />
-      {live && list.entries.length === 0 && <Empty title={hiddenView ? "Nothing snoozed or dismissed" : EMPTY[coverage].title}>{hiddenView ? null : EMPTY[coverage].body}</Empty>}
+      {live && list.entries.length === 0 && arrivals.length > 0 && <p className="inbox-none">New items arrived. Show new items adds them.</p>}
+      {live && list.entries.length === 0 && arrivals.length === 0 && <Empty title={hiddenView ? "Nothing snoozed or dismissed" : EMPTY[coverage].title}>{hiddenView ? null : EMPTY[coverage].body}</Empty>}
       {live && typed.length === 0 && list.entries.length > 0 && <p className="inbox-none">No items of this type.</p>}
       {grouped
         ? grouped.map((g) => (
@@ -282,7 +280,7 @@ export function Inbox({ attentionOn, draftsOn, coverage }: { attentionOn: boolea
               </h3>
               <Rows entries={typed.filter((e) => g.rows.some((i) => i.id === e.item.id))} {...rowsProps} />
               {g.hidden > 0 && (
-                <button className="small inbox-show-all" onClick={() => setExpanded(new Set([...expanded, g.family]))}>
+                <button className="small inbox-show-all" onClick={() => setPlace({ expanded: [...place.expanded, g.family] })}>
                   Show all {g.total}
                 </button>
               )}

@@ -56,11 +56,13 @@ const RULES: Readonly<Record<string, Rule>> = {
   authored_pr: (i) => ({ subject: i.title, context: githubPlace(i.url) }),
   assigned_issue: (i) => ({ subject: i.title, context: githubPlace(i.url) }),
   pending_reply: (i) => {
+    if (i.sourceKind === "slack") return slackSplit(i, /^Reply to (.+) in Slack$/s);
     if (i.sourceKind !== "gmail") return null;
     const m = after(/^Reply to (.+?): (.*)$/s, i.title);
     return m && m[2] !== "(no subject)" ? { subject: m[2]!, context: m[1]! } : null;
   },
   mention: (i) => {
+    if (i.sourceKind === "slack") return slackSplit(i, /^Mentioned in (#\S+)$/s);
     if (i.sourceKind !== "confluence") return null;
     const m = after(/^Mentioned in "(.*)"$/s, i.title);
     return m ? { subject: m[1]!, context: /^(.+?) mentioned you/.exec(i.summary)?.[1] ?? null } : null;
@@ -81,6 +83,22 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
 };
 
+/** Slack's message markup as words: `<@U1|Alex>` "@Alex", `<@U1>` "@someone", `<#C1|ops>` "#ops", `<url|label>` "label". */
+function slackText(text: string): string {
+  return (text.split("\n")[0] ?? "")
+    .replace(/<@[A-Z0-9]+\|([^>]+)>/g, "@$1")
+    .replace(/<@[A-Z0-9]+>/g, "@someone")
+    .replace(/<#[A-Z0-9]+\|([^>]+)>/g, "#$1")
+    .replace(/<[^|>]+\|([^>]+)>/g, "$1")
+    .replace(/<([^>]+)>/g, "$1")
+    .trim();
+}
+
+/** A Slack title only names the sender or channel, so the message is the subject and that name moves to the source line. */
+function slackSplit(i: RowItem, named: RegExp): Split {
+  return { subject: slackText(i.summary) || i.title, context: named.exec(i.title)?.[1] ?? null };
+}
+
 function jiraSplit(i: RowItem): Split | null {
   const m = after(/^([A-Z][A-Z0-9]*-\d+) [^:]*: (.*)$/s, i.title);
   return m ? { subject: m[2]!, context: m[1]! } : null;
@@ -92,9 +110,12 @@ function readable(word: string): string {
   return words ? words[0]!.toUpperCase() + words.slice(1) : "Unknown source";
 }
 
+/** A table's own entry, so a kind such as "constructor" never finds an inherited property. */
+const own = <T>(table: Readonly<Record<string, T>>, key: string): T | undefined => (Object.hasOwn(table, key) ? table[key] : undefined);
+
 export function rowText(item: RowItem): RowText {
-  const split = RULES[item.kind]?.(item) ?? { subject: item.title, context: null };
-  const source = KIND_SOURCE[item.kind] ?? SOURCE_NAME[item.sourceKind] ?? readable(item.sourceKind);
+  const split = own(RULES, item.kind)?.(item) ?? { subject: item.title, context: null };
+  const source = own(KIND_SOURCE, item.kind) ?? own(SOURCE_NAME, item.sourceKind) ?? readable(item.sourceKind);
   return { subject: split.subject, source: split.context ? `${source} · ${split.context}` : source };
 }
 

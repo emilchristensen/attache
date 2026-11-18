@@ -28,8 +28,10 @@ describe("a row's subject and source line", () => {
     ["an assigned issue names its repository", item("assigned_issue", "github", "Flaky login test", { url: "https://github.com/acme/api/issues/7" }), "Flaky login test", "GitHub · acme/api #7"],
     ["a Gmail reply moves the sender to the source line", item("pending_reply", "gmail", "Reply to Nora Lind: Confirm the pilot window"), "Confirm the pilot window", "Gmail · Nora Lind"],
     ["a Gmail reply without a subject keeps its title", item("pending_reply", "gmail", "Reply to Nora Lind: (no subject)"), "Reply to Nora Lind: (no subject)", "Gmail"],
-    ["a Slack DM keeps its title, which names the sender", item("pending_reply", "slack", "Reply to Mira in Slack"), "Reply to Mira in Slack", "Slack"],
-    ["a Slack mention keeps its title, which names the channel", item("mention", "slack", "Mentioned in #payments"), "Mentioned in #payments", "Slack"],
+    ["a Slack DM shows the message, with the sender on the source line", item("pending_reply", "slack", "Reply to Mira in Slack", { summary: "Can you look at the checkout PR today?" }), "Can you look at the checkout PR today?", "Slack · Mira"],
+    ["a Slack mention shows the message, with the channel on the source line", item("mention", "slack", "Mentioned in #general", { summary: "<@U0SELF|Alex> can you confirm the release date?" }), "@Alex can you confirm the release date?", "Slack · #general"],
+    ["Slack's markup reads as words", item("mention", "slack", "Mentioned in Slack", { summary: "<@U0SELF> see <#C01|ops> and <https://x.example/p|the plan>\nsecond line" }), "@someone see #ops and the plan", "Slack"],
+    ["a Slack message without text keeps its title", item("pending_reply", "slack", "Reply to Mira in Slack", { summary: "" }), "Reply to Mira in Slack", "Slack · Mira"],
     [
       "a Confluence mention moves who mentioned to the source line",
       item("mention", "confluence", 'Mentioned in "Pilot plan"', { summary: "Ana Ruiz mentioned you in Payments." }),
@@ -55,6 +57,7 @@ describe("a row's subject and source line", () => {
     ],
     ["a Replication item", item("replication_blocked", "replication", "Replication is blocked"), "Replication is blocked", "Replication"],
     ["an unknown kind and source keep what they have", item("calendar_event", "new_source", "Something new"), "Something new", "New source"],
+    ["a kind named like an object property is unknown, not a rule", item("constructor", "toString", "Odd one"), "Odd one", "ToString"],
     ["a title that only looks like a prefix is kept", item("deadline", "vault", "Overdue:", { summary: "" }), "Overdue:", "Notes"],
   ];
   it.each(cases)("%s", (_name, row, subject, source) => {

@@ -6,15 +6,23 @@ import type { RowDecision } from "./InboxRow.tsx";
 /**
  * The Inbox's frozen list. The rows the owner sees keep their order while the live list changes underneath: an
  * item that arrives waits behind Show new items, and a row decided here stays in its place as one line with Undo.
- * Nothing is frozen while no row shows (the first answer, a new view, an empty list).
+ * The snapshot is taken from the first answer of each view, an empty one included.
  */
 
 export interface DecidedEntry {
   item: AttentionItemView;
   decision: RowDecision;
   until: string | null;
-  /** Undo was sent; the row returns to the live item once the list answers with it again. */
-  undone: boolean;
+  /** The answer the decision was made on; a newer answer that has the item open again retires the receipt. */
+  since: readonly AttentionItemView[] | null;
+}
+
+/**
+ * Whether a decided row's receipt still stands in `live`: until a newer answer than the one it was decided on has the
+ * item again (after Undo, a snooze that ran out, or evidence that changed after a dismissal).
+ */
+export function receiptStands(entry: DecidedEntry, live: readonly AttentionItemView[]): boolean {
+  return live === entry.since || !live.some((i) => i.id === entry.item.id);
 }
 
 export type ListEntry = { item: AttentionItemView; decided: DecidedEntry | null };
@@ -27,7 +35,6 @@ export interface InboxList {
   /** Take the arrivals in, re-sorting the whole list; decided lines go. */
   showNew: () => void;
   decided: (item: AttentionItemView, decision: RowDecision, until: string | null) => void;
-  undone: (id: string) => void;
 }
 
 const NONE: ReadonlyMap<string, DecidedEntry> = new Map();
@@ -46,11 +53,7 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
   const [welcome, setWelcome] = useState<ReadonlySet<string>>(new Set());
 
   const held = snap?.key === listKey ? snap.ids : null;
-  const base = useMemo(() => {
-    if (!live) return held;
-    const showing = held?.some((id) => decisions.has(id) || live.some((i) => i.id === id));
-    return held && showing ? held : ordered(live, order).map((i) => i.id);
-  }, [live, held, decisions, order]);
+  const base = useMemo(() => (held ?? (live ? ordered(live, order).map((i) => i.id) : null)), [live, held, order]);
   const frozen = useMemo(() => (live && base ? frozenList(base, live, order, welcome) : null), [live, base, order, welcome]);
   const ids = frozen?.snapshot ?? base;
 
@@ -60,12 +63,10 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
     if (ids.some((id) => welcome.has(id))) setWelcome((prev) => new Set([...prev].filter((id) => !ids.includes(id))));
   }, [ids, held, listKey, welcome]);
 
-  // A decided line that was undone gives way to its item once the list has it again.
+  // A receipt the service has overtaken gives way to the live item, in the same place.
   useEffect(() => {
-    if (!live) return;
-    const back = [...decisions.values()].filter((d) => d.undone && live.some((i) => i.id === d.item.id));
-    if (!back.length) return;
-    setDecidedIn((prev) => ({ ...prev, map: new Map([...prev.map].filter(([id]) => !back.some((d) => d.item.id === id))) }));
+    if (!live || [...decisions.values()].every((d) => receiptStands(d, live))) return;
+    setDecidedIn((prev) => ({ ...prev, map: new Map([...prev.map].filter(([, d]) => receiptStands(d, live))) }));
   }, [live, decisions]);
 
   const entries = useMemo<ListEntry[]>(() => {
@@ -74,10 +75,10 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
     return ids.flatMap((id): ListEntry[] => {
       const d = decisions.get(id);
       const item = byId.get(id);
-      if (d && !(d.undone && item)) return [{ item: d.item, decided: d }];
+      if (d && live && receiptStands(d, live)) return [{ item: d.item, decided: d }];
       return item ? [{ item, decided: null }] : [];
     });
-  }, [frozen, ids, decisions]);
+  }, [frozen, ids, decisions, live]);
 
   return {
     entries,
@@ -87,13 +88,8 @@ export function useInboxList(live: readonly AttentionItemView[] | null, listKey:
       setDecisions(() => NONE);
     },
     decided: (item, decision, until) => {
-      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, undone: false }));
+      setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, since: live }));
       if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
     },
-    undone: (id) =>
-      setDecisions((prev) => {
-        const d = prev.get(id);
-        return d ? new Map(prev).set(id, { ...d, undone: true }) : prev;
-      }),
   };
 }

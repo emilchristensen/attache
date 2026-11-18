@@ -35,8 +35,6 @@ export interface FrozenList<T> {
   rows: T[];
   /** Items the snapshot does not hold yet, in the view's order; Show new items adds them. */
   arrivals: T[];
-  /** Snapshot ids no longer in the live list (decided here or elsewhere). */
-  gone: string[];
   /** The snapshot with the welcomed items in their places; the snapshot to keep from now on. */
   snapshot: string[];
 }
@@ -64,7 +62,6 @@ export function frozenList<T extends ViewItem>(snapshot: readonly string[], live
   return {
     rows: kept.flatMap((id) => byId.get(id) ?? []),
     arrivals: ordered(live.filter((i) => !shown.has(i.id)), order),
-    gone: snapshot.filter((id) => !byId.has(id)),
     snapshot: kept,
   };
 }
