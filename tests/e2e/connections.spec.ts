@@ -170,6 +170,13 @@ test("a tile opens in place across its group into the setup form, and the Notes 
   await slack.getByRole("button", { name: "Connect" }).click();
   await expect(page.locator('[data-group="work"] .connection-row[data-connection="slack"]')).toBeVisible({ timeout: 30_000 });
   await expect(slack.locator(".connection-detail")).toContainText("Test: Slack answered through claude.ai");
+  // Disconnected, it is a tile again, and its setup form no longer shows the old test result.
+  await slack.getByRole("button", { name: "Disconnect…" }).click();
+  await slack.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect(page.locator('[data-group="work"] .connection-tile[data-connection="slack"]')).toBeVisible();
+  await expect(slack.locator(".connection-tile-meta")).toHaveText("Disconnected");
+  await expect(slack.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+  await expect(slack.locator(".connection-detail")).not.toContainText("Test:");
 
   // Importing a folder: preview first, then import, read-only.
   await page.getByRole("button", { name: /^Import a folder/ }).click();
