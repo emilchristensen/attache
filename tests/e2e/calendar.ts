@@ -1,6 +1,7 @@
 /**
  * The fixture Google Calendar for meeting prep journeys: put meetings on it at times relative to now and read it
- * again, so the service raises their meeting prep items with start, end and Meet link.
+ * again, so the service raises their meeting prep items with start, end and Meet link. The same as meeting-prep.spec's
+ * own `setCalendar`; once #41's shared `meetings.ts` lands, narrow-home.spec uses that and this file goes.
  */
 import { expect, type Page } from "@playwright/test";
 import { api } from "./browser.ts";
