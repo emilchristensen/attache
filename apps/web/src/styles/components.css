@@ -863,3 +863,37 @@ button.menu-item:hover:not(:disabled) {
     margin-top: 14px;
   }
 }
+
+/* ---- forced colours: selection and the attention dot ------------------------------------------------ */
+
+/*
+ * Forced colours (Windows contrast themes) drop fills and shadows, and with them every selection the Dashboard draws
+ * (an ink fill, an inset ink bar) and the brass dot. A selection keeps a solid system-coloured edge instead: a frame
+ * around a screen's name or a chip, a bar along a row's start. Never an outline: that stays the focus ring's.
+ */
+@media (forced-colors: active) {
+  :is(.masthead-nav a[aria-current="page"], .bottom-bar [aria-current="page"], .bottom-bar [aria-current="true"], .chips a[aria-current="true"]) {
+    border: 2px solid CanvasText;
+  }
+  :is(
+      .more-nav a[aria-current="page"],
+      .collections a[aria-current="true"],
+      .note-list-item[aria-current="true"],
+      .result-item[aria-current="true"],
+      .list > .list-item[aria-current="true"],
+      .job-pick[aria-current="true"],
+      .search-option[aria-selected="true"],
+      .settings-nav a[aria-current="page"],
+      .setup-steps button[aria-current="step"]
+    ) {
+    border-inline-start: 4px solid CanvasText;
+  }
+  /* A tab's edge is drawn only under the chosen one: forced colours would paint every tab's transparent edge. */
+  .tabs button:not([aria-selected="true"]) {
+    border-bottom-color: Canvas;
+  }
+  .attention-dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

@@ -10,7 +10,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { axeFindings, focusRing, overlaps, sideways, TARGET, targets } from "./a11y.ts";
 import { openRow } from "./inbox.ts";
-import { buildAll, startStack, type Stack } from "./stack.ts";
+import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
@@ -26,7 +26,7 @@ const SAFE_AREA_BOTTOM = 34;
 /** The triangle of the `warning` glyph (`components/icons.tsx`). */
 const TRIANGLE = 'path[d^="M12 3.8 21 19.5H3z"]';
 
-test.describe.configure({ mode: "default" });
+test.describe.configure({ mode: "serial" });
 
 /** axe's findings and any sideways overflow on a screen shown before pairing or setup, at desktop, 320 px and 200% zoom. */
 async function checkBefore(page: Page, where: string) {
@@ -72,6 +72,8 @@ test.beforeAll(async ({ browser }) => {
   await expect.poll(async () => (draftId = (await api<Array<{ id: string }>>(page, "GET", "/actions?status=draft"))[0]?.id ?? ""), { timeout: 60_000 }).not.toBe("");
   await api(page, "POST", "/memory/proposals", { item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }] }, reason: "Introduced in the vendor call" });
   jobId = (await api<{ job: { id: string } }>(page, "POST", "/jobs", { kind: "demo-long", title: "Diagnostics: a failing run", input: { steps: 1, stepMs: 10, failUntilAttempt: 1, maxAttempts: 1 } })).job.id;
+  // Two people in one collection, so a note in the list can be seen chosen and not chosen.
+  await harnessSave(stack, ["Nora Lind", "Sam Berg"].map((title) => ({ action: "create", type: "person", title, facts: [{ subject: "Role", value: "Client contact" }] })), { agent: "claude-code", session: "a11y" });
   await api(page, "POST", "/briefings", { kind: "manual" });
   await expect.poll(async () => (await api<{ briefing: unknown }>(page, "GET", "/briefings/latest")).briefing !== null, { timeout: 30_000 }).toBe(true);
   await page.close();
@@ -251,6 +253,58 @@ test("forced colours: every focus stop on every screen shows a 3 px ring in the 
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
   await page.screenshot({ path: "test-results/screens/forced-colours-home-focus.png" });
+  await page.emulateMedia({ forcedColors: "none" });
+});
+
+test("forced colours: the selected screen, tab, collection, note, job, Settings section and search result stay marked, and the attention dot stays drawn", async () => {
+  const page = await journeys.open("/");
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.mouse.move(1, 1);
+  /** The same element drawn while `select` has chosen it and while `other` has: the two must not look alike. */
+  const marked = async (what: string, at: (page: Page) => ReturnType<Page["locator"]>, select: () => Promise<void>, other: () => Promise<void>) => {
+    await select();
+    await page.mouse.move(1, 1);
+    const on = await at(page).screenshot({ animations: "disabled", caret: "hide" });
+    await other();
+    await page.mouse.move(1, 1);
+    const off = await at(page).screenshot({ animations: "disabled", caret: "hide" });
+    expect(on.equals(off), `${what}: chosen and not chosen look the same`).toBe(false);
+  };
+  const go = (path: string, h1: string) => () => arrive(page, path, h1);
+  await marked("the masthead's screen", (p) => p.locator(".masthead-nav").getByRole("link", { name: "Brain", exact: true }), go("/brain", "Brain"), go("/jobs", "Jobs"));
+  await marked("a tab", (p) => p.getByRole("tab", { name: "Recent saves" }), go("/brain/recent", "Brain"), go("/brain", "Brain"));
+  await marked("a collection", (p) => p.getByRole("navigation", { name: "Collections" }).getByRole("link", { name: "Projects" }), go("/brain?tab=project", "Brain"), go("/brain?tab=person", "Brain"));
+  const notes = page.locator(".note-list-item");
+  await arrive(page, "/brain?tab=person", "Brain");
+  await expect(notes).not.toHaveCount(1);
+  const [first, second] = [await notes.nth(0).getAttribute("href"), await notes.nth(1).getAttribute("href")];
+  await marked("a note in the list", () => notes.nth(0), go(first!, "Brain"), go(second!, "Brain"));
+  await page.screenshot({ path: "test-results/screens/forced-colours-brain-note.png" });
+  await marked("a Settings section", (p) => p.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Features" }), go("/settings/features", "Settings"), go("/settings/schedules", "Settings"));
+  await marked("a job", (p) => p.locator(`[data-job-row] .job-pick`).first(), async () => {
+    await arrive(page, "/jobs", "Jobs");
+    await page.locator("[data-job-row] .job-pick").first().click();
+  }, async () => {
+    await page.locator("[data-job-row] .job-pick").nth(1).click();
+  });
+  await arrive(page, "/", "Home");
+  const field = page.getByRole("combobox", { name: "Search the Brain" });
+  await field.fill("Orion");
+  const option = page.getByRole("listbox", { name: "Results" }).getByRole("option").first();
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  await marked("a search result", () => option, async () => {}, () => field.press("ArrowDown"));
+  await field.press("Escape");
+  // The brass dot beside the Inbox's count keeps a colour of its own against the page.
+  const dot = await page.locator("#inbox .attention-dot").evaluate((el) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "Canvas";
+    document.body.append(probe);
+    const canvas = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return { dot: getComputedStyle(el).backgroundColor, canvas };
+  });
+  expect(dot.dot, "the attention dot").not.toBe(dot.canvas);
+  expect(dot.dot, "the attention dot").not.toBe("rgba(0, 0, 0, 0)");
   await page.emulateMedia({ forcedColors: "none" });
 });
 

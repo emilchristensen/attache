@@ -155,7 +155,7 @@ Headings are set in Georgia, and the morning briefing leads Home on an amber pag
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
 The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
-With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour.
+With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
 
 Every screen works in a window 320 px wide and at 200% zoom without scrolling sideways.
 On a phone or a touch screen every button, link, field, tab and switch on every screen is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
