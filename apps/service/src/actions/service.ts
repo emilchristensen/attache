@@ -177,7 +177,8 @@ export class ActionService {
 
   /**
    * Undo a rejection: the same text comes back as a new version in `draft`, until the Draft's own lifetime ends.
-   * Refused when another Draft for the same Inbox item already waits or is being sent, so one item never has two.
+   * Refused when another Draft for the same Inbox item already waits or is being sent, so one item never has two,
+   * and when the item's last Draft has a send of unknown outcome, which only an explicit replacement may follow.
    */
   restore(id: string, expectedVersion: number, actor: string): ActionView {
     const a = this.require(id);
@@ -188,6 +189,8 @@ export class ActionService {
     if (key) {
       const open = this.db.prepare(`select id from actions where attention_item_key = ? and id <> ? and status in (${placeholders(OPEN_ACTION_STATUSES)}) limit 1`).get(key, id, ...OPEN_ACTION_STATUSES);
       if (open) throw new ActionError("superseded", "A newer Draft for the same item is open. Reject it before restoring this one.");
+      const last = this.db.prepare("select a.status from attention_items i join actions a on a.id = i.action_id where i.item_key = ? and a.id <> ?").get(key, id) as { status: ActionStatus } | undefined;
+      if (last?.status === "unknown") throw new ActionError("delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
     }
     const version = a.version + 1;
     tx(this.db, () => {
