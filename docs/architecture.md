@@ -392,7 +392,8 @@ The attention engine follows these rules:
 - Editing a draft increments `version` and changes the hash, invalidating any approval.
   The new text replaces the old one: `action_events` keeps each version's number and hash, not its words.
 - A rejected draft is locked: editing it is refused (`not_editable`), and only `POST /actions/:id/restore` with the version it starts from brings it back, as `draft` at the next version with the same text and a `restored` event, until the draft's own expiry.
-  Restore is refused (`superseded`) while another draft for the same Inbox item is open, and it moves the item's link back to the restored draft.
+  Restore is refused (`superseded`) while another draft for the same Inbox item is open or after the item's last draft was sent, and (`delivery_unconfirmed`) while the item's last draft has a send of unknown outcome, so its reply never goes out twice.
+  Otherwise it moves the item's link back to the restored draft.
 - Approval creates `{actionId, version, payloadHash, nonce, expiresAt, approvedBy}`.
   It lasts 15 minutes (`APPROVAL_TTL_MS`), never past the draft's own expiry.
 - When an approval ends unused, the draft goes back to `draft` with the approval cleared, an `approval_expired` event is recorded and `actions.changed` is emitted, so the owner can approve it again.

@@ -353,10 +353,14 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     const uncertain = (await reviewItem()).actionId;
     const first = await draftFor({ replaceUnconfirmed: uncertain });
     const rejected = await svc.post(`/actions/${first.id}/reject`, {});
-    // A newer Draft is prepared and its send ends unknown too.
+    // A newer Draft is prepared and sent, and its send ends unknown too: the comment is posted but cannot be read back.
     const newer = await draftFor({});
     expect(newer.id).not.toBe(first.id);
-    svc.app.db.prepare("update actions set status = 'unknown' where id = ?").run(newer.id);
+    const ap = await svc.post(`/actions/${newer.id}/approve`, { version: newer.version, payloadHash: newer.payloadHash });
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const sent = await svc.post(`/actions/${newer.id}/execute`, { nonce: ap.approval.nonce, version: newer.version, payloadHash: newer.payloadHash });
+    await svc.waitJob(sent.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
     expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
     // Restoring would hide the Delivery unconfirmed warning and let the old text be sent while the newer one may have arrived.
     const restore = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });

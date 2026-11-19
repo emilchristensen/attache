@@ -346,6 +346,7 @@ Whatever you press, the page stays on the same Draft.
 - **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
 - **Reject** locks the Draft, and nothing is sent.
   Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
+  Restore is refused while a newer Draft for the same item waits, was sent, or has an unknown outcome.
 - When the other service cannot confirm what happened, the page says the outcome is unknown, with a warning sign, and asks you to check the destination first.
   It never offers to send that Draft again; prepare a new one from its Inbox item only after you have looked.
 - A Draft that was not sent, or expired, is finished: **Copy text** keeps its words and **Prepare a new Draft** asks Attache for a fresh one.
