@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useRefreshAnnouncement } from "../count-announcement.ts";
 import { SignalsContext, useNavSignals } from "../nav-signals.ts";
 import { screenAt } from "../routes.ts";
 import { focusHomeSearch } from "../search-launch.ts";
@@ -47,6 +48,7 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
     if (sheet === "search") setSheet(null);
   }
   useTabSignal(signals.count.total, signals.dot);
+  const announcement = useRefreshAnnouncement(signals.count.total, signals.countAskedAt);
   return (
     <SignalsContext.Provider value={signals}>
     <div className="shell">
@@ -55,6 +57,10 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       </a>
       <Masthead current={current} signals={signals} onSearch={search} />
       <ReaderWarning />
+      {/* Present from the start and empty, so what a Source refresh changed is read out when it is written. */}
+      <p className="sr-only" role="status" data-count-announcement>
+        {announcement}
+      </p>
       <main id="main" className="main" tabIndex={-1}>
         <ErrorBoundary>{children}</ErrorBoundary>
       </main>

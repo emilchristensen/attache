@@ -1,4 +1,5 @@
 import type { App } from "../app.ts";
+import { SOURCE_REFRESH_EVENT, type SourceRefreshPhase } from "@attache/contracts";
 import type { JobContext } from "./queue.ts";
 import { EffectCheckError, JobBlockedError } from "./queue.ts";
 import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
@@ -31,15 +32,21 @@ function sourceConnections(app: App) {
 async function runSourceRefresh(app: App, ctx: JobContext) {
   const ids = ctx.input.connectionId ? [String(ctx.input.connectionId)] : sourceConnections(app).filter((r) => r.status === "connected" || r.status === "needs_auth" || r.status === "error").map((r) => r.id);
   const results: Array<{ id: string; coverage: string; created: number; changed: number; resolved: number }> = [];
-  for (const [i, id] of ids.entries()) {
-    if (ctx.signal.aborted) throw ctx.signal.reason;
-    ctx.progress(i / Math.max(1, ids.length), `Refreshing ${id}`);
-    const r = await app.connections.refresh(id, ctx.signal);
-    ctx.event("source_synced", { id, coverage: r.coverage.state, items: r.coverage.items });
-    results.push({ id, coverage: r.coverage.state, created: r.attention.created.length, changed: r.attention.changed.length, resolved: r.attention.resolved.length });
-    await notifyUrgent(app, [...r.attention.created, ...r.attention.reopened]);
+  // Started and finished frame what the refresh changed, so the Dashboard can announce the count it changed.
+  app.bus.emit("event", { type: SOURCE_REFRESH_EVENT, phase: "started" satisfies SourceRefreshPhase });
+  try {
+    for (const [i, id] of ids.entries()) {
+      if (ctx.signal.aborted) throw ctx.signal.reason;
+      ctx.progress(i / Math.max(1, ids.length), `Refreshing ${id}`);
+      const r = await app.connections.refresh(id, ctx.signal);
+      ctx.event("source_synced", { id, coverage: r.coverage.state, items: r.coverage.items });
+      results.push({ id, coverage: r.coverage.state, created: r.attention.created.length, changed: r.attention.changed.length, resolved: r.attention.resolved.length });
+      await notifyUrgent(app, [...r.attention.created, ...r.attention.reopened]);
+    }
+  } finally {
+    app.bus.emit("event", { type: SOURCE_REFRESH_EVENT, phase: "finished" satisfies SourceRefreshPhase });
+    app.bus.emit("event", { type: "attention.changed" });
   }
-  app.bus.emit("event", { type: "attention.changed" });
   return { sources: results };
 }
 

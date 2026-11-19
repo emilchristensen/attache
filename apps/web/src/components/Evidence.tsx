@@ -106,7 +106,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
+      <div className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
         <div className="drawer-head">
           <div className="stack-sm" style={{ flex: 1, minWidth: 0 }}>
             <div className="row">
@@ -147,7 +147,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
             </>
           )}
         </div>
-      </aside>
+      </div>
     </>
   );
 }

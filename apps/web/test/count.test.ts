@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionStatus, ConnectionStatus, DecisionTotals } from "@attache/contracts";
-import { countDecisions as countFrom, dotAfter, homeLine, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
+import { countDecisions as countFrom, dotAfter, homeLine, refreshAnnouncement, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
 
 /** Answers as the Dashboard gets them. */
 const rows = <T>(list: T[], limit: number | null = 100): Answer<T> => ({ kind: "rows", rows: list, limit });
@@ -272,6 +272,25 @@ describe("spokenCount", () => {
     expect(spokenCount(c.home, (n) => (n === 1 ? "needs you" : "need you"))).toBe("1 needs you");
     expect(spokenCount(c.approvals, () => "waiting")).toBe("at least 2 waiting");
     expect(spokenCount(c.connections, () => "needed")).toBeNull();
+  });
+});
+
+describe("refreshAnnouncement", () => {
+  const needYou = (n: number) => (n === 1 ? "needs you" : "need you");
+  const known = (count: number): Tally => ({ state: "known", count, exact: true });
+  const atLeast = (count: number): Tally => ({ state: "at_limit", count, exact: false });
+  const unknown: Tally = { state: "unknown", count: 0, exact: false };
+  it.each([
+    ["the total grew", known(3), known(4), "4 need you now."],
+    ["the total fell to one", known(3), known(1), "1 needs you now."],
+    ["nothing waits any more", known(2), known(0), "Nothing needs you now."],
+    ["a lower bound", known(2), atLeast(200), "At least 200 need you now."],
+    ["the refresh changed nothing", known(3), known(3), null],
+    ["nothing was known before it", unknown, known(3), null],
+    ["no count when it started", null, known(3), null],
+    ["a part became unknown: it never claims nothing waits", known(2), unknown, null],
+  ] as const)("%s", (_, before, after, said) => {
+    expect(refreshAnnouncement(before, after, needYou)).toBe(said);
   });
 });
 

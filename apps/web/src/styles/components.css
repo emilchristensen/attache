@@ -820,22 +820,36 @@ button.menu-item:hover:not(:disabled) {
  * stand alone (Join, Back, View details, a chip), fields, selects, tabs, a disclosure's line and a checkbox's line.
  * Groups already wrap with 8 px between neighbours, so a bigger target never covers the next one. A subject stretched
  * over its whole row (Inbox, Approvals, Connections) already has that row as its target; the tab row's scroll
- * arrows are pointer shortcuts only.
+ * arrows are pointer shortcuts only. A wide touch screen (a tablet) keeps the desktop layout with these targets.
  */
 @media (max-width: 720px), (pointer: coarse) {
-  :is(.page, .sheet, .masthead, .compact-screen, .setup)
-    :is(button:not(.inbox-subject, .approval-subject, .connection-toggle, .tabs-scroll), .btn, .source-chip, summary, select, .chips a, .collections a) {
+  :is(.page, .sheet, .drawer, .masthead, .compact-screen, .setup)
+    :is(
+      button:not(.inbox-subject, .approval-subject, .connection-toggle, .tabs-scroll),
+      .btn,
+      .source-chip,
+      summary,
+      select,
+      .chips a,
+      .collections a,
+      .masthead-nav a,
+      .settings-nav a
+    ) {
     min-height: 44px;
     min-width: 44px;
   }
-  :is(.page, .sheet, .compact-screen, .setup) :is(input:not([type="checkbox"], [type="radio"]), textarea) {
+  :is(.page, .sheet, .drawer, .compact-screen, .setup) :is(input:not([type="checkbox"], [type="radio"]), textarea) {
     min-height: 44px;
   }
-  :is(.page, .sheet) :is(button.small, .btn.small, .source-chip) {
+  /* A search result or a place in the palette's Go to is one tap. */
+  .search-option {
+    min-height: 44px;
+  }
+  :is(.page, .sheet, .drawer) :is(button.small, .btn.small, .source-chip) {
     justify-content: center;
   }
   /* A related note's title wraps inside its chip rather than run past the screen, even with no space to break at. */
-  :is(.page, .sheet) .source-chip {
+  :is(.page, .sheet, .drawer) .source-chip {
     white-space: normal;
     overflow-wrap: anywhere;
     text-align: left;
@@ -854,7 +868,7 @@ button.menu-item:hover:not(:disabled) {
   .check input {
     margin-top: 0;
   }
-  .feature-name {
+  :is(.feature-name, .shortcut-switch label) {
     display: inline-flex;
     align-items: center;
     min-height: 44px;

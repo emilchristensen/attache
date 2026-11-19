@@ -52,6 +52,8 @@ export interface NavSignals {
   countRetry: (() => void) | null;
   /** Which parts of the count a failed request left inexact; all false while nothing failed. */
   countFailures: CountFailures;
+  /** When the count route's answer behind `count` was asked (`orderMark()`), null before one: a change can be dated by it. */
+  countAskedAt: number | null;
 }
 
 /**
@@ -60,7 +62,7 @@ export interface NavSignals {
  */
 export const COUNT_LIMITS = { inbox: 200, proposals: 100, drafts: 100 } as const;
 
-const needYou = (n: number) => (n === 1 ? "needs you" : "need you");
+export const needYou = (n: number) => (n === 1 ? "needs you" : "need you");
 const WORDS: Record<"home" | "approvals" | "connections", (n: number) => string> = {
   home: needYou,
   approvals: () => "waiting",
@@ -243,6 +245,7 @@ export function useNavSignals(): NavSignals {
     settingsWarning: (status && PROBLEM_WORDS[status]) ?? null,
     countRetry: routeFailed && listFailed ? retryCount : null,
     countFailures,
+    countAskedAt: heldTotals.askedAt,
   };
 }
 

@@ -158,10 +158,11 @@ The keyboard focus is a blue ring around the control, and the selected screen or
 With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
 
 Every screen works in a window 320 px wide and at 200% zoom without scrolling sideways.
-On a phone or a touch screen every button, link, field, tab and switch on every screen is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
+On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
 With reduced motion switched on in your system, nothing glides or turns: the Dashboard jumps straight to where a link takes you.
 Type is never told by colour alone, so the stamps stay apart in grayscale and with colour blindness, and a failure keeps its warning triangle.
 A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a Heads-up put away.
+When a Source refresh changes how many decisions wait, it hears the new total once, such as "4 need you now."; opening the Dashboard, your own decisions and other live updates stay quiet.
 
 ### Home
 

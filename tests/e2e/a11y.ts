@@ -125,7 +125,7 @@ export function targets(scope: string): Target[] {
     });
     let [top, left] = [r.top, r.left];
     for (let n = el.parentElement; n; n = n.parentElement) [top, left] = [top + n.scrollTop, left + n.scrollLeft];
-    const layer = el.closest(".masthead, .bottom-bar, dialog") ?? el.closest(".page");
+    const layer = el.closest(".masthead, .bottom-bar, dialog, [aria-modal='true']") ?? el.closest(".page");
     const name = (el.getAttribute("aria-label") ?? label?.textContent ?? el.textContent ?? (el as HTMLInputElement).placeholder ?? "").trim() || el.outerHTML.slice(0, 60);
     return { name, width: r.width, height: r.height, hit, clipped: el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== "ellipsis", box: { left, top, right: left + r.width, bottom: top + r.height }, layer: layer?.className ?? "" };
   });
@@ -143,9 +143,14 @@ export interface Ring {
   /** The ring's colour, and the system's Highlight colour it should be under forced colours. */
   colour: string;
   highlight: string;
+  /** Focus has been on this element before: the Tab order came back round. */
+  visited: boolean;
 }
 
-/** The focused element's ring. Run with `page.evaluate(focusRing)`; null when nothing in the page has focus. */
+/**
+ * The focused element's ring, marking the element as visited. Run with `page.evaluate(focusRing)`; null when nothing in
+ * the page has focus. A fresh page load clears the marks.
+ */
 export function focusRing(): Ring | null {
   const el = document.activeElement as HTMLElement | null;
   if (!el || el === document.body) return null;
@@ -156,6 +161,8 @@ export function focusRing(): Ring | null {
   probe.remove();
   const candidates = [getComputedStyle(el), getComputedStyle(el, "::after"), ...(el.closest(".search-box") ? [getComputedStyle(el.closest(".search-box")!)] : [])];
   const drawn = candidates.find((s) => s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0) ?? candidates[0]!;
-  const name = `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? el.textContent ?? "").trim().slice(0, 40)}"`;
-  return { name, style: drawn.outlineStyle, width: parseFloat(drawn.outlineWidth), colour: drawn.outlineColor, highlight };
+  const name = `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? (el as HTMLInputElement).labels?.[0]?.textContent ?? el.textContent ?? "").trim().slice(0, 40)}"`;
+  const visited = el.hasAttribute("data-focus-visited");
+  el.setAttribute("data-focus-visited", "");
+  return { name, style: drawn.outlineStyle, width: parseFloat(drawn.outlineWidth), colour: drawn.outlineColor, highlight, visited };
 }

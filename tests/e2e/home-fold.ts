@@ -6,8 +6,9 @@ import { expect, type Page } from "@playwright/test";
 
 /**
  * The fold criterion, measured: at scroll position zero, with the Inbox heading on screen, how many Inbox rows end
- * (bottom edge, not top) inside the viewport, with their whole subject, source line and time visible. -1 when the
- * Inbox heading itself is below the fold.
+ * (bottom edge, not top) inside the viewport, with their whole type word, subject, source line and time drawn: each
+ * one rendered, cut off neither sideways nor below, and inside every ancestor that clips it. -1 when the Inbox
+ * heading itself is below the fold.
  */
 export async function completeRows(page: Page): Promise<number> {
   await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
@@ -17,7 +18,19 @@ export async function completeRows(page: Page): Promise<number> {
     const fold = window.innerHeight;
     if (document.querySelector("#inbox h2")!.getBoundingClientRect().bottom > fold) return -1;
     const rows = [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")];
-    const whole = (row: HTMLElement) => row.getBoundingClientRect().bottom <= fold && [...row.querySelectorAll(".inbox-subject, .inbox-source, .inbox-time")].every((el) => el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().bottom <= fold);
+    const PARTS = [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"];
+    const insideClips = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        if (getComputedStyle(p).overflow === "visible") continue;
+        const clip = p.getBoundingClientRect();
+        if (box.top < clip.top - 0.5 || box.bottom > clip.bottom + 0.5 || box.left < clip.left - 0.5 || box.right > clip.right + 0.5) return false;
+      }
+      return true;
+    };
+    const drawn = (el: HTMLElement | null) =>
+      el !== null && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && el.getBoundingClientRect().bottom <= fold && insideClips(el);
+    const whole = (row: HTMLElement) => row.getBoundingClientRect().bottom <= fold && PARTS.every((s) => drawn(row.querySelector<HTMLElement>(s)));
     return rows.filter(whole).length;
   });
 }

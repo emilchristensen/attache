@@ -5,6 +5,14 @@ import { z } from "zod";
 export const JobKind = z.enum(["research", "briefing", "draft", "source-refresh", "import", "reindex", "action", "demo-long", "session-distill", "session-consolidate", "capture-consolidate"]);
 export type JobKind = z.infer<typeof JobKind>;
 
+/**
+ * The live event a Source refresh sends when it starts and when it finishes (`{type, phase}`), so a client can tell
+ * what the refresh changed: the Dashboard announces the decision count only when a Source refresh changed it. The
+ * finish comes before the refresh's last `attention.changed`, so anything asked again on that event is asked after it.
+ */
+export const SOURCE_REFRESH_EVENT = "source-refresh";
+export type SourceRefreshPhase = "started" | "finished";
+
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";
 
 export interface JobView {

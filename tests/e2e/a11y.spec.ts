@@ -7,6 +7,8 @@
  * through the API, so it runs on its own.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
 import { axeFindings, focusRing, overlaps, sideways, TARGET, targets } from "./a11y.ts";
 import { openRow } from "./inbox.ts";
@@ -107,6 +109,9 @@ async function arrive(page: Page, path: string, h1: string | null) {
   await page.waitForLoadState("networkidle");
 }
 
+/** A modal over the page (a sheet, the palette, the evidence view): while one is open, only its controls can be tapped. */
+const MODAL = 'dialog[open], [aria-modal="true"]';
+
 /** Home's search results: a popup over the page, so its own controls are the ones to measure while it is open. */
 const SEARCH_RESULTS = "Home's search results";
 
@@ -127,6 +132,11 @@ const OPENED: ReadonlyArray<readonly [where: string, path: string, h1: string, o
   ["Home with the briefing read", "/", "Home", async (page) => {
     await page.getByRole("region", { name: "For you now" }).getByRole("button", { name: /Read briefing/ }).first().click();
     await expect(page.locator(".briefing-detail")).toBeVisible();
+  }],
+  ["the evidence view", "/", "Home", async (page) => {
+    await openRow(page.locator("#inbox [data-inbox-row]").first());
+    await page.locator("#inbox .source-chip").first().click();
+    await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
   }],
   ["Approvals with a Draft open", "/approvals", "Approvals", async (page) => {
     await page.locator("[data-approval-row] [data-row-toggle]").first().click();
@@ -208,6 +218,33 @@ test("screen reader: Home's four areas are named in order, the navigation names 
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
+test("screen reader: the decision count is read out when a Source refresh changes it, and never on load or for the owner's own decision", async () => {
+  const page = await journeys.open("/");
+  const said = page.locator("[data-count-announcement]");
+  await expect(said).toHaveAttribute("role", "status");
+  const total = async () => Number((await page.title()).match(/^\((\d+)\)/)?.[1] ?? 0);
+  await expect.poll(total).toBeGreaterThan(0);
+  await page.waitForLoadState("networkidle");
+  await expect(said).toHaveText("");
+  // The owner's own decision changes the count without a word.
+  const before = await total();
+  const open = (await api<{ items: Array<{ id: string; kind: string }> }>(page, "GET", "/attention?state=open")).items;
+  const item = open.find((i) => i.kind === "pending_reply")!;
+  await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
+  await expect.poll(total).toBe(before - 1);
+  await page.waitForTimeout(500);
+  await expect(said).toHaveText("");
+  // A Source refresh that finds a new deadline is read out with the new total.
+  const notes = (await api<Array<{ id: string; kind: string }>>(page, "GET", "/connections")).find((c) => c.kind === "vault" && c.id !== "vault-data")!;
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  writeFileSync(join(stack.vaultDir, "Projects/Announce.md"), `# Announce\n\n## Tasks\n- [ ] Book the venue 📅 ${tomorrow}\n`);
+  await api(page, "POST", `/connections/${notes.id}/refresh`);
+  await expect(said).toHaveText(`${before} need you now.`);
+  await expect.poll(total).toBe(before);
+  // Undo the decision, so the other passes see the same Inbox.
+  await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
+});
+
 test("sideways: no screen or opened state scrolls sideways at 320 px or at 200% zoom", async () => {
   expect(beforeSideways, "pairing and Setup").toEqual([]);
   const page = await journeys.open("/");
@@ -235,18 +272,19 @@ test("forced colours: every focus stop on every screen shows a 3 px ring in the 
   for (const [path, h1] of screens()) {
     await arrive(page, path, h1);
     await page.locator("h1").click();
-    const seen = new Set<string>();
-    // Tab from the h1 until focus comes back round (or 80 stops).
-    for (let i = 0; i < 80; i++) {
+    // Tab from the h1 until focus comes back to an element it already visited (each is marked as it is reached),
+    // or leaves the page, so every stop is checked, also several that share a name.
+    let stops = 0;
+    for (; stops < 200; stops++) {
       await page.keyboard.press("Tab");
       const ring = await page.evaluate(focusRing);
-      if (!ring || seen.has(ring.name)) break;
-      seen.add(ring.name);
+      if (!ring || ring.visited) break;
       expect(ring.style, `${path}: ${ring.name}`).toBe("solid");
       expect(ring.width, `${path}: ${ring.name}`).toBeGreaterThanOrEqual(3);
       expect(ring.colour, `${path}: ${ring.name}`).toBe(ring.highlight);
     }
-    expect(seen.size, `${path} has focus stops`).toBeGreaterThan(0);
+    expect(stops, `${path} has focus stops`).toBeGreaterThan(0);
+    expect(stops, `${path}: the Tab order came back round`).toBeLessThan(200);
   }
   await arrive(page, "/", "Home");
   await page.getByRole("combobox", { name: "Search the Brain" }).focus();
@@ -362,7 +400,14 @@ test("colour vision: in grayscale and under each colour-vision deficiency every 
   await expect(failure).toContainText("Gmail");
   const cdp = await page.context().newCDPSession(page);
   const kinds = await page.locator("#inbox [data-inbox-row]").evaluateAll((rows) => [...new Set(rows.map((r) => r.getAttribute("data-type")!))]);
-  expect(kinds.length, "the Inbox shows several types").toBeGreaterThanOrEqual(3);
+  // The stack's GitHub, Gmail and notes raise these three, the pair the spec names (review vs reply) among them.
+  expect(kinds).toEqual(expect.arrayContaining(["review_request", "pending_reply", "deadline"]));
+  // Each type has its own word and its own glyph, whatever its fill: told apart without colour.
+  const looks = await Promise.all(
+    kinds.map((kind) => page.locator(`#inbox [data-inbox-row][data-type="${kind}"]`).first().locator(".inbox-kind").evaluate((k) => ({ word: k.querySelector(".inbox-kind-word")!.textContent!, glyph: k.querySelector("svg")!.innerHTML }))),
+  );
+  expect(new Set(looks.map((l) => l.word)).size, "one word per type").toBe(kinds.length);
+  expect(new Set(looks.map((l) => l.glyph)).size, "one glyph per type").toBe(kinds.length);
   for (const vision of ["achromatopsia", "protanopia", "deuteranopia", "tritanopia"] as const) {
     await cdp.send("Emulation.setEmulatedVisionDeficiency", { type: vision });
     const stamps: Buffer[] = [];
@@ -370,7 +415,10 @@ test("colour vision: in grayscale and under each colour-vision deficiency every 
       const row = page.locator(`#inbox [data-inbox-row][data-type="${kind}"]`).first();
       await row.scrollIntoViewIfNeeded();
       await expect(row.locator(".inbox-kind-word"), `${vision}: ${kind} has its word`).not.toBeEmpty();
+      // The glyph alone, on a transparent stamp, so a difference in fill cannot stand in for a different glyph.
+      await row.locator(".type-icon").evaluate((el) => ((el as HTMLElement).style.background = "transparent"));
       stamps.push(await row.locator(".type-icon").screenshot());
+      await row.locator(".type-icon").evaluate((el) => ((el as HTMLElement).style.background = ""));
     }
     const same = kinds.flatMap((a, i) => kinds.slice(i + 1).filter((_, j) => stamps[i]!.equals(stamps[i + 1 + j]!)).map((b) => `${a} = ${b}`));
     expect(same, `${vision}: stamps that cannot be told apart`).toEqual([]);
@@ -383,12 +431,13 @@ test("colour vision: in grayscale and under each colour-vision deficiency every 
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-test("targets: on a touch phone every control on every screen is a 44 x 44 target a tap reaches, apart from its neighbours", async ({ browser }) => {
-  const phone = await JourneyBrowser.start(browser, stack.url, { storageState: await journeys.context.storageState(), hasTouch: true, isMobile: true, viewport: PHONE });
+for (const [device, viewport] of [["phone", PHONE], ["tablet", { width: 1024, height: 768 }]] as const) {
+test(`targets: on a touch ${device} every control on every screen, sheet and dialog is a 44 x 44 target a tap reaches, apart from its neighbours`, async ({ browser }) => {
+  const phone = await JourneyBrowser.start(browser, stack.url, { storageState: await journeys.context.storageState(), hasTouch: true, isMobile: true, viewport });
   const page = await phone.open("/");
   const check = async (where: string) => {
     await page.mouse.move(1, 1);
-    const found = await page.evaluate(targets, where === SEARCH_RESULTS ? ".home-search .search" : ".page, .masthead, .bottom-bar, dialog[open]");
+    const found = await page.evaluate(targets, where === SEARCH_RESULTS ? ".home-search .search" : (await page.locator(MODAL).count()) ? MODAL : ".page, .masthead, .bottom-bar");
     const small = found.filter((t) => t.width < TARGET - 0.01 || t.height < TARGET - 0.01).map((t) => `${t.name} ${Math.round(t.width)}x${Math.round(t.height)}`);
     expect(small, `${where}: targets under ${TARGET} px`).toEqual([]);
     expect(found.filter((t) => !t.hit).map((t) => t.name), `${where}: targets a tap does not reach`).toEqual([]);
@@ -400,7 +449,7 @@ test("targets: on a touch phone every control on every screen is a 44 x 44 targe
     await arrive(page, path, h1);
     await check(path);
   }
-  for (const [where, path, h1, open] of OPENED.filter(([w]) => !/sheet|palette/.test(w))) {
+  for (const [where, path, h1, open] of OPENED) {
     await arrive(page, path, h1);
     await open(page);
     await check(where);
@@ -408,6 +457,7 @@ test("targets: on a touch phone every control on every screen is a 44 x 44 targe
   expect(phone.consoleErrors).toEqual([]);
   await phone.close();
 });
+}
 
 test("first and last actions: on a phone with a home indicator, each screen's first and last controls sit between the masthead and the bottom bar, where a tap reaches them", async () => {
   const page = await journeys.open("/");
