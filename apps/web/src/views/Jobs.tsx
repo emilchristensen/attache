@@ -1,204 +1,188 @@
-import { useEffect, useState } from "react";
-import { plural, type JobEvent, type JobView } from "@attache/contracts";
+import { useEffect, useState, type ReactNode } from "react";
+import { useMoveKeys } from "../shortcuts.ts";
+import type { JobView } from "@attache/contracts";
 import { post } from "../api.ts";
-import { useLiveEvent, useResource } from "../live.ts";
-import { Empty, ErrorState, Loading, Markdown, navigate, StatusPill, Time, useAction, useLocation } from "../components/ui.tsx";
-import { useRevealDetail } from "../components/reveal-detail.ts";
-import { useOpenEvidence } from "../components/Evidence.tsx";
+import { useResource, type Resource } from "../live.ts";
+import { Loading, navigate, useAction, useLocation } from "../components/ui.tsx";
+import { usePageRoom, useRevealDetail } from "../components/reveal-detail.ts";
+import { useHeadsUpClock, type HeadsUpClock } from "../heads-up-clock.ts";
+import { ACTIVE_STATUSES, ENDED_STATUSES, initialJobId, jobSummary, jobTime, runningOrder } from "../jobs.ts";
+import { GroupFailure } from "../components/GroupFailure.tsx";
+import { JobDetail, JobTag } from "./JobDetail.tsx";
 
-const OUTCOME: Record<string, string> = {
-  stopped: "Cancelled: the work stopped before finishing.",
-  too_late: "The cancel request arrived after the job had already finished; its result stands.",
-  not_started: "Cancelled before it started.",
-};
+/** How many ended jobs Finished shows at first, and how many more each "Show more" adds. */
+const FINISHED_PAGE = 50;
+/** The most the service lists in one answer. */
+const FINISHED_MAX = 500;
+/** More queued and running jobs than this at once would be a runaway; the list says so by its count. */
+const RUNNING_LIMIT = 100;
+/** A Diagnostics run: two minutes of checkpointed steps with one recorded side effect, for checking durability. */
+const DIAGNOSTICS = { kind: "demo-long", input: { steps: 60, stepMs: 2000 } };
 
-function describe(e: JobEvent): string {
-  const d = e.data as Record<string, unknown>;
-  switch (e.type) {
-    case "progress":
-      return `${Math.round(Number(d.progress ?? 0) * 100)}%${d.note ? ` — ${String(d.note)}` : ""}`;
-    case "searched":
-      return `Searched “${String(d.query)}” — ${plural(Number(d.hits), "hit")}`;
-    case "source_synced":
-      return `Refreshed ${String(d.id)}: ${String(d.coverage)}`;
-    case "retry_scheduled":
-      return `Failed (${String(d.error)}); retrying in ${Math.round(Number(d.inMs) / 1000)}s`;
-    case "recovered":
-      return String(d.note ?? "Recovered after restart");
-    case "failed":
-      return `Failed: ${String(d.error)}`;
-    case "cancelled":
-      return OUTCOME[String(d.outcome)] ?? "Cancelled";
-    case "effect_done":
-      return "External effect recorded once";
-    case "effect_reused":
-    case "effect_recovered":
-      return "Earlier effect found; not repeated";
-    case "blocked":
-      return `Blocked: ${String(d.reason)}`;
-    default:
-      return e.type.replace(/_/g, " ");
-  }
+const jobsHref = (id: string) => `/jobs?id=${encodeURIComponent(id)}`;
+
+/**
+ * The detail the screen opens on, chosen once: when both lists and the newest failure have first answered (or
+ * failed), from what they hold. The newest failure is asked for on its own, since it can be older than Finished's
+ * first page. Live updates change the lists, never this choice; only the owner's pick (`?id=`) changes what the pane
+ * shows.
+ */
+function useInitialJob(active: Resource<JobView[]>, ended: Resource<JobView[]>): string | null {
+  const [chosen, setChosen] = useState<{ id: string | null } | null>(null);
+  const failure = useResource<JobView[]>(chosen === null ? "/jobs?status=failed,blocked&limit=1" : null);
+  const answered = (r: Resource<JobView[]>) => r.data !== null || r.error !== null;
+  const ready = answered(active) && answered(ended) && answered(failure);
+  useEffect(() => {
+    if (chosen === null && ready) setChosen({ id: initialJobId(active.data ?? [], [...(ended.data ?? []), ...(failure.data ?? [])]) });
+  }, [chosen, ready, active.data, ended.data, failure.data]);
+  return chosen?.id ?? null;
 }
 
-function JobDetail({ id }: { id: string }) {
-  const r = useResource<{ job: JobView; events: JobEvent[] }>(`/jobs/${id}`, []);
-  const [events, setEvents] = useState<JobEvent[]>([]);
-  const [job, setJob] = useState<JobView | null>(null);
-  const [cancelMsg, setCancelMsg] = useState<string | null>(null);
-  const { busy, run } = useAction();
-  const open = useOpenEvidence();
+/** The rows a resource last answered with, kept while a bigger page of them loads, so "Show more" does not blank the list. */
+function useHeldRows(r: Resource<JobView[]>): JobView[] | null {
+  const [held, setHeld] = useState<JobView[] | null>(null);
+  if (r.data && r.data !== held) setHeld(r.data);
+  return r.data ?? held;
+}
+
+/**
+ * Jobs: background work the service runs, as a quiet table. Running holds queued and running work, Finished the rest,
+ * newest first. The detail pane opens on the running job, else the newest failure, else the newest job, and keeps
+ * whatever it shows until the owner picks another row.
+ */
+export function JobsView() {
+  const loc = useLocation();
+  useMoveKeys(".job-rows .job-pick");
+  const picked = loc.search.get("id");
+  const active = useResource<JobView[]>(`/jobs?status=${ACTIVE_STATUSES.join(",")}&limit=${RUNNING_LIMIT}`, ["job"]);
+  const [finishedLimit, setFinishedLimit] = useState(FINISHED_PAGE);
+  const ended = useResource<JobView[]>(`/jobs?status=${ENDED_STATUSES.join(",")}&limit=${finishedLimit}`, ["job"]);
+  const endedRows = useHeldRows(ended);
+  const initial = useInitialJob(active, ended);
+  const selected = picked ?? initial;
+  const clock = useHeadsUpClock();
+  const { detailRef, revealDetail } = useRevealDetail();
+  usePageRoom(detailRef);
+  // Another job starts at the top of the pane.
   useEffect(() => {
-    if (r.data) {
-      setJob(r.data.job);
-      setEvents(r.data.events);
-    }
-  }, [r.data]);
-  useLiveEvent((ev) => {
-    if (ev.type !== "job.event") return;
-    const e = ev.event as JobEvent;
-    if (e.jobId !== id) return;
-    setEvents((xs) => (xs.some((x) => x.seq === e.seq) ? xs : [...xs, e]));
-    if (["succeeded", "failed", "cancelled", "blocked", "started", "retry_scheduled", "recovered", "cancel_too_late"].includes(e.type)) r.reload();
-    if (e.type === "progress") setJob((j) => (j ? { ...j, progress: Number(e.data.progress ?? j.progress), progressNote: String(e.data.note ?? j.progressNote ?? "") } : j));
-  });
-  if (r.loading && !job) return <Loading lines={6} />;
-  if (r.error) return <ErrorState error={r.error} retry={r.reload} />;
-  if (!job) return null;
-  const active = ["queued", "running"].includes(job.status);
-  const result = job.result as { relPath?: string; answer?: string; supported?: boolean; counts?: Record<string, number>; completedSteps?: number; actionId?: string; sources?: unknown[] } | null;
+    if (detailRef.current) detailRef.current.scrollTop = 0;
+  }, [detailRef, selected]);
+  const pick = (id: string) => {
+    navigate(jobsHref(id));
+    revealDetail();
+  };
+  const moreToShow = endedRows !== null && endedRows.length >= finishedLimit && finishedLimit < FINISHED_MAX;
   return (
-    <div className="stack" data-job-id={job.id} data-status={job.status}>
-      <div className="row">
-        <h2 style={{ flex: 1 }}>{job.title}</h2>
-        <StatusPill state={job.status} />
-      </div>
-      <div className="progress" aria-label="Progress" aria-valuenow={Math.round(job.progress * 100)} role="progressbar">
-        <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
-      </div>
-      <p className="small muted">
-        {job.progressNote ?? ""} · attempt {job.attempts} of {job.maxAttempts} · created <Time iso={job.createdAt} />
-        {job.finishedAt ? <> · finished <Time iso={job.finishedAt} /></> : null}
-      </p>
-      {job.error && job.status !== "succeeded" && <p className="small error-text">{job.error}</p>}
-      {(cancelMsg || job.cancelOutcome) && <div className="state partial small">{cancelMsg ?? OUTCOME[job.cancelOutcome!]}</div>}
-      <div className="row">
-        {active && (
-          <button
-            disabled={busy !== null}
-            onClick={() =>
-              run("cancel", async () => {
-                const out = await post<{ outcome: string }>(`/jobs/${job.id}/cancel`);
-                setCancelMsg(out.outcome === "pending" ? "Cancel requested; waiting for the work to stop…" : (OUTCOME[out.outcome] ?? out.outcome));
-                r.reload();
-              })
-            }
-          >
-            Cancel
-          </button>
-        )}
-        {!active && job.status !== "succeeded" && (
-          <button disabled={busy !== null} onClick={() => run("retry", () => post(`/jobs/${job.id}/retry`).then(() => { setCancelMsg(null); r.reload(); }), "Retrying")}>
-            Retry
-          </button>
-        )}
-        {!active && job.status === "succeeded" && (
-          <button className="ghost" disabled={busy !== null} onClick={() => run("cancel", async () => { const out = await post<{ outcome: string }>(`/jobs/${job.id}/cancel`); setCancelMsg(OUTCOME[out.outcome] ?? out.outcome); })}>
-            Cancel
-          </button>
-        )}
-      </div>
-      {job.status === "succeeded" && result && (
-        <div className="card stack-sm">
-          <h3>Result</h3>
-          {result.answer && <Markdown text={result.answer} />}
-          {result.supported === false && <div className="unsupported">No supporting evidence was found.</div>}
-          {result.relPath && (
-            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => open({ root: "data", relPath: result.relPath!, title: job.title })}>
-              Open {result.relPath}
-            </button>
-          )}
-          {result.actionId && (
-            <button className="small" style={{ alignSelf: "flex-start" }} onClick={() => navigate(`/drafts?id=${result.actionId}`)}>
-              Open the draft
-            </button>
-          )}
-          {!result.answer && !result.relPath && !result.actionId && <pre className="mono small" style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(result, null, 2)}</pre>}
+    <div className="page">
+      <div className="jobs">
+        <div className="page-header">
+          <h1>Jobs</h1>
+          <span className="subtitle">Background work runs in the Attache service. Close this tab and it keeps going.</span>
         </div>
-      )}
-      <div className="card">
-        <h3>Events</h3>
-        <ol className="timeline" style={{ marginTop: 6 }} aria-label="Job events">
-          {events.map((e) => (
-            <li key={e.seq} data-event={e.type}>
-              <Time iso={e.at} />
-              <span>{describe(e)}</span>
-            </li>
-          ))}
-        </ol>
+        <ResearchForm onCreated={pick} />
+        <div className="split jobs-split">
+          <div className="jobs-lists">
+            <JobGroup id="jobs-running" title="Running" resource={active} rows={active.data ? runningOrder(active.data) : null} none="Nothing is running." selected={selected} clock={clock} onPick={pick} />
+            <JobGroup id="jobs-finished" title="Finished" resource={ended} rows={endedRows} none="Nothing has finished yet. Research, briefings, Drafts and Source refreshes show here with what they produced." selected={selected} clock={clock} onPick={pick}>
+              {moreToShow && (
+                <button className="small jobs-more" disabled={ended.loading} onClick={() => setFinishedLimit((n) => Math.min(n + FINISHED_PAGE, FINISHED_MAX))}>
+                  Show {FINISHED_PAGE} more
+                </button>
+              )}
+              {endedRows !== null && endedRows.length >= FINISHED_MAX && <p className="jobs-none">These are the newest {FINISHED_MAX}; older jobs are kept but not listed here.</p>}
+            </JobGroup>
+          </div>
+          <div ref={detailRef} className="split-detail jobs-detail sticky-detail">
+            {selected ? <JobDetail key={selected} id={selected} /> : <p className="reader-placeholder">{endedRows?.length === 0 && active.data?.length === 0 ? "No jobs yet. Research a question above, or wait for the next Source refresh." : "Pick a job to see its progress, result and events here."}</p>}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export function JobsView() {
-  const loc = useLocation();
-  const list = useResource<JobView[]>("/jobs?limit=100", ["job"]);
+/** The question to research across the notes, and Diagnostics; either opens the job it starts. */
+function ResearchForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [question, setQuestion] = useState("");
   const { busy, run } = useAction();
-  const selected = loc.search.get("id");
-  const { detailRef, revealDetail } = useRevealDetail();
   const create = (body: Record<string, unknown>) =>
     run("create", async () => {
-      const r = await post<{ job: JobView }>("/jobs", body);
-      navigate(`/jobs?id=${r.job.id}`);
-      list.reload();
+      const out = await post<{ job: JobView }>("/jobs", body);
+      onCreated(out.job.id);
+      return out.job;
     });
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1>Jobs</h1>
-        <span className="subtitle">Background work runs in the Attache service. Close this tab and it keeps going.</span>
-      </div>
-      <form
-        className="card row research-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void create({ kind: "research", input: { question } }).then(() => setQuestion(""));
-        }}
-      >
-        <label className="sr-only" htmlFor="research-q">
-          Research question
-        </label>
-        <input id="research-q" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Research a question across your notes, e.g. What is still open on Atlas?" />
-        <button className="primary" disabled={busy !== null || !question.trim()}>
-          Research
-        </button>
-        <button type="button" className="ghost" title="A 2-minute diagnostic job for checking durability" onClick={() => void create({ kind: "demo-long", input: { steps: 60, stepMs: 2000 } })}>
-          Diagnostics
-        </button>
-      </form>
-      <div className="split">
-        <div>
-          {list.loading && !list.data && <Loading />}
-          <ErrorState error={list.error} retry={list.reload} />
-          {list.data?.length === 0 && <Empty title="No jobs yet">Research, briefing and draft jobs appear here with their progress and results.</Empty>}
-          <div className="list">
-            {list.data?.map((j) => (
-              <button key={j.id} className="list-item" aria-current={j.id === selected} onClick={() => { navigate(`/jobs?id=${j.id}`); revealDetail(); }}>
-                <div className="stack-sm" style={{ minWidth: 0, flex: 1 }}>
-                  <strong style={{ overflowWrap: "anywhere" }}>{j.title}</strong>
-                  <span className="row small muted">
-                    <StatusPill state={j.status} />
-                    {j.status === "running" && `${Math.round(j.progress * 100)}%`} <Time iso={j.updatedAt} />
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div ref={detailRef} className="split-detail">{selected ? <JobDetail key={selected} id={selected} /> : <Empty title="Select a job" />}</div>
-      </div>
-    </div>
+    <form
+      className="research-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void create({ kind: "research", input: { question } }).then((job) => job && setQuestion(""));
+      }}
+    >
+      <label className="sr-only" htmlFor="research-q">
+        Research question
+      </label>
+      <input id="research-q" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Research a question across your notes" />
+      <button className="primary" disabled={busy !== null || !question.trim()}>
+        Research
+      </button>
+      <button type="button" title="A 2-minute diagnostic job for checking durability" disabled={busy !== null} onClick={() => void create(DIAGNOSTICS)}>
+        Diagnostics
+      </button>
+    </form>
+  );
+}
+
+interface JobGroupProps {
+  id: string;
+  title: string;
+  resource: Resource<JobView[]>;
+  rows: JobView[] | null;
+  none: string;
+  selected: string | null;
+  clock: HeadsUpClock;
+  onPick: (id: string) => void;
+  children?: ReactNode;
+}
+
+/** A ruled group of job rows under its heading, with its own failure and empty line. */
+function JobGroup({ id, title, resource, rows, none, selected, clock, onPick, children }: JobGroupProps) {
+  return (
+    <section className="jobs-group" aria-labelledby={id}>
+      <h2 className="jobs-group-title" id={id}>
+        {title}
+      </h2>
+      {resource.error && <GroupFailure what={title === "Running" ? "Running jobs" : "Finished jobs"} error={resource.error} answeredAt={resource.answeredAt} retry={resource.reload} retained={rows !== null} />}
+      {rows === null && !resource.error && <Loading lines={2} label={`Loading ${title.toLowerCase()} jobs`} />}
+      {rows !== null && rows.length > 0 && (
+        <ul className="job-rows">
+          {rows.map((job) => (
+            <JobRow key={job.id} job={job} selected={job.id === selected} clock={clock} onPick={onPick} />
+          ))}
+        </ul>
+      )}
+      {rows !== null && rows.length === 0 && <p className="jobs-none">{none}</p>}
+      {children}
+    </section>
+  );
+}
+
+/** One job: its title, its result in a few words (a tag only for a failure or a block), and a time in a narrow column. */
+function JobRow({ job, selected, clock, onPick }: { job: JobView; selected: boolean; clock: HeadsUpClock; onPick: (id: string) => void }) {
+  const { tag, words } = jobSummary(job);
+  const time = jobTime(job, clock.now, clock.timeZone);
+  return (
+    <li className="job-row" data-job-row={job.id} data-status={job.status}>
+      <button className="job-pick" aria-current={selected ? "true" : undefined} onClick={() => onPick(job.id)}>
+        <span className="job-title">{job.title}</span>
+        <span className="job-result">
+          {tag && <JobTag tag={tag} />}
+          <span className="job-words">{words}</span>
+        </span>
+        <time className="job-time" dateTime={time.iso} title={time.label}>
+          {time.text}
+        </time>
+      </button>
+    </li>
   );
 }

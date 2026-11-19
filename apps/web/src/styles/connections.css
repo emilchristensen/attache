@@ -1,0 +1,281 @@
+/*
+ * Connections (views/Connections.tsx): plain grouped rows with four columns (name and state, account, what Attache
+ * may read and write, last read), each opening in place into its controls, and small tiles for what is not set up.
+ */
+
+.page-connections {
+  --connection-cols: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.75fr) 112px;
+  --connection-gap: var(--s-5);
+}
+.page-connections .page-header {
+  margin-bottom: var(--s-2);
+}
+/* The Reader and the last Source refresh come first, before any group. */
+.page-connections .reader-line {
+  margin: 0 0 var(--s-2);
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+}
+.page-connections .reader-line.silent {
+  color: var(--amber);
+}
+.connections-lede {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.connections-oauth {
+  margin-top: var(--s-4);
+}
+.connection-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  margin-top: var(--s-6);
+}
+
+/* A group's heading shares the rows' grid, so the column names stand above their columns. */
+.connection-head {
+  display: grid;
+  grid-template-columns: var(--connection-cols);
+  column-gap: var(--connection-gap);
+  align-items: end;
+  padding: 0 var(--s-1) var(--s-2);
+}
+.connection-head h2 {
+  margin: 0;
+}
+.connection-col {
+  padding-bottom: 5px;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+
+.connection-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.connection-row {
+  border-top: 1px solid var(--rule);
+}
+.connection-line {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--connection-cols);
+  column-gap: var(--connection-gap);
+  align-items: start;
+  padding: var(--s-3) var(--s-1);
+  font-size: var(--fs-control);
+  line-height: 20px;
+}
+.connection-line:hover,
+.connection-row[data-open] > .connection-line {
+  background: var(--row-hover);
+}
+.connection-line p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.connection-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.connection-name h3 {
+  margin: 0;
+  font: inherit;
+}
+/* The name is the row's button; its box stretches over the whole line, so the line opens wherever it is pressed. */
+button.connection-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-body);
+  line-height: 20px;
+  font-weight: 600;
+  text-align: left;
+}
+button.connection-toggle:hover:not(:disabled) {
+  background: none;
+}
+button.connection-toggle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+button.connection-toggle:focus-visible {
+  outline: none;
+}
+button.connection-toggle:focus-visible::after {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+  border-radius: var(--r-sm);
+}
+.connection-chevron {
+  flex: none;
+  color: var(--ink-3);
+  transition: transform 0.15s;
+}
+[aria-expanded="true"] > .connection-chevron {
+  transform: rotate(90deg);
+}
+/* A state word only when something is wrong, in its hue beside its glyph: a working Connection carries no badge. */
+.connection-state {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 22px;
+  color: var(--c);
+  font-weight: 600;
+  font-size: var(--fs-meta);
+}
+.connection-account,
+.connection-permission {
+  color: var(--ink-2);
+}
+.connection-permission {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.connection-verb {
+  color: var(--ink-3);
+}
+.connection-last {
+  color: var(--ink-2);
+}
+/* Desktop names each column once, above it; the cells name themselves only to screen readers until the columns stack. */
+.connection-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* The opened part lines up under the name, beside the chevron. */
+.connection-detail {
+  padding: var(--s-2) var(--s-1) var(--s-5) calc(var(--s-1) + 22px);
+  max-width: 824px;
+}
+.connection-detail[hidden] {
+  display: none;
+}
+
+/* Restrained tiles for what is not set up; one that opens spans the group with its form. */
+.connection-tiles {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s-2);
+  margin: var(--s-3) 0 0;
+  padding: 0;
+}
+.connection-rows + .connection-tiles {
+  margin-top: var(--s-4);
+}
+.connection-tile {
+  min-width: 0;
+}
+.connection-tile[data-open] {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--paper);
+}
+button.connection-tile-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name chevron"
+    "meta chevron";
+  align-items: center;
+  column-gap: var(--s-2);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--canvas);
+  color: var(--ink);
+  text-align: left;
+}
+button.connection-tile-button:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.connection-tile[data-open] > button.connection-tile-button {
+  border: 0;
+  border-radius: var(--r) var(--r) 0 0;
+  background: none;
+}
+.connection-tile-name,
+.connection-tile-meta {
+  min-width: 0;
+  white-space: normal;
+}
+.connection-tile-name {
+  grid-area: name;
+  font-size: var(--fs-control);
+  font-weight: 600;
+}
+.connection-tile-meta {
+  grid-area: meta;
+  color: var(--ink-3);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.connection-tile-button .connection-chevron {
+  grid-area: chevron;
+}
+.connection-tile .connection-detail {
+  padding: 0 var(--s-3) var(--s-4);
+}
+
+/* Narrow: one column, the name and its state first, then account, permission and last read, each naming itself. */
+@media (max-width: 720px) {
+  .connection-head {
+    display: block;
+  }
+  .connection-col {
+    display: none;
+  }
+  .connection-line {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--s-1);
+  }
+  .connection-account,
+  .connection-permission,
+  .connection-last {
+    padding-left: 22px;
+    font-size: var(--fs-meta);
+    line-height: var(--lh-meta);
+  }
+  .connection-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    color: var(--ink-3);
+  }
+  .connection-detail {
+    padding-left: var(--s-1);
+  }
+  .connection-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}

@@ -3,6 +3,50 @@ import type { ActionStatus } from "./actions.ts";
 
 /** API contract: Attention. */
 
+/**
+ * Every Inbox item kind the service raises. A connector can only raise a kind from this list
+ * (`AttentionCandidate.kind` is `InboxKind`), and the Dashboard's kind-to-type map is tested against it,
+ * so a new kind fails a test until the Dashboard gives it a family, word, hue and icon.
+ * An item's `kind` stays a string: a newer Machine can replicate a kind this one does not know.
+ */
+export const INBOX_KINDS = [
+  "deadline",
+  "review_request",
+  "authored_pr",
+  "assigned_issue",
+  "pending_reply",
+  "mention",
+  "invite_response",
+  "meeting_prep",
+  "overdue_work_item",
+  "due_work_item",
+  "fact-review",
+  "replication_blocked",
+  "replication_unauthorized",
+  "replication_prose_versions",
+  "replication_deleted_and_changed",
+] as const;
+
+export type InboxKind = (typeof INBOX_KINDS)[number];
+
+/** The Replication merge notices that become Inbox items, as `replication_<notice kind>`. */
+export const MERGE_NOTICE_KINDS = ["prose_versions", "deleted_and_changed"] as const;
+
+export type MergeNoticeKind = (typeof MERGE_NOTICE_KINDS)[number];
+
+/**
+ * The meeting a meeting prep item is about, as the calendar Connection read it.
+ * `start` and `end` are instants (ISO 8601 in UTC); the item stays open until `end`.
+ */
+export interface MeetingTimes {
+  start: string;
+  end: string;
+  /** The call to join (Google Meet or another conference link), or null when the meeting has none. */
+  meetLink: string | null;
+  /** The other people invited, by name or email; the owner is left out. */
+  attendees: string[];
+}
+
 export interface AttentionItemView {
   id: string;
   key: string;
@@ -26,9 +70,23 @@ export interface AttentionItemView {
   actionStatus: ActionStatus | null;
   changedSinceDecision: boolean;
   draftable: { actionKind: string; target: Record<string, unknown>; context: Record<string, unknown> } | null;
+  /** Set on meeting prep: when the meeting runs and how to join it; null for every other kind. */
+  meeting: MeetingTimes | null;
 }
 
 export const AttentionDecision = z.object({
   decision: z.enum(["dismiss", "snooze", "reopen", "done"]),
   until: z.string().datetime().optional(),
 });
+
+/**
+ * `POST /attention/:id/draft`. While the item's last Draft has a send of unknown outcome (`actionStatus` "unknown"),
+ * the service refuses a new Draft (`delivery_unconfirmed`) unless `replaceUnconfirmed` names that Draft: the owner
+ * chose to replace exactly the Draft they were warned about.
+ */
+export const AttentionDraftInput = z.object({
+  instructions: z.string().max(2000).optional(),
+  replaceUnconfirmed: z.string().min(1).optional(),
+});
+
+export type AttentionDraftBody = z.infer<typeof AttentionDraftInput>;

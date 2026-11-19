@@ -1,0 +1,194 @@
+/*
+ * Jobs: the research form, then a quiet table beside a detail sheet. The table is ruled groups (Running, Finished)
+ * of rows on the canvas: the title, the result in a few words under it, and the time in a narrow column on the right.
+ * A success stays plain; only a failure or a block carries a tag. The detail is the shared paper sheet
+ * (`.job-detail` in components.css) with ruled section titles. On a phone the detail goes below the table.
+ */
+
+/* The question beside its buttons, or above them on a narrow screen. */
+.research-form {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  margin-bottom: var(--s-5);
+}
+.research-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The table takes a little less than half the column; the detail reads in the rest. */
+.jobs-split {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--s-5);
+}
+
+/* ---- groups ------------------------------------------------------------------------------------- */
+
+.jobs-group + .jobs-group {
+  margin-top: var(--s-6);
+}
+.jobs-group-title {
+  margin: 0;
+}
+.jobs-none {
+  margin: var(--s-3) 0 0;
+  color: var(--ink-2);
+}
+.jobs-more {
+  margin-top: var(--s-3);
+}
+
+/* ---- rows ------------------------------------------------------------------------------------------- */
+
+.job-rows {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  border-top: 2px solid var(--ink);
+}
+.job-row {
+  border-bottom: 1px solid var(--rule);
+}
+/* The title over its result, the time on the right in a column just wide enough for "Yesterday". */
+.job-pick {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+  grid-template-areas: "title time" "result time";
+  column-gap: var(--s-3);
+  row-gap: 2px;
+  align-items: baseline;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.job-pick:hover {
+  background: var(--row-hover);
+}
+/* Selected: a fill and an ink bar, never an outline, so it cannot be mistaken for focus. */
+.job-pick[aria-current="true"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.job-title {
+  grid-area: title;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* Restrained: the result is secondary ink at the meta size, on one line; the detail has all of it. */
+.job-result {
+  grid-area: result;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.job-result .tag {
+  flex: none;
+}
+.job-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-time {
+  grid-area: time;
+  justify-self: end;
+  white-space: nowrap;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the detail ------------------------------------------------------------------------------------- */
+
+/* Text that flows: a long reason wraps under the tag instead of dropping below it whole. */
+.job-state {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-control);
+  color: var(--ink);
+}
+.job-state .tag {
+  margin-right: var(--s-2);
+}
+.job-state.quiet {
+  color: var(--ink-2);
+}
+.job-progress {
+  margin-top: var(--s-3);
+}
+.job-times {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.job-cancel-note:empty {
+  display: none;
+}
+.job-cancel-note {
+  margin: var(--s-3) 0 0;
+  font-size: var(--fs-control);
+  color: var(--ink);
+}
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.job-actions:empty {
+  display: none;
+}
+.job-section {
+  margin-top: var(--s-5);
+}
+.job-section > h3 + * {
+  margin-top: var(--s-3);
+}
+.job-error {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.job-raw {
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  background: var(--sunken);
+  border-radius: var(--r-sm);
+  font: var(--fs-meta) / var(--lh-meta) var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A research claim no source supports. */
+.unsupported {
+  font-size: var(--fs-meta);
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+}
+
+@media (max-width: 720px) {
+  .research-form {
+    flex-wrap: wrap;
+  }
+  .research-form input {
+    flex-basis: 100%;
+  }
+  .jobs-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

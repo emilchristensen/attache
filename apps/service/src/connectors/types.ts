@@ -1,4 +1,4 @@
-import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState } from "@attache/contracts";
+import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState, InboxKind, MeetingTimes } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { HttpClient } from "./http.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
@@ -45,7 +45,8 @@ export interface Observation {
 
 export interface AttentionCandidate {
   key: string;
-  kind: string;
+  /** One of the kinds the Dashboard knows; add a new one to `INBOX_KINDS` first. */
+  kind: InboxKind;
   title: string;
   summary: string;
   why: string;
@@ -55,6 +56,8 @@ export interface AttentionCandidate {
   /** Parts added to the observation fingerprint (e.g. the due/overdue category). */
   extraFingerprint?: Array<string | number | boolean | null>;
   draftable?: { actionKind: string; target: Record<string, unknown>; context: Record<string, unknown> };
+  /** Meeting prep only: the meeting's times, call and attendees. */
+  meeting?: MeetingTimes;
 }
 
 export interface RefreshResult {

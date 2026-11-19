@@ -2,6 +2,7 @@ import { Component, createContext, useCallback, useContext, useEffect, useMemo, 
 import MarkdownIt from "markdown-it";
 import type { ApiError } from "../api.ts";
 import { plural } from "@attache/contracts";
+import { settingsHref } from "../routes.ts";
 
 // ---- routing -------------------------------------------------------------------
 
@@ -28,12 +29,13 @@ export function useLocation(): { path: string; search: URLSearchParams; hash: st
   }, [href]);
 }
 
-export function Link(props: { to: string; children: ReactNode; className?: string; "aria-current"?: "page" | undefined; title?: string }) {
+export function Link(props: { to: string; children: ReactNode; className?: string; "aria-current"?: "page" | "true" | undefined; "aria-label"?: string; title?: string }) {
   return (
     <a
       href={props.to}
       className={props.className}
       aria-current={props["aria-current"]}
+      aria-label={props["aria-label"]}
       title={props.title}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -68,6 +70,11 @@ export function Empty({ title, children, action }: { title: string; children?: R
   );
 }
 
+/** Where a switched-off feature is turned back on: Settings' Features section. */
+export function TurnOnInSettings() {
+  return <Link to={settingsHref("features")}>Turn it on in Settings</Link>;
+}
+
 export function ErrorState({ error, retry, title }: { error: ApiError | Error | null; retry?: () => void; title?: string }) {
   if (!error) return null;
   const offline = (error as ApiError).code === "offline";
@@ -78,25 +85,9 @@ export function ErrorState({ error, retry, title }: { error: ApiError | Error | 
       <span className="small">{error.message}</span>
       <div className="row">
         {retry && <button onClick={retry}>Try again</button>}
-        {disabled && <Link to="/settings">Open Settings</Link>}
+        {disabled && <Link to={settingsHref("features")}>Open Settings</Link>}
       </div>
     </div>
-  );
-}
-
-export function StatusPill({ state, label }: { state: string; label?: string }) {
-  const cls = ["ready", "connected", "complete", "empty", "succeeded", "ok", "applied", "open"].includes(state)
-    ? "ok"
-    : ["partial", "needs_setup", "needs_auth", "queued", "running", "draft", "approved", "snoozed", "proposed", "executing", "blocked", "revoked", "unknown", "never_run"].includes(state)
-      ? "warn"
-      : ["error", "failed", "unavailable", "denied", "unauthorized", "offline", "expired", "rejected"].includes(state)
-        ? "danger"
-        : "";
-  return (
-    <span className={`pill ${cls}`}>
-      <span className="dot" aria-hidden />
-      {label ?? state.replace(/_/g, " ")}
-    </span>
   );
 }
 
@@ -121,9 +112,14 @@ export function useNow(intervalMs = 30_000) {
   }, [intervalMs]);
 }
 
-export function Time({ iso }: { iso: string | null | undefined }) {
+/** A time relative to now. `standalone` sets it in the 13 px tabular style of a time that stands on its own, such as a value in a list of facts. */
+export function Time({ iso, standalone = false }: { iso: string | null | undefined; standalone?: boolean }) {
   useNow();
-  return <time dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined}>{relTime(iso)}</time>;
+  return (
+    <time className={standalone ? "time" : undefined} dateTime={iso ?? undefined} title={iso ? new Date(iso).toLocaleString() : undefined}>
+      {relTime(iso)}
+    </time>
+  );
 }
 
 // ---- markdown (safe: raw HTML disabled; markdown-it rejects javascript: links) ---------

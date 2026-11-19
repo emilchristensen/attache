@@ -18,7 +18,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 ## Features
 
 - **Search with citations.**
-  Every hit names its file and lines, and search works without a model.
+  One field at the top of Home (or `Ctrl K` and `/`, which open the same search in a palette on every other screen, with a Go to list of screens and Settings sections) shows passages as you type; every hit names its file and lines, and search works without a model.
 - **Meaning-based search.**
   A small multilingual model runs locally and ranks passages by meaning and keywords, so a question worded differently, or in another language, still finds the note.
 - **The Brain in your Harness.**
@@ -26,19 +26,33 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Connecting a Harness in the Dashboard adds the server and, where supported, the session hooks in one step.
 - **Memory with history.**
   Import a Markdown folder or Obsidian vault read-only, and keep notes and source-linked decisions with dated history.
+  The Brain screen reads them side by side with their collections, opens each fact's source in place, and lists every recent save with its origin and one-click Revert.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
-- **Drafts and approvals.**
-  PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts.
+  Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
+  It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
+  Home's For you now brings the daily briefing forward in the morning, meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), and the briefings you ask for, each saying why it is there and when it leaves.
+  Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
+- **Approvals.**
+  Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
+  Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
+  A Draft's own page quotes the message it answers above its text, names the version on Approve and Send, and keeps a rejection undoable only by an explicit Restore.
 - **Replication (opt-in).**
   Every Machine you run Attache on keeps the same Brain through a private git repository, including offline saves and hand edits.
 - **Background work.**
   Research, briefing and draft jobs survive closing the browser tab and restarting the service.
+  Jobs lists them as a quiet table, running work first, where only a failure or a block carries a tag, and Cancel says whether the work stopped or had already finished.
 
 Attache has no chat box of its own; you ask the Brain from your Harness.
+Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
+It works at 320 px and 200% zoom, with a screen reader, with forced colours and reduced motion, and with 44 px touch targets on a phone.
+Home, Approvals, Brain, Connections, Jobs and Settings sit in one masthead, or in a bottom bar on a narrow window, and `g` then a letter jumps to each (`?` lists the shortcuts).
+Settings keeps its choices in sections, each at its own address, and a feature switch speaks up only when the feature is on but not fully working.
+The logo's dot, the tab's icon and its title, such as "(14) Attache", show how many decisions wait for you, counted once each across the Inbox, Approvals and sign-ins, and exact however many there are.
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.
+The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect on Home lands on it.
 
 ## Install
 
@@ -51,7 +65,8 @@ No developer tools are needed.
 | Linux (x86_64 with systemd) | `Attache-Installer-<version>-linux-x64.sh` | `sh Attache-Installer-<version>-linux-x64.sh` |
 | Windows 10 or 11 (x86_64) | `Attache-Installer-<version>-windows-x64.cmd` | Double-click it. |
 
-The installer starts Attache as a background service and opens first-run setup in your browser.
+The installer starts Attache as a background service, pairs your browser with a one-time code and opens first-run setup.
+Setup asks only for a data folder; everything else is optional and can wait.
 The releases are not code-signed, so macOS may ask you to right-click the file and choose **Open** the first time.
 
 The [user guide](docs/user-guide.md) covers setup, everyday use, Harness connections, Replication, backups and uninstalling.

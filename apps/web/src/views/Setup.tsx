@@ -1,30 +1,18 @@
-import { useEffect, useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type Config, type SetupDefaults } from "@attache/contracts";
-import { api, patch, post, put, type ApiError } from "../api.ts";
+import { useEffect, useState, type ReactNode } from "react";
+import type { FeatureStatus, Config } from "@attache/contracts";
+import { api, patch, post, type ApiError } from "../api.ts";
 import { useResource } from "../live.ts";
-import { ErrorState, Loading, StatusPill, useAction, useLocation } from "../components/ui.tsx";
+import { ErrorState, Loading, useAction, useLocation } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { ConnectionCard } from "../components/ConnectionCard.tsx";
 import { Logo } from "../components/Logo.tsx";
-import { JoinForm } from "./Replication.tsx";
+import { Icon } from "../components/icons.tsx";
+import { SetupActions } from "./SetupActions.tsx";
+import { DataFolderStep } from "./SetupDataFolder.tsx";
+import { FeatureList, type Caps } from "./FeatureList.tsx";
 
 const STEPS = ["Data folder", "Features", "Connections", "Model and schedules", "Test and finish"];
 
-interface Caps {
-  features: FeatureStatus[];
-  connections: ConnectionStatus[];
-  definitions: ConnectionDefinition[];
-}
-
-interface Preview {
-  path: string;
-  exists: boolean;
-  writable: boolean;
-  markdownFiles: number;
-  sample: string[];
-  willCreate: string[];
-  willModify: string[];
-  note: string;
-}
 
 export function Setup({ onDone }: { onDone: () => void }) {
   const cfg = useResource<{ config: Config }>("/config", ["config.changed"]);
@@ -37,36 +25,64 @@ export function Setup({ onDone }: { onDone: () => void }) {
     void patch("/config", { setupStep: n }).catch(() => {});
     window.scrollTo(0, 0);
   };
-  if (!cfg.data || step === null) return <div className="setup"><Loading /></div>;
+  if (!cfg.data || step === null)
+    return (
+      <main className="setup" aria-busy>
+        <SetupAside />
+        <div className="setup-form">
+          <Loading />
+        </div>
+      </main>
+    );
   const hasFolder = !!cfg.data.config.dataFolder;
   return (
     <main className="setup">
-      <div className="brand" style={{ padding: 0 }}>
-        <Logo /> Attache setup
+      <SetupAside>
+        <nav aria-label="Setup progress">
+          <ol className="setup-steps">
+            {STEPS.map((s, i) => (
+              <li key={s}>
+                <button type="button" aria-current={i === step ? "step" : undefined} className={i < step ? "done" : undefined} disabled={i > 0 && !hasFolder} onClick={() => go(i)}>
+                  <span className="setup-step-mark" aria-hidden>
+                    {i < step ? <Icon name="check" size={14} /> : i + 1}
+                  </span>
+                  <span className="setup-step-label">{s}</span>
+                  {i < step && <span className="sr-only">, done</span>}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </SetupAside>
+      <div className="setup-form">
+        {step === 0 && <DataFolderStep config={cfg.data.config} onNext={() => { cfg.reload(); go(1); }} />}
+        {step === 1 && <FeaturesStep onBack={() => go(0)} onNext={() => go(2)} />}
+        {step === 2 && <ConnectionsStep onBack={() => go(1)} onNext={() => go(3)} />}
+        {step === 3 && <ModelStep config={cfg.data.config} onBack={() => go(2)} onNext={() => go(4)} />}
+        {step === 4 && <FinishStep onBack={() => go(3)} onDone={onDone} />}
       </div>
-      <nav aria-label="Setup progress">
-        <ol className="steps">
-          {STEPS.map((s, i) => (
-            <li key={s} aria-current={i === step ? "step" : undefined} className={i < step ? "done" : ""}>
-              <button className="ghost small" style={{ padding: 0, border: "none", color: "inherit" }} disabled={i > 0 && !hasFolder} onClick={() => go(i)}>
-                {i + 1}. {s}
-              </button>
-            </li>
-          ))}
-        </ol>
-      </nav>
-      {step === 0 && <DataFolderStep config={cfg.data.config} onNext={() => { cfg.reload(); go(1); }} />}
-      {step === 1 && <FeaturesStep onBack={() => go(0)} onNext={() => go(2)} />}
-      {step === 2 && <ConnectionsStep onBack={() => go(1)} onNext={() => go(3)} />}
-      {step === 3 && <ModelStep config={cfg.data.config} onBack={() => go(2)} onNext={() => go(4)} />}
-      {step === 4 && <FinishStep onBack={() => go(3)} onDone={onDone} />}
     </main>
+  );
+}
+
+/** Setup's left pane: the large logo, without its dot since nothing waits yet, then the steps. */
+function SetupAside({ children }: { children?: ReactNode }) {
+  return (
+    <aside className="setup-aside">
+      <div className="setup-brand">
+        <Logo size={64} attention={false} />
+        <span>
+          Attache <span className="setup-brand-sub">setup</span>
+        </span>
+      </div>
+      {children}
+    </aside>
   );
 }
 
 function Nav({ onBack, onNext, nextLabel = "Continue", disabled }: { onBack?: () => void; onNext: () => void; nextLabel?: string; disabled?: boolean }) {
   return (
-    <div className="row" style={{ marginTop: 20 }}>
+    <SetupActions>
       {onBack && (
         <button className="ghost" onClick={onBack}>
           Back
@@ -76,163 +92,7 @@ function Nav({ onBack, onNext, nextLabel = "Continue", disabled }: { onBack?: ()
       <button className="primary" onClick={onNext} disabled={disabled}>
         {nextLabel}
       </button>
-    </div>
-  );
-}
-
-function DataFolderStep({ config, onNext }: { config: Config; onNext: () => void }) {
-  const defaults = useResource<SetupDefaults>("/setup/defaults");
-  const [path, setPath] = useState(config.dataFolder ?? "");
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [err, setErr] = useState<ApiError | null>(null);
-  const [name, setName] = useState(config.identity?.name ?? "");
-  const [email, setEmail] = useState(config.identity?.email ?? "");
-  const [importPath, setImportPath] = useState("");
-  const [importPreview, setImportPreview] = useState<{ path: string; filesToRead: number; sample: string[]; skippedCount: number; note: string } | null>(null);
-  const { busy, run } = useAction();
-  // Once the owner is in the field, a suggestion that arrives late would mix into what they type.
-  const [ownersChoice, setOwnersChoice] = useState(false);
-  useEffect(() => {
-    if (!path && !ownersChoice && defaults.data) setPath(defaults.data.suggestion);
-  }, [defaults.data, path, ownersChoice]);
-  const doPreview = async () => {
-    setErr(null);
-    try {
-      setPreview(await post<Preview>("/setup/data-folder/preview", { path }));
-    } catch (e) {
-      setPreview(null);
-      setErr(e as ApiError);
-    }
-  };
-  const save = () =>
-    run("save", async () => {
-      await post("/setup/data-folder", { path });
-      if (name.trim()) await post("/setup/identity", { name: name.trim(), email: email.trim(), confirm: true });
-      if (importPreview) await post("/import", { path: importPreview.path });
-      onNext();
-    });
-  return (
-    <section className="stack">
-      <h1>Where should Attache keep your knowledge?</h1>
-      <p className="muted">Attache stores memory as plain Markdown in a folder you choose. You can open it in Obsidian or any editor. Settings, jobs and credentials stay outside this folder.</p>
-      <div className="card stack">
-        <label className="field">
-          Data folder
-          <div className="row" style={{ flexWrap: "nowrap" }}>
-            <input value={path} onFocus={() => setOwnersChoice(true)} onChange={(e) => { setPath(e.target.value); setPreview(null); }} spellCheck={false} aria-describedby="folder-help" />
-            <button onClick={doPreview} disabled={!path.trim()}>
-              Preview
-            </button>
-          </div>
-          <span className="help" id="folder-help">A new or existing folder. Existing Markdown files are indexed but never modified.</span>
-        </label>
-        <ErrorState error={err} />
-        {preview && (
-          <div className={`state ${preview.writable ? "partial" : "error"}`} style={{ borderColor: preview.writable ? "var(--border-strong)" : undefined }} aria-live="polite">
-            <strong style={{ color: "var(--text)" }}>{preview.exists ? "Existing folder" : "New folder"}: {preview.path}</strong>
-            <span className="small">{preview.note}</span>
-            {preview.willCreate.length > 0 && <span className="small">Will create: {preview.willCreate.join(", ")}</span>}
-            <span className="small">Will modify: {preview.willModify.length ? preview.willModify.join(", ") : "nothing"}</span>
-            {!preview.writable && <span className="error-text small">Attache cannot write here. Choose another folder.</span>}
-          </div>
-        )}
-      </div>
-      <details className="card join-brain">
-        <summary>
-          <strong>Already use Attache on another Machine?</strong>
-          <span className="small muted"> Join its Brain instead of starting a new one.</span>
-        </summary>
-        <div className="join-brain-body">
-          <JoinForm folder={path} primary={false} intro="With Replication set up on your other Machine, Attache clones that Brain into the data folder above, which must be empty or new. Leave the import and identity below as they are: they come with the Brain." onDone={onNext} />
-        </div>
-      </details>
-      <div className="card stack">
-        <h3>Import an existing Markdown folder or Obsidian vault (optional)</h3>
-        <p className="small muted">Attache reads it in place and cites it. It does not copy, change or move anything in that folder.</p>
-        <div className="row" style={{ flexWrap: "nowrap" }}>
-          <input value={importPath} onChange={(e) => { setImportPath(e.target.value); setImportPreview(null); }} placeholder={defaults.data?.examples.notes} spellCheck={false} aria-label="Folder to import" />
-          <button disabled={!importPath.trim()} onClick={() => run("ip", async () => setImportPreview(await post("/import/preview", { path: importPath })))}>
-            Preview import
-          </button>
-        </div>
-        {importPreview && (
-          <div className="state partial small">
-            <strong style={{ color: "var(--text)" }}>Will read {plural(importPreview.filesToRead, "Markdown file")} from {importPreview.path}</strong>
-            <span>{importPreview.note}</span>
-            {importPreview.skippedCount > 0 && <span>{plural(importPreview.skippedCount, "item")} skipped (hidden folders, links or large files).</span>}
-            {importPreview.sample.length > 0 && <span className="mono">{importPreview.sample.slice(0, 5).join(", ")}{importPreview.filesToRead > 5 ? ", …" : ""}</span>}
-            <span>Files changed in that folder: 0</span>
-          </div>
-        )}
-      </div>
-      <div className="card stack">
-        <h3>Who is this for? (optional)</h3>
-        <p className="small muted">Used to tell your own messages from others'. Stored as a protected identity record that only Settings can change.</p>
-        <div className="grid-2">
-          <label className="field">
-            Name
-            <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
-          </label>
-          <label className="field">
-            Email
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          </label>
-        </div>
-      </div>
-      <Nav onNext={save} nextLabel={busy ? "Saving…" : "Use this folder"} disabled={!preview?.writable || busy !== null} />
-    </section>
-  );
-}
-
-export function FeatureList({ caps, onChanged }: { caps: Caps; onChanged: () => void }) {
-  const { run } = useAction();
-  const [problem, setProblem] = useState<{ id: string; on: boolean; message: string } | null>(null);
-  const toggle = async (id: string, on: boolean, cascade = false) => {
-    try {
-      await put("/features", { changes: { [id]: on }, cascade });
-      setProblem(null);
-      onChanged();
-    } catch (e) {
-      const err = e as ApiError;
-      if (err.code === "dependency") setProblem({ id, on, message: err.message });
-      else throw e;
-    }
-  };
-  return (
-    <div className="card" role="group" aria-label="Features">
-      {caps.features.map((f) => (
-        <div key={f.id} className="feature-row" data-feature={f.id}>
-          <input type="checkbox" id={`f-${f.id}`} checked={f.enabled} disabled={f.core} onChange={(e) => void run(`f-${f.id}`, () => toggle(f.id, e.target.checked))} />
-          <div style={{ flex: 1 }}>
-            <label htmlFor={`f-${f.id}`} className="row" style={{ cursor: f.core ? "default" : "pointer" }}>
-              <strong>{f.label}</strong>
-              {f.core && <span className="pill">core</span>}
-              <StatusPill state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
-            </label>
-            <p className="desc">{f.description}</p>
-            {(f.dependsOn.features.length > 0 || f.dependsOn.connections.length > 0) && (
-              <p className="deps">
-                Needs: {[...f.dependsOn.features.map((d) => caps.features.find((x) => x.id === d)?.label ?? d), ...f.dependsOn.connections.map((c) => `${c.label}${c.required ? "" : " (optional)"}`)].join(" · ")}
-              </p>
-            )}
-            {f.enabled && f.reason && <p className="small" style={{ color: f.readiness === "ready" ? "var(--muted)" : "var(--warn)", marginTop: 4 }}>{f.reason}</p>}
-            {problem?.id === f.id && (
-              <div className="state partial small" style={{ marginTop: 8 }} role="alert">
-                <span>{problem.message}</span>
-                <div className="row">
-                  <button className="small primary" onClick={() => void run("cascade", () => toggle(problem.id, problem.on, true))}>
-                    {problem.on ? "Turn on what it needs too" : "Also turn off what depends on it"}
-                  </button>
-                  <button className="small ghost" onClick={() => setProblem(null)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
+    </SetupActions>
   );
 }
 
@@ -304,7 +164,7 @@ function ModelStep({ config, onBack, onNext }: { config: Config; onBack: () => v
           <div className="card grid-2">
             <label className="field">
               Refresh sources every (minutes)
-              <input type="number" min={5} max={1440} value={sched.refreshEveryMinutes} onChange={(e) => setSched({ ...sched, refreshEveryMinutes: Math.max(5, Number(e.target.value) || 30) })} />
+              <input type="number" min={5} max={1440} value={sched.refreshEveryMinutes} onChange={(e) => setSched({ ...sched, refreshEveryMinutes: Math.min(1440, Math.max(5, Math.round(Number(e.target.value)) || 30)) })} />
             </label>
             <label className="field">
               Daily briefing at
@@ -363,7 +223,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
               {result.features.filter((f) => f.enabled).map((f) => (
                 <div key={f.id} className="check-row" data-feature-status={f.id}>
                   <span>{f.label}</span>
-                  <StatusPill state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
+                  <StateTag state={f.readiness} label={f.readiness.replace(/_/g, " ")} />
                   {f.reason && <span className="small muted">{f.reason}</span>}
                 </div>
               ))}
@@ -378,7 +238,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
                 {result.connections.map((c) => (
                   <div key={c.id} className="check-row">
                     <span>{c.label}</span>
-                    <StatusPill state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
+                    <StateTag state={c.ok ? "ready" : c.state} label={c.ok ? "ready" : c.state.replace(/_/g, " ")} />
                     {c.message && <span className="small muted">{c.message}</span>}
                   </div>
                 ))}
@@ -387,7 +247,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
           </div>
         </>
       )}
-      <div className="row">
+      <SetupActions>
         <button className="ghost" onClick={onBack}>
           Back
         </button>
@@ -398,7 +258,7 @@ function FinishStep({ onBack, onDone }: { onBack: () => void; onDone: () => void
         <button className="primary" disabled={busy !== null || testing} onClick={() => run("finish", async () => { await post("/setup/complete"); await api("/config"); onDone(); })}>
           Finish setup
         </button>
-      </div>
+      </SetupActions>
     </section>
   );
 }

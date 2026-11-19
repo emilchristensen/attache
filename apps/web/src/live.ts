@@ -14,19 +14,23 @@ class LiveHub {
   private es: EventSource | null = null;
   private listeners = new Set<Listener>();
   private statusListeners = new Set<() => void>();
-  status: "connecting" | "open" | "closed" = "connecting";
-  private wasOpen = false;
+  /**
+   * `connecting` only for the first attempt after the page loads; `reconnecting` once an attempt failed and the
+   * browser retries, `closed` while the hub waits to start a new stream.
+   */
+  status: "connecting" | "open" | "reconnecting" | "closed" = "connecting";
+  private opened = false;
 
   start() {
     if (this.es) return;
     this.es = new EventSource(`${API_PREFIX}/events`);
     this.es.onopen = () => {
-      const reconnect = this.wasOpen;
-      this.wasOpen = true;
+      const reconnect = this.opened;
+      this.opened = true;
       this.setStatus("open");
       if (reconnect) this.emit({ type: "reconnected" });
     };
-    this.es.onerror = () => this.setStatus(this.es?.readyState === EventSource.CLOSED ? "closed" : "connecting");
+    this.es.onerror = () => this.setStatus(this.es?.readyState === EventSource.CLOSED ? "closed" : "reconnecting");
     this.es.onmessage = (m) => {
       try {
         this.emit(JSON.parse(m.data) as LiveEvent);
@@ -75,6 +79,12 @@ export function useLiveStatus() {
   );
 }
 
+/** The live connection as the owner hears of it: `lost` once an attempt failed; the first connect after the page loads is not news. */
+export function useLiveConnection(): { status: LiveHub["status"]; lost: boolean } {
+  const status = useLiveStatus();
+  return { status, lost: status === "reconnecting" || status === "closed" };
+}
+
 export function useLiveEvent(handler: Listener) {
   const ref = useRef(handler);
   ref.current = handler;
@@ -85,9 +95,26 @@ export interface Resource<T> {
   data: T | null;
   error: ApiError | null;
   loading: boolean;
+  /** When the data now held was answered (ms since the epoch), so a failure after a good load can say how old it is. */
+  answeredAt: number | null;
   reload: () => void;
   setData: (d: T) => void;
+  /** When the request behind `data` was asked, as an `orderMark()`, so a newer answer can be told from an older one. */
+  askedAt: number | null;
 }
+
+let marks = 0;
+
+/**
+ * A strictly increasing number, shared by every request start and anything that must be ordered against them (an
+ * Inbox decision): unlike a clock reading, two marks are never equal.
+ */
+export function orderMark(): number {
+  return ++marks;
+}
+
+/** How long a resource waits after a live event before it asks again, so a burst of events asks once. */
+export const REFRESH_DELAY_MS = 120;
 
 /**
  * Fetch a resource and refetch when a matching live event arrives or the
@@ -98,15 +125,20 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(!!path);
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
+  const [askedAt, setAskedAt] = useState<number | null>(null);
   const seq = useRef(0);
   const load = useCallback(() => {
     if (!path) return;
     const mine = ++seq.current;
+    const asked = orderMark();
     setLoading(true);
     api<T>(path)
       .then((d) => {
         if (mine !== seq.current) return;
         setData(d);
+        setAnsweredAt(Date.now());
+        setAskedAt(asked);
         setError(null);
       })
       .catch((e: ApiError) => {
@@ -119,14 +151,15 @@ export function useResource<T>(path: string | null, refreshOn: string[] = []): R
   }, [path]);
   useEffect(() => {
     setData(null);
+    setAnsweredAt(null);
     load();
   }, [load]);
   const timer = useRef<number | null>(null);
   useLiveEvent((ev) => {
     if (ev.type === "reconnected" || refreshOn.includes(ev.type) || (ev.type === "job.event" && refreshOn.includes("job"))) {
       if (timer.current) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(load, 120);
+      timer.current = window.setTimeout(load, REFRESH_DELAY_MS);
     }
   });
-  return { data, error, loading, reload: load, setData };
+  return { data, error, loading, answeredAt, reload: load, setData, askedAt };
 }

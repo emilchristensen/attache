@@ -67,12 +67,20 @@ Attache no longer has voice; upgrading from a version that had it removes the do
 
 ## First-run setup
 
-Setup has five steps and each works without the ones after it.
+The installer opens the Dashboard with a one-time pairing code, and your browser pairs by itself.
+If the code is missing, wrong or expired, **Pair this browser** asks for it and says what is wrong beside the field; run `attache pair --open` for a new code.
+
+Setup shows its five steps on the left and the current step on the right.
+Each step works without the ones after it, you can go back to any step you have reached, and Setup resumes at the step you left.
+**Continue** is never greyed out: when something is missing, it says what beside the field and puts the cursor there.
 
 1. **Data folder.**
    Choose where Attache stores knowledge (default `~/Documents/Attache`).
-   Preview shows exactly what will be created and confirms that existing files are not modified.
-   You can also point Attache at an existing Markdown folder or Obsidian vault; it is read in place and never changed.
+   Preview shows exactly what will be created and confirms that existing files are not modified; **Use this folder** asks you to preview first.
+   Three optional sections sit below **Use this folder**, closed until you open them.
+   *Import an existing Markdown folder or Obsidian vault* points Attache at your notes; they are read in place and never changed.
+   *Who is this for?* takes your name and email, so Attache can tell your own messages from others'.
+   *Already use Attache on another Machine?* joins the Brain you already have instead of starting a new one (see Replication below).
 2. **Features.**
    Search is always on.
    Saving to memory, background work, attention and briefings, drafts and approvals, and agent sessions are optional.
@@ -98,37 +106,180 @@ Everything chosen during setup can be changed later in **Settings** and **Connec
 
 ## Everyday use
 
-**Home** shows the attention inbox.
+**Home** shows what is timely now, under **For you now**, and the Inbox.
 Attache has no chat box: you ask the Brain from your Harness (see Using the Brain from a Harness below).
 
-- The briefing summarises what changed, what needs your judgment and what Attache has prepared, one point per line.
-  The counts under it jump to each group; drafts and memory changes open their own screens.
-  **Away summary** covers the last three days.
-- **Sources** names the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
-  Without Replication this Machine is its own Reader.
-  Below it, each source shows its last successful refresh and whether its last Source refresh was complete, partial or failed.
-  An item list is never shown as "nothing to do" when a source failed.
-- Items are grouped into deadlines, review queue, meetings, pending replies and facts to check.
+### Getting around
+
+On a desktop window the masthead runs along the top: the Attache mark, then **Home**, **Approvals**, **Brain**, **Connections**, **Jobs** and **Settings** on one line, with the page below in a centred reading column.
+The screen you are on is filled in ink.
+A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
+Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
+On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
+When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
+The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
+The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
+The count is exact however many decisions wait.
+When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
+A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
+When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; in Settings the same words sit under **Machines and Replication**, which says why and what to do.
+
+Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
+At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
+When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
+When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
+**Connections** also opens with the Reader and its last Source refresh, and Home's Connections area turns red with **Not reading** while no Machine reads.
+
+On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
+**More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
+**Search** in the bar puts you in Home's search field on Home and opens the search palette everywhere else.
+
+Press `g` and then a letter to jump to a screen: `h` Home, `a` Approvals, `b` Brain, `j` Jobs, `c` Connections, `s` Settings.
+Press `Ctrl K` (`Cmd K` on a Mac) or `/` to search the Brain: on Home they put you in Home's search field, elsewhere they open the search palette.
+The search palette is the same search in a dialog over the screen you are on, with the same results and a **Go to** group above them.
+Before you type, Go to lists every screen and every Settings section; as you type it keeps the places whose name starts with your words, so `repl` finds Machines and Replication and `settings ident` finds Identity.
+Arrow keys move through places and passages, `Enter` opens the chosen one, and **All results in Brain** takes the query to the Brain.
+`Tab` stays inside the palette, `Esc` closes it, and focus goes back to where it was; each time it opens, its field is empty.
+Searching from the palette only reads: it starts no job and changes nothing.
+Press `?` for the list of keyboard shortcuts.
+`j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
+The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+No single key ever applies, approves, sends, rejects, reverts or disconnects.
+Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
+The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
+
+### Look
+
+The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
+Headings are set in Georgia, and the morning briefing leads Home on an amber page of its own.
+Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
+Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
+The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
+With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
+
+Every screen works in a window 320 px wide and at 200% zoom without scrolling sideways.
+On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
+With reduced motion switched on in your system, nothing glides or turns: the Dashboard jumps straight to where a link takes you.
+Type is never told by colour alone, so the stamps stay apart in grayscale and with colour blindness, and a failure keeps its warning triangle.
+A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a Heads-up put away.
+When a Source refresh changes how many decisions wait, it hears the new total once, such as "4 need you now."; opening the Dashboard, your own decisions and other live updates stay quiet.
+
+### Home
+
+Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
+
+- **Search the Brain** sits under a short line with the word Home and today's date.
+  The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
+  As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
+  The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
+  `Esc` closes the results and keeps what you typed.
+  A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
+  **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
+  Searching starts no job and changes nothing.
+- **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
+- **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
+  Every Heads-up says why it is here and when it leaves.
+  - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
+    **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
+    **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
+    Yesterday's briefing never shows as today's.
+  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
+    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
+    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
+    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
+    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
+    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
+    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
+  - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
+  - Under a meeting a briefing is one line, the Earlier today line too, and **Read briefing** opens why it is there with the briefing, so the Inbox's first row still shows above the fold during back-to-back meetings.
+  - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
+  - When nothing is timely, the area is one quiet line that says what comes next: when a meeting's prep shows, or when the Reader's next daily briefing is scheduled.
+  - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
+  - Got it and Not now are remembered in this browser only, so another browser or Machine still shows the Heads-up.
+  - When a Heads-up arrives while you read further down, the page keeps your place.
+  - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
+  - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
+  - With Attention and briefings switched off, the area says so, with a link to Settings.
+- **Connections** says whether you can trust the list below it.
+  When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
+  Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
+  Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
+  Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
+  Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
+  Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
+  Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
+  Sources that could not reach the network at all (offline: no connection, no name lookup, refused), whatever words each one recorded, share one row; a source whose service answered with an error or did not answer in time has its own row, unless another failed with the same message.
+  At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
+  Only a Connection that needs you to sign in again counts toward the dot.
+  An item list is never shown as "nothing to do" while this area shows a problem.
+- **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
+  Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
+  A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
+  Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
+  On a narrow window the type comes first, then the whole subject, then the source and time.
+  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
-- **Recently added** lists every change written to your Brain without your review in the last 7 days, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  A decided row stays where it was as one line with **Undo**, so nothing below it moves.
+  The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
+  Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
+  The **Type** menu lists every type with its count and shows one type at a time.
+  The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
+  The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
+  When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
+  When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.
+  An empty Inbox says exactly what is known.
+  **Nothing needs you.**, beside the logo without its dot, appears only when no decision waits anywhere and every source was read, and says when they were read.
+  When a source was not read it says "Nothing found in the 4 sources that were read." and names the one that was not; with only your notes connected, "Nothing found in your notes."; when Approvals or a sign-in still wait, "No open Inbox items." and where they wait; and when the count could not be read, that Attache cannot say nothing needs you, with **Retry**.
+  With Attention and briefings switched off the Inbox says so, and that this is not a claim that nothing needs you.
+- **Recently added** is one line at the end of the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+  It is not there while Saving to memory is switched off, and it says so with **Retry** when it could not be loaded.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
   **Revert** works as in Recent saves below, and a reverted change stays listed, marked reverted.
-  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the section says so in one line.
+  Changes older than 7 days drop off on their own, so there is nothing to mark as seen; with none, the line says so and has nothing to open.
   A dismissed item comes back only if something about it changed, and it is marked "changed since your decision".
 - **Prepare draft** asks Attache to write a reply or review comment with the item's context.
-  While that draft waits for you or is being sent, the item offers **View draft** instead.
-  Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** on the Drafts screen.
+  While that draft waits for you or is being sent, the item stays in the Inbox with a tag naming the Draft's state, such as **Draft waiting**, and offers **View draft** instead.
+  Once the draft is finished (rejected, expired, sent or failed), the item offers **Prepare draft** again, and the finished draft stays under **Finished** in Approvals.
+  When a send's outcome could not be verified, the item stays open and says **Delivery unconfirmed**, after a reload too.
+  Open it and **Check destination** comes first: it opens where the message went, in a new tab, and changes nothing.
+  **View the Draft** shows the original Draft and its receipt.
+  Only if the message did not arrive, **Prepare a replacement** and confirm it to prepare a new Draft; mark the item **Done** if it did arrive.
   Drafts stay on the Machine they were prepared on, so another Machine can offer Prepare draft for the same item.
 
-Press `g` followed by a letter (h, m, d, j, c, s) to switch views.
+### Brain
 
-**Memory** lists people, projects, decisions and notes, plus imported notes, archived evidence and generated deliverables.
-Each memory note has a *Current state* with one dated entry per subject.
+The **Brain** opens with a full-width search field, and under it two views, each with its own address: **Library** (`/brain`) and **Recent saves** (`/brain/recent`).
+
+**Library** puts the collections, the notes in the chosen collection and the note you are reading side by side.
+The collections are People, Projects, Decisions, Notes, Imported, Evidence and Deliverables; they show no counts.
+A person, project, decision or note opens in the reader beside the list; imported notes, evidence and deliverables open in the evidence view.
+On a narrow window the collections become one row of chips that scrolls sideways, and the note goes below the list.
+The address names the note you are reading (`/brain?root=…&path=…`), so you can bookmark it or come back to it.
+
+Type in the search field and every matching passage, up to 50, takes the Library's place, with a line saying how they were ranked (by meaning and keywords, or by keywords only and why).
+The Brain's search includes raw session transcripts that Home's search leaves out, and it keeps your words in the address as you type (`/brain?q=…`).
+A passage in a note opens that note in the reader beside the results; anything else opens in the evidence view at the cited lines.
+**Clear search** brings the Library back.
+
+The reader shows one note:
+
+- *Current state* first, one dated entry per subject, with its Review date when it has one; past that date the entry is marked **unverified**.
+- **Source** beside an entry is a button: select, tap or press it to open the source in place, exactly as the note stores it, with when it was observed and a way to open it, the cited lines in the evidence view or the web page.
+  Select it again to close it.
+- The note's *Notes*, then *History* exactly as the note stores it.
+- The **Change log**, closed until you open it: every recorded change to the note, with who made it and why.
+- On your identity record, a line saying it changes only from Settings.
+- When a Proposal waits to change the note, a line linking to it in Approvals, where it opens in place.
+- **Markdown file** opens the file itself at its path, with line numbers.
+
+The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Service health*.
+Jobs shows its progress, and it changes no note.
+
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
 Every change to the Brain goes through a Harness (see Using the Brain from a Harness below) or through your own edits to the Markdown files.
 A changed fact replaces the current one, the old value moves to *History* with the date and the reason, and the next search returns the new value.
-Changes that Attache proposes wait in *Memory changes to review* until you apply or reject them.
+Changes that Attache proposes wait in **Approvals**, under *Changes to the Brain*, until you apply or reject them.
 Each Proposal shows the whole change before you decide: the new note or the note it updates, every fact with its reason, every event, notes and tags, why it was suggested and the evidence it cites, with the words it quotes from that evidence.
 **Apply** writes every part at once, and each replaced value moves to *History*; **Reject** writes nothing.
 If the Brain changed since the Proposal was made, for example the note was deleted or a note with the same title now exists, Apply refuses and writes nothing; the Proposal stays so you can reject it.
@@ -137,7 +288,8 @@ With Replication on, a Proposal made on one Machine shows on every Machine, and 
 Decide it on any of them: approving applies it once, where you clicked, and it leaves the list everywhere.
 If two Machines decided the same Proposal while apart, the later decision stands on both; an approval that a later rejection overrules is undone, except for events, which stay in *History*.
 
-**Recent saves** on the Memory screen lists the newest changes to your Brain, newest first.
+**Recent saves** on the Brain screen lists the newest changes to your Brain, newest first, 50 at a time with **Show more** below.
+Its filters keep **All** changes, those **Written without review** (auto-accepted or consolidated), or those **Reverted**, each with the revert that undid it; the filter is part of the address (`/brain/recent?show=reverted`).
 Each row shows the note, the fact with its old and new value, where the change came from (the Harness and session, the session or meeting Consolidation read, a Proposal you approved, or you) and when.
 A change written without your review is marked auto-accepted, or consolidated when Consolidation wrote it.
 **Revert** undoes one change with one click:
@@ -152,21 +304,106 @@ A change can be reverted only while it is still the last word on what it changed
 When a later change overwrote the same fact, or the note was edited outside Attache since, the row says why and offers no **Revert**; revert the later change first.
 Events stay in *History*, which only grows, so they cannot be reverted.
 
-**Drafts** shows each draft with its context and evidence.
-Editing creates a new version and cancels any earlier approval.
-**Approve** binds your approval to that exact version for 15 minutes.
-When the 15 minutes end before you send, the draft goes back to needing approval, says when the approval ended and that nothing was sent, and offers **Approve vN again**.
-**Send** is available only when the connection is authorised to write that kind of action; Attache rechecks everything on the service immediately before sending and marks the draft sent only after the other service confirms it.
+### Approvals
+
+**Approvals** holds everything Attache prepared that waits for your OK.
+Approvals is only the page's name: you approve one exact version of a Draft, and you apply or reject a Proposal.
+
+The **Waiting** tab has two ruled sections, so sending a message and changing the Brain never look alike:
+
+- *Drafts to send*, marked with a blue pen and the word Draft.
+  Each row shows the Draft's subject, where it goes and its version, such as "GitHub comment on acme/web #42 · v2", and the first line of its text.
+  Opening a row shows, read-only, what the Draft answers and its whole text, with **Review and approve vN** (or **Review and send vN** once approved) and **Reject**.
+  **Approve** and **Send** are never in the list: they are on the Draft's own page, with the version in view.
+- *Changes to the Brain*, marked with a plum change glyph and the word Proposal.
+  Each row names the note and the change, the old value and the new one for a correction, such as "Owner: Sam → Nora", or what it adds.
+  Opening a row shows every part, the reason and the evidence (as described above), with **Apply** and **Reject**.
+  When Apply is refused, the reason shows in the row and the row stays, so you can still reject it.
+
+A row you decide stays as one line in its place, such as "Applied · Email vendor", until your next visit, so nothing below it moves.
+A Draft that is being sent shows under *In progress*; it is not counted, since nothing waits for you there.
+"Nothing waits for your OK." shows only when both the Drafts and the Proposals answered with nothing.
+The Drafts and the Proposals are asked for separately, and each section answers for its own: when one cannot be loaded it says so with **Retry**, and keeps the rows it last had with the time they were loaded.
+The Waiting tab and Approvals in the navigation still count every waiting decision; only when the count could not be read either do they show what is known as a lower bound, such as "2+".
+
+The **Finished** tab lists sent, not sent, unknown, rejected and expired Drafts and applied or rejected Proposals, the latest outcome first.
+
+A Draft's own page is at its own address under Approvals, with **Back to Approvals** at the top and Approvals selected in the navigation.
+Its header names the kind of Draft and where it goes, such as "GitHub comment on acme/web #42", then its version, its status and, while it can still be sent, when it expires.
+A step line under it shows where the Draft stands: Draft, Approved, then Sent.
+The message the Draft answers is quoted above its text at every width, and the text itself is the main part of the page, at reading size.
+Under the text one line says what the state means, and the buttons follow, the next step first.
+Whatever you press, the page stays on the same Draft.
+
+- **Approve vN** binds your approval to that exact version for 15 minutes.
+  **Send vN** is shown before that, switched off, with the reason; for a Gmail draft it reads **Create vN in Gmail**, which makes a draft in your Gmail and sends nothing.
+- Typing makes the text unsaved: **Save as vN+1** and **Discard changes** come first, and Approve and Send wait.
+  Saving replaces the text of the old version, which is not kept, and cancels any approval of it; the page says so before you save.
+- When the 15 minutes end before you send, the Draft says when the approval ended and that nothing was sent, and offers **Approve vN again**.
+- **Send** works only when the connection is authorised to write that kind of action.
+  Until then the page says "Cannot send yet." with the reason, and **Open Connections** when the fix is there.
+  Attache rechecks everything on the service immediately before sending and marks the Draft sent only after the other service confirms it.
+- **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
+- **Reject** locks the Draft, and nothing is sent.
+  Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
+  Restore is refused while a newer Draft for the same item waits, was sent, or has an unknown outcome.
+- When the other service cannot confirm what happened, the page says the outcome is unknown, with a warning sign, and asks you to check the destination first.
+  It never offers to send that Draft again; prepare a new one from its Inbox item only after you have looked.
+- A Draft that was not sent, or expired, is finished: **Copy text** keeps its words and **Prepare a new Draft** asks Attache for a fresh one.
+- If the Draft changes elsewhere while you are typing, such as in another tab, your words stay in the box: **Copy my text** keeps them, and **Load vN** shows the current Draft.
+
 Drafts expire after 48 business hours.
 
+### Connections
+
+**Connections** opens with the Reader, the Machine that runs Source refresh and briefings, and when it last refreshed every source.
+Below it each Connection you set up is one row in its group: **Notes**, **Work sources**, **Harnesses** and **Model**.
+A row shows the Connection's name, its account (or folder, or the settings file a Harness was installed in), what Attache may read and write there, and when Attache last read it, each in its own column.
+A Connection that works carries no state word; one with a problem says so under its name in the same words Home uses, such as **Down**, **Offline**, **Partly read** or **Not read yet**.
+Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disconnect…**, what Attache reads and its write permissions.
+Connections you have not set up are small tiles under their group; a tile opens across the group into its setup form.
+The Notes group also has **Import a folder**, which reads a Markdown folder or Obsidian vault without changing it.
+
+When a Connection needs you to sign in again, a **Needs you** group comes first with that Connection's row already open, ready to sign in or take a new token.
+**Reconnect** on Home lands there, on that Connection's row, when the fix needs you to type something.
+
+### Settings
+
+**Settings** lists its sections on the left, in four groups, and shows one section at a time beside the list:
+
+- **Attache:** *Features*, *Schedules and notifications* and *Identity*.
+- **Brain:** *Saving and review* (Auto-accept for each connected Harness, and Consolidation), *Meaning-based search* and *Backup and export*.
+- **Machines:** *Machines and Replication* (this Machine's name, then Replication with every state and action it has) and *Paired clients*.
+- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next.
+
+Each section has its own address (`/settings/identity`, `/settings/machines` and so on), so a link or a bookmark opens it, and the browser's Back goes through the sections you opened.
+`/settings` itself opens Features.
+On a narrow window Settings opens on the list; a section then fills the screen, with **All settings** above it to go back.
+A feature switch says nothing more while the feature works or is off; one that is on but not fully working shows **needs setup**, **partly working** or **unavailable** with the reason.
+Changing your identity record still asks you to confirm it first.
+
+### Jobs
+
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
+It is a quiet table: each job's title, what it came to in a few words, and the time it started or finished.
+Work that is queued or running comes first, under **Running**; everything that ended follows under **Finished**, newest first, 50 at a time with **Show 50 more**.
+A job that succeeded carries no tag, only what it produced, such as "Answered from 3 sources" or "Draft v2 ready".
+A job that failed carries a red **Failed** tag and one that is blocked an amber **Blocked** tag, each with its reason.
+
+The detail beside the table shows a job's progress, times, result or reason, and its events.
+When you open Jobs it shows the running job, else the newest one that failed or is blocked, else the newest job.
+Live updates change the table, never which job the detail shows; picking a row changes it, and that pick stays in the address, so a reload or a link comes back to it.
+
+Type a question and press **Research** to research it across your notes; the answer is saved as a deliverable you can open from the result.
+**Diagnostics** runs a two-minute self-test that checks background work survives a restart.
+**Cancel** stops queued or running work and says what happened: it stopped, or it had already finished and its result stands.
+**Retry** starts a failed, cancelled or blocked job again.
 Jobs keep running when you close the browser; reopen the page and progress resumes from the service.
-Cancelling tells you whether the work stopped or had already finished.
 
 ## Agent sessions
 
 Attache remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
-Connect each one you use under Connections → *Harnesses*; the card says exactly which files change before you connect.
+Connect each one you use under Connections → *Harnesses*; its tile says exactly which files change before you connect.
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
@@ -180,11 +417,11 @@ Connect each one you use under Connections → *Harnesses*; the card says exactl
   Session logs are searchable; raw transcripts are kept but never quoted as evidence.
 - **Consolidation:** when the session log entry holds something durable, Attache reads the session again, with the notes that search finds related to it, and writes what it finds to your Brain straight away.
   Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the session it rests on, linked to the line of the transcript.
-  Each change is listed in *Recent saves* on the Memory page, marked as written without review, and one click reverts it.
+  Each change is listed in *Recent saves* on the Brain screen, marked as written without review, and one click reverts it.
   There is no limit on how many changes a session yields, but nothing is written twice: a change that is already waiting for review, or a fact the note already holds, is left out, and your identity record is never changed.
   When a session states a different value for a fact a note already holds, Attache writes the new value and moves the old one to the note's *History* with the reason.
   A session that only mentions or repeats a fact changes nothing.
-  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, beside the Harness switches; on that Machine it then makes Proposals in *Memory changes to review* instead.
+  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, under **Saving and review**, beside the Harness switches; on that Machine it then makes Proposals under *Changes to the Brain* in Approvals instead.
   A Proposal that is a correction shows the current value struck through beside the new one, with the reason and the evidence, and applying it moves the old value to *History*.
   If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
   A Harness's auto-accept switch has no say over Consolidation.
@@ -209,7 +446,7 @@ Uninstalling Attache removes them all.
 ## Meeting captures
 
 A meeting capture is a Markdown file in your data folder's `evidence/captures/` folder whose frontmatter `tags` include `meeting` or `meeting-transcript`, for example the notes and transcript of a meeting that an export routine writes there.
-When a new one arrives, Attache reads it, with the notes that search finds related to it, and writes what it finds to your Brain, the same way it does for a Harness session; with the Consolidation switch off, it makes Proposals in *Memory changes to review* instead.
+When a new one arrives, Attache reads it, with the notes that search finds related to it, and writes what it finds to your Brain, the same way it does for a Harness session; with the Consolidation switch off, it makes Proposals under *Changes to the Brain* in Approvals instead.
 This needs a model connection; without one, the capture is kept and is not read.
 
 - Each change names the note it changes (or the new note it creates), the facts and events, an optional Review date, the reason, and the words in the meeting it rests on, linked to the lines of the capture that hold them.
@@ -256,12 +493,12 @@ When Attache starts after the upgrade, it removes the skill folders it installed
   After one request goes unanswered, that Harness session stores Proposals without asking again.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
 - **Auto-accept** writes a save without review, so nothing waits for you (ADR 0004).
-  In Settings, under **Auto-accept**, each connected Harness has a switch, on by default; upgrading from an earlier version switched it on for every Harness, including one you had left off.
+  In Settings, under **Saving and review**, each connected Harness has a switch, on by default; upgrading from an earlier version switched it on for every Harness, including one you had left off.
   With it on, a save from that Harness is written without asking; switch it off and that Harness asks you to confirm every save.
   A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
   The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
   Disconnecting a Harness forgets its setting, so connecting it again starts with auto-accept on.
-  A save written without review still records the Harness and session, and Recent saves on the Memory screen marks it **auto-accepted**, so you can see and revert it.
+  A save written without review still records the Harness and session, and Recent saves on the Brain screen marks it **auto-accepted**, so you can see and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.
   A fact is flagged stale only when it is past its Review date; a fact without one is never stale, however old it is.
@@ -387,7 +624,7 @@ The next time Attache starts with Credential Manager working, it moves the crede
 ## This Machine
 
 Attache gives the computer it runs on an id and a name.
-The name starts as the computer's hostname; change it in **Settings → This Machine**.
+The name starts as the computer's hostname; change it in **Settings → Machines and Replication**.
 The id never changes.
 Session logs and connector snapshots carry the name in their file name, for example `evidence/sessions/2026-11-11-work-mac-3f9a2c1d.md`, so you can tell which computer wrote them.
 Renaming the Machine affects files written from then on; earlier files keep their name.
@@ -406,7 +643,7 @@ Machines on macOS, Linux and Windows share one Brain.
 The Brain's repository keeps every note with LF line endings, whatever git's own `core.autocrlf` setting is.
 A note Attache writes on Windows has the same bytes on every Machine, and one an editor on Windows saved with CRLF reaches the other Machines with LF.
 
-Replication is in the Dashboard under **Settings → Replication**, and in the terminal as `attache replication`.
+Replication is in the Dashboard under **Settings → Machines and Replication**, and in the terminal as `attache replication`.
 
 - **Connect GitHub first** in the Dashboard's Connections.
   Replication reaches the repository with the GitHub connection's token, so its token needs Contents: read and write on the Brain's repository, besides what the GitHub source uses.
@@ -432,7 +669,7 @@ Replication is in the Dashboard under **Settings → Replication**, and in the t
   Both are recorded in the Brain, in `machines/`, so every Machine reads the same; when two Machines choose differently at the same time, the later choice wins.
 - **The Reader:** the list marks the Reader, the one Machine that runs scheduled Source refresh, briefings and the inbox items for facts past their Review date, so no source is read twice.
   The Machine that switched Replication on starts as the Reader; the Preferred Reader takes the role at its next check once you choose it, and whenever it comes back online.
-  The other Machines read nothing on a schedule, and show the Reader's latest Source refresh on Home.
+  The other Machines read nothing on a schedule, and show the Reader's latest Source refresh on Connections and in the green line on Home.
   A Source refresh you start yourself with **Refresh now** still runs on the Machine you are on.
   The Reader says it is still there every 10 minutes through the repository, without adding to the Brain's history.
   A Reader that could not reach the repository for 30 minutes, because it was asleep or offline, shows as silent and reads nothing on a schedule until it is back; then it catches up once.
@@ -548,17 +785,17 @@ On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves t
 
 ## Troubleshooting
 
-- *Attache service is not reachable:* run `attache status`.
+- *Attache service is not reachable:* the Dashboard says so, with **Retry**; run `attache status`, and `attache start` if it is not running.
   `attache service status` says whether the background service is loaded.
   Reinstalling repairs the service without touching data.
   Logs: `logs` in the service state folder (`~/Library/Application Support/Attache/state/logs` on macOS, `~/.local/state/attache/logs` on Linux, `%LOCALAPPDATA%\Attache\state\logs` on Windows).
 - *Pairing code expired:* run `attache pair --open`.
-- *A connection shows "needs auth":* its sign-in was rejected or expired, and the card shows a **Sign-in needed** box saying what to fix.
-  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** on the card.
+- *A connection says "Sign-in needed":* its sign-in was rejected or expired, so it moves to **Needs you** at the top of Connections, open, with a **Sign-in needed** box saying what to fix.
+  For a claude.ai connector, reconnect it in claude.ai → Settings → Connectors, or run `claude` once and sign in if Claude Code itself is signed out, then press **Reconnect** in its row.
   Reconnect tests the connection again and says what is still wrong if it fails.
-  Once it succeeds, Attache refreshes that source straight away so the card stops showing the failed Source refresh.
+  Once it succeeds, Attache refreshes that source straight away, so the row goes back to its group without the failed Source refresh.
   Right after connecting a connector in claude.ai, Claude Code can keep reporting it as unauthenticated for a few minutes; press **Reconnect** again shortly.
   For an API token, **Reconnect** opens the form so you can enter a new token.
-  If you chose **Sign in with Atlassian** directly, sign in again on the card.
+  If you chose **Sign in with Atlassian** directly, sign in again in its row.
 - *Slack, Gmail or Calendar says Claude Code settings auto-approve its tools:* remove the listed `permissions.allow` rule from `~/.claude/settings.json`.
   Attache approves every connector call itself and will not run while a rule would skip that check.

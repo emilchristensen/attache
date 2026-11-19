@@ -311,7 +311,9 @@ export function parseToolResult(tool: string, r: { text: string; isError: boolea
     const message = typeof obj?.message === "string" ? obj.message : r.text.slice(0, 300) || "unknown error";
     const state = toolErrorState(status, message);
     const hint = state === "unauthorized" && /scope/i.test(message) ? " The credential lacks the Atlassian MCP scopes: sign in with Atlassian again, or create the API token for the MCP server (app mcp-v2)." : "";
-    throw new RemoteError(`Atlassian ${tool} failed: ${message}${hint}`, state, status);
+    // The status goes in the words too: coverage keeps only the message, and the Dashboard tells a server's error
+    // answer from a network failure by it.
+    throw new RemoteError(`Atlassian ${tool} failed${status === null ? "" : ` (HTTP ${status})`}: ${message}${hint}`, state, status);
   }
   return data;
 }

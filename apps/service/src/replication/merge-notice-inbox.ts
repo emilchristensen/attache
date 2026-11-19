@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { Coverage } from "@attache/contracts";
+import type { Coverage, InboxKind, MergeNoticeKind } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import { unresolvedItems, type ApplyResult, type CandidateWithSource } from "../attention/engine.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
@@ -17,7 +17,7 @@ export const MERGE_NOTICE_SOURCE = "replication_merge";
 const PRIORITY = 60;
 
 /** The inbox item kind of a notice kind. */
-export const noticeItemKind = (kind: string) => `replication_${kind}`;
+export const noticeItemKind = (kind: MergeNoticeKind): InboxKind => `replication_${kind}`;
 
 function candidate(notice: MergeNotice, at: string): CandidateWithSource {
   // Never the merge's time: two Machines that merge the same thing raise one item.
@@ -66,8 +66,8 @@ export type NoticeSettled = (content: string | null) => boolean;
  * that can be checked this way; `read` gives a Brain file's content, or null
  * when it is missing.
  */
-export function settledMergeNotices(db: Db, settled: Readonly<Record<string, NoticeSettled>>, read: (path: string) => string | null): string[] {
-  const checks = new Map(Object.entries(settled).map(([kind, check]) => [noticeItemKind(kind), check]));
+export function settledMergeNotices(db: Db, settled: Readonly<Partial<Record<MergeNoticeKind, NoticeSettled>>>, read: (path: string) => string | null): string[] {
+  const checks = new Map<string, NoticeSettled | undefined>(Object.entries(settled).map(([kind, check]) => [noticeItemKind(kind as MergeNoticeKind), check]));
   return unresolvedItems(db, MERGE_NOTICE_SOURCE)
     .filter((item) => {
       const check = checks.get(item.kind);
@@ -78,7 +78,7 @@ export function settledMergeNotices(db: Db, settled: Readonly<Record<string, Not
 }
 
 /** The notice kinds the owner settles by editing the file: a note with two versions is settled once it no longer holds both. */
-export const SETTLED_BY_EDIT: Readonly<Record<string, NoticeSettled>> = {
+export const SETTLED_BY_EDIT: Readonly<Partial<Record<MergeNoticeKind, NoticeSettled>>> = {
   [PROSE_VERSIONS]: (content) => content === null || !holdsTwoVersions(content),
 };
 

@@ -1,10 +1,11 @@
+import type { MergeNoticeKind } from "@attache/contracts";
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { parseMarkdown } from "../memory/markdown.ts";
 import type { MergeInput, MergeOutcome, MergeRule } from "./seams.ts";
 
 /** The `MergeNotice.kind` this rule raises. */
-export const DELETED_AND_CHANGED = "deleted_and_changed";
+export const DELETED_AND_CHANGED = "deleted_and_changed" satisfies MergeNoticeKind;
 
 function noteTitle(path: string, content: string): string {
   try {

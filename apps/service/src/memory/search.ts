@@ -1,4 +1,4 @@
-import type { Db } from "../core/db.ts";
+import { placeholders, type Db } from "../core/db.ts";
 import { parseStateLine } from "./markdown.ts";
 import { markdownToPlainText } from "./plain-text.ts";
 import { collapseSpaces } from "./same-text.ts";
@@ -113,7 +113,7 @@ export function search(db: Db, query: string, opts: SearchOptions = {}): SearchH
     .prepare(
       `select c.id as chunkId, c.heading, c.section, c.start_line as startLine, c.end_line as endLine, c.text,
               d.id as docId, d.root, d.rel_path as relPath, d.area, d.doc_type as docType, d.title, d.meta
-       from chunks c join documents d on d.id = c.doc_id where c.id in (${ids.map(() => "?").join(",")})`,
+       from chunks c join documents d on d.id = c.doc_id where c.id in (${placeholders(ids)})`,
     )
     .all(...ids) as Array<Omit<SearchHit, "score" | "snippet" | "meta" | "review" | "unverified"> & { meta: string }>;
 

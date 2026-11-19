@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useResource } from "../live.ts";
-import { ErrorState, Link, Loading, Markdown, StatusPill, Time } from "./ui.tsx";
+import { ErrorState, Link, Loading, Markdown, Time } from "./ui.tsx";
+import { Tag } from "./Tag.tsx";
 import { Tabs, type TabItem } from "./Tabs.tsx";
+import { keepTabInside } from "./dialog.ts";
 
 export interface EvidenceTarget {
   root: string;
@@ -9,6 +11,8 @@ export interface EvidenceTarget {
   lines?: [number, number] | undefined;
   title?: string | undefined;
   marker?: string | undefined;
+  /** Runs once the drawer has closed and focus is back on its opener (the search palette reopens where it was). */
+  onClosed?: (() => void) | undefined;
 }
 
 interface DocView {
@@ -33,7 +37,15 @@ export function EvidenceProvider({ children }: { children: ReactNode }) {
   return (
     <EvidenceCtx.Provider value={setTarget}>
       {children}
-      {target && <EvidenceDrawer target={target} onClose={() => setTarget(null)} />}
+      {target && (
+        <EvidenceDrawer
+          target={target}
+          onClose={() => {
+            setTarget(null);
+            target.onClosed?.();
+          }}
+        />
+      )}
     </EvidenceCtx.Provider>
   );
 }
@@ -73,9 +85,26 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   const doc = useResource<DocView>(`/memory/document?root=${encodeURIComponent(target.root)}&path=${encodeURIComponent(target.relPath)}`, ["memory.changed"]);
   const [mode, setMode] = useState<EvidenceMode>("source");
   const closeRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were;
+  // when that left with its page (Open in Brain), to the new page itself, never to nowhere.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (opener?.isConnected) opener.focus();
+      else document.getElementById("main")?.focus({ preventScroll: true });
+    };
+  }, []);
   useEffect(() => {
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Esc is used up here, so a dialog that opens as the drawer closes (the search palette) does not close with it.
+    // It is modal: Tab and Shift+Tab stay inside it until it closes.
+    const onKey = (e: KeyboardEvent) => {
+      if (drawerRef.current) keepTabInside(e, drawerRef.current);
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -83,15 +112,15 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
+      <div ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
         <div className="drawer-head">
           <div className="stack-sm" style={{ flex: 1, minWidth: 0 }}>
             <div className="row">
               {target.marker && <span className="cite">{target.marker}</span>}
-              <h2 style={{ overflowWrap: "anywhere" }}>{d?.title ?? target.title ?? target.relPath}</h2>
+              <h2 className="detail-title" style={{ overflowWrap: "anywhere" }}>{d?.title ?? target.title ?? target.relPath}</h2>
             </div>
             <div className="row small muted">
-              {d && <StatusPill state={d.area === "memory" ? "ready" : "draft"} label={d.area === "memory" ? "curated memory" : d.area === "import" ? "imported note" : d.area} />}
+              {d && <Tag>{d.area === "memory" ? "curated memory" : d.area === "import" ? "imported note" : d.area}</Tag>}
               <span className="mono" style={{ overflowWrap: "anywhere" }}>
                 {target.root !== "data" ? `${d?.rootLabel ?? target.root} › ` : ""}
                 {target.relPath}
@@ -113,10 +142,14 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           <ErrorState error={doc.error} retry={doc.reload} title="Could not open this evidence" />
           {d && (
             <>
-              <div className="row">
+              {/* Open in Brain leaves the evidence for the note: it closes once the link has navigated in this tab (React click
+                  on the row, after the link's handler; a Ctrl or Cmd click opens another tab and leaves it open). */}
+              <div className="row" onClick={(e) => e.defaultPrevented && (e.target as Element).closest(".drawer-brain-link") && onClose()}>
                 <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
-                  <Link to={`/memory?path=${encodeURIComponent(d.relPath)}`}>Open in Memory</Link>
+                  <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`} className="drawer-brain-link">
+                    Open in Brain
+                  </Link>
                 )}
               </div>
               {mode === "source" ? <SourceView raw={d.raw} lines={target.lines} /> : <Markdown text={d.raw.replace(/^---[\s\S]*?---\n/, "")} />}
@@ -124,7 +157,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
             </>
           )}
         </div>
-      </aside>
+      </div>
     </>
   );
 }
