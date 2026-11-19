@@ -444,9 +444,10 @@ describe("connectionsStatus: Offline sources that could not reach the network sh
       withConnections(
         conn("github", { coverage: unreached("api.github.com") }),
         conn("gmail", { coverage: coverage("offline", { note: "GET /gmail/v1/users/me/threads → HTTP 502: upstream connection refused" }) }),
+        conn("jira", { coverage: coverage("offline", { note: "Atlassian searchJiraIssuesUsingJql failed (HTTP 502): upstream connection refused" }) }),
       ),
     );
-    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail"]);
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail", "offline:jira"]);
   });
 
   it("still groups timeouts whose messages match once their hosts are set aside", () => {
