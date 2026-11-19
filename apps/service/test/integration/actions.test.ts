@@ -340,7 +340,7 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "unknown" });
   });
 
-  it("a rejected Draft is not restored over a newer Draft whose send has an unknown outcome", async () => {
+  it("a rejected Draft is not restored over a newer Draft whose send has an unknown outcome or went out", async () => {
     const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
     const draftFor = async (body: Record<string, unknown>) => {
       const item = await reviewItem();
@@ -364,6 +364,23 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(restore.body.error).toMatchObject({ code: "delivery_unconfirmed", message: "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement." });
     expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
     expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
+    // The owner replaces the uncertain Draft, approves the replacement, then revokes that approval: it still waits for them.
+    const third = await draftFor({ replaceUnconfirmed: newer.id });
+    const approved = await svc.post(`/actions/${third.id}/approve`, { version: third.version, payloadHash: third.payloadHash });
+    await svc.post(`/actions/${third.id}/revoke`);
+    const briefed = await svc.post("/briefings", { kind: "manual" });
+    await svc.waitJob(briefed.job.id);
+    const prepared = (await svc.get("/briefings/latest")).briefing.sections.find((s: any) => s.id === "prepared");
+    expect(prepared.items).toContainEqual(expect.objectContaining({ id: third.id, summary: "Approval revoked, waiting for your review." }));
+    // Approved again and sent: the item's reply went out, so the old rejected text is not restored to be sent a second time.
+    const again = await svc.post(`/actions/${third.id}/approve`, { version: approved.version, payloadHash: approved.payloadHash });
+    const exec = await svc.post(`/actions/${third.id}/execute`, { nonce: again.approval.nonce, version: again.version, payloadHash: again.payloadHash });
+    await svc.waitJob(exec.job.id);
+    expect(await reviewItem()).toMatchObject({ actionId: third.id, actionStatus: "succeeded" });
+    const afterSent = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });
+    expect(afterSent.status).toBe(409);
+    expect(afterSent.body.error).toMatchObject({ code: "superseded", message: "A newer Draft for this item was already sent." });
+    expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
   });
 
   it("draft expiry counts business hours only", () => {
