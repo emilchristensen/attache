@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
-import { installFixtureModel } from "../fixtures/fixture-model.ts";
+import { installFixtureModel, type FixtureModel } from "../fixtures/fixture-model.ts";
 import { addBusinessHours } from "../../src/actions/expiry.ts";
 import { APPROVAL_TTL_MS } from "../../src/actions/service.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
 let svc: TestService;
 let fx: FixtureServer;
+let model: FixtureModel;
 const clock = new ManualClock();
 const posted: Array<{ id: number; body: string; html_url: string }> = [];
 
@@ -42,7 +43,7 @@ async function prepareDraft() {
 
 beforeAll(async () => {
   fx = await startFixtureServer();
-  installFixtureModel(fx);
+  model = installFixtureModel(fx);
   githubFixture();
   svc = await startTestService({ clock });
   await svc.post("/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${fx.url}/model`, model: "fixture" } });
@@ -246,6 +247,144 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     clock.skip(8 * 86_400_000);
     expect(await reviewItem()).toMatchObject({ actionId: again.id, actionStatus: "expired" });
     expect((await svc.get(`/actions/${fresh.id}`)).status).toBe("rejected");
+  });
+
+  it("a rejected draft is locked: only an explicit Restore brings it back, as vN+1 with the same text, until it expires", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const d = await prepareDraft();
+    const rejected = await svc.post(`/actions/${d.id}/reject`, {});
+    // Saving text no longer un-rejects it behind the owner's back.
+    const edit = await svc.call("PUT", `/actions/${d.id}`, { payload: { body: "typed into a rejected draft" }, expectedVersion: rejected.version });
+    expect(edit.status).toBe(409);
+    expect(edit.body.error.code).toBe("not_editable");
+    // Restore names the version it starts from, like an edit.
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: rejected.version - 1 })).body.error.code).toBe("version_conflict");
+    const events: Array<{ type: string; id?: string }> = [];
+    const listen = (e: { type: string; id?: string }) => events.push(e);
+    svc.app.bus.on("event", listen);
+    const restored = await svc.post(`/actions/${d.id}/restore`, { expectedVersion: rejected.version });
+    svc.app.bus.off("event", listen);
+    expect(restored).toMatchObject({ status: "draft", version: rejected.version + 1, payload: rejected.payload, payloadHash: rejected.payloadHash, approval: null, expiresAt: rejected.expiresAt });
+    expect(restored.events.at(-1)).toMatchObject({ event: "restored", data: { version: rejected.version + 1 } });
+    expect(events).toContainEqual({ type: "actions.changed", id: d.id });
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "draft" });
+    // Only a rejected draft restores.
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version })).body.error.code).toBe("not_restorable");
+    // A newer draft for the same item already waits: restoring the old one would make two.
+    await svc.post(`/actions/${d.id}/reject`, {});
+    const newer = await prepareDraft();
+    expect(newer.id).not.toBe(d.id);
+    const twice = await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version });
+    expect(twice.status).toBe(409);
+    expect(twice.body.error.code).toBe("superseded");
+    // Past its lifetime it stays rejected.
+    clock.skip(8 * 86_400_000);
+    expect((await svc.call("POST", `/actions/${d.id}/restore`, { expectedVersion: restored.version })).body.error.code).toBe("expired");
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("rejected");
+  });
+
+  it("after a send of unknown outcome the item is not drafted again unless the owner explicitly asks for a replacement", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const d = await prepareDraft();
+    const ap = await svc.post(`/actions/${d.id}/approve`, { version: d.version, payloadHash: d.payloadHash });
+    // The comment is posted, but reading it back fails: nobody knows whether it arrived.
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const exec = await svc.post(`/actions/${d.id}/execute`, { nonce: ap.approval.nonce, version: d.version, payloadHash: d.payloadHash });
+    await svc.waitJob(exec.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
+    const item = await reviewItem();
+    expect(item).toMatchObject({ state: "open", actionId: d.id, actionStatus: "unknown" });
+    // Asking for a Draft as usual is refused, and nothing is queued.
+    const jobsBefore = (await svc.get("/jobs?limit=200")).length;
+    const plain = await svc.call("POST", `/attention/${item.id}/draft`, {});
+    expect(plain.status).toBe(409);
+    expect(plain.body.error.code).toBe("delivery_unconfirmed");
+    expect(plain.body.error.message).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect((await svc.get("/jobs?limit=200")).length).toBe(jobsBefore);
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // A Draft job asked for another way (the generic jobs route) is held to the same rule when it runs.
+    const generic = await svc.post("/jobs", { kind: "draft", input: { attentionItemId: item.id } });
+    const held = await svc.waitJob(generic.job.id);
+    expect(held.job.status).toBe("blocked");
+    expect(held.job.error).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect(await reviewItem()).toMatchObject({ actionId: d.id, actionStatus: "unknown" });
+    // The explicit choice names the Draft it replaces: consent for another Draft does not count.
+    const other = await svc.call("POST", `/attention/${item.id}/draft`, { replaceUnconfirmed: "another-draft" });
+    expect(other.status).toBe(409);
+    expect(other.body.error.code).toBe("delivery_unconfirmed");
+    // The explicit choice prepares a new Draft; the uncertain one keeps its outcome.
+    const { job } = await svc.post(`/attention/${item.id}/draft`, { replaceUnconfirmed: d.id });
+    const done = await svc.waitJob(job.id);
+    expect(done.job.status).toBe("succeeded");
+    expect(done.job.result.actionId).not.toBe(d.id);
+    const replacement = done.job.result.actionId;
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "draft" });
+    expect((await svc.get(`/actions/${d.id}`)).status).toBe("unknown");
+    // A send that starts while a Draft job writes holds that job back when it would save.
+    const stop = model.respond((call) => {
+      if (/Write .* the user could send/.test(call.user)) svc.app.db.prepare("update actions set status = 'executing' where id = ?").run(replacement);
+      return null;
+    });
+    const during = await svc.post(`/attention/${item.id}/draft`, {});
+    const waited = await svc.waitJob(during.job.id);
+    stop();
+    expect(waited.job.status).toBe("blocked");
+    expect(waited.job.error).toBe("The last Draft for this item is being sent. Wait for its outcome before preparing another.");
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "executing" });
+    // That send ends unknown too: the owner's earlier choice to replace the first Draft does not replace this one.
+    svc.app.db.prepare("update actions set status = 'unknown' where id = ?").run(replacement);
+    const stale = await svc.post("/jobs", { kind: "draft", input: { attentionItemId: item.id, replaceUnconfirmed: d.id } });
+    const refused = await svc.waitJob(stale.job.id);
+    expect(refused.job.status).toBe("blocked");
+    expect(refused.job.error).toBe("The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.");
+    expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "unknown" });
+  });
+
+  it("a rejected Draft is not restored over a newer Draft whose send has an unknown outcome or went out", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const draftFor = async (body: Record<string, unknown>) => {
+      const item = await reviewItem();
+      const { job } = await svc.post(`/attention/${item.id}/draft`, body);
+      const done = await svc.waitJob(job.id);
+      expect(done.job.status).toBe("succeeded");
+      return svc.get(`/actions/${done.job.result.actionId}`);
+    };
+    // The item's last send ended unknown (the test above); the owner chooses to replace it, then rejects that Draft.
+    const uncertain = (await reviewItem()).actionId;
+    const first = await draftFor({ replaceUnconfirmed: uncertain });
+    const rejected = await svc.post(`/actions/${first.id}/reject`, {});
+    // A newer Draft is prepared and sent, and its send ends unknown too: the comment is posted but cannot be read back.
+    const newer = await draftFor({});
+    expect(newer.id).not.toBe(first.id);
+    const ap = await svc.post(`/actions/${newer.id}/approve`, { version: newer.version, payloadHash: newer.payloadHash });
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const sent = await svc.post(`/actions/${newer.id}/execute`, { nonce: ap.approval.nonce, version: newer.version, payloadHash: newer.payloadHash });
+    await svc.waitJob(sent.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
+    expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
+    // Restoring would hide the Delivery unconfirmed warning and let the old text be sent while the newer one may have arrived.
+    const restore = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });
+    expect(restore.status).toBe(409);
+    expect(restore.body.error).toMatchObject({ code: "delivery_unconfirmed", message: "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement." });
+    expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
+    expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
+    // The owner replaces the uncertain Draft, approves the replacement, then revokes that approval: it still waits for them.
+    const third = await draftFor({ replaceUnconfirmed: newer.id });
+    const approved = await svc.post(`/actions/${third.id}/approve`, { version: third.version, payloadHash: third.payloadHash });
+    await svc.post(`/actions/${third.id}/revoke`);
+    const briefed = await svc.post("/briefings", { kind: "manual" });
+    await svc.waitJob(briefed.job.id);
+    const prepared = (await svc.get("/briefings/latest")).briefing.sections.find((s: any) => s.id === "prepared");
+    expect(prepared.items).toContainEqual(expect.objectContaining({ id: third.id, summary: "Approval revoked, waiting for your review." }));
+    // Approved again and sent: the item's reply went out, so the old rejected text is not restored to be sent a second time.
+    const again = await svc.post(`/actions/${third.id}/approve`, { version: approved.version, payloadHash: approved.payloadHash });
+    const exec = await svc.post(`/actions/${third.id}/execute`, { nonce: again.approval.nonce, version: again.version, payloadHash: again.payloadHash });
+    await svc.waitJob(exec.job.id);
+    expect(await reviewItem()).toMatchObject({ actionId: third.id, actionStatus: "succeeded" });
+    const afterSent = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });
+    expect(afterSent.status).toBe(409);
+    expect(afterSent.body.error).toMatchObject({ code: "superseded", message: "A newer Draft for this item was already sent." });
+    expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
   });
 
   it("draft expiry counts business hours only", () => {

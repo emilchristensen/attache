@@ -84,12 +84,21 @@ function selfResponse(ev: CalendarEvent): string {
 }
 
 const people = (ev: CalendarEvent) => (ev.attendees ?? []).filter((a) => !a.resource);
+const others = (ev: CalendarEvent) => people(ev).filter((a) => !a.self);
+const personName = (a: Attendee) => a.displayName || a.email || "unknown";
+const meetLink = (ev: CalendarEvent) => ev.conferenceUrl ?? ev.hangoutLink ?? null;
 
 function attendeeList(ev: CalendarEvent): string {
-  const others = people(ev).filter((a) => !a.self);
-  const names = others.slice(0, MAX_NAMES).map((a) => a.displayName || a.email || "unknown");
-  const more = others.length - names.length;
+  const list = others(ev);
+  const names = list.slice(0, MAX_NAMES).map(personName);
+  const more = list.length - names.length;
   return `${names.join(", ")}${more > 0 ? ` (+${more} more)` : ""}`;
+}
+
+/** The scheduled end; an event without a readable end ends when it starts. */
+function endMs(ev: CalendarEvent, start: number): number {
+  const end = Date.parse(ev.end?.dateTime ?? "");
+  return Number.isFinite(end) && end > start ? end : start;
 }
 
 function attentionFor(ev: CalendarEvent, allDay: boolean, response: string, nowMs: number): AttentionCandidate | undefined {
@@ -101,9 +110,19 @@ function attentionFor(ev: CalendarEvent, allDay: boolean, response: string, nowM
     return { ...base, kind: "invite_response", title: `Respond to invite: ${title}`, summary: `Starts ${when}${people(ev).length ? ` with ${attendeeList(ev)}` : ""}.`, why: "You have not responded to this invitation yet.", priority: 60 };
   }
   const count = people(ev).length;
-  if (allDay || response === "declined" || count < 2 || start < nowMs || start >= nowMs + PREP_MS) return undefined;
+  const end = endMs(ev, start);
+  // Raised from 24 hours before the start until the scheduled end, so the prep stays at hand during the meeting.
+  if (allDay || response === "declined" || count < 2 || !Number.isFinite(start) || end <= nowMs || start > nowMs + PREP_MS) return undefined;
   const hours = Math.max(0, Math.round((start - nowMs) / HOUR));
-  return { ...base, kind: "meeting_prep", title: `Prepare for ${title}`, summary: `Starts ${when} with ${attendeeList(ev)}.`, why: "A meeting with other people starts within 24 hours.", priority: Math.max(40, 75 - hours * 2) };
+  return {
+    ...base,
+    kind: "meeting_prep",
+    title: `Prepare for ${title}`,
+    summary: `Starts ${when} with ${attendeeList(ev)}.`,
+    why: "A meeting with other people starts within 24 hours.",
+    priority: Math.max(40, 75 - hours * 2),
+    meeting: { start: new Date(start).toISOString(), end: new Date(end).toISOString(), meetLink: meetLink(ev), attendees: others(ev).map(personName) },
+  };
 }
 
 function toObservation(ev: CalendarEvent, nowMs: number): Observation {
@@ -120,7 +139,7 @@ function toObservation(ev: CalendarEvent, nowMs: number): Observation {
     ...(ev.htmlLink ? { url: ev.htmlLink } : {}),
     ...(ev.organizer?.email ? { author: ev.organizer.email } : {}),
     ...(start ? { occurredAt: start } : {}),
-    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map((a) => a.displayName || a.email || ""), location: ev.location ?? null, meetLink: ev.conferenceUrl ?? ev.hangoutLink ?? null },
+    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map(personName), location: ev.location ?? null, meetLink: meetLink(ev) },
     fingerprintParts: [start, end, response, count],
     ...(attention ? { attention } : {}),
   };

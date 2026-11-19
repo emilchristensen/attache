@@ -1,0 +1,143 @@
+/* A Proposal and a change written to the Brain: Approvals, Home's Recently added and the Brain's Recent saves. */
+
+/* ---- a Proposal (Home and Memory) --------------------------------------------------------------- */
+
+.proposal-parts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-meta);
+}
+.proposal-parts li {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.proposal-parts .part-kind {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.proposal-parts li[data-part="notes"] > span:last-child {
+  white-space: pre-wrap;
+}
+/* A correction strikes the value it replaces, so the old and the new value read side by side. */
+.proposal-parts del {
+  color: var(--ink-3);
+  text-decoration-thickness: 1px;
+}
+/* The words a Proposal rests on, laid out like its parts: a label column, then the quote. */
+.proposal-evidence {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--fs-meta);
+}
+.proposal-evidence figcaption {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+/* Quotes are roman: the face has no italic. */
+.proposal-evidence blockquote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--key);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* ---- a change to the Brain (Home's Recently added and Memory's Recent saves) ------------------------ */
+
+.recent-changes {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.recent-change {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+}
+.recent-change:first-child {
+  border-top: none;
+}
+.recent-change-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.recent-change-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.recent-change-title {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.recent-change-what {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.recent-change .change-values {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+.recent-change .change-values strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.recent-change .change-old {
+  color: var(--ink-3);
+}
+.recent-change .change-new {
+  text-decoration: none;
+  color: var(--ink);
+}
+.recent-change-meta {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+}
+.recent-change-why {
+  font-size: var(--fs-meta);
+  color: var(--amber);
+}
+
+@media (max-width: 900px) {
+  /* Never wider than the window, however wide a row inside wants to be. */
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  /* One line each, so a wrapped line never starts with a separator dot. */
+  .item .proposal-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .item .proposal-meta > *::before {
+    content: none;
+  }
+}

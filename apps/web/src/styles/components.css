@@ -1,0 +1,440 @@
+/* Shared components that more than one screen shows. One screen's own rules live in its own file. */
+
+/* ---- icons, tags, the attention dot, type icons ----------------------------------- */
+
+/* `components/icons.tsx`: line icons in the current text colour. */
+svg.icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* `components/Tag.tsx`: a plain exception label. No green: a healthy state is `.state-text`. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-tag);
+  background: var(--sunken);
+  color: var(--ink-2);
+  font: 600 12px/1 var(--font);
+  white-space: nowrap;
+}
+.tag.attention {
+  background: var(--attn-soft);
+  color: var(--attn-ink);
+}
+.tag.danger {
+  background: var(--red-soft);
+  color: var(--danger);
+}
+.tag.outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tag.hue {
+  background: var(--c-soft);
+  color: var(--c);
+}
+
+/* `components/StateTag.tsx`: a healthy state, in words and nothing else, quieter than the name beside it. */
+.state-text {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* `components/AttentionDot.tsx`: the logo's brass dot inside the Dashboard. */
+.attention-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--attn);
+}
+
+/* `components/TypeIcon.tsx`: a 19 px stroked glyph in its hue, stamped on that hue's tint. */
+.type-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--c-soft);
+  color: var(--c);
+}
+.type-icon.sm {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+}
+.type-icon svg.icon {
+  stroke-width: 1.8;
+}
+/* Forced colours drop the tint: the stamp keeps an edge so it still reads as one. */
+@media (forced-colors: active) {
+  .type-icon {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* ---- the logo -------------------------------------------------------------------- */
+
+/* The logo keeps its own colours, so a change to the theme leaves it alone. */
+.logo {
+  flex-shrink: 0;
+  display: block;
+}
+.logo-case {
+  fill: var(--logo-copper);
+  stroke: var(--logo-copper);
+}
+.logo-case rect {
+  stroke: none;
+}
+.logo-dot {
+  fill: var(--logo-brass);
+}
+
+/* ---- surfaces ---------------------------------------------------------------------- */
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 14px 16px;
+}
+.card.flat {
+  background: transparent;
+}
+.card h3 {
+  margin-bottom: 4px;
+}
+.card + .card {
+  margin-top: 10px;
+}
+.card h4 {
+  font-size: var(--fs-control);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-top: 6px;
+}
+
+/* One thing in a list of cards: an Inbox item, a Proposal, a Connection that is not set up. */
+.item {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.item + .item {
+  margin-top: 8px;
+}
+.item .title {
+  font-weight: 600;
+  font-size: var(--fs-body);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.item .summary {
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+}
+.item .meta {
+  font-size: var(--fs-meta);
+  color: var(--ink-3);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* `.item .meta` sets a gap of its own, which must not narrow the dots' gap. */
+.item .meta.separated {
+  column-gap: 16px;
+}
+.item .item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+/* A list beside its detail (the Brain, Jobs). */
+.split {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+/* Scrolled to on a narrow screen, with the page's own top margin above it. */
+.split-detail {
+  min-width: 0;
+  scroll-margin-top: 16px;
+}
+
+/*
+ * A detail beside its list (the Brain's reader, Jobs' detail) stays in view and scrolls on its own, so an item picked
+ * far down a long list opens where the owner is looking and the list keeps its place. Its room is the page's visible
+ * height below its top padding (`--page-room`, set by `usePageRoom` in `reveal-detail.ts`) less a margin above and
+ * below. Stacked under the list on a phone, it scrolls with the page.
+ */
+@media (min-width: 721px) {
+  .sticky-detail {
+    /* Until the page has been measured. */
+    --page-room: 100dvh;
+    position: sticky;
+    top: var(--s-4);
+    max-height: calc(var(--page-room) - 2 * var(--s-4));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* The paper sheet a detail pane reads on (a Brain note, a job), or its placeholder before anything is picked. */
+.note-reader,
+.job-detail,
+.reader-placeholder {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+}
+.note-reader,
+.job-detail {
+  padding: var(--s-5) var(--s-5) var(--s-4);
+  overflow-wrap: anywhere;
+}
+.reader-placeholder {
+  margin: 0;
+  padding: var(--s-6) var(--s-5);
+  color: var(--ink-2);
+}
+/* The kind over a detail's title, in small mono capitals: PERSON, RESEARCH. */
+.reader-kind {
+  margin: 0 0 var(--s-1);
+  font: 600 12px/18px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+/* A ruled section title: the sans heading over a 2 px ink rule, the rows under it. */
+h3.reader-rule {
+  padding-bottom: var(--s-1);
+  border-bottom: 2px solid var(--ink);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+.list > .list-item {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  /* Square, so the divider below each row runs straight instead of curling up at its ends. */
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: inherit;
+  font-weight: 400;
+  white-space: normal;
+}
+.list > .list-item:hover {
+  background: var(--row-hover);
+}
+/* Selected: a fill and an ink bar, never an outline, so it cannot be mistaken for focus. */
+.list > .list-item[aria-current="true"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  font-size: var(--fs-control);
+}
+.kv dt {
+  color: var(--ink-3);
+}
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 10px;
+  color: var(--ink-2);
+}
+.timeline time {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress {
+  height: 5px;
+  background: var(--sunken);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.4s ease;
+}
+
+/* A link back to where the owner came from, above a page's title: a Draft's page, a narrow window's Settings section. */
+.back-link {
+  align-self: flex-start;
+  font-size: var(--fs-control);
+}
+
+/* ---- disclosure ------------------------------------------------------------------------ */
+
+/* `components/Disclosure.tsx`: a ruled row that opens in place, its title at the card-heading scale. */
+.disclosure {
+  border-top: 1px solid var(--rule);
+}
+.disclosure:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+.disclosure > summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  padding: 14px 0;
+  cursor: pointer;
+}
+.disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure-chevron {
+  color: var(--ink-2);
+  transition: transform 0.15s ease;
+}
+.disclosure[open] > summary .disclosure-chevron {
+  transform: rotate(90deg);
+}
+.disclosure-title {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.disclosure-meta {
+  grid-column: 2;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: 0 0 var(--s-5) 26px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure-chevron {
+    transition: none;
+  }
+}
+
+/* ---- loading, empty, error ------------------------------------------------------------ */
+
+.state {
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  padding: 20px;
+  text-align: center;
+  color: var(--ink-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.state.error {
+  border-style: solid;
+  border-color: var(--red);
+  color: var(--ink-2);
+  text-align: left;
+  align-items: flex-start;
+}
+.state.error strong {
+  color: var(--danger);
+}
+.state.partial {
+  border-style: solid;
+  border-color: var(--amber);
+  color: var(--ink-2);
+  text-align: left;
+  align-items: flex-start;
+}
+
+/* A still placeholder: no shimmer or pulse. */
+.skeleton {
+  background: var(--sunken);
+  border-radius: var(--r-tag);
+  height: 14px;
+}
+
+.toast-host {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+  width: min(520px, calc(100vw - 24px));
+}
+.toast {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+  font-size: var(--fs-control);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.toast.error {
+  border-color: var(--red);
+}
+.toast.ok {
+  border-color: var(--green);
+}
+.toast button {
+  margin-left: auto;
+}

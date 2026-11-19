@@ -7,9 +7,9 @@ export function SwitchRow({ id, label, description, checked, disabled, onChange,
   return (
     <div className="feature-row" {...data}>
       <input type="checkbox" id={id} checked={checked} disabled={disabled} aria-describedby={`${id}-desc`} onChange={(e) => onChange(e.target.checked)} />
-      <div style={{ flex: 1 }}>
-        <label htmlFor={id} style={{ cursor: "pointer" }}>
-          <strong>{label}</strong>
+      <div className="feature-body">
+        <label htmlFor={id} className="feature-name">
+          {label}
         </label>
         <p className="desc" id={`${id}-desc`}>
           {description}

@@ -8,12 +8,15 @@ import { AFTER_WRITE, CHECK, SILENCE, advanceTo, connectGitHub, idOf, readerOn, 
 let world: TestWorld | null = null;
 let github: FixtureServer | null = null;
 
+/** Stopping three Machines' services took over vitest's 10 s hook default on Windows CI. */
+const TEARDOWN_MS = 30_000;
+
 afterEach(async () => {
   await world?.stop();
   await github?.close();
   world = null;
   github = null;
-});
+}, TEARDOWN_MS);
 
 /** Marks `m` as standby and lets every other Machine hear about it. */
 async function markStandby(m: TestMachine, others: TestMachine[]) {

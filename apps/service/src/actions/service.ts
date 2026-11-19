@@ -1,9 +1,15 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { approvalEndedAt, type ActionStatus, type ActionView } from "@attache/contracts";
-import { type Db, json, tx } from "../core/db.ts";
+import { approvalEndedAt, OPEN_ACTION_STATUSES, WAITING_ACTION_STATUSES, type ActionStatus, type ActionView } from "@attache/contracts";
+import { type Db, json, placeholders, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
 export const APPROVAL_TTL_MS = 15 * 60_000;
+
+/**
+ * Why an item whose last Draft has a send of unknown outcome is not drafted again: only the owner's explicit choice
+ * (`replaceUnconfirmed`, naming that Draft) prepares a replacement. The route refuses with it, and a Draft job checks again when it runs.
+ */
+export const DELIVERY_UNCONFIRMED_MESSAGE = "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement.";
 
 export class ActionError extends Error {
   readonly code: string;
@@ -56,7 +62,7 @@ export class ActionService {
     // Refreshing a draft for the same item keeps its original creation and expiry,
     // so a periodically regenerated draft cannot postpone its own expiry.
     if (input.attentionItemKey) {
-      const existing = this.db.prepare("select id, status from actions where attention_item_key = ? and kind = ? and status in ('draft','approved','revoked') order by created_at desc limit 1").get(input.attentionItemKey, input.kind) as { id: string } | undefined;
+      const existing = this.db.prepare(`select id, status from actions where attention_item_key = ? and kind = ? and status in (${placeholders(WAITING_ACTION_STATUSES)}) order by created_at desc limit 1`).get(input.attentionItemKey, input.kind, ...WAITING_ACTION_STATUSES) as { id: string } | undefined;
       if (existing) {
         const current = this.get(existing.id)!;
         if (current.payloadHash === hash) return current;
@@ -108,9 +114,15 @@ export class ActionService {
   list(opts: { status?: string[]; limit?: number } = {}): ActionView[] {
     const status = opts.status;
     const rows = (status?.length
-      ? this.db.prepare(`select id from actions where status in (${status.map(() => "?").join(",")}) order by updated_at desc limit ?`).all(...status, opts.limit ?? 100)
+      ? this.db.prepare(`select id from actions where status in (${placeholders(status)}) order by updated_at desc limit ?`).all(...status, opts.limit ?? 100)
       : this.db.prepare("select id from actions order by updated_at desc limit ?").all(opts.limit ?? 100)) as Array<{ id: string }>;
     return rows.map((r) => this.get(r.id)!);
+  }
+
+  /** How many Drafts wait for the owner (`WAITING_ACTION_STATUSES`), however many there are. Settle stale ones first. */
+  countWaiting(): number {
+    const row = this.db.prepare(`select count(*) n from actions where status in (${placeholders(WAITING_ACTION_STATUSES)})`).get(...WAITING_ACTION_STATUSES) as { n: number };
+    return Number(row.n);
   }
 
   private require(id: string): ActionView {
@@ -126,7 +138,8 @@ export class ActionService {
   edit(id: string, payload: Record<string, unknown>, expectedVersion: number, actor: string, context?: Record<string, unknown>): ActionView {
     const a = this.require(id);
     if (a.version !== expectedVersion) throw new ActionError("version_conflict", `The draft changed (now version ${a.version}); reload before editing.`);
-    if (!["draft", "approved", "revoked", "rejected"].includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
+    if (a.status === "rejected") throw new ActionError("not_editable", "A rejected Draft cannot be edited. Restore it first.");
+    if (!WAITING_ACTION_STATUSES.includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
     if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired.");
     const hash = payloadHash(a.kind, a.target, payload);
     const version = a.version + 1;
@@ -154,10 +167,37 @@ export class ActionService {
 
   reject(id: string, actor: string, reason?: string): ActionView {
     const a = this.require(id);
-    if (!["draft", "approved", "revoked"].includes(a.status)) throw new ActionError("not_rejectable", `A ${a.status} action cannot be rejected.`);
+    if (!WAITING_ACTION_STATUSES.includes(a.status)) throw new ActionError("not_rejectable", `A ${a.status} action cannot be rejected.`);
     tx(this.db, () => {
       this.db.prepare("update actions set status = 'rejected', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), id);
       this.event(id, "rejected", actor, reason ? { reason } : null);
+    });
+    return this.get(id)!;
+  }
+
+  /**
+   * Undo a rejection: the same text comes back as a new version in `draft`, until the Draft's own lifetime ends.
+   * Refused when another Draft for the same Inbox item already waits or is being sent, so one item never has two,
+   * and when the item's last Draft went out or has a send of unknown outcome, so the item's reply is never sent twice.
+   */
+  restore(id: string, expectedVersion: number, actor: string): ActionView {
+    const a = this.require(id);
+    if (a.status !== "rejected") throw new ActionError("not_restorable", `A ${a.status} action cannot be restored; only a rejected Draft can.`);
+    if (a.version !== expectedVersion) throw new ActionError("version_conflict", `The draft changed (now version ${a.version}); reload before restoring.`);
+    if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired, so it can no longer be restored.");
+    const key = (this.db.prepare("select attention_item_key k from actions where id = ?").get(id) as { k: string | null }).k;
+    if (key) {
+      const open = this.db.prepare(`select id from actions where attention_item_key = ? and id <> ? and status in (${placeholders(OPEN_ACTION_STATUSES)}) limit 1`).get(key, id, ...OPEN_ACTION_STATUSES);
+      if (open) throw new ActionError("superseded", "A newer Draft for the same item is open. Reject it before restoring this one.");
+      const last = this.db.prepare("select a.status from attention_items i join actions a on a.id = i.action_id where i.item_key = ? and a.id <> ?").get(key, id) as { status: ActionStatus } | undefined;
+      if (last?.status === "unknown") throw new ActionError("delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
+      if (last?.status === "succeeded") throw new ActionError("superseded", "A newer Draft for this item was already sent.");
+    }
+    const version = a.version + 1;
+    tx(this.db, () => {
+      this.db.prepare("update actions set status = 'draft', version = ?, approval = null, updated_at = ? where id = ?").run(version, this.now().toISOString(), id);
+      this.event(id, "restored", actor, { version, payloadHash: a.payloadHash });
+      if (key) this.db.prepare("update attention_items set action_id = ? where item_key = ?").run(id, key);
     });
     return this.get(id)!;
   }
@@ -187,7 +227,7 @@ export class ActionService {
    */
   expireStale(): { expired: string[]; approvalsEnded: string[] } {
     const now = this.now().toISOString();
-    const expired = (this.db.prepare("select id from actions where status in ('draft','approved','revoked') and expires_at <= ?").all(now) as Array<{ id: string }>).map((r) => r.id);
+    const expired = (this.db.prepare(`select id from actions where status in (${placeholders(WAITING_ACTION_STATUSES)}) and expires_at <= ?`).all(...WAITING_ACTION_STATUSES, now) as Array<{ id: string }>).map((r) => r.id);
     for (const id of expired) {
       tx(this.db, () => {
         this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(now, id);

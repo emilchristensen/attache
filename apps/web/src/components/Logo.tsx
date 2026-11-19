@@ -2,10 +2,12 @@ import { useId } from "react";
 
 /**
  * The Attache mark: an attaché case in copper, with a brass dot when something needs your attention.
- * Its colours are its own (`.logo` in styles.css), not the theme's; the gaps are cut out, so it sits on any background.
- * `attention` defaults to on, the form `public/favicon.svg` and `docs/assets/logo.svg` draw.
+ * Its colours are its own (`--logo-copper` and `--logo-brass` in styles/tokens.css), not the theme's; the gaps are cut out, so it sits on any background.
+ * Every use says whether the dot shows: the shell's mark follows the count (`NavSignals.dot`); the large marks on
+ * pairing, Setup and empty states never carry it. `public/favicon.svg` and `docs/assets/logo.svg` draw it with the
+ * dot, `public/favicon-quiet.svg` without.
  */
-export function Logo({ size = 26, attention = true }: { size?: number; attention?: boolean }) {
+export function Logo({ size = 26, attention }: { size?: number; attention: boolean }) {
   const cut = useId();
   return (
     <svg className="logo" width={size} height={size} viewBox="6 6 52 52" aria-hidden focusable="false">

@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ActionRestoreInput, AttentionDraftInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
 import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
+import { DELIVERY_UNCONFIRMED_MESSAGE } from "../actions/service.ts";
 import { FEATURES } from "../capabilities/registry.ts";
+import type { SignInState } from "../connectors/manager.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { expandHome, folderName } from "../platform/locations.ts";
 
@@ -15,6 +17,19 @@ const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; r
 
 function featureForJob(kind: JobKind) {
   return FEATURES.find((f) => f.jobKinds.includes(kind))?.id ?? "jobs";
+}
+
+/**
+ * A source that just recovered its sign-in still shows the failed coverage of its last Source refresh: refresh it now.
+ * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in. A sign-in
+ * recovers when it worked before or a stored read now needs replacing; a first sign-in during Setup with nothing read
+ * is left to Setup and the schedule.
+ */
+function refreshIfRecovered(app: App, id: string, before: SignInState | null, ok: boolean) {
+  const rec = app.connections.record(id);
+  if (!ok || !rec || !before || (before.status !== "needs_auth" && before.status !== "error") || !(before.workedBefore || before.read)) return;
+  if (!rec.readScopes.length || !app.featureEnabled("attention")) return;
+  app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
 }
 
 export function registerWorkRoutes(r: Router, app: App, port: () => number) {
@@ -91,11 +106,13 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- attention → drafts, briefings ----------------------------------------------------
   r.post("/attention/:id/draft", async (c) => {
     requireFeature(app, "drafts");
-    const body = await c.body(z.object({ instructions: z.string().max(2000).optional() }));
+    const body = await c.body(AttentionDraftInput);
     const item = getItem(app.db, c.params.id!);
     if (!item) throw new HttpError(404, "not_found", "Attention item not found");
     if (!item.draftable) throw new HttpError(409, "not_draftable", "Attache cannot draft a response for this kind of item.");
-    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}) }, capability: "drafts", connectionId: item.connectionId });
+    // The last send may have arrived: a replacement only on the owner's explicit choice, never as a routine new Draft.
+    if (item.actionStatus === "unknown" && body.replaceUnconfirmed !== item.actionId) throw new HttpError(409, "delivery_unconfirmed", DELIVERY_UNCONFIRMED_MESSAGE);
+    const { job } = app.jobs.create({ kind: "draft", title: `Prepare draft: ${item.title}`.slice(0, 200), input: { attentionItemId: item.id, ...(body.instructions ? { instructions: body.instructions } : {}), ...(body.replaceUnconfirmed ? { replaceUnconfirmed: body.replaceUnconfirmed } : {}) }, capability: "drafts", connectionId: item.connectionId });
     return { __status: 201, body: { job } };
   });
   r.post("/briefings", async (c) => {
@@ -139,6 +156,14 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     app.bus.emit("event", { type: "actions.changed", id: out.id });
     return out;
   });
+  r.post("/actions/:id/restore", async (c) => {
+    requireFeature(app, "drafts");
+    app.settleActions();
+    const body = await c.body(ActionRestoreInput);
+    const out = app.actions.restore(c.params.id!, body.expectedVersion, c.client!.id);
+    app.bus.emit("event", { type: "actions.changed", id: out.id });
+    return out;
+  });
   r.post("/actions/:id/revoke", (c) => {
     const out = app.actions.revoke(c.params.id!, c.client!.id);
     app.bus.emit("event", { type: "actions.changed", id: out.id });
@@ -160,19 +185,19 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
+    const before = app.connections.signInState(kind);
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
+    // Saving the method again is how a login made outside Attache is picked up.
+    refreshIfRecovered(app, out.status.id, before, out.test.ok);
     return out;
   });
   r.post("/connections/:id/test", async (c) => {
-    const before = app.connections.requireRecord(c.params.id!).status;
+    const before = app.connections.signInState(c.params.id!);
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
-    // A connection that just recovered still shows the failed coverage of its last Source refresh: refresh it now.
-    if (out.ok && (before === "needs_auth" || before === "error") && rec.readScopes.length && app.featureEnabled("attention")) {
-      app.jobs.create({ kind: "source-refresh", title: `Refresh ${rec.label}`, input: { connectionId: rec.id }, capability: "attention", connectionId: rec.id });
-    }
+    refreshIfRecovered(app, rec.id, before, out.ok);
     return { test: out, status: app.connections.status(app.connections.requireRecord(c.params.id!)) };
   });
   r.put("/connections/:id/scopes", async (c) => {
@@ -233,6 +258,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const code = c.query("code");
       if (!code) return back("No authorization code returned", false);
       const rec = app.connections.requireRecord(pending.kind);
+      const before = app.connections.signInState(rec.id);
       const adapter = app.connections.adapter(pending.kind);
       try {
         // Exchange the code with the client this sign-in started with; persist it only now that it worked.
@@ -241,6 +267,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
         app.connections.mergeSettings(rec.id, { ...pending.settings, ...res.settings });
         if (res.account) app.db.prepare("update connections set account = ? where id = ?").run(res.account, rec.id);
         const t = await app.connections.test(rec.id);
+        refreshIfRecovered(app, rec.id, before, t.ok);
         return back(t.ok ? `Connected ${adapter.definition.label}` : t.message, t.ok);
       } catch (e) {
         return back((e as Error).message, false);

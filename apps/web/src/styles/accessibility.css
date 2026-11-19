@@ -1,0 +1,100 @@
+/* Accessibility rules for every screen: 44 px touch targets, and selection and the attention dot under forced colours. */
+
+/* ---- Touch targets ------------------------------------------------------------------------ */
+
+/*
+ * On a phone, or with any coarse pointer, every control on every screen is a 44 x 44 px target: buttons, links that
+ * stand alone (Join, Back, View details, a chip), fields, selects, tabs, a disclosure's line and a checkbox's line.
+ * Groups already wrap with 8 px between neighbours, so a bigger target never covers the next one. A subject stretched
+ * over its whole row (Inbox, Approvals, Connections) already has that row as its target; the tab row's scroll
+ * arrows are pointer shortcuts only. A wide touch screen (a tablet) keeps the desktop layout with these targets.
+ */
+@media (max-width: 720px), (pointer: coarse) {
+  :is(.page, .sheet, .drawer, .masthead, .compact-screen, .setup)
+    :is(
+      button:not(.inbox-subject, .approval-subject, .connection-toggle, .tabs-scroll),
+      .btn,
+      .source-chip,
+      summary,
+      select,
+      .chips a,
+      .collections a,
+      .masthead-nav a,
+      .settings-nav a
+    ) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  :is(.page, .sheet, .drawer, .compact-screen, .setup) :is(input:not([type="checkbox"], [type="radio"]), textarea) {
+    min-height: 44px;
+  }
+  /* A search result or a place in the palette's Go to is one tap. */
+  .search-option {
+    min-height: 44px;
+  }
+  :is(.page, .sheet, .drawer) :is(button.small, .btn.small, .source-chip) {
+    justify-content: center;
+  }
+  /* A related note's title wraps inside its chip rather than run past the screen, even with no space to break at. */
+  :is(.page, .sheet, .drawer) .source-chip {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+  /* Links that stand alone as a line's target: Back, Browse's collections, All results, Open in Brain, the Connections details, a Recently added note, the mark. */
+  :is(.back-link, .browse-links a, .search-foot > a, .drawer-brain-link, .conn-details, a.recent-change-title, .masthead .brand) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  /* A checkbox is tapped on its whole line: its label is part of the target. */
+  .check {
+    min-height: 44px;
+    align-items: center;
+  }
+  .check input {
+    margin-top: 0;
+  }
+  :is(.feature-name, .shortcut-switch label) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .feature-row > input[type="checkbox"] {
+    margin-top: 14px;
+  }
+}
+
+/* ---- forced colours: selection and the attention dot ------------------------------------------------ */
+
+/*
+ * Forced colours (Windows contrast themes) drop fills and shadows, and with them every selection the Dashboard draws
+ * (an ink fill, an inset ink bar) and the brass dot. A selection keeps a solid system-coloured edge instead: a frame
+ * around a screen's name or a chip, a bar along a row's start. Never an outline: that stays the focus ring's.
+ */
+@media (forced-colors: active) {
+  :is(.masthead-nav a[aria-current="page"], .bottom-bar [aria-current="page"], .bottom-bar [aria-current="true"], .chips a[aria-current="true"]) {
+    border: 2px solid CanvasText;
+  }
+  :is(
+      .more-nav a[aria-current="page"],
+      .collections a[aria-current="true"],
+      .note-list-item[aria-current="true"],
+      .result-item[aria-current="true"],
+      .list > .list-item[aria-current="true"],
+      .job-pick[aria-current="true"],
+      .search-option[aria-selected="true"],
+      .settings-nav a[aria-current="page"],
+      .setup-steps button[aria-current="step"]
+    ) {
+    border-inline-start: 4px solid CanvasText;
+  }
+  /* A tab's edge is drawn only under the chosen one: forced colours would paint every tab's transparent edge. */
+  .tabs button:not([aria-selected="true"]) {
+    border-bottom-color: Canvas;
+  }
+  .attention-dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

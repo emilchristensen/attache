@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { JobEvent, JobKind, JobStatus, JobView } from "@attache/contracts";
-import { type Db, json, nowIso, tx } from "../core/db.ts";
+import { type Db, json, nowIso, placeholders, tx } from "../core/db.ts";
 import type { Logger } from "../core/log.ts";
 import { redactDeep } from "../core/log.ts";
 
@@ -104,7 +104,7 @@ export class JobQueue {
     const where: string[] = [];
     const args: string[] = [];
     if (opts.status?.length) {
-      where.push(`status in (${opts.status.map(() => "?").join(",")})`);
+      where.push(`status in (${placeholders(opts.status)})`);
       args.push(...opts.status);
     }
     if (opts.kind) {

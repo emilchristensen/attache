@@ -101,11 +101,38 @@ export class Proposals {
     }
     tx(this.deps.db, () => records.forEach((r) => this.index.put(proposalPath(r.id), r)));
     written.forEach((rel) => this.deps.onWrite(rel));
-    return records.map(toProposalView);
+    return records.map((r) => this.view(r));
   }
 
-  list(opts: { status?: ProposalView["status"]; limit?: number } = {}): ProposalView[] {
-    return this.index.list(opts).map(toProposalView);
+  /** The Proposals in any of `statuses` (every one when empty), the latest made or decided first, each with its note's title. */
+  list(opts: { statuses?: readonly ProposalView["status"][]; limit?: number } = {}): ProposalView[] {
+    return this.index.list(opts).map((r) => this.view(r));
+  }
+
+  /** The changes still waiting, without reading their notes: for Consolidation, which only compares them. */
+  pendingItems(limit: number): MemorySaveItem[] {
+    return this.index.list({ statuses: ["proposed"], limit }).flatMap((r) => proposalItem(r) ?? []);
+  }
+
+  /** A Proposal as the Dashboard shows it, with the title of the note it changes or wrote, as that note says now. */
+  private view(record: ProposalRecord): ProposalView {
+    const view = toProposalView(record);
+    return { ...view, noteTitle: this.noteTitle(view) };
+  }
+
+  private noteTitle(view: Omit<ProposalView, "noteTitle">): string | null {
+    if (view.item?.action === "create" && view.status !== "applied") return view.item.title;
+    try {
+      return this.deps.memory.exists(view.target) ? this.deps.memory.describe(view.target).title || null : null;
+    } catch {
+      // A target outside the Brain or a note that cannot be read has no title to show; the path still names it.
+      return null;
+    }
+  }
+
+  /** How many Proposals are in this status, without the list's limit. */
+  count(status: ProposalView["status"]): number {
+    return this.index.count(status);
   }
 
   /** Whether a Proposal with this id exists, whatever its status. */
@@ -143,7 +170,7 @@ export class Proposals {
     }
     const next: ProposalRecord = { ...record, decisions: [...record.decisions, made] };
     this.store(root, relPath, next);
-    return toProposalView(next);
+    return this.view(next);
   }
 
   /**

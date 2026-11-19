@@ -240,6 +240,10 @@ export const MIGRATIONS: readonly string[] = [
   `
   alter table memory_changes add column capture text;
   `,
+  // A meeting prep item carries its meeting's start, end, call and attendees (JSON), and stays open until the end.
+  `
+  alter table attention_items add column meeting text;
+  `,
 ];
 
 const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);
@@ -305,6 +309,9 @@ export function tx<T>(db: Db, fn: () => T): T {
     throw err;
   }
 }
+
+/** `?,?,?`: one SQL placeholder per value, for an `in (...)` list. */
+export const placeholders = (values: readonly unknown[]): string => values.map(() => "?").join(",");
 
 export const nowIso = (): string => new Date().toISOString();
 

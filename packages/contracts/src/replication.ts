@@ -44,6 +44,9 @@ export interface ReplicationMachinesView {
   preferredReader: string | null;
 }
 
+/** A Reader lease not renewed for this long has lapsed: the Reader is silent. The Dashboard asks again at that moment. */
+export const READER_SILENT_AFTER_MS = 30 * 60_000;
+
 /**
  * The Reader: the one Machine that runs scheduled Source refresh, briefings
  * and Review-date inbox items. With Replication off, this Machine is its own Reader.

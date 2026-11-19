@@ -1,0 +1,593 @@
+/* Home: For you now, the Inbox and Recently added. */
+
+/* ---- For you now --------------------------------------------------------------------------- */
+
+.for-you-now {
+  margin-bottom: var(--s-5);
+}
+.for-you-now-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.for-you-now h2:focus {
+  outline: none;
+}
+.for-you-now h2:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Nothing timely: one quiet line between rules, so the page does not jump when a Heads-up arrives or leaves. */
+.for-you-now.quiet {
+  padding: 7px 0;
+  border-block: 1px solid var(--rule);
+}
+.for-you-now.quiet .for-you-now-head {
+  gap: var(--s-1) var(--s-2);
+  margin-bottom: 0;
+}
+/* Lines without a lead: the title at the quiet line's size. */
+.for-you-now.compact .for-you-now-head {
+  margin-bottom: var(--s-1);
+}
+.for-you-now-quiet-title {
+  font-family: var(--font);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.for-you-now-quiet-text {
+  margin: 0;
+  flex: 1 1 16em;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.for-you-now-failed {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+
+/* The lead: one Heads-up shown whole. */
+.heads-up-lead {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-lg);
+  padding: 18px 24px;
+}
+/* Only a lead morning briefing is the amber spread, with a low sun etched into its outer margin. */
+.heads-up-lead.feature {
+  background: var(--feature);
+  border-color: transparent;
+}
+.heads-up-lead.feature::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  right: -26px;
+  bottom: -125px;
+  width: 300px;
+  height: 280px;
+  border-radius: 50%;
+  z-index: -1;
+  background: repeating-radial-gradient(ellipse at center, transparent 0 12px, currentColor 13px 14px, transparent 15px 22px);
+  color: var(--rust);
+  opacity: 0.28;
+}
+/* The words stay clear of the sun. */
+.heads-up-lead.feature > :not(.briefing-detail) {
+  max-width: 76%;
+}
+/* The plain control outline is under 3:1 on amber, so controls on the spread take the field's stronger edge. */
+.heads-up-lead.feature button:not(.ghost):not(.primary) {
+  border-color: var(--key);
+}
+.heads-up-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.heads-up-lead.feature .heads-up-eyebrow {
+  color: var(--rust);
+}
+.heads-up-title {
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 34px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.heads-up-explanation {
+  margin: 4px 0 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+.heads-up-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  margin-top: var(--s-3);
+}
+.heads-up-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.heads-up-why {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.heads-up-foot .heads-up-why {
+  flex: 1 1 18em;
+}
+
+/* Followers: compact lines under the lead, each with its why. */
+.heads-up-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.heads-up-lead + .heads-up-lines {
+  margin-top: var(--s-2);
+}
+.heads-up-line {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-3);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.heads-ups > .heads-up-lines:first-child .heads-up-line:first-child {
+  border-top: 1px solid var(--rule);
+}
+.heads-up-line-icon {
+  display: grid;
+  place-items: center;
+  color: var(--rust);
+}
+.heads-up-line-text {
+  min-width: 0;
+}
+.heads-up-line-head {
+  margin: 0;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  color: var(--ink);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.heads-up-line-head strong {
+  font-weight: 600;
+}
+.heads-up-line-timing,
+.heads-up-line-title {
+  color: var(--ink-2);
+}
+.heads-up-line .progress {
+  margin-top: 6px;
+  max-width: 24em;
+}
+.heads-up-line .briefing-detail {
+  grid-column: 2 / -1;
+}
+.heads-up-more {
+  margin-top: var(--s-1);
+}
+
+/* A held meeting that ended: the same box at the same size, with only "Meeting ended" and its subject in it. */
+.heads-up-ended {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--ink-2);
+}
+.heads-up-ended .heads-up-line-icon {
+  color: var(--ink-2);
+}
+.heads-up-ended-text {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.heads-up-ended-text strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Meeting prep: the calendar-and-notes glyph in the meeting hue; Open prep opens below the line or the card. */
+.heads-up-lead.meeting .heads-up-eyebrow svg,
+.heads-up-line.meeting .heads-up-line-icon {
+  color: var(--c);
+}
+/* A follower meeting's subject and interval wrap rather than lose words on a narrow screen. */
+.heads-up-eyebrow-parts > span {
+  white-space: nowrap;
+}
+.heads-up-line.meeting .heads-up-line-head {
+  white-space: normal;
+}
+.meeting-prep-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+.heads-up-line .meeting-prep-detail {
+  grid-column: 2 / -1;
+}
+.meeting-prep-who,
+.meeting-prep-notes-none {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.meeting-prep-label {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink);
+}
+.meeting-prep-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* The briefing actions: one button and the three things it opens. */
+.briefing-actions {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+.briefing-actions-chevron {
+  transform: rotate(90deg);
+  color: var(--ink-3);
+}
+/* What Read briefing opens: every point, the linked counts and the file. */
+.briefing-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule);
+}
+.briefing-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.briefing-fresh {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+button.count-chip {
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-2);
+  gap: 6px;
+}
+.count-chip b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.briefing-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 72ch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.briefing-lines li {
+  position: relative;
+  padding-left: 16px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.briefing-lines li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rust);
+}
+.briefing-lines li:only-child {
+  padding-left: 0;
+}
+.briefing-lines li:only-child::before {
+  display: none;
+}
+.briefing-lines li.caveat {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+.briefing-lines li.caveat::before {
+  background: var(--amber);
+}
+
+/* Meeting context: the notes the latest briefing found for each meeting. */
+.meeting-context {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+}
+.meeting-context-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+}
+.meeting-context-head button {
+  margin-left: auto;
+}
+.meeting-context-when,
+.meeting-context-empty {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.meeting-context-list {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.meeting-context-list li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+@media (max-width: 720px) {
+  .heads-up-lead {
+    padding: 16px;
+  }
+  .heads-up-lead.feature::after {
+    width: 120px;
+    right: -65px;
+  }
+  .heads-up-lead.feature > :not(.briefing-detail) {
+    max-width: 86%;
+  }
+  .heads-up-title {
+    font-size: 22px;
+    line-height: 28px;
+  }
+  /* On a phone a line wraps rather than cut its words off; its actions move under it. */
+  .heads-up-line {
+    grid-template-columns: 24px minmax(0, 1fr);
+    row-gap: var(--s-2);
+  }
+  .heads-up-line-head {
+    white-space: normal;
+  }
+  .heads-up-line > .heads-up-actions {
+    grid-column: 2;
+  }
+}
+
+/* ---- Connections ---------------------------------------------------------------------- */
+
+/* One ruled line when all is good; otherwise a ruled head and one compact row per problem. */
+.home-connections {
+  border-block: 1px solid var(--rule);
+  margin: var(--s-5) 0 var(--s-4);
+  padding: 9px 0;
+}
+.conn-title {
+  font: 600 var(--fs-body) / var(--lh-body) var(--font);
+  color: var(--ink);
+  margin: 0;
+}
+.conn-good,
+.conn-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.conn-good > .icon,
+.conn-good-word {
+  color: var(--c);
+}
+.conn-good-word {
+  font-weight: 500;
+}
+.conn-good-meta,
+.conn-working {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.conn-details {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+}
+.conn-rows {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+/* The line (icon, subject, word, impact) opens the row's detail in place; its one button stays beside it. */
+.conn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  border-top: 1px solid var(--rule);
+  padding: 4px 0;
+}
+.conn-row-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-control);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+button.conn-row-line:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+.conn-row-icon {
+  color: var(--c);
+}
+.conn-row-text {
+  min-width: 0;
+}
+.conn-subject {
+  font-weight: 600;
+}
+.conn-word {
+  color: var(--c);
+  font-weight: 600;
+}
+.conn-sep,
+.conn-impact {
+  color: var(--ink-2);
+}
+.conn-row-chevron {
+  color: var(--ink-3);
+  transition: transform 0.15s;
+}
+.conn-row-line[aria-expanded="true"] .conn-row-chevron {
+  transform: rotate(90deg);
+}
+.conn-row-detail {
+  grid-column: 1 / -1;
+  padding: 2px 0 8px 34px;
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  max-width: 72ch;
+}
+.conn-row-detail p {
+  margin: 2px 0;
+}
+.conn-failure {
+  color: var(--ink);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+.conn-more {
+  border-top: 1px solid var(--rule);
+}
+.conn-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* "1 more: <folder name>" can hold a name with no space to break at. */
+  overflow-wrap: anywhere;
+  min-height: 36px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  list-style: none;
+}
+.conn-more > summary::-webkit-details-marker {
+  display: none;
+}
+.conn-more-chevron {
+  margin-left: 1px;
+  transition: transform 0.15s;
+}
+.conn-more[open] > summary .conn-more-chevron {
+  transform: rotate(90deg);
+}
+.conn-more > .conn-rows {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  /* The button moves under the line, where it has room, and keeps a comfortable tap target. */
+  .conn-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .conn-row-action {
+    padding: 0 0 6px 34px;
+  }
+  .conn-details {
+    margin-left: 0;
+  }
+}
+
+/* ---- Recently added: one ruled line closing the Inbox area that opens in place ------------------------------------ */
+
+.recently-added {
+  margin-top: var(--s-5);
+}
+.recently-added > .disclosure {
+  border-bottom: 1px solid var(--rule);
+}
+/* Nothing to open: the same ruled line as a closed disclosure, without the chevron, flush with the column. */
+.recently-added-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 14px 0;
+  border-block: 1px solid var(--rule);
+}
+.recently-added-line .disclosure-meta {
+  grid-column: 1;
+}
+.recently-added .collapse-toggle {
+  align-self: flex-start;
+}
+

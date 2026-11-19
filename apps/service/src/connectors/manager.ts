@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { plural, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
-import { type Db, json, nowIso, tx } from "../core/db.ts";
+import { plural, WAITING_ACTION_STATUSES, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
+import { type Db, json, nowIso, placeholders, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
 import { redact } from "../core/log.ts";
@@ -11,7 +11,7 @@ import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, R
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
-import { recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
+import { countOpenDecisions, recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import type { Inbox } from "../attention/inbox.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
@@ -37,6 +37,17 @@ export interface ManagerDeps {
   claude: ClaudeConnectorRunner;
   /** Whether this Machine is the Reader, which alone raises inbox items for facts past their Review date. */
   isReader: () => boolean;
+  /** The service's clock, so a source reads "now" as the Inbox does; the system clock when left out. */
+  now?: () => Date;
+}
+
+/** A Connection's sign-in state before a test, a re-saved method or a browser sign-in changes it. */
+export interface SignInState {
+  status: string;
+  /** The sign-in worked at some point before. */
+  workedBefore: boolean;
+  /** A Source refresh stored a read, which may now be stale. */
+  read: boolean;
 }
 
 export class ConnectionManager {
@@ -84,7 +95,7 @@ export class ConnectionManager {
       http: createHttpClient({ signal: sig }),
       log: this.d.log,
       signal: sig,
-      now: () => new Date(),
+      now: this.d.now ?? (() => new Date()),
       endpoint: resolveEndpoint,
       selfEmail: this.d.selfEmail(),
       claude: this.d.claude,
@@ -111,6 +122,7 @@ export class ConnectionManager {
           settings: {},
           lastAttemptAt: null,
           lastSuccessAt: null,
+          lastReadAt: null,
           lastError: null,
           coverage: null,
           authMethod: "",
@@ -119,6 +131,12 @@ export class ConnectionManager {
       }
     }
     return out;
+  }
+
+  /** When a Source refresh last finished having read something, from the run history: a sign-in test never counts. */
+  private lastReadAt(id: string): string | null {
+    const row = this.d.db.prepare("select max(finished_at) at from sync_runs where connection_id = ? and outcome in ('complete', 'empty', 'partial')").get(id) as { at: string | null } | undefined;
+    return row?.at ?? null;
   }
 
   status(r: ConnectionRecord): ConnectionStatus {
@@ -138,6 +156,7 @@ export class ConnectionManager {
       settings: visibleSettings,
       lastAttemptAt: (row.last_attempt_at as string) ?? null,
       lastSuccessAt: (row.last_success_at as string) ?? null,
+      lastReadAt: this.lastReadAt(r.id),
       lastError: (row.last_error as string) ?? null,
       coverage: json<Coverage | null>(row.coverage, null),
       authMethod: authMethod ?? "",
@@ -234,7 +253,7 @@ export class ConnectionManager {
     return {
       observations: count("select count(*) n from observations where connection_id = ?", id),
       attentionItems: count("select count(*) n from attention_items where connection_id = ? and state != 'resolved'", id),
-      drafts: count("select count(*) n from actions where connection_id = ? and status in ('draft','approved','revoked')", id),
+      drafts: count(`select count(*) n from actions where connection_id = ? and status in (${placeholders(WAITING_ACTION_STATUSES)})`, id, ...WAITING_ACTION_STATUSES),
       queuedJobs: count("select count(*) n from jobs where connection_id = ? and status in ('queued','running','blocked')", id),
       indexedDocuments: rec.kind === "vault" ? count("select count(*) n from documents where root = ?", `import:${id}`) : 0,
       credentials: this.adapter(rec.kind).secretNames.length,
@@ -308,7 +327,28 @@ export class ConnectionManager {
   }
 
   /** Run one Source refresh of a connection: fetch, archive observations, update attention. */
-  async refresh(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number }> {
+  /**
+   * What a refresh can change of the decision count: the open Inbox items that count (no waiting Draft) and the
+   * Connections that need a sign-in. Measured just before and after a refresh's writes, which run in one
+   * synchronous stretch, so nothing else (an owner's decision) lands in between.
+   */
+  private decisionWeight(): number {
+    return countOpenDecisions(this.d.db) + this.countSignIns();
+  }
+
+  /** How many Connections need a sign-in (`needs_auth`): the Decision count's Connections part. */
+  countSignIns(): number {
+    return Number((this.d.db.prepare("select count(*) n from connections where status = 'needs_auth'").get() as { n: number }).n);
+  }
+
+  /** A Connection's sign-in state, read before a test, a re-saved method or a browser sign-in changes it. */
+  signInState(id: string): SignInState | null {
+    const row = this.d.db.prepare("select status, last_success_at, coverage from connections where id = ?").get(id) as { status: string; last_success_at: string | null; coverage: string | null } | undefined;
+    return row ? { status: row.status, workedBefore: !!row.last_success_at, read: !!row.coverage } : null;
+  }
+
+  /** `countDelta`: how much this refresh's own writes changed the decision count (see `decisionWeight`). */
+  async refresh(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number; countDelta: number }> {
     const rec = this.requireRecord(id);
     if (rec.status === "disconnected") throw new RemoteError("Connection is disconnected", "not_configured");
     const runId = randomUUID();
@@ -339,8 +379,9 @@ export class ConnectionManager {
     if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
       this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or Source refresh cancelled' where id = ?").run(nowIso(), runId);
       if (signal?.aborted) throw new RemoteError("Source refresh cancelled", "error");
-      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0 };
+      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0, countDelta: 0 };
     }
+    const weightBefore = this.decisionWeight();
     const attention = this.store(current, result, previous);
     const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
     const now = nowIso();
@@ -350,8 +391,9 @@ export class ConnectionManager {
     this.d.db
       .prepare(`update connections set coverage = ?, status = ?, ${ok ? "last_success_at = ?," : ""} last_error = ?, ${errText ? "last_error_at = ?," : ""} updated_at = ? where id = ? and status != 'disconnected'`)
       .run(...([JSON.stringify(result.coverage), newStatus, ...(ok ? [now] : []), errText, ...(errText ? [now] : []), now, id] as Array<string | null>));
+    const countDelta = this.decisionWeight() - weightBefore;
     this.onChange(id);
-    return { coverage: result.coverage, attention, observations: result.observations.length };
+    return { coverage: result.coverage, attention, observations: result.observations.length, countDelta };
   }
 
   private async refreshRemote(rec: ConnectionRecord, signal?: AbortSignal): Promise<RefreshResult> {

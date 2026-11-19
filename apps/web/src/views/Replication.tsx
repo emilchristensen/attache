@@ -1,13 +1,16 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
-import { useResource } from "../live.ts";
-import { ErrorState, Loading, StatusPill, Time, useAction } from "../components/ui.tsx";
+import { useResource, type Resource } from "../live.ts";
+import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
+import { StateTag } from "../components/StateTag.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
 import { tabId, Tabs, type TabItem } from "../components/Tabs.tsx";
 import { useFolderExamples } from "../folder-examples.ts";
+import { FieldError, fieldProps, focusField } from "../components/FieldError.tsx";
+import { joinErrorField, joinProblems } from "./form-checks.ts";
 
-const PILL: Record<ReplicationStatus, { state: string; label: string }> = {
+const STATE: Record<ReplicationStatus, { state: string; label: string }> = {
   off: { state: "off", label: "off" },
   up_to_date: { state: "ok", label: "up to date" },
   offline: { state: "partial", label: "offline" },
@@ -51,15 +54,18 @@ function useSubmit(onDone: (v: ReplicationView) => void) {
   return { error, busy, submit };
 }
 
-function RepositoryField({ value, onChange, id }: { value: string; onChange: (v: string) => void; id: string }) {
+function RepositoryField({ value, onChange, id, message, field }: { value: string; onChange: (v: string) => void; id: string; message?: string | null; field?: Ref<HTMLInputElement> }) {
   return (
-    <label className="field">
-      Repository
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="you/brain" spellCheck={false} autoComplete="off" aria-describedby={`${id}-help`} />
+    <div className="field-group">
+      <label className="field" htmlFor={id}>
+        Repository
+      </label>
+      <input id={id} ref={field} value={value} onChange={(e) => onChange(e.target.value)} placeholder="you/brain" spellCheck={false} autoComplete="off" {...fieldProps(`${id}-error`, message, `${id}-help`)} />
+      <FieldError id={`${id}-error`} message={message} />
       <span className="help" id={`${id}-help`}>
         {REPOSITORY_HELP}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -80,29 +86,90 @@ function StartForm({ onDone }: { onDone: (v: ReplicationView) => void }) {
   );
 }
 
-/** Clone a Brain another Machine set up into an empty folder, which becomes this Machine's data folder. */
-export function JoinForm({ onDone, folder: fixedFolder, intro, primary = true }: { onDone: (v: ReplicationView) => void; folder?: string; intro: string; primary?: boolean }) {
+/**
+ * Clone a Brain another Machine set up into an empty folder, which becomes this Machine's data folder.
+ * Setup passes its data folder as `folder`, and `onFolderProblem` to name a problem with that field and focus it.
+ * A problem the owner fixes in one field, found here or by the service, is named beside that field, which gets focus.
+ */
+export function JoinForm({ onDone, folder: fixedFolder, onFolderProblem, intro, primary = true }: { onDone: (v: ReplicationView) => void; folder?: string; onFolderProblem?: (message: string) => void; intro: string; primary?: boolean }) {
   const [remote, setRemote] = useState("");
   const [folder, setFolder] = useState("");
+  const [attempted, setAttempted] = useState(false);
+  const [refused, setRefused] = useState<{ field: "repository" | "folder"; message: string } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
   const examples = useFolderExamples(fixedFolder === undefined);
   const target = fixedFolder ?? folder;
-  const { error, busy, submit } = useSubmit(onDone);
+  const fields = { repository: useRef<HTMLInputElement>(null), folder: useRef<HTMLInputElement>(null) };
+  // What the fields hold now, so a refusal that arrives after the owner changed a field is not pinned on the new value.
+  const latest = useRef({ repository: remote, folder: target });
+  useEffect(() => {
+    latest.current = { repository: remote, folder: target };
+  });
+  const problems = attempted ? joinProblems({ repository: remote, folder: target }) : [];
+  const message = (f: "repository" | "folder") => problems.find((p) => p.field === f)?.message ?? (refused?.field === f ? refused.message : undefined);
+  const point = (field: "repository" | "folder", text: string) => (field === "folder" && fixedFolder !== undefined ? onFolderProblem?.(text) : focusField(fields[field].current));
+  const join = (e: FormEvent) => {
+    e.preventDefault();
+    const found = joinProblems({ repository: remote, folder: target });
+    setAttempted(true);
+    setRefused(null);
+    setError(null);
+    // Setup's data folder sits above this form, so it is the first field to fix.
+    const first = (fixedFolder !== undefined && found.find((p) => p.field === "folder")) || found[0];
+    if (first) return point(first.field, first.message);
+    const sent = { repository: remote, folder: target };
+    setBusy(true);
+    post<ReplicationView>("/replication/join", { remote, path: target })
+      .then(onDone)
+      .catch((err: ApiError) => {
+        const field = joinErrorField(err.code);
+        if (!field) return setError(err);
+        if (latest.current[field] !== sent[field]) return;
+        if (field === "repository" || fixedFolder === undefined) setRefused({ field, message: err.message });
+        point(field, err.message);
+      })
+      .finally(() => setBusy(false));
+  };
   return (
-    <form className="stack" onSubmit={(e) => submit(e, () => post<ReplicationView>("/replication/join", { remote, path: target }))}>
+    <form className="stack" onSubmit={join} noValidate>
       <p className="small muted">{intro}</p>
-      <RepositoryField id="join-repo" value={remote} onChange={setRemote} />
+      <RepositoryField
+        id="join-repo"
+        value={remote}
+        onChange={(v) => {
+          setRemote(v);
+          setRefused(null);
+        }}
+        message={message("repository")}
+        field={fields.repository}
+      />
       {fixedFolder === undefined && (
-        <label className="field">
-          Empty folder for the Brain
-          <input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={examples.brain} spellCheck={false} aria-describedby="join-folder-help" />
+        <div className="field-group">
+          <label className="field" htmlFor="join-folder">
+            Empty folder for the Brain
+          </label>
+          <input
+            id="join-folder"
+            ref={fields.folder}
+            value={folder}
+            onChange={(e) => {
+              setFolder(e.target.value);
+              setRefused(null);
+            }}
+            placeholder={examples.brain}
+            spellCheck={false}
+            {...fieldProps("join-folder-error", message("folder"), "join-folder-help")}
+          />
+          <FieldError id="join-folder-error" message={message("folder")} />
           <span className="help" id="join-folder-help">
             Attache clones the Brain here and uses this folder from then on. It must be empty or new, so two Brains are never mixed; the current data folder is left as it is.
           </span>
-        </label>
+        </div>
       )}
       <ErrorState error={error} title="Could not join" />
       <div>
-        <button type="submit" className={primary ? "primary" : undefined} disabled={busy || !remote.trim() || !target.trim()}>
+        <button type="submit" className={primary ? "primary" : undefined} disabled={busy}>
           {busy ? "Joining…" : fixedFolder === undefined ? "Join" : "Join into this folder"}
         </button>
       </div>
@@ -128,7 +195,11 @@ function SwitchOn({ onDone }: { onDone: (v: ReplicationView) => void }) {
   );
 }
 
-function Problem({ view }: { view: ReplicationView }) {
+/**
+ * What is wrong with Replication, why and what to do: Settings shows it at the top of Machines and Replication, so the
+ * named Settings warning leads straight to its cause.
+ */
+export function ReplicationProblem({ view }: { view: ReplicationView }) {
   const p = PROBLEM[view.status];
   if (!p) return null;
   return (
@@ -177,15 +248,14 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
         <dt>Repository</dt>
         <dd className="mono">{view.remote}</dd>
         <dt>Last up to date</dt>
-        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} /> : "not yet"}</dd>
+        <dd data-up-to-date>{view.upToDateAt ? <Time iso={view.upToDateAt} standalone /> : "not yet"}</dd>
         <dt>Last checked</dt>
         <dd>
-          <Time iso={view.lastCheckedAt} />
+          <Time iso={view.lastCheckedAt} standalone />
         </dd>
         <dt>Last sent</dt>
-        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} /> : "nothing sent from this Machine yet"}</dd>
+        <dd>{view.lastPushedAt ? <Time iso={view.lastPushedAt} standalone /> : "nothing sent from this Machine yet"}</dd>
       </dl>
-      <Problem view={view} />
       <div className="row">
         <button disabled={busy !== null} onClick={() => void run("check", () => post<ReplicationView>("/replication/check").then(onChanged))}>
           {busy ? "Checking…" : "Check now"}
@@ -199,17 +269,21 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
 }
 
 /** Replication on this Machine: set it up or join, watch its status and the other Machines, or switch it off. */
-export function ReplicationCard({ dataFolder }: { dataFolder: string | null }) {
-  const view = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+/** This Machine's Replication, as Settings' Machines and Replication section asks for it once for the card and its notice. */
+export function useReplication(): Resource<ReplicationView> {
+  return useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+}
+
+export function ReplicationCard({ view, dataFolder }: { view: Resource<ReplicationView>; dataFolder: string | null }) {
   const v = view.data;
-  const pill = v ? PILL[v.status] : null;
+  const shown = v ? STATE[v.status] : null;
   return (
     <section className="card stack" aria-labelledby="replication-title" data-replication={v?.status}>
       <div className="row">
         <h3 id="replication-title" style={{ flex: 1 }}>
           Replication
         </h3>
-        {pill && <StatusPill state={pill.state} label={pill.label} />}
+        {shown && <StateTag state={shown.state} label={shown.label} />}
       </div>
       <p className="small muted">Keeps the Brain the same on every Machine you own, with its history, through a private git repository. Drafts, approvals, connections and secrets stay on the Machine they were made on.</p>
       {view.loading && !v && <Loading lines={2} />}

@@ -69,7 +69,7 @@ export const skipped = (reason: string, message?: string): Skipped => ({ written
  */
 export async function consolidate(app: App, ctx: JobContext, source: ConsolidationSource): Promise<PipelineResult> {
   const wording = SUBJECTS[source.subject];
-  const pending = app.proposals.list({ status: "proposed", limit: 500 }).flatMap((p) => (p.item ? [p.item] : []));
+  const pending = app.proposals.pendingItems(500);
   const reading = runSoFar(ctx).reading ?? (await read(app, ctx, source, pending));
   if ("skipped" in reading) return reading;
 
