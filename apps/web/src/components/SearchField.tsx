@@ -134,17 +134,22 @@ function GoToRow({ place }: { place: GoToEntry }) {
   );
 }
 
-/** A named group of options inside the listbox (the palette's Go to and Passages). */
+/**
+ * A named group of options inside the listbox (the palette's Go to and Passages). The list item only places it in the
+ * list (`role="none"`): ARIA allows the group role on a `div`, not on a list item.
+ */
 function OptionGroup({ label, stale = false, children }: { label: string; stale?: boolean; children: ReactNode }) {
   const id = useId();
   return (
-    <li role="group" aria-labelledby={id} className="search-group" data-stale={stale || undefined}>
-      <span id={id} className="search-group-label">
-        {label}
-      </span>
-      <ul role="none" className="search-group-options">
-        {children}
-      </ul>
+    <li role="none" className="search-group-item">
+      <div role="group" aria-labelledby={id} className="search-group" data-stale={stale || undefined}>
+        <span id={id} className="search-group-label">
+          {label}
+        </span>
+        <ul role="none" className="search-group-options">
+          {children}
+        </ul>
+      </div>
     </li>
   );
 }

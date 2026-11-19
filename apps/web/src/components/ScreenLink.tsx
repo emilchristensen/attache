@@ -9,13 +9,20 @@ export function spokenName(label: string, news: ReadonlyArray<string | null | un
   return [label, ...news.filter(Boolean)].join(", ");
 }
 
-/** A screen's decision count as it shows: the number alone ("4", or "4+" for a lower bound); the link's name reads it out with its words. */
+/**
+ * A screen's decision count as it shows: the number alone ("4", or "4+" for a lower bound); the link's name reads it
+ * out with its words. A space keeps it apart from the name in the text, so the words on screen ("Approvals 2") are
+ * what the name starts with ("Approvals, 2 waiting") and speech input can say them (WCAG 2.5.3).
+ */
 export function BadgeCount({ badge }: { badge: Badge | undefined }) {
   if (!badge) return null;
   return (
-    <span className="count" aria-hidden>
-      {badge.shown}
-    </span>
+    <>
+      {" "}
+      <span className="count" aria-hidden>
+        {badge.shown}
+      </span>
+    </>
   );
 }
 

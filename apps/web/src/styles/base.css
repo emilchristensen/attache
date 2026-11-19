@@ -103,17 +103,12 @@ time {
 
 /*
  * The focus ring is a 3 px blue outline around the control; a selection is an ink fill or bar, so focus never looks
- * like selection. Forced colours keep the outline in the system's highlight.
+ * like selection. Forced colours keep the outline in the system's highlight (`--focus` in tokens.css).
  */
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
   border-radius: 4px;
-}
-@media (forced-colors: active) {
-  :focus-visible {
-    outline-color: Highlight;
-  }
 }
 
 .sr-only {

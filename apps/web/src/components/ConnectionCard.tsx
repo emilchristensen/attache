@@ -7,8 +7,8 @@ import { reconfigureSignIn, reconnectMethod, savedFields, startBrowserSignIn } f
 
 const COVERAGE_TEXT: Record<string, string> = {
   complete: "Complete",
-  empty: "Complete — nothing found",
-  partial: "Partial — some items may be missing",
+  empty: "Complete, nothing found",
+  partial: "Partial: some items may be missing",
   denied: "Access denied for a scope",
   unauthorized: "Sign-in expired or rejected",
   offline: "Service unreachable",
@@ -30,7 +30,7 @@ export function CoverageDetail({ coverage }: { coverage: Coverage | null }) {
       <ul className="small" style={{ margin: 0, paddingLeft: 18, color: "var(--text-2)" }}>
         {coverage.scopes.map((s, i) => (
           <li key={i}>
-            {s.scope}: <b>{s.state.replace(/_/g, " ")}</b> ({s.items} item{s.items === 1 ? "" : "s"}, {s.pages} page{s.pages === 1 ? "" : "s"}){s.note ? <span className="muted"> — {s.note}</span> : null}
+            {s.scope}: <b>{s.state.replace(/_/g, " ")}</b> ({s.items} item{s.items === 1 ? "" : "s"}, {s.pages} page{s.pages === 1 ? "" : "s"}){s.note ? <span className="muted">: {s.note}</span> : null}
           </li>
         ))}
       </ul>
@@ -147,7 +147,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
           {!inRow && (
             <>
               <dt>Account</dt>
-              <dd>{status.account ?? "—"}</dd>
+              <dd>{status.account ?? "Not known"}</dd>
             </>
           )}
           <dt>Last success</dt>

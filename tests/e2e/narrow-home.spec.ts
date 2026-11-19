@@ -9,12 +9,11 @@ import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { meetingHeadsUp, openPrep, SELF, setCalendar } from "./meetings.ts";
 import { openRecentlyAdded, openRow } from "./inbox.ts";
+import { overlaps, TARGET, targets as measureTargets } from "./a11y.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
 
-/** The smallest touch target the design allows, in CSS px (WCAG 2.5.5's enhanced size). */
-const TARGET = 44;
 const PHONE = { width: 375, height: 812 };
 /** The home indicator's inset on a notched phone. */
 const SAFE_AREA_BOTTOM = 34;
@@ -101,54 +100,6 @@ async function phoneHome(): Promise<Page> {
   return page;
 }
 
-interface Target {
-  name: string;
-  width: number;
-  height: number;
-  /** Where the browser sends a tap at the box's centre and just inside each corner: true when every one reaches it. */
-  hit: boolean;
-  /** Its words run past its own box, so part of them is cut off or spills onto a neighbour. */
-  clipped: boolean;
-  box: { left: number; top: number; right: number; bottom: number };
-}
-
-/**
- * Every visible control on Home, measured where it is drawn after scrolling it into view: its box, and whether a tap
- * anywhere in the box reaches it rather than a neighbour or the bottom bar. A link inside a sentence is part of the
- * text, not a target of its own (WCAG 2.5.8's inline exception).
- */
-async function homeTargets(page: Page): Promise<Target[]> {
-  return page.evaluate(() => {
-    const controls = [...document.querySelectorAll<HTMLElement>('[aria-label="Home"] :is(a[href], button, summary, select, input)')].filter(
-      (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden" && !(el.tagName === "A" && el.parentElement?.tagName === "P"),
-    );
-    return controls.map((el) => {
-      el.scrollIntoView({ block: "center" });
-      // A control stretched over its line (an Inbox subject) is tapped anywhere in that line: measure the line.
-      const stretched = getComputedStyle(el, "::after").position === "absolute" && el.offsetParent;
-      const r = (stretched ? el.offsetParent! : el).getBoundingClientRect();
-      const inset = 2;
-      const points = [
-        [r.left + r.width / 2, r.top + r.height / 2],
-        [r.left + inset, r.top + inset],
-        [r.right - inset, r.top + inset],
-        [r.left + inset, r.bottom - inset],
-        [r.right - inset, r.bottom - inset],
-      ];
-      const hit = points.every(([x, y]) => {
-        const at = document.elementFromPoint(x!, y!);
-        return at !== null && (at === el || el.contains(at));
-      });
-      // Document coordinates (every scrolled ancestor added back), so boxes measured at different scroll positions compare.
-      let top = r.top;
-      for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
-      return { name: (el.getAttribute("aria-label") ?? el.textContent ?? "").trim(), width: r.width, height: r.height, hit, clipped: el.scrollWidth > el.clientWidth + 1, box: { left: r.left, top, right: r.right, bottom: top + r.height } };
-    });
-  });
-}
-
-const overlaps = (a: Target["box"], b: Target["box"]) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
-
 test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apart and whole at 375 and 320 px", async () => {
   const page = await phoneHome();
   for (const width of [375, 320]) {
@@ -156,7 +107,7 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
     await page.mouse.move(1, 1);
     // The frame itself never scrolls: only the page does, so the masthead and the bottom bar stay where they are.
     expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight), `${width} px document scrolls`).toBeLessThanOrEqual(0);
-    const targets = await homeTargets(page);
+    const targets = await page.evaluate(measureTargets, '[aria-label="Home"]');
     const names = targets.map((t) => t.name);
     // Every control the ticket names is among them: the related note, both meetings' decisions and destinations, Reconnect.
     for (const name of ["Nora Lind", UNBROKEN_TITLE, "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "View details", "Open in Connections"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
@@ -165,7 +116,7 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
     expect(targets.filter((t) => t.clipped).map((t) => t.name), `${width} px targets with words cut off`).toEqual([]);
     const blocked = targets.filter((t) => !t.hit).map((t) => t.name);
     expect(blocked, `${width} px targets a tap does not reach`).toEqual([]);
-    const touching = targets.flatMap((a, i) => targets.slice(i + 1).filter((b) => overlaps(a.box, b.box)).map((b) => `${a.name} / ${b.name}`));
+    const touching = targets.flatMap((a, i) => targets.slice(i + 1).filter((b) => overlaps(a, b)).map((b) => `${a.name} / ${b.name}`));
     expect(touching, `${width} px overlapping targets`).toEqual([]);
     expect(await page.evaluate(() => scrollY), `${width} px frame moved`).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width} px page overflow`).toBeLessThanOrEqual(0);

@@ -160,6 +160,18 @@
   }
 }
 
+/* ---- forced colours ------------------------------------------------------------ */
+
+/*
+ * Forced colours (Windows contrast themes) repaint every colour but keep system colours, so the focus ring takes the
+ * system's Highlight wherever it is drawn: on the control, around the box a field sits in, or on a stretched line.
+ */
+@media (forced-colors: active) {
+  :root {
+    --focus: Highlight;
+  }
+}
+
 /* ---- one hue for a subtree --------------------------------------------------- */
 
 /* `hueClass()` in theme/hues.ts names these. Components inside read --c and --c-soft. */

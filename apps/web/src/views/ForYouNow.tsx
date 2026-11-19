@@ -54,6 +54,8 @@ interface EntryProps {
   clock: { now: number; timeZone: string };
   /** Its meeting has ended while held: drawn as "Meeting ended" at `ended.height`, taking the focus it had. */
   ended: { height: number | undefined; takeFocus: boolean } | null;
+  /** A lead stands above the lines, so a briefing line keeps to one line (see `Line`). */
+  underLead: boolean;
 }
 
 const isMeeting = (h: HeadsUp): h is HeadsUp & { meeting: MeetingPrep } => !!h.meeting;
@@ -98,14 +100,15 @@ function LeadCard({ headsUp, open, onRead, onGotIt }: EntryProps) {
 }
 
 /**
- * A follower: one compact line, opening in place. A line kind (progress, Earlier today) keeps its why under it; a card
- * that follows (a briefing under a meeting) stays one line, with its why inside what Read briefing opens. A briefing
- * that takes a progress line's place (`inPlaceOf`, the same row) keeps at least that line's height while held, so the
- * lines below it stay put.
+ * A follower: one compact line, opening in place. A line kind (progress, Earlier today) keeps its why under it while
+ * no lead stands above; a briefing that follows a lead (a briefing card, or Earlier today, under a meeting) stays one
+ * line, with its why inside what Read briefing opens, so overlapping meetings still leave the Inbox's first row above
+ * the fold. A briefing that takes a progress line's place (`inPlaceOf`, the same row) keeps at least that line's
+ * height while held, so the lines below it stay put.
  */
-function Line({ headsUp, open, onRead, onGotIt }: EntryProps) {
+function Line({ headsUp, open, onRead, onGotIt, underLead }: EntryProps) {
   const job = headsUp.job;
-  const oneLine = headsUp.form === "card";
+  const oneLine = headsUp.form === "card" || (underLead && !job && !!headsUp.briefing);
   const row = useRef<HTMLLIElement>(null);
   const progressHeight = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -336,6 +339,7 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
     meeting: { onDone: () => isMeeting(h) && done(h), onNotNow: () => notNow(h), busy: busy === h.key },
     clock,
     ended: ended.has(h.key) ? { height: entries.heights.get(h.key), takeFocus: focused === h.key } : null,
+    underLead: !!slot.lead,
   });
   const actions = <BriefingActions running={!!job} hasBriefing={typeof latest.value === "object" && latest.value !== null} start={start} onMeetingContext={() => setContext(true)} />;
   const meetingContext = context && typeof latest.value === "object" && latest.value !== null && (

@@ -1,6 +1,7 @@
 import { briefingLines } from "../briefing-text.ts";
 import type { BriefingRelatedNote, BriefingView } from "../heads-ups.ts";
 import { clockTime, spokenTime } from "../zoned-time.ts";
+import { scrollMotion } from "../motion.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { navigate } from "../components/ui.tsx";
 
@@ -11,7 +12,7 @@ const SECTION_ROUTE: Record<string, string> = { prepared: "/approvals", memory: 
 function jumpTo(sectionId: string) {
   const route = SECTION_ROUTE[sectionId];
   if (route) return navigate(route);
-  (document.getElementById(`attention-${sectionId}`) ?? document.getElementById("inbox"))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  (document.getElementById(`attention-${sectionId}`) ?? document.getElementById("inbox"))?.scrollIntoView({ behavior: scrollMotion(), block: "start" });
 }
 
 /**

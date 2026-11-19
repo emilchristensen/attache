@@ -566,36 +566,6 @@ button.conn-row-line:hover:not(:disabled) {
   }
 }
 
-/* ---- Touch targets ------------------------------------------------------------------------ */
-
-/*
- * On a phone, or with any coarse pointer, every Home control is a 44 x 44 px target, the links that stand alone
- * (Join, Open in Google Calendar, View details, Open in Connections, a Recently added note) as much as the buttons and the related-note chips.
- * Groups already wrap with 8 px between neighbours, so a bigger target never covers the next one.
- */
-@media (max-width: 720px), (pointer: coarse) {
-  /* An Inbox subject is stretched over its whole line, which is already a bigger target. */
-  .page-inbox :is(button:not(.inbox-subject), .btn, .source-chip, summary, select) {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  .page-inbox :is(button.small, .btn.small, .source-chip) {
-    justify-content: center;
-  }
-  /* A related note's title wraps inside its chip rather than run past the screen, even with no space to break at. */
-  .page-inbox .source-chip {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    text-align: left;
-  }
-  /* Links that stand alone as a line's target: the Connections details and a Recently added note. */
-  .page-inbox :is(.conn-details, a.recent-change-title) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-}
-
 /* ---- Recently added: one ruled line under the Inbox that opens in place ------------------------------------ */
 
 .recently-added {
