@@ -277,20 +277,14 @@ describe("spokenCount", () => {
 
 describe("refreshAnnouncement", () => {
   const needYou = (n: number) => (n === 1 ? "needs you" : "need you");
-  const known = (count: number): Tally => ({ state: "known", count, exact: true });
-  const atLeast = (count: number): Tally => ({ state: "at_limit", count, exact: false });
-  const unknown: Tally = { state: "unknown", count: 0, exact: false };
   it.each([
-    ["the total grew", known(3), known(4), "4 need you now."],
-    ["the total fell to one", known(3), known(1), "1 needs you now."],
-    ["nothing waits any more", known(2), known(0), "Nothing needs you now."],
-    ["a lower bound", known(2), atLeast(200), "At least 200 need you now."],
-    ["the refresh changed nothing", known(3), known(3), null],
-    ["nothing was known before it", unknown, known(3), null],
-    ["no count when it started", null, known(3), null],
-    ["a part became unknown: it never claims nothing waits", known(2), unknown, null],
-  ] as const)("%s", (_, before, after, said) => {
-    expect(refreshAnnouncement(before, after, needYou)).toBe(said);
+    ["several wait", { state: "known", count: 4, exact: true }, "4 need you now."],
+    ["one waits", { state: "known", count: 1, exact: true }, "1 needs you now."],
+    ["nothing waits", { state: "known", count: 0, exact: true }, "Nothing needs you now."],
+    ["a lower bound", { state: "at_limit", count: 200, exact: false }, "At least 200 need you now."],
+    ["a part is unknown: it never claims nothing waits", { state: "unknown", count: 0, exact: false }, null],
+  ] as const)("%s", (_, after, said) => {
+    expect(refreshAnnouncement(after as Tally, needYou)).toBe(said);
   });
 });
 

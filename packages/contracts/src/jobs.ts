@@ -6,12 +6,16 @@ export const JobKind = z.enum(["research", "briefing", "draft", "source-refresh"
 export type JobKind = z.infer<typeof JobKind>;
 
 /**
- * The live event a Source refresh sends when it starts and when it finishes (`{type, phase}`), so a client can tell
- * what the refresh changed: the Dashboard announces the decision count only when a Source refresh changed it. The
- * finish comes before the refresh's last `attention.changed`, so anything asked again on that event is asked after it.
+ * The live event a Source refresh sends when it finishes (`SourceRefreshEvent`): `changed` is true when the refresh
+ * itself opened, reopened or resolved an Inbox item or changed whether a Connection needs a sign-in, so it may have
+ * changed the decision count; the Dashboard reads the count out only then. It comes before the refresh's last
+ * `attention.changed`, so anything asked again on that event is asked after it.
  */
 export const SOURCE_REFRESH_EVENT = "source-refresh";
-export type SourceRefreshPhase = "started" | "finished";
+export interface SourceRefreshEvent {
+  type: typeof SOURCE_REFRESH_EVENT;
+  changed: boolean;
+}
 
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "blocked";
 

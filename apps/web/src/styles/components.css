@@ -854,8 +854,8 @@ button.menu-item:hover:not(:disabled) {
     overflow-wrap: anywhere;
     text-align: left;
   }
-  /* Links that stand alone as a line's target: Back, Browse's collections, All results, the Connections details, a Recently added note, the mark. */
-  :is(.back-link, .browse-links a, .search-foot > a, .conn-details, a.recent-change-title, .masthead .brand) {
+  /* Links that stand alone as a line's target: Back, Browse's collections, All results, Open in Brain, the Connections details, a Recently added note, the mark. */
+  :is(.back-link, .browse-links a, .search-foot > a, .drawer-brain-link, .conn-details, a.recent-change-title, .masthead .brand) {
     display: inline-flex;
     align-items: center;
     min-height: 44px;

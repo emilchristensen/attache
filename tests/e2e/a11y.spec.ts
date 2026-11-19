@@ -7,7 +7,7 @@
  * through the API, so it runs on its own.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
 import { axeFindings, focusRing, overlaps, sideways, TARGET, targets } from "./a11y.ts";
@@ -75,7 +75,14 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/memory/proposals", { item: { action: "create", type: "person", title: "Lena Berg", facts: [{ subject: "Role", value: "Postmark account manager" }] }, reason: "Introduced in the vendor call" });
   jobId = (await api<{ job: { id: string } }>(page, "POST", "/jobs", { kind: "demo-long", title: "Diagnostics: a failing run", input: { steps: 1, stepMs: 10, failUntilAttempt: 1, maxAttempts: 1 } })).job.id;
   // Two people in one collection, so a note in the list can be seen chosen and not chosen.
-  await harnessSave(stack, ["Nora Lind", "Sam Berg"].map((title) => ({ action: "create", type: "person", title, facts: [{ subject: "Role", value: "Client contact" }] })), { agent: "claude-code", session: "a11y" });
+  await harnessSave(stack, [{ action: "create", type: "person", title: "Sam Berg", facts: [{ subject: "Role", value: "Client contact" }] }], { agent: "claude-code", session: "a11y" });
+  // Nora's role was due for review in February, written by hand as the owner might, so a Fact to check cites her
+  // note: its evidence view offers Open in Brain.
+  mkdirSync(join(stack.dataDir, "memory/people"), { recursive: true });
+  writeFileSync(join(stack.dataDir, "memory/people/nora-lind.md"), "# Nora Lind\n\n## Current state\n- **Role** (2026-01-01, review 2026-02-01): Client contact\n");
+  await expect.poll(async () => (await api<Array<{ relPath: string }>>(page, "GET", "/memory/documents?area=memory")).some((d) => d.relPath === "memory/people/nora-lind.md"), { timeout: 30_000 }).toBe(true);
+  await api(page, "POST", "/connections/vault-data/refresh");
+  await expect.poll(async () => (await api<{ items: Item[] }>(page, "GET", "/attention?state=open")).items.map((i) => i.kind), { timeout: 30_000 }).toContain("fact-review");
   await api(page, "POST", "/briefings", { kind: "manual" });
   await expect.poll(async () => (await api<{ briefing: unknown }>(page, "GET", "/briefings/latest")).briefing !== null, { timeout: 30_000 }).toBe(true);
   await page.close();
@@ -112,6 +119,9 @@ async function arrive(page: Page, path: string, h1: string | null) {
 /** A modal over the page (a sheet, the palette, the evidence view): while one is open, only its controls can be tapped. */
 const MODAL = 'dialog[open], [aria-modal="true"]';
 
+/** The evidence view of a curated note, with Open in Brain. */
+const EVIDENCE = "the evidence view";
+
 /** Home's search results: a popup over the page, so its own controls are the ones to measure while it is open. */
 const SEARCH_RESULTS = "Home's search results";
 
@@ -133,10 +143,11 @@ const OPENED: ReadonlyArray<readonly [where: string, path: string, h1: string, o
     await page.getByRole("region", { name: "For you now" }).getByRole("button", { name: /Read briefing/ }).first().click();
     await expect(page.locator(".briefing-detail")).toBeVisible();
   }],
-  ["the evidence view", "/", "Home", async (page) => {
-    await openRow(page.locator("#inbox [data-inbox-row]").first());
-    await page.locator("#inbox .source-chip").first().click();
-    await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
+  [EVIDENCE, "/", "Home", async (page) => {
+    const fact = page.locator("#inbox [data-inbox-row]", { has: page.locator(".inbox-kind-word", { hasText: "Fact to check" }) }).first();
+    await openRow(fact);
+    await fact.locator(".source-chip").first().click();
+    await expect(page.getByRole("dialog", { name: /Evidence/ }).getByRole("link", { name: "Open in Brain" })).toBeVisible();
   }],
   ["Approvals with a Draft open", "/approvals", "Approvals", async (page) => {
     await page.locator("[data-approval-row] [data-row-toggle]").first().click();
@@ -241,6 +252,15 @@ test("screen reader: the decision count is read out when a Source refresh change
   await api(page, "POST", `/connections/${notes.id}/refresh`);
   await expect(said).toHaveText(`${before} need you now.`);
   await expect.poll(total).toBe(before);
+  // A decision made while a refresh that finds nothing new runs is the owner's own: nothing more is read out.
+  const heard = () => said.evaluate((el) => el.textContent);
+  const was = await heard();
+  const other = open.find((i) => i.kind === "deadline")!;
+  await Promise.all([api(page, "POST", `/connections/${notes.id}/refresh`), api(page, "POST", `/attention/${other.id}/decision`, { decision: "done" })]);
+  await expect.poll(total).toBe(before - 1);
+  await page.waitForTimeout(1500);
+  expect(await heard()).toBe(was);
+  await api(page, "POST", `/attention/${other.id}/decision`, { decision: "reopen" });
   // Undo the decision, so the other passes see the same Inbox.
   await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
 });
@@ -271,20 +291,23 @@ test("forced colours: every focus stop on every screen shows a 3 px ring in the 
   await page.emulateMedia({ forcedColors: "active" });
   for (const [path, h1] of screens()) {
     await arrive(page, path, h1);
-    await page.locator("h1").click();
-    // Tab from the h1 until focus comes back to an element it already visited (each is marked as it is reached),
-    // or leaves the page, so every stop is checked, also several that share a name.
+    // From the document's first stop (the skip link; a screen like Settings focuses its section on arrival), Tab
+    // through the masthead and the page until focus leaves the document or comes back to an element it already
+    // visited, so every stop is checked, also several that share a name.
+    await page.locator(".skip-link").focus();
     let stops = 0;
-    for (; stops < 200; stops++) {
-      await page.keyboard.press("Tab");
+    let masthead = false;
+    for (; stops < 300; stops++) {
+      if (stops > 0) await page.keyboard.press("Tab");
       const ring = await page.evaluate(focusRing);
       if (!ring || ring.visited) break;
+      masthead ||= ring.masthead;
       expect(ring.style, `${path}: ${ring.name}`).toBe("solid");
       expect(ring.width, `${path}: ${ring.name}`).toBeGreaterThanOrEqual(3);
       expect(ring.colour, `${path}: ${ring.name}`).toBe(ring.highlight);
     }
-    expect(stops, `${path} has focus stops`).toBeGreaterThan(0);
-    expect(stops, `${path}: the Tab order came back round`).toBeLessThan(200);
+    expect(masthead, `${path}: the walk went through the masthead`).toBe(true);
+    expect(stops, `${path}: the Tab order ended`).toBeLessThan(300);
   }
   await arrive(page, "/", "Home");
   await page.getByRole("combobox", { name: "Search the Brain" }).focus();
@@ -344,6 +367,24 @@ test("forced colours: the selected screen, tab, collection, note, job, Settings 
   expect(dot.dot, "the attention dot").not.toBe(dot.canvas);
   expect(dot.dot, "the attention dot").not.toBe("rgba(0, 0, 0, 0)");
   await page.emulateMedia({ forcedColors: "none" });
+});
+
+test("keyboard: the evidence view keeps Tab and Shift+Tab inside it until it closes, then gives focus back", async () => {
+  const page = await journeys.open("/");
+  const [, path, h1, open] = OPENED.find(([w]) => w === EVIDENCE)!;
+  await arrive(page, path, h1);
+  await open(page);
+  const drawer = page.getByRole("dialog", { name: /Evidence/ });
+  await expect(drawer.getByRole("button", { name: "Close evidence" })).toBeFocused();
+  for (const key of ["Shift+Tab", "Tab"]) {
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press(key);
+      expect(await drawer.evaluate((d) => d.contains(document.activeElement)), `${key} ${i + 1}`).toBe(true);
+    }
+  }
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(page.locator("#inbox .source-chip").first()).toBeFocused();
 });
 
 test("reduced motion: nothing animates, and a jump the Dashboard makes itself lands at once", async () => {

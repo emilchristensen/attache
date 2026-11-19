@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { SOURCE_REFRESH_EVENT } from "@attache/contracts";
 import { startTestService, type TestService } from "./harness.ts";
@@ -11,18 +13,28 @@ afterAll(async () => {
   await svc.stop();
 });
 
-describe("a Source refresh's live events", () => {
-  it("says when it starts and when it finishes, before the Inbox change that asks the count again", async () => {
-    const events: Array<{ type: string; phase?: string }> = [];
-    const listen = (e: { type: string; phase?: string }) => events.push(e);
-    svc.app.bus.on("event", listen);
-    try {
-      await svc.waitJob((await svc.post("/jobs", { kind: "source-refresh", input: { all: true } })).job.id);
-    } finally {
-      svc.app.bus.off("event", listen);
-    }
-    const seen = events.filter((e) => e.type === SOURCE_REFRESH_EVENT || e.type === "attention.changed").map((e) => (e.phase ? `${e.type}:${e.phase}` : e.type));
-    expect(seen.slice(0, 1)).toEqual([`${SOURCE_REFRESH_EVENT}:started`]);
-    expect(seen.slice(-2)).toEqual([`${SOURCE_REFRESH_EVENT}:finished`, "attention.changed"]);
+/** Runs one Source refresh of the data folder and returns the live events it sent, in order. */
+async function refresh(): Promise<Array<{ type: string; changed?: boolean }>> {
+  const events: Array<{ type: string; changed?: boolean }> = [];
+  const listen = (e: { type: string; changed?: boolean }) => events.push(e);
+  svc.app.bus.on("event", listen);
+  try {
+    await svc.waitJob((await svc.post("/connections/vault-data/refresh")).job.id);
+  } finally {
+    svc.app.bus.off("event", listen);
+  }
+  return events.filter((e) => e.type === SOURCE_REFRESH_EVENT || e.type === "attention.changed");
+}
+
+describe("a Source refresh's live event", () => {
+  it("says it finished, and whether it changed the Inbox itself, before the Inbox change that asks the count again", async () => {
+    // A fact past its Review date: the refresh opens a Fact to check.
+    mkdirSync(join(svc.dataDir, "memory/people"), { recursive: true });
+    writeFileSync(join(svc.dataDir, "memory/people/nora-lind.md"), "# Nora Lind\n\n## Current state\n- **Role** (2026-01-01, review 2026-02-01): Client contact\n");
+    const first = await refresh();
+    expect(first.slice(-2)).toEqual([{ type: SOURCE_REFRESH_EVENT, changed: true }, { type: "attention.changed" }]);
+    // Read again with nothing new: finished, and nothing changed by the refresh itself.
+    const second = await refresh();
+    expect(second.slice(-2)).toEqual([{ type: SOURCE_REFRESH_EVENT, changed: false }, { type: "attention.changed" }]);
   });
 });

@@ -127,14 +127,10 @@ export function spokenCount(t: Tally, words: (n: number) => string): string | nu
 }
 
 /**
- * What a screen reader hears when a Source refresh has finished (spec #14 story 22): the total in words when the
- * refresh changed it ("4 need you now."), else nothing, so other live updates never interrupt. `before` is the total
- * when the refresh started; with nothing known then there is nothing to compare, and an unknown part never claims
- * that nothing waits.
+ * What a screen reader hears after a Source refresh that changed what counts (spec #14 story 22): the total in words,
+ * "4 need you now.", or "Nothing needs you now." for an exact zero. An unknown part never claims that nothing waits.
  */
-export function refreshAnnouncement(before: Tally | null, after: Tally, words: (n: number) => string): string | null {
-  if (!before || (before.count === 0 && !before.exact)) return null;
-  if (shownCount(before) === shownCount(after)) return null;
+export function refreshAnnouncement(after: Tally, words: (n: number) => string): string | null {
   if (after.count === 0) return after.exact ? "Nothing needs you now." : null;
   const said = `${spokenCount(after, words)} now.`;
   return said.charAt(0).toUpperCase() + said.slice(1);

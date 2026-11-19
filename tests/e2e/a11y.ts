@@ -145,6 +145,8 @@ export interface Ring {
   highlight: string;
   /** Focus has been on this element before: the Tab order came back round. */
   visited: boolean;
+  /** It sits in the masthead. */
+  masthead: boolean;
 }
 
 /**
@@ -164,5 +166,5 @@ export function focusRing(): Ring | null {
   const name = `${el.tagName.toLowerCase()} "${(el.getAttribute("aria-label") ?? (el as HTMLInputElement).labels?.[0]?.textContent ?? el.textContent ?? "").trim().slice(0, 40)}"`;
   const visited = el.hasAttribute("data-focus-visited");
   el.setAttribute("data-focus-visited", "");
-  return { name, style: drawn.outlineStyle, width: parseFloat(drawn.outlineWidth), colour: drawn.outlineColor, highlight, visited };
+  return { name, style: drawn.outlineStyle, width: parseFloat(drawn.outlineWidth), colour: drawn.outlineColor, highlight, visited, masthead: !!el.closest(".masthead") };
 }
