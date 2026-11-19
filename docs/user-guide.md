@@ -142,7 +142,7 @@ Arrow keys move through places and passages, `Enter` opens the chosen one, and *
 `Tab` stays inside the palette, `Esc` closes it, and focus goes back to where it was; each time it opens, its field is empty.
 Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
-On Home, `j` and `k` move between Inbox rows and `Enter` opens one; they change nothing.
+`j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
 The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
 No single key ever applies, approves, sends, rejects, reverts or disconnects.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
@@ -166,7 +166,7 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds Search the Brain, For you now, Connections, the Inbox and Recently added.
+Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
@@ -208,7 +208,7 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
   Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
   Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
-  Sources that could not be reached for the same recorded reason, such as the same network error, share one row; a source that failed for a reason of its own, such as an error answer from its service, has its own row.
+  Sources that could not reach the network at all (offline: no connection, no name lookup, refused), whatever words each one recorded, share one row; a source whose service answered with an error or did not answer in time has its own row, unless another failed with the same message.
   At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
   Only a Connection that needs you to sign in again counts toward the dot.
   An item list is never shown as "nothing to do" while this area shows a problem.
@@ -217,7 +217,7 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
   On a narrow window the type comes first, then the whole subject, then the source and time.
-  Select a row to open it in place: the summary, why it is here, its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
+  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
   The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
@@ -231,7 +231,7 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   **Nothing needs you.**, beside the logo without its dot, appears only when no decision waits anywhere and every source was read, and says when they were read.
   When a source was not read it says "Nothing found in the 4 sources that were read." and names the one that was not; with only your notes connected, "Nothing found in your notes."; when Approvals or a sign-in still wait, "No open Inbox items." and where they wait; and when the count could not be read, that Attache cannot say nothing needs you, with **Retry**.
   With Attention and briefings switched off the Inbox says so, and that this is not a claim that nothing needs you.
-- **Recently added** is one line under the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
+- **Recently added** is one line at the end of the Inbox, such as "3 changes written without your review in the last 7 days", that opens into every such change, newest first: saves a Harness wrote with auto-accept on, and Consolidation's changes.
   It is not there while Saving to memory is switched off, and it says so with **Retry** when it could not be loaded.
   Saves you confirmed in the Harness and Proposals you applied are left out, since you saw them.
   Each row shows the note, what changed (a new note, a new fact, an event, or a corrected fact's old value struck through before the new one, with the reason), where it came from (the Harness and session, or the session or meeting Consolidation read) and when.
@@ -270,7 +270,7 @@ The reader shows one note:
 - The note's *Notes*, then *History* exactly as the note stores it.
 - The **Change log**, closed until you open it: every recorded change to the note, with who made it and why.
 - On your identity record, a line saying it changes only from Settings.
-- When a Proposal waits to change the note, a line linking to it in Approvals.
+- When a Proposal waits to change the note, a line linking to it in Approvals, where it opens in place.
 - **Markdown file** opens the file itself at its path, with line numbers.
 
 The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Service health*.

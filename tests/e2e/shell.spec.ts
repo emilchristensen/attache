@@ -367,7 +367,12 @@ async function movesAndOpens(page: Page, openers: Locator, opened: (first: Locat
 
 test("shortcuts: j, k and Enter move between and open the rows of Approvals, Jobs, Connections and the Brain's notes, as on the Inbox", async () => {
   await harnessSave(stack, ["Ada Lind", "Bo Strand"].map((title) => ({ action: "create", type: "person", title, facts: [{ subject: "Role", value: "Vendor contact" }] })), { agent: "claude-code", session: "shell-rows" });
-  await api(await journeys.open("/jobs"), "POST", "/connections/github/refresh");
+  const setup = await journeys.open("/jobs");
+  await api(setup, "POST", "/connections/github/refresh");
+  // Two rows on Approvals whatever else waits, taken out again at the end.
+  const proposals = await Promise.all(
+    ["Kim Holm", "Lars Vik"].map((title) => api<{ id: string }>(setup, "POST", "/memory/proposals", { item: { action: "create", type: "person", title, facts: [{ subject: "Role", value: "Vendor contact" }] }, reason: "Row keys" })),
+  );
   const page = await journeys.open("/approvals");
   await movesAndOpens(page, page.locator(".approvals-panel [data-row-toggle]"), (first) => expect(first).toHaveAttribute("aria-expanded", "true"));
   await page.goto(`${stack.url}/jobs`);
@@ -379,6 +384,7 @@ test("shortcuts: j, k and Enter move between and open the rows of Approvals, Job
     await expect(first).toHaveAttribute("aria-current", "true");
     await expect(page.locator(".library-reader h2.detail-title")).toHaveText(/^(Ada Lind|Bo Strand)$/);
   });
+  for (const p of proposals) await api(page, "POST", `/memory/proposals/${p.id}/reject`);
 });
 
 /** The masthead's three parts do not overlap and stay inside its column: every control can be clicked. */
