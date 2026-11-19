@@ -401,7 +401,7 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await expect(panel.locator(".reader-line")).toHaveAttribute("data-reader", "alone");
   await expect(panel).toContainText("This Machine runs Source refresh and briefings.");
   await expect(panel).toContainText("Live updates are connected.");
-  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings");
+  await expect(panel.getByRole("link", { name: /Machines and Replication/ })).toHaveAttribute("href", "/settings/machines");
   // Escape belongs to the topmost layer: the shortcut sheet over the disclosure closes first.
   await page.keyboard.press("?");
   const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -413,13 +413,13 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
   await expect(trigger).toBeFocused();
-  // Following its link by keyboard leaves focus on the button, not at the top of the page.
+  // Following its link by keyboard closes it and lands on the Machines and Replication section, focused.
   await page.keyboard.press("Enter");
   await panel.getByRole("link", { name: /Machines and Replication/ }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(`${stack.url}/settings`);
+  await expect(page).toHaveURL(`${stack.url}/settings/machines`);
   await expect(panel).toBeHidden();
-  await expect(trigger).toBeFocused();
+  await expect(page.locator('[data-settings-section="machines"]')).toBeFocused();
 
   // A lost live connection shows on the button itself, and the disclosure says what it means.
   await stack.stopService();
@@ -467,6 +467,91 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
     await page.keyboard.press("Escape");
   }
   await api(page, "PATCH", "/machine", { name: machine.name });
+});
+
+/**
+ * Holds every dialog's `close` event back until `releaseCloses`, as Chrome on macOS does (most of a second): the
+ * event comes a task after the dialog closed, and nothing says how soon.
+ */
+async function holdCloseEvents(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { heldCloses: EventTarget[] };
+    w.heldCloses = [];
+    const late = new WeakSet<Event>();
+    window.addEventListener(
+      "close",
+      (e) => {
+        if (late.has(e)) return;
+        e.stopImmediatePropagation();
+        w.heldCloses.push(e.target!);
+      },
+      true,
+    );
+    (window as unknown as { releaseCloses: () => number }).releaseCloses = () => {
+      const held = w.heldCloses.splice(0);
+      for (const target of held) {
+        const again = new Event("close");
+        late.add(again);
+        target.dispatchEvent(again);
+      }
+      return held.length;
+    };
+  });
+}
+
+/**
+ * Waits until `count` `close` events are held (the browser queues each a task after its dialog closed), then
+ * delivers them.
+ */
+async function releaseCloses(page: Page, count: number, message: string): Promise<void> {
+  await expect.poll(() => page.evaluate(() => (window as unknown as { heldCloses: EventTarget[] }).heldCloses.length), message).toBe(count);
+  await page.evaluate(() => (window as unknown as { releaseCloses: () => number }).releaseCloses());
+}
+
+test("sheets: a close the browser reports late gives focus back only where the owner left it, and nothing waits for it", async () => {
+  const page = await journeys.open("/jobs");
+  await holdCloseEvents(page);
+  const trigger = page.getByRole("button", { name: /^This Machine/ });
+  const panel = page.getByRole("region", { name: "This Machine" });
+  const sheet = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  // The shortcut sheet over the disclosure, closed; the owner moves on before its close event arrives.
+  await trigger.click();
+  await page.keyboard.press("?");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await page.keyboard.press("Enter");
+  await panel.getByRole("link", { name: /Machines and Replication/ }).focus();
+  await page.keyboard.press("Enter");
+  const section = page.locator('[data-settings-section="machines"]');
+  await expect(section).toBeFocused();
+  await releaseCloses(page, 1, "the sheet's close event, held");
+  await expect(section, "the late close leaves focus where the owner went").toBeFocused();
+  // Asked for again right after Escape, the sheet opens again; closed, focus is back where it was when it opened.
+  await page.keyboard.press("?");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await page.keyboard.press("?");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(section).toBeFocused();
+  await releaseCloses(page, 2, "both closings' events, held");
+  await expect(section).toBeFocused();
+  // A place chosen in the search palette opens at once, without waiting for the palette's close event.
+  await page.getByRole("button", { name: "Search the Brain" }).click();
+  const palette = page.getByRole("dialog", { name: "Search the Brain" });
+  await expect(palette).toBeVisible();
+  await page.keyboard.type("jobs");
+  await page.keyboard.press("Enter");
+  await expect(palette).toBeHidden();
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
+  await releaseCloses(page, 1, "the palette's close event, held");
+  await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
 test("Reader: a silent Reader stays in view on every screen and size without opening anything, and Connections names the Reader at once", async () => {
@@ -584,7 +669,8 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(bar.getByRole("link", { name: "Approvals, 1 waiting" })).toBeVisible();
 
   // The last thing on a page scrolls clear of the bar, safe area included.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/machines`);
+  await expect(page.getByRole("region", { name: "Replication" })).toBeVisible();
   await page.locator(".page").first().evaluate((el) => el.scrollTo(0, el.scrollHeight));
   const last = await page.locator(".page").first().evaluate((el) => {
     const kids = [...el.querySelectorAll("*")].filter((k) => (k as HTMLElement).offsetParent !== null && k.getBoundingClientRect().height > 0);
@@ -609,12 +695,14 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(more).toBeHidden();
   await expect(bar.getByRole("button", { name: "More" })).toBeFocused();
 
-  // Its Machines and Replication link goes to Settings in the same page, closing the sheet.
+  // Its Machines and Replication link goes to that Settings section in the same page, closing the sheet.
   await bar.getByRole("button", { name: "More" }).click();
   await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
   await more.getByRole("link", { name: /Machines and Replication/ }).click();
   await expect(more).toBeHidden();
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page).toHaveURL(`${stack.url}/settings/machines`);
+  // The sheet closed first, so the section it opened has focus, not More.
+  await expect(page.locator('[data-settings-section="machines"]')).toBeFocused();
   expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), "no full page load").toBe(true);
 
   // Search opens the search palette off Home, across the whole narrow width, and focuses Home's own field on Home.

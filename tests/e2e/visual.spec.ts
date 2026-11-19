@@ -21,15 +21,15 @@ test.afterAll(() => stack?.stop());
 const runGit = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
 
-/** The Replication card in every theme and width: off, up to date with two Machines, and blocked with its cause. */
+/** Machines and Replication in every theme and width: off, up to date with two Machines, and blocked with its cause on top. */
 async function replicationScreens(page: Page) {
-  // The card is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
+  // The section is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
   const capture = async (path: string, on: boolean) => {
-    await page.goto(`${stack.url}/settings`);
+    await page.goto(`${stack.url}/settings/machines`);
     const card = page.getByRole("region", { name: "Replication" });
     if (on) await expect(card.locator(".machine-row").first()).toBeVisible();
     await page.waitForTimeout(300);
-    await card.screenshot({ path });
+    await page.locator('[data-settings-section="machines"]').screenshot({ path });
   };
   const shoot = async (name: string) => {
     await page.setViewportSize({ width: 1360, height: 2000 });
@@ -335,10 +335,12 @@ test("screens", async ({ browser }) => {
       await page.waitForTimeout(600);
       await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png`, fullPage: false });
     }
-    // Below the fold of the settings screenshot.
+    // Settings' parts with a Harness connected, each in its own section (settings.spec captures every section).
+    await page.goto(`${stack.url}/settings/machines`);
     await page.locator(".card", { has: page.getByRole("heading", { name: "This Machine" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-machine.png` });
-    await page.locator(".card", { has: page.getByRole("heading", { name: "Service health" }) }).screenshot({ path: `test-results/screens/${scheme}-settings-health.png` });
+    await page.goto(`${stack.url}/settings/meaning-search`);
     await page.locator("[data-meaning-search]").screenshot({ path: `test-results/screens/${scheme}-settings-meaning.png` });
+    await page.goto(`${stack.url}/settings/saving`);
     await page.getByRole("region", { name: "Auto-accept" }).screenshot({ path: `test-results/screens/${scheme}-settings-auto-accept.png` });
     await approvalsScreens(page, scheme);
     // A note opened read-only, below the review lists.
@@ -387,7 +389,7 @@ test("screens", async ({ browser }) => {
   await expect(page.locator("[data-keywords-only]")).toBeVisible();
   await page.locator("[data-keywords-only]").scrollIntoViewIfNeeded();
   await page.screenshot({ path: "test-results/screens/dark-brain-keywords-only.png", fullPage: false });
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/meaning-search`);
   const meaning = page.locator("[data-meaning-search]");
   await meaning.getByRole("button", { name: /^Download model/ }).click();
   await expect(meaning.getByText("ready", { exact: true })).toBeVisible({ timeout: 30_000 });

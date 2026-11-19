@@ -3,6 +3,7 @@ import { READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { Link, Time } from "../components/ui.tsx";
 import { Icon } from "../components/icons.tsx";
+import { settingsHref } from "../routes.ts";
 
 export const READER_EVENTS = ["reader.changed", "replication.changed", "config.changed"];
 
@@ -79,7 +80,7 @@ export function ReaderWarning() {
     <div className="banner danger" role="status" data-reader-warning>
       <Icon name="warning" />
       <p>
-        <strong>Not reading.</strong> {readerName(r)} was the Reader but went silent <Time iso={r.heartbeatAt} />, so no Machine reads the sources on a schedule. <Link to="/settings">Machines and Replication</Link>
+        <strong>Not reading.</strong> {readerName(r)} was the Reader but went silent <Time iso={r.heartbeatAt} />, so no Machine reads the sources on a schedule. <Link to={settingsHref("machines")}>Machines and Replication</Link>
       </p>
     </div>
   );

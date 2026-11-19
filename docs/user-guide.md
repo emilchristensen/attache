@@ -122,7 +122,7 @@ The numbers beside Home, Approvals and Connections always add up to the one in t
 The count is exact however many decisions wait.
 When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
 A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
-When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; Settings says why and what to do.
+When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; in Settings the same words sit under **Machines and Replication**, which says why and what to do.
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
@@ -141,7 +141,6 @@ Before you type, Go to lists every screen and every Settings section; as you typ
 Arrow keys move through places and passages, `Enter` opens the chosen one, and **All results in Brain** takes the query to the Brain.
 `Tab` stays inside the palette, `Esc` closes it, and focus goes back to where it was; each time it opens, its field is empty.
 Searching from the palette only reads: it starts no job and changes nothing.
-Each Settings section has its own address (`/settings/identity`, `/settings/machines` and so on), which opens Settings at that section.
 Press `?` for the list of keyboard shortcuts.
 On Home, `j` and `k` move between Inbox rows and `Enter` opens one; they change nothing.
 The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
@@ -266,7 +265,7 @@ The reader shows one note:
 - When a Proposal waits to change the note, a line linking to it in Approvals.
 - **Markdown file** opens the file itself at its path, with line numbers.
 
-The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Search index*.
+The **⋯** menu beside the heading holds **Rebuild index**, which reads every note into search again when search misses one; it is also in Settings, under *Service health*.
 Jobs shows its progress, and it changes no note.
 
 The Dashboard shows notes, evidence and deliverables read-only: it has no capture box and no way to correct or edit a note.
@@ -359,6 +358,21 @@ The Notes group also has **Import a folder**, which reads a Markdown folder or O
 When a Connection needs you to sign in again, a **Needs you** group comes first with that Connection's row already open, ready to sign in or take a new token.
 **Reconnect** on Home lands there, on that Connection's row, when the fix needs you to type something.
 
+### Settings
+
+**Settings** lists its sections on the left, in four groups, and shows one section at a time beside the list:
+
+- **Attache:** *Features*, *Schedules and notifications* and *Identity*.
+- **Brain:** *Saving and review* (Auto-accept for each connected Harness, and Consolidation), *Meaning-based search* and *Backup and export*.
+- **Machines:** *Machines and Replication* (this Machine's name, then Replication with every state and action it has) and *Paired clients*.
+- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next.
+
+Each section has its own address (`/settings/identity`, `/settings/machines` and so on), so a link or a bookmark opens it, and the browser's Back goes through the sections you opened.
+`/settings` itself opens Features.
+On a narrow window Settings opens on the list; a section then fills the screen, with **All settings** above it to go back.
+A feature switch says nothing more while the feature works or is off; one that is on but not fully working shows **needs setup**, **partly working** or **unavailable** with the reason.
+Changing your identity record still asks you to confirm it first.
+
 ### Jobs
 
 **Jobs** lists background work: research, briefings, draft preparation and source refreshes.
@@ -398,7 +412,7 @@ Connect each one you use under Connections → *Harnesses*; its tile says exactl
   There is no limit on how many changes a session yields, but nothing is written twice: a change that is already waiting for review, or a fact the note already holds, is left out, and your identity record is never changed.
   When a session states a different value for a fact a note already holds, Attache writes the new value and moves the old one to the note's *History* with the reason.
   A session that only mentions or repeats a fact changes nothing.
-  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, beside the Harness switches; on that Machine it then makes Proposals under *Changes to the Brain* in Approvals instead.
+  To see Consolidation's changes before they are written, switch **Consolidation** off in Settings, under **Saving and review**, beside the Harness switches; on that Machine it then makes Proposals under *Changes to the Brain* in Approvals instead.
   A Proposal that is a correction shows the current value struck through beside the new one, with the reason and the evidence, and applying it moves the old value to *History*.
   If the fact changed after the Proposal was made, Apply is refused, so a correction never replaces a value you were not shown; reject it instead.
   A Harness's auto-accept switch has no say over Consolidation.
@@ -470,7 +484,7 @@ When Attache starts after the upgrade, it removes the skill folders it installed
   After one request goes unanswered, that Harness session stores Proposals without asking again.
   Your identity record (`memory/self.md`) cannot be changed through this tool; change it in Settings.
 - **Auto-accept** writes a save without review, so nothing waits for you (ADR 0004).
-  In Settings, under **Auto-accept**, each connected Harness has a switch, on by default; upgrading from an earlier version switched it on for every Harness, including one you had left off.
+  In Settings, under **Saving and review**, each connected Harness has a switch, on by default; upgrading from an earlier version switched it on for every Harness, including one you had left off.
   With it on, a save from that Harness is written without asking; switch it off and that Harness asks you to confirm every save.
   A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
   The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
@@ -601,7 +615,7 @@ The next time Attache starts with Credential Manager working, it moves the crede
 ## This Machine
 
 Attache gives the computer it runs on an id and a name.
-The name starts as the computer's hostname; change it in **Settings → This Machine**.
+The name starts as the computer's hostname; change it in **Settings → Machines and Replication**.
 The id never changes.
 Session logs and connector snapshots carry the name in their file name, for example `evidence/sessions/2026-11-11-work-mac-3f9a2c1d.md`, so you can tell which computer wrote them.
 Renaming the Machine affects files written from then on; earlier files keep their name.
@@ -620,7 +634,7 @@ Machines on macOS, Linux and Windows share one Brain.
 The Brain's repository keeps every note with LF line endings, whatever git's own `core.autocrlf` setting is.
 A note Attache writes on Windows has the same bytes on every Machine, and one an editor on Windows saved with CRLF reaches the other Machines with LF.
 
-Replication is in the Dashboard under **Settings → Replication**, and in the terminal as `attache replication`.
+Replication is in the Dashboard under **Settings → Machines and Replication**, and in the terminal as `attache replication`.
 
 - **Connect GitHub first** in the Dashboard's Connections.
   Replication reaches the repository with the GitHub connection's token, so its token needs Contents: read and write on the Brain's repository, besides what the GitHub source uses.

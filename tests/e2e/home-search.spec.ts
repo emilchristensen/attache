@@ -580,22 +580,23 @@ test("palette: a chosen place stays chosen when passages arrive, links in the re
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(`${stack.url}/settings/features`);
 
-  // Choosing the section the address already names brings it back into view, with no new history entry.
-  await openPaletteAt(page, "/settings/identity", "Settings");
+  // Choosing the section the address already names brings it back to the top and focuses it, with no new history entry.
+  await page.setViewportSize({ width: 1360, height: 500 });
+  await openPaletteAt(page, "/settings/machines", "Settings");
   await page.keyboard.press("Escape");
-  const identity = page.locator('[data-settings-section="identity"]');
-  await expect.poll(() => inView(identity)).toBe(true);
-  await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 0));
+  const machines = page.locator('[data-settings-section="machines"]');
   await page.locator("h1").click();
-  await expect.poll(() => inView(identity)).toBe(false);
+  await page.evaluate(() => document.querySelector(".page")!.scrollTo(0, 10_000));
+  await expect.poll(() => inView(machines)).toBe(false);
   const entries = await page.evaluate(() => history.length);
   await page.keyboard.press("Control+k");
-  await field(page).fill("identity");
+  await field(page).fill("replication");
   await page.keyboard.press("Enter");
   await expect(palette(page)).toBeHidden();
-  await expect.poll(() => inView(identity)).toBe(true);
-  await expect(identity).toBeFocused();
+  await expect.poll(() => inView(machines)).toBe(true);
+  await expect(machines).toBeFocused();
   expect(await page.evaluate(() => history.length)).toBe(entries);
+  await page.setViewportSize({ width: 1360, height: 900 });
 
   // The ranking line's Settings link closes the palette and opens meaning-based search, even from Settings.
   await page.keyboard.press("Control+k");

@@ -39,7 +39,7 @@ test.afterAll(async () => {
 });
 
 test("consolidation switch: shows in Settings with no Harness connected", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/saving");
   const card = page.getByRole("region", { name: "Auto-accept" });
   await expect(card).toContainText("No Harness is connected. Connect one under Connections.");
   await expect(card.getByRole("checkbox")).toHaveCount(1);
@@ -245,7 +245,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
   await claudeCode.getByRole("button", { name: "Connect" }).click();
   await expect(claudeCode).toHaveAttribute("data-state", "works");
 
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/saving`);
   const card = page.getByRole("region", { name: "Auto-accept" });
   await expect(card.getByText("A connected Harness writes its saves to your Brain without review.")).toBeVisible();
   // Only connected Harnesses are listed: Claude Code is, Codex is not.
@@ -268,7 +268,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
   await expect(created).toContainText("auto-accepted");
 
   // Switched off, the Harness asks before every save, and a save the owner confirmed carries no mark.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/saving`);
   const off = page.getByRole("region", { name: "Auto-accept" }).getByRole("checkbox", { name: /Claude Code/ });
   await off.click();
   await expect(page.getByText("Claude Code asks before every save")).toBeVisible();
@@ -283,7 +283,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
   await expect(confirmed).not.toContainText("auto-accepted");
 
   // Switched on again, as a new Machine starts.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/saving`);
   const on = page.getByRole("region", { name: "Auto-accept" }).getByRole("checkbox", { name: /Claude Code/ });
   await on.click();
   await expect(page.getByText("Claude Code saves without asking on this Machine")).toBeVisible();
@@ -291,7 +291,7 @@ test("auto-accept: on by default for a connected Harness, switched off in Settin
 });
 
 test("consolidation switch: on by default beside the Harness switches, a meeting's change is written without review, and switched off it makes Proposals", async () => {
-  const page = await journeys.open("/settings");
+  const page = await journeys.open("/settings/saving");
   const row = page.locator("[data-consolidation]");
   const box = row.getByRole("checkbox", { name: "Consolidation" });
   await expect(box).toBeChecked();
@@ -307,7 +307,7 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
   await expect(page.getByRole("region", { name: "Recent saves" }).getByRole("listitem").filter({ hasText: "Helix review board" }).first()).toBeVisible();
 
   // Off: kept across a reload, and the next meeting's change waits for review instead.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/saving`);
   await page.locator("[data-consolidation]").getByRole("checkbox", { name: "Consolidation" }).click();
   await expect(page.getByText("Consolidation makes Proposals on this Machine")).toBeVisible();
   await expect(page.locator("[data-consolidation]")).toContainText("Makes Proposals for you to review instead.");
@@ -326,7 +326,7 @@ test("consolidation switch: on by default beside the Harness switches, a meeting
   await expect(proposal).toHaveAttribute("data-decided", "Rejected");
 
   // Back on, as the other journeys expect.
-  await page.goto(`${stack.url}/settings`);
+  await page.goto(`${stack.url}/settings/saving`);
   await page.locator("[data-consolidation]").getByRole("checkbox", { name: "Consolidation" }).click();
   await expect(page.getByText("Consolidation writes without asking on this Machine")).toBeVisible();
 });

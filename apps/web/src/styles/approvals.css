@@ -235,10 +235,6 @@ button.approval-subject::after {
   gap: var(--s-4);
   max-width: 760px;
 }
-.back-link {
-  align-self: flex-start;
-  font-size: var(--fs-control);
-}
 .draft-page-body {
   display: flex;
   flex-direction: column;
