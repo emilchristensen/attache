@@ -317,3 +317,9 @@ input[type="radio"] {
 .tabs-scroll.after {
   right: 0;
 }
+/* On a touch screen the row is swiped: the arrows, a pointer's shortcut, would only take taps meant for the tab under them. */
+@media (pointer: coarse) {
+  .tabs-bar > .tabs-scroll {
+    display: none;
+  }
+}

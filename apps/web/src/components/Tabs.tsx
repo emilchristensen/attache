@@ -1,4 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { scrollMotion } from "../motion.ts";
+import { BadgeCount } from "./ScreenLink.tsx";
 
 export interface TabItem<T extends string> {
   id: T;
@@ -123,7 +125,7 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
     const list = listRef.current;
     if (!list) return;
     const edge = edgeWidth(list);
-    list.scrollBy({ left: direction * Math.max(list.clientWidth - 2 * edge, edge), behavior: "smooth" });
+    list.scrollBy({ left: direction * Math.max(list.clientWidth - 2 * edge, edge), behavior: scrollMotion() });
   };
 
   return (
@@ -142,11 +144,7 @@ export function Tabs<T extends string>({ label, tabs, selected, onSelect, panelI
             aria-label={t.count ? `${t.label}, ${t.count.label}` : undefined}
           >
             {t.label}
-            {t.count && (
-              <span className="count" aria-hidden>
-                {t.count.shown}
-              </span>
-            )}
+            {t.count && <BadgeCount badge={t.count} />}
           </button>
         ))}
       </div>

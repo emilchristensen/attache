@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActionStatus, ConnectionStatus, DecisionTotals } from "@attache/contracts";
-import { countDecisions as countFrom, dotAfter, homeLine, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
+import { countDecisions as countFrom, dotAfter, homeLine, refreshAnnouncement, shownCount, spokenCount, tabTitle, withRows, type Answer, type CountInputs, type Tally, type Totals } from "../src/count.ts";
 
 /** Answers as the Dashboard gets them. */
 const rows = <T>(list: T[], limit: number | null = 100): Answer<T> => ({ kind: "rows", rows: list, limit });
@@ -272,6 +272,19 @@ describe("spokenCount", () => {
     expect(spokenCount(c.home, (n) => (n === 1 ? "needs you" : "need you"))).toBe("1 needs you");
     expect(spokenCount(c.approvals, () => "waiting")).toBe("at least 2 waiting");
     expect(spokenCount(c.connections, () => "needed")).toBeNull();
+  });
+});
+
+describe("refreshAnnouncement", () => {
+  const needYou = (n: number) => (n === 1 ? "needs you" : "need you");
+  it.each([
+    ["several wait", { state: "known", count: 4, exact: true }, "4 need you now."],
+    ["one waits", { state: "known", count: 1, exact: true }, "1 needs you now."],
+    ["nothing waits", { state: "known", count: 0, exact: true }, "Nothing needs you now."],
+    ["a lower bound", { state: "at_limit", count: 200, exact: false }, "At least 200 need you now."],
+    ["a part is unknown: it never claims nothing waits", { state: "unknown", count: 0, exact: false }, null],
+  ] as const)("%s", (_, after, said) => {
+    expect(refreshAnnouncement(after as Tally, needYou)).toBe(said);
   });
 });
 

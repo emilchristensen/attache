@@ -287,7 +287,7 @@
   flex: 1 1 auto;
   min-height: 0;
 }
-.search-group {
+.search-group-item {
   list-style: none;
 }
 .search-group-label {

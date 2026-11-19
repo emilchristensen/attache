@@ -3,6 +3,7 @@ import { useResource } from "../live.ts";
 import { ErrorState, Link, Loading, Markdown, Time } from "./ui.tsx";
 import { Tag } from "./Tag.tsx";
 import { Tabs, type TabItem } from "./Tabs.tsx";
+import { keepTabInside } from "./dialog.ts";
 
 export interface EvidenceTarget {
   root: string;
@@ -84,17 +85,22 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   const doc = useResource<DocView>(`/memory/document?root=${encodeURIComponent(target.root)}&path=${encodeURIComponent(target.relPath)}`, ["memory.changed"]);
   const [mode, setMode] = useState<EvidenceMode>("source");
   const closeRef = useRef<HTMLButtonElement>(null);
-  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were;
+  // when that left with its page (Open in Brain), to the new page itself, never to nowhere.
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return () => {
       if (opener?.isConnected) opener.focus();
+      else document.getElementById("main")?.focus({ preventScroll: true });
     };
   }, []);
   useEffect(() => {
     closeRef.current?.focus();
     // Esc is used up here, so a dialog that opens as the drawer closes (the search palette) does not close with it.
+    // It is modal: Tab and Shift+Tab stay inside it until it closes.
     const onKey = (e: KeyboardEvent) => {
+      if (drawerRef.current) keepTabInside(e, drawerRef.current);
       if (e.key !== "Escape") return;
       e.preventDefault();
       onClose();
@@ -106,7 +112,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
+      <div ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={`Evidence: ${target.title ?? target.relPath}`}>
         <div className="drawer-head">
           <div className="stack-sm" style={{ flex: 1, minWidth: 0 }}>
             <div className="row">
@@ -136,10 +142,14 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           <ErrorState error={doc.error} retry={doc.reload} title="Could not open this evidence" />
           {d && (
             <>
-              <div className="row">
+              {/* Open in Brain leaves the evidence for the note: it closes once the link has navigated in this tab (React click
+                  on the row, after the link's handler; a Ctrl or Cmd click opens another tab and leaves it open). */}
+              <div className="row" onClick={(e) => e.defaultPrevented && (e.target as Element).closest(".drawer-brain-link") && onClose()}>
                 <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
-                  <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`}>Open in Brain</Link>
+                  <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`} className="drawer-brain-link">
+                    Open in Brain
+                  </Link>
                 )}
               </div>
               {mode === "source" ? <SourceView raw={d.raw} lines={target.lines} /> : <Markdown text={d.raw.replace(/^---[\s\S]*?---\n/, "")} />}
@@ -147,7 +157,7 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
             </>
           )}
         </div>
-      </aside>
+      </div>
     </>
   );
 }

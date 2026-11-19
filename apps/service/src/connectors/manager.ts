@@ -11,7 +11,7 @@ import type { AdapterContext, ConnectionRecord, ConnectorAdapter, Observation, R
 import { CoverageTracker } from "./types.ts";
 import { resolveEndpoint } from "./test-endpoints.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
-import { recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
+import { countOpenDecisions, recordByKey, toCandidate, type ApplyResult } from "../attention/engine.ts";
 import type { Inbox } from "../attention/inbox.ts";
 import { fingerprint } from "../attention/fingerprint.ts";
 import { scanDeadlines } from "./vault.ts";
@@ -318,7 +318,18 @@ export class ConnectionManager {
   }
 
   /** Run one Source refresh of a connection: fetch, archive observations, update attention. */
-  async refresh(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number }> {
+  /**
+   * What a refresh can change of the decision count: the open Inbox items that count (no waiting Draft) and the
+   * Connections that need a sign-in. Measured just before and after a refresh's writes, which run in one
+   * synchronous stretch, so nothing else (an owner's decision) lands in between.
+   */
+  private decisionWeight(): number {
+    const signIns = (this.d.db.prepare("select count(*) n from connections where status = 'needs_auth'").get() as { n: number }).n;
+    return countOpenDecisions(this.d.db) + Number(signIns);
+  }
+
+  /** `countDelta`: how much this refresh's own writes changed the decision count (see `decisionWeight`). */
+  async refresh(id: string, signal?: AbortSignal): Promise<{ coverage: Coverage; attention: ApplyResult; observations: number; countDelta: number }> {
     const rec = this.requireRecord(id);
     if (rec.status === "disconnected") throw new RemoteError("Connection is disconnected", "not_configured");
     const runId = randomUUID();
@@ -349,8 +360,9 @@ export class ConnectionManager {
     if (!current || current.status === "disconnected" || ctrl.signal.aborted) {
       this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'cancelled', error = 'connection disconnected or Source refresh cancelled' where id = ?").run(nowIso(), runId);
       if (signal?.aborted) throw new RemoteError("Source refresh cancelled", "error");
-      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0 };
+      return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0, countDelta: 0 };
     }
+    const weightBefore = this.decisionWeight();
     const attention = this.store(current, result, previous);
     const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
     const now = nowIso();
@@ -360,8 +372,9 @@ export class ConnectionManager {
     this.d.db
       .prepare(`update connections set coverage = ?, status = ?, ${ok ? "last_success_at = ?," : ""} last_error = ?, ${errText ? "last_error_at = ?," : ""} updated_at = ? where id = ? and status != 'disconnected'`)
       .run(...([JSON.stringify(result.coverage), newStatus, ...(ok ? [now] : []), errText, ...(errText ? [now] : []), now, id] as Array<string | null>));
+    const countDelta = this.decisionWeight() - weightBefore;
     this.onChange(id);
-    return { coverage: result.coverage, attention, observations: result.observations.length };
+    return { coverage: result.coverage, attention, observations: result.observations.length, countDelta };
   }
 
   private async refreshRemote(rec: ConnectionRecord, signal?: AbortSignal): Promise<RefreshResult> {

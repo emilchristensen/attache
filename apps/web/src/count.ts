@@ -127,6 +127,16 @@ export function spokenCount(t: Tally, words: (n: number) => string): string | nu
 }
 
 /**
+ * What a screen reader hears after a Source refresh that changed what counts (spec #14 story 22): the total in words,
+ * "4 need you now.", or "Nothing needs you now." for an exact zero. An unknown part never claims that nothing waits.
+ */
+export function refreshAnnouncement(after: Tally, words: (n: number) => string): string | null {
+  if (after.count === 0) return after.exact ? "Nothing needs you now." : null;
+  const said = `${spokenCount(after, words)} now.`;
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
+/**
  * Whether the logo's dot shows, given whether it showed before. A decision that is known to wait lights it; only
  * an exact zero puts it out; an unknown part never turns it on or off. On first load `previous` is false.
  */
