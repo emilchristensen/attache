@@ -86,11 +86,13 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
   const [mode, setMode] = useState<EvidenceMode>("source");
   const closeRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
-  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were.
+  // Closing returns focus to what opened the drawer, such as a search field, so the owner carries on where they were;
+  // when that left with its page (Open in Brain), to the new page itself, never to nowhere.
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     return () => {
       if (opener?.isConnected) opener.focus();
+      else document.getElementById("main")?.focus({ preventScroll: true });
     };
   }, []);
   useEffect(() => {
@@ -140,7 +142,8 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           <ErrorState error={doc.error} retry={doc.reload} title="Could not open this evidence" />
           {d && (
             <>
-              <div className="row">
+              {/* Open in Brain leaves the evidence for the note: it closes, after the link has navigated (React click on the row). */}
+              <div className="row" onClick={(e) => (e.target as Element).closest(".drawer-brain-link") && onClose()}>
                 <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
                   <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`} className="drawer-brain-link">

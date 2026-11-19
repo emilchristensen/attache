@@ -6,9 +6,9 @@ export const JobKind = z.enum(["research", "briefing", "draft", "source-refresh"
 export type JobKind = z.infer<typeof JobKind>;
 
 /**
- * The live event a Source refresh sends when it finishes (`SourceRefreshEvent`): `changed` is true when the refresh
- * itself opened, reopened or resolved an Inbox item or changed whether a Connection needs a sign-in, so it may have
- * changed the decision count; the Dashboard reads the count out only then. It comes before the refresh's last
+ * The live event a Source refresh sends when it finishes (`SourceRefreshEvent`): `changed` is true when the
+ * refresh's own writes changed the decision count (open Inbox items that count, Connections that need a sign-in),
+ * measured around them, so an owner's decision meanwhile is not the refresh's; the Dashboard reads the count out only then. It comes before the refresh's last
  * `attention.changed`, so anything asked again on that event is asked after it.
  */
 export const SOURCE_REFRESH_EVENT = "source-refresh";

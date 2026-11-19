@@ -37,4 +37,13 @@ describe("a Source refresh's live event", () => {
     const second = await refresh();
     expect(second.slice(-2)).toEqual([{ type: SOURCE_REFRESH_EVENT, changed: false }, { type: "attention.changed" }]);
   });
+
+  it("says nothing changed when the refresh resolves one item and opens another: the decision count is the same", async () => {
+    // Role is checked again (its item resolves) while Office comes due for review (a new item opens).
+    writeFileSync(join(svc.dataDir, "memory/people/nora-lind.md"), "# Nora Lind\n\n## Current state\n- **Role** (2026-01-01, review 2099-02-01): Client contact\n- **Office** (2026-01-01, review 2026-02-01): Copenhagen\n");
+    const events = await refresh();
+    expect(events.slice(-2)).toEqual([{ type: SOURCE_REFRESH_EVENT, changed: false }, { type: "attention.changed" }]);
+    const open = (await svc.get("/attention?state=open")).items.filter((i: { kind: string }) => i.kind === "fact-review").map((i: { title: string }) => i.title);
+    expect(open).toEqual([expect.stringContaining("Office")]);
+  });
 });

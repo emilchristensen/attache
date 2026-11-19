@@ -369,7 +369,7 @@ test("forced colours: the selected screen, tab, collection, note, job, Settings 
   await page.emulateMedia({ forcedColors: "none" });
 });
 
-test("keyboard: the evidence view keeps Tab and Shift+Tab inside it until it closes, then gives focus back", async () => {
+test("keyboard: the evidence view keeps Tab and Shift+Tab inside it until it closes, then gives focus back, and Open in Brain closes it", async () => {
   const page = await journeys.open("/");
   const [, path, h1, open] = OPENED.find(([w]) => w === EVIDENCE)!;
   await arrive(page, path, h1);
@@ -385,6 +385,15 @@ test("keyboard: the evidence view keeps Tab and Shift+Tab inside it until it clo
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
   await expect(page.locator("#inbox .source-chip").first()).toBeFocused();
+  // Open in Brain goes there and closes the evidence view, so the keyboard carries on in the Brain.
+  await page.keyboard.press("Enter");
+  await drawer.getByRole("link", { name: "Open in Brain" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/brain\?path=memory%2Fpeople%2Fnora-lind\.md/);
+  await expect(drawer).toBeHidden();
+  await expect(page.locator("[data-note] h2.detail-title")).toHaveText("Nora Lind");
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => document.activeElement !== document.body && !document.activeElement?.closest(".drawer"))).toBe(true);
 });
 
 test("reduced motion: nothing animates, and a jump the Dashboard makes itself lands at once", async () => {
