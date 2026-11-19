@@ -206,10 +206,10 @@ Home holds Search the Brain, For you now, Connections, the Inbox and Recently ad
   Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
   Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
   Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
-  Select a row to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine.
+  Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
   Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
   Sources that could not be reached for the same recorded reason, such as the same network error, share one row; a source that failed for a reason of its own, such as an error answer from its service, has its own row.
-  At most three rows show, and the rest wait behind "1 more".
+  At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
   Only a Connection that needs you to sign in again counts toward the dot.
   An item list is never shown as "nothing to do" while this area shows a problem.
 - **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.

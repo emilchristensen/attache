@@ -669,14 +669,25 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   await expect(bar.getByRole("link", { name: "Approvals, 1 waiting" })).toBeVisible();
 
   // The last thing on a page scrolls clear of the bar, safe area included.
+  // A section's parts load one by one and the page grows as they do: wait for Replication, then scroll to the end
+  // again until the page settles.
   await page.goto(`${stack.url}/settings/machines`);
   await expect(page.getByRole("region", { name: "Replication" })).toBeVisible();
-  await page.locator(".page").first().evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  const last = await page.locator(".page").first().evaluate((el) => {
-    const kids = [...el.querySelectorAll("*")].filter((k) => (k as HTMLElement).offsetParent !== null && k.getBoundingClientRect().height > 0);
-    return Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
-  });
-  expect(last, "last row above the bottom bar").toBeLessThanOrEqual((await bar.boundingBox())!.y);
+  const barTop = (await bar.boundingBox())!.y;
+  await expect
+    .poll(
+      () =>
+        page
+          .locator(".page")
+          .first()
+          .evaluate((el) => {
+            el.scrollTo(0, el.scrollHeight);
+            const kids = [...el.querySelectorAll("*")].filter((k) => (k as HTMLElement).offsetParent !== null && k.getBoundingClientRect().height > 0);
+            return Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
+          }),
+      { message: "last row above the bottom bar" },
+    )
+    .toBeLessThanOrEqual(barTop);
 
   // More opens a sheet with the rest of the screens and this Machine.
   await bar.getByRole("button", { name: "More" }).click();
