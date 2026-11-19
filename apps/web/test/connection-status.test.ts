@@ -410,6 +410,57 @@ describe("connectionsStatus: Offline sources share a row only for a shared cause
   });
 });
 
+describe("connectionsStatus: Offline sources that could not reach the network share one row (story 59)", () => {
+  it("groups network-level failures with different words as one shared reason: offline", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: unreached("api.github.com") }),
+        conn("gmail", { coverage: coverage("offline", { note: "Network error contacting gmail.googleapis.com: getaddrinfo ENOTFOUND gmail.googleapis.com" }) }),
+        conn("slack", { coverage: coverage("offline", { note: "Network error contacting mcp.slack.com: connect ECONNREFUSED 10.0.0.4:443" }) }),
+        conn("jira", { coverage: coverage("offline", { note: "fetch failed" }) }),
+      ),
+    );
+    expect(rows.map((r) => [r.key, r.subject])).toEqual([["offline:github,gmail,slack,jira", "GitHub, Gmail, Slack and Jira"]]);
+    // The row keeps what each source's own read said.
+    expect(rows[0]!.failure).toBe(
+      "GitHub: Network error contacting api.github.com: fetch failed; Gmail: Network error contacting gmail.googleapis.com: getaddrinfo ENOTFOUND gmail.googleapis.com; Slack: Network error contacting mcp.slack.com: connect ECONNREFUSED 10.0.0.4:443; Jira: fetch failed",
+    );
+  });
+
+  it("keeps a server error or a timeout apart from the network-level failures, even when its words mention the network", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: unreached("api.github.com") }),
+        conn("gmail", { coverage: coverage("offline", { note: "GET /gmail/v1/users/me/threads → HTTP 502: bad gateway" }) }),
+        conn("slack", { coverage: coverage("offline", { note: "Network error contacting mcp.slack.com: The operation was aborted due to timeout" }) }),
+        conn("jira", { coverage: coverage("offline", { note: "Network error contacting example.atlassian.net: getaddrinfo EAI_AGAIN example.atlassian.net" }) }),
+      ),
+    );
+    expect(rows.map((r) => r.key)).toEqual(["offline:github,jira", "offline:gmail", "offline:slack"]);
+  });
+
+  it("keeps a server's error answer apart even when its body names a network failure", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: unreached("api.github.com") }),
+        conn("gmail", { coverage: coverage("offline", { note: "GET /gmail/v1/users/me/threads → HTTP 502: upstream connection refused" }) }),
+        conn("jira", { coverage: coverage("offline", { note: "Atlassian searchJiraIssuesUsingJql failed (HTTP 502): upstream connection refused" }) }),
+      ),
+    );
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail", "offline:jira"]);
+  });
+
+  it("still groups timeouts whose messages match once their hosts are set aside", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("slack", { coverage: coverage("offline", { note: "mcp.slack.com did not answer within 60 seconds" }) }),
+        conn("jira", { coverage: coverage("offline", { note: "mcp.atlassian.com did not answer within 60 seconds" }) }),
+      ),
+    );
+    expect(rows.map((r) => r.key)).toEqual(["offline:slack,jira"]);
+  });
+});
+
 describe("connectionsStatus: findings from review round 4", () => {
   it("gives a source whose scopes were not reached for different reasons its own row, keeping every reason", () => {
     const github = coverage("offline", {

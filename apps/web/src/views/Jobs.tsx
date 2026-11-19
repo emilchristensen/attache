@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useMoveKeys } from "../shortcuts.ts";
 import type { JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
@@ -51,6 +52,7 @@ function useHeldRows(r: Resource<JobView[]>): JobView[] | null {
  */
 export function JobsView() {
   const loc = useLocation();
+  useMoveKeys(".job-rows .job-pick");
   const picked = loc.search.get("id");
   const active = useResource<JobView[]>(`/jobs?status=${ACTIVE_STATUSES.join(",")}&limit=${RUNNING_LIMIT}`, ["job"]);
   const [finishedLimit, setFinishedLimit] = useState(FINISHED_PAGE);

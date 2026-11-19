@@ -92,6 +92,10 @@ test("groups: the Reader first, then rows in Notes, Work sources, Harnesses and 
   expect(tile.width).toBeLessThan(row.width / 3);
   expect(tile.height).toBeLessThanOrEqual(64);
   await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop"]);
+  // The data folder is described in the glossary's words: the Machine's copy of the Brain.
+  await openConnection(page, "vault-data");
+  await expect(connection(page, "vault-data")).toContainText("Where this Machine keeps its copy of your Brain (curated notes, evidence and deliverables) as Markdown.");
+  await connectionToggle(connection(page, "vault-data")).click();
   // Nothing needs sign-in, so there is no Needs you and nothing starts open.
   await expect(page.locator('[data-group="needs_you"]')).toHaveCount(0);
   await expect(page.locator('.page [aria-expanded="true"]')).toHaveCount(0);

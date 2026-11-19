@@ -11,8 +11,8 @@ import { RecentlyAdded } from "./RecentlyAdded.tsx";
 const NOTHING_ABOVE: ReadonlySet<string> = new Set();
 
 /**
- * Home: Search the Brain, For you now (the Heads-ups), then Connections (can the owner trust what is below?), then
- * the Inbox and what reached the Brain without review. Questions to the Brain happen in the owner's Harness (ADR 0003).
+ * Home's four areas: Search the Brain, For you now (the Heads-ups), then Connections (can the owner trust what is
+ * below?), then the Inbox, which closes with what reached the Brain without review (Recently added). Questions to the Brain happen in the owner's Harness (ADR 0003).
  * A meeting prep item shown in For you now is not listed in the Inbox (`above`): it is one item, shown once.
  */
 export function Home() {
@@ -28,8 +28,7 @@ export function Home() {
       <HomeSearch recall={f.recall} />
       {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
       <HomeConnections view={connections} />
-      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} />
-      {f.capture && <RecentlyAdded />}
+      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} after={f.capture && <RecentlyAdded />} />
     </section>
   );
 }

@@ -6,7 +6,7 @@ import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { hueClass } from "../theme/hues.ts";
 import { inboxType } from "../inbox-types.ts";
-import { draftTag, rowText, rowTime, snoozeChoices, untilText } from "../inbox-rows.ts";
+import { draftTag, rowText, rowTime, rowWhy, snoozeChoices, untilText } from "../inbox-rows.ts";
 import { openDraftId } from "../linked-draft.ts";
 import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
 import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
@@ -114,16 +114,17 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
  * The open row: summary, why it is here, evidence, then the main action first and the decisions after it. An item
  * whose last send has an unknown outcome leads with its warning and Check destination, its summary and evidence after.
  */
-function Detail({ item, id, actions, draftsOn }: { item: AttentionItemView; id: string; actions: RowActions; draftsOn: boolean }) {
+function Detail({ item, id, actions, draftsOn, clock }: { item: AttentionItemView; id: string; actions: RowActions; draftsOn: boolean; clock: Clock }) {
   const unconfirmed = unconfirmedDraftId(item);
+  const why = rowWhy(item, clock.now, clock.timeZone);
   const canDraft = draftsOn && item.draftable !== null && item.state === "open";
   const context = (
     <>
       {item.summary && <p className="inbox-summary">{item.summary}</p>}
-      {item.why && (
+      {why && (
         <p className="inbox-why">
           <span className="inbox-why-label">Why it is here: </span>
-          {item.why}
+          {why}
         </p>
       )}
       <Evidence item={item} />
@@ -222,7 +223,7 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { i
           {time.text}
         </time>
       </div>
-      {open && <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} />}
+      {open && <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} clock={clock} />}
     </li>
   );
 }

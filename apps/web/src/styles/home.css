@@ -568,7 +568,7 @@ button.conn-row-line:hover:not(:disabled) {
   }
 }
 
-/* ---- Recently added: one ruled line under the Inbox that opens in place ------------------------------------ */
+/* ---- Recently added: one ruled line closing the Inbox area that opens in place ------------------------------------ */
 
 .recently-added {
   margin-top: var(--s-5);

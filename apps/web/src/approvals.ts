@@ -1,5 +1,6 @@
 import { approvalEndedAt, plural, type ActionStatus, type ActionView, type MemorySaveItem, type ProposalView } from "@attache/contracts";
 import type { Answer } from "./count.ts";
+import { recordOf, textOf } from "./draft-fields.ts";
 
 /**
  * The rules behind Approvals (pure, table-tested in `test/approvals.test.ts`): what a collapsed Draft or Proposal row
@@ -19,25 +20,23 @@ export const DRAFT_KIND_WORDS: Readonly<Record<string, string>> = {
 /** The payload field that holds a Draft's text. */
 export const draftBodyKey = (kind: string): string => (kind === "slack.post" ? "text" : "body");
 
-const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
-const record = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 
 /** Where a Draft goes: "GitHub comment on acme/web #42", "Gmail draft to nora@example.com", "Slack reply to Nora". */
 function destination(d: Pick<ActionView, "kind" | "target" | "context">): string {
   const t = d.target;
-  const source = record(record(d.context).source);
+  const source = recordOf(recordOf(d.context).source);
   switch (d.kind) {
     case "github.comment":
-      return text(t.repo) && t.number !== undefined ? `GitHub comment on ${String(t.repo)} #${String(t.number)}` : "GitHub comment";
+      return textOf(t.repo) && t.number !== undefined ? `GitHub comment on ${String(t.repo)} #${String(t.number)}` : "GitHub comment";
     case "jira.comment":
-      return text(t.key) ? `Jira comment on ${String(t.key)}` : "Jira comment";
+      return textOf(t.key) ? `Jira comment on ${String(t.key)}` : "Jira comment";
     case "confluence.comment":
-      return text(source.title) ? `Confluence comment on ${String(source.title)}` : "Confluence comment";
+      return textOf(source.title) ? `Confluence comment on ${String(source.title)}` : "Confluence comment";
     case "gmail.draft":
-      return text(t.to) ? `Gmail draft to ${String(t.to)}` : "Gmail draft";
+      return textOf(t.to) ? `Gmail draft to ${String(t.to)}` : "Gmail draft";
     case "slack.post":
-      if (text(source.userName)) return `Slack ${t.thread_ts ? "reply" : "message"} to ${String(source.userName)}`;
-      return text(t.channel) ? `Slack message in ${String(t.channel)}` : "Slack message";
+      if (textOf(source.userName)) return `Slack ${t.thread_ts ? "reply" : "message"} to ${String(source.userName)}`;
+      return textOf(t.channel) ? `Slack message in ${String(t.channel)}` : "Slack message";
     default:
       return DRAFT_KIND_WORDS[d.kind] ?? d.kind;
   }
@@ -64,10 +63,10 @@ export function draftRowText(d: Pick<ActionView, "kind" | "title" | "target" | "
 
 /** What a Draft answers: the Inbox item it was prepared from, and the words it replies to. */
 export function draftAnswers(d: Pick<ActionView, "context">): { title: string | null; quote: string | null } {
-  const ctx = record(d.context);
-  const source = record(ctx.source);
-  const quote = text(source.body) ?? text(source.text) ?? text(source.snippet) ?? text(source.excerpt) ?? text(source.summary);
-  return { title: text(record(ctx.item).title), quote };
+  const ctx = recordOf(d.context);
+  const source = recordOf(ctx.source);
+  const quote = textOf(source.body) ?? textOf(source.text) ?? textOf(source.snippet) ?? textOf(source.excerpt) ?? textOf(source.summary);
+  return { title: textOf(recordOf(ctx.item).title), quote };
 }
 
 /** The row's way to the Draft's own page, where Approve and Send live. */

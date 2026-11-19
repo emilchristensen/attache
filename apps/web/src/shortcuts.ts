@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { modalOpen } from "./components/dialog.ts";
 import { decisionKeysOn } from "./decision-keys.ts";
 import { navigate } from "./components/ui.tsx";
@@ -7,7 +7,8 @@ import { browserPlatform, isSearchChord, SEARCH_SLASH, searchKeyLabel } from "./
 
 /**
  * The Dashboard's keyboard shortcuts: one keymap the shell listens with and the shortcut sheet lists.
- * Row movement works on whichever screen lists rows (`useRowKeys`); the Inbox's decision keys only once the
+ * Row movement works on whichever screen lists rows (`useRowKeys`, or `useMoveKeys` for a list that only moves and
+ * opens: Approvals, Jobs, Connections and the Brain's notes); the Inbox's decision keys only once the
  * owner switches them on in the sheet (`decision-keys.ts`). There is never a single key for Apply, Reject, Approve,
  * Send, Revert or Disconnect.
  */
@@ -90,6 +91,30 @@ export function useRowKeys(handler: RowKeyHandler): void {
       if (rowKeys === handler) rowKeys = null;
     };
   }, [handler]);
+}
+
+/** The row an opener belongs to: its list item, or the opener itself when it is the row. */
+const rowOf = (opener: HTMLElement): HTMLElement => opener.closest<HTMLElement>("li") ?? opener;
+
+/**
+ * `j`/`k` on a list: the keyboard goes to the next or previous row's opener (each row's toggle, link or button, in
+ * reading order; hidden ones skipped) from the row it is in, and from anywhere else to the first. The opener is a
+ * button or a link, so Enter opens the row. False when there are no rows.
+ */
+export function moveAmongRows(openers: readonly HTMLElement[], key: "next" | "previous", active: Element | null = document.activeElement): boolean {
+  const shown = openers.filter((o) => o.getClientRects().length > 0);
+  if (!shown.length) return false;
+  const at = active ? shown.findIndex((o) => rowOf(o).contains(active)) : -1;
+  const next = shown[at < 0 ? 0 : Math.min(shown.length - 1, Math.max(0, at + (key === "next" ? 1 : -1)))]!;
+  next.focus();
+  next.scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+/** Lets `j`/`k` move between the rows whose openers match `selector` while this screen is mounted (`moveAmongRows`). */
+export function useMoveKeys(selector: string): void {
+  const handler = useCallback((key: RowKey) => (key === "next" || key === "previous") && moveAmongRows([...document.querySelectorAll<HTMLElement>(selector)], key), [selector]);
+  useRowKeys(handler);
 }
 
 /** The owner is typing, composing text, holding a modifier, or inside a modal: shortcuts stay out of the way. */

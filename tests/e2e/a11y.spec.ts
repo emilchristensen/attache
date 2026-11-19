@@ -214,6 +214,8 @@ test("screen reader: Home's four areas are named in order, the navigation names 
     [".home-search", ".for-you-now", ".home-connections", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
   );
   expect(order, "search, For you now, Connections, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
+  // Four areas and nothing else: Recently added closes the Inbox area rather than standing as a fifth.
+  await expect(home.locator("> *")).toHaveCount(4);
   for (const [viewport, bar] of [[{ width: 1360, height: 900 }, ".masthead-nav"], [PHONE, ".bottom-bar"]] as const) {
     await page.setViewportSize(viewport);
     const nav = page.locator(bar);

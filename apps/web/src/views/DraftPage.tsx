@@ -4,6 +4,7 @@ import { post, put } from "../api.ts";
 import { useResource } from "../live.ts";
 import { ErrorState, Link, Loading, useNow } from "../components/ui.tsx";
 import { draftBodyKey } from "../approvals.ts";
+import { draftItemId } from "../draft-fields.ts";
 import { draftScreen, draftTargetUrl, uncertainTargetUrl, type DraftActionId, type DraftButton, type DraftScreen } from "../draft-state.ts";
 import { connectionHref } from "../reconnect.ts";
 import { approvalsHref } from "../routes.ts";
@@ -15,11 +16,6 @@ type Said = { tone: "ok" | "refused"; text: string } | null;
 
 /** How often the page looks at the clock, so an approval that ran out reads as ended before the service says so. */
 const CLOCK_TICK_MS = 15_000;
-
-const itemId = (d: ActionView): string | null => {
-  const item = (d.context as { item?: { id?: unknown } }).item;
-  return typeof item?.id === "string" ? item.id : null;
-};
 
 async function copy(text: string): Promise<boolean> {
   try {
@@ -99,7 +95,7 @@ function useRunner(d: ActionView, setDraft: (d: ActionView) => void, reload: () 
       case "copy-mine":
         return void copied(edit.text, "your text");
       case "prepare": {
-        const item = itemId(d);
+        const item = draftItemId(d);
         if (!item) return;
         return call("prepare", async () => (await post(`/attention/${item}/draft`, {}), null), "Preparing a new Draft. It waits in Approvals when it is ready.");
       }

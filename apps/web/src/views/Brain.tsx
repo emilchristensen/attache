@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useMoveKeys } from "../shortcuts.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, useLocation } from "../components/ui.tsx";
 import { ChipNav } from "../components/ChipNav.tsx";
@@ -215,6 +216,7 @@ function Library({ place, onClear }: { place: LibraryPlace; onClear: () => void 
 
 export function BrainView() {
   const loc = useLocation();
+  useMoveKeys(".note-list .note-list-item");
   const place = brainPlace(loc.path, loc.search);
   // The query lives in the address (`/brain?q=`), so "All results in Brain" and the back button carry it.
   const query = place.view === "library" ? place.q : "";

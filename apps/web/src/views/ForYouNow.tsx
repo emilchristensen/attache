@@ -9,11 +9,10 @@ import { useHold } from "../hold.ts";
 import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contracts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
-import { Link, useAction } from "../components/ui.tsx";
+import { TurnOnInSettings, useAction } from "../components/ui.tsx";
 import { BriefingActions } from "./BriefingActions.tsx";
 import { BriefingDetail, MeetingContext } from "./BriefingParts.tsx";
 import { useBriefingJob } from "./briefing-job.ts";
-import { settingsHref } from "../routes.ts";
 import { MeetingEnded, MeetingLead, MeetingLine, type MeetingHandlers } from "./MeetingHeadsUp.tsx";
 
 const ICON: Record<HeadsUpKindId, IconName> = {
@@ -222,6 +221,18 @@ function useDoneHere(items: readonly { id: string }[] | null) {
   return { done, add: (id: string) => setDone((prev) => new Set([...prev, id])) };
 }
 
+/** A check that failed, said in the quiet line with its own retry: "Could not check your meetings. Try again". */
+function CouldNot({ what, retry }: { what: string; retry: () => void }) {
+  return (
+    <>
+      Could not {what}.{" "}
+      <button className="small" onClick={retry}>
+        Try again
+      </button>
+    </>
+  );
+}
+
 /**
  * For you now: Home's second area. The Heads-ups that are timely, the most urgent leading and the rest as compact
  * lines, or one quiet line when nothing is. While the pointer or focus is on a Heads-up, the Heads-ups hold still:
@@ -302,25 +313,22 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
             For you now
           </h2>
           <p className="for-you-now-quiet-text">
-            Heads-ups need Attention and briefings, which is switched off. <Link to={settingsHref("features")}>Turn it on in Settings</Link>
+            Heads-ups need Attention and briefings, which is switched off. <TurnOnInSettings />
           </p>
         </div>
       </section>
     );
 
   const toggle = (key: string) => setOpen((o) => (o.has(key) ? new Set([...o].filter((k) => k !== key)) : new Set([...o, key])));
-  const gotIt = (h: HeadsUp) => {
+  // Got it and Not now: settled on every tab, applied in this one at once, said, and the focus on the area's heading.
+  const putAway = (h: HeadsUp, words: string) => {
     settle(h.key);
     setMine((m) => new Set([...m, h.key]));
-    setSaid(h.kind === "daily-briefing" ? "Briefing put away. It stays under Earlier today until midnight." : "Briefing put away.");
+    setSaid(words);
     heading.current?.focus();
   };
-  const notNow = (h: HeadsUp) => {
-    settle(h.key);
-    setMine((m) => new Set([...m, h.key]));
-    setSaid(`${h.title} moved to the Inbox. It stays open there.`);
-    heading.current?.focus();
-  };
+  const gotIt = (h: HeadsUp) => putAway(h, h.kind === "daily-briefing" ? "Briefing put away. It stays under Earlier today until midnight." : "Briefing put away.");
+  const notNow = (h: HeadsUp) => putAway(h, `${h.title} moved to the Inbox. It stays open there.`);
   const done = (h: HeadsUp & { meeting: MeetingPrep }) =>
     void run(h.key, async () => {
       await post(`/attention/${h.meeting.itemId}/decision`, { decision: "done" });
@@ -349,23 +357,7 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
 
   // Without a lead the title shrinks to the quiet line's size, so lines alone cost the Inbox little room.
   const compact = !slot.lead;
-  const status = latest.failed ? (
-    <>
-      Could not check for a briefing.{" "}
-      <button className="small" onClick={latest.retry}>
-        Try again
-      </button>
-    </>
-  ) : openInbox.error ? (
-    <>
-      Could not check your meetings.{" "}
-      <button className="small" onClick={openInbox.reload}>
-        Try again
-      </button>
-    </>
-  ) : (
-    (slot.quiet ?? "Checking for Heads-ups…")
-  );
+  const status = latest.failed ? <CouldNot what="check for a briefing" retry={latest.retry} /> : openInbox.error ? <CouldNot what="check your meetings" retry={openInbox.reload} /> : (slot.quiet ?? "Checking for Heads-ups…");
 
   return (
     <section className={`for-you-now${quiet ? " quiet" : compact ? " compact" : ""}`} aria-labelledby={headingId} data-for-you-now={quiet ? "quiet" : "timely"}>

@@ -89,6 +89,9 @@ export function settingsSectionShown(path: string): string | null {
 export type ApprovalsTab = "waiting" | "finished";
 export const approvalsHref = (tab: ApprovalsTab = "waiting") => (tab === "finished" ? "/approvals?tab=finished" : "/approvals");
 
+/** A waiting Proposal on Approvals' Waiting tab, opened in place with the keyboard on it: `/approvals?proposal=<id>`. */
+export const proposalHref = (id: string) => `/approvals?proposal=${encodeURIComponent(id)}`;
+
 /** A Draft's own page, under Approvals (Approvals stays selected in the navigation). */
 export const draftHref = (id: string) => `/approvals/${encodeURIComponent(id)}`;
 

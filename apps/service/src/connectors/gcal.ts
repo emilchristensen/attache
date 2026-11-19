@@ -139,7 +139,7 @@ function toObservation(ev: CalendarEvent, nowMs: number): Observation {
     ...(ev.htmlLink ? { url: ev.htmlLink } : {}),
     ...(ev.organizer?.email ? { author: ev.organizer.email } : {}),
     ...(start ? { occurredAt: start } : {}),
-    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map((a) => a.displayName || a.email || ""), location: ev.location ?? null, meetLink: meetLink(ev) },
+    data: { start, end, allDay, selfResponseStatus: response, attendeeCount: count, attendees: people(ev).map(personName), location: ev.location ?? null, meetLink: meetLink(ev) },
     fingerprintParts: [start, end, response, count],
     ...(attention ? { attention } : {}),
   };

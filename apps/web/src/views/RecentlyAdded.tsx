@@ -11,7 +11,7 @@ const NOTHING = `Nothing was written without your review in the last ${UNREVIEWE
 /**
  * Every change written to the Brain without the owner reviewing it in the last 7 days (ADR 0004): auto-accepted
  * saves and Consolidation's changes, newest first, each with its source and a one-click revert. Home shows it as one
- * line under the Inbox that opens in place; nothing there asks for a decision, so it stays closed until the owner
+ * line closing the Inbox area that opens in place; nothing there asks for a decision, so it stays closed until the owner
  * looks. Older entries drop off on their own, so there is nothing to mark as seen. A failed request says so with
  * Retry (and keeps the entries it had), never "nothing".
  */

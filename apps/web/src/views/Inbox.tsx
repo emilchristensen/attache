@@ -3,12 +3,12 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
-import { Empty, Link, Loading, navigate, useAction } from "../components/ui.tsx";
+import { Empty, Link, Loading, navigate, TurnOnInSettings, useAction } from "../components/ui.tsx";
 import { GroupFailure } from "../components/GroupFailure.tsx";
 import { Logo } from "../components/Logo.tsx";
 import type { ConnectionsStatus } from "../connection-status.ts";
 import { emptyInbox, inboxReach, type EmptyInbox } from "../inbox-empty.ts";
-import { approvalsHref, settingsHref } from "../routes.ts";
+import { approvalsHref } from "../routes.ts";
 import { anchorOf, useReturnToAnchor } from "./inbox-return.ts";
 import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
@@ -17,7 +17,7 @@ import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
 import { rowText, snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
-import { useRowKeys, type RowKey } from "../shortcuts.ts";
+import { moveAmongRows, useRowKeys, type RowKey } from "../shortcuts.ts";
 import { DecidedRow, InboxRow, MovedUpRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
 
@@ -176,16 +176,8 @@ function useFocusAfter(): (id: string, target: "undo" | "row") => void {
 function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActions["decide"], busy: boolean): void {
   const onRowKey = useCallback(
     (key: RowKey): boolean => {
-      const toggles = [...document.querySelectorAll<HTMLElement>("#inbox [data-row-toggle]")];
-      if (!toggles.length) return false;
+      if (key === "next" || key === "previous") return moveAmongRows([...document.querySelectorAll<HTMLElement>("#inbox [data-row-toggle]")], key);
       const row = document.activeElement?.closest<HTMLElement>("#inbox [data-inbox-row]") ?? null;
-      const at = toggles.findIndex((t) => t.closest("[data-inbox-row]") === row);
-      if (key === "next" || key === "previous") {
-        const next = at < 0 ? 0 : Math.min(toggles.length - 1, Math.max(0, at + (key === "next" ? 1 : -1)));
-        toggles[next]!.focus();
-        toggles[next]!.scrollIntoView({ block: "nearest" });
-        return true;
-      }
       const decision = KEY_DECISION[key];
       const item = live?.find((i) => i.id === row?.dataset.itemId);
       if (!decision || !item || item.state !== "open" || busy) return false;
@@ -256,9 +248,10 @@ function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionIt
  * request shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the
  * rows it keeps and their time. `above` holds the items For you now shows as
  * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
- * `clock` is Home's, shared with For you now, so a meeting leaves both at the same instant.
+ * `clock` is Home's, shared with For you now, so a meeting leaves both at the same instant. `after` closes the area
+ * (Home's Recently added), whatever state the list is in.
  */
-export function Inbox({ attentionOn, draftsOn, connections, above, clock }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; above: ReadonlySet<string>; clock: HeadsUpClock }) {
+export function Inbox({ attentionOn, draftsOn, connections, above, clock, after }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; above: ReadonlySet<string>; clock: HeadsUpClock; after?: ReactNode }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
@@ -371,6 +364,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock }: { at
       <section id="inbox" className="inbox" aria-labelledby={heading}>
         <InboxHeading id={heading} open={false} above={above} />
         <Loading label="Loading the Inbox" />
+        {after}
       </section>
     );
   if (!attentionOn)
@@ -381,9 +375,10 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock }: { at
           <div className="inbox-empty-words">
             <p className="inbox-empty-title">Attention and briefings is off.</p>
             <p className="inbox-empty-line">Nothing is read for the Inbox, so this is not a claim that nothing needs you. Search still works.</p>
-            <Link to={settingsHref("features")}>Turn it on in Settings</Link>
+            <TurnOnInSettings />
           </div>
         </div>
+        {after}
       </section>
     );
 
@@ -436,6 +431,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock }: { at
           {shown.length < typed.length && <button onClick={() => setPlace({ shown: place.shown + PAGE_SIZE })}>Load more</button>}
         </div>
       )}
+      {after}
     </section>
   );
 }

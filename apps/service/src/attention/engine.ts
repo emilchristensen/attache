@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WAITING_ACTION_STATUSES, type ActionStatus, type AttentionItemView, type Coverage } from "@attache/contracts";
-import { type Db, json, nowIso, tx } from "../core/db.ts";
+import { type Db, json, nowIso, placeholders, tx } from "../core/db.ts";
 import { fingerprint } from "./fingerprint.ts";
 import type { AttentionCandidate } from "../connectors/types.ts";
 import { isFullyCovered } from "../connectors/types.ts";
@@ -357,7 +357,7 @@ export function getItem(db: Db, id: string): AttentionItemView | null {
 export function listItems(db: Db, opts: { states?: string[]; limit?: number } = {}): AttentionItemView[] {
   const states = opts.states ?? ["open"];
   const rows = db
-    .prepare(`${SELECT_VIEW} where i.state in (${states.map(() => "?").join(",")}) order by i.priority desc, coalesce(i.due_at, '9999') asc, i.updated_at desc limit ?`)
+    .prepare(`${SELECT_VIEW} where i.state in (${placeholders(states)}) order by i.priority desc, coalesce(i.due_at, '9999') asc, i.updated_at desc limit ?`)
     .all(...states, opts.limit ?? 200) as Array<Record<string, unknown>>;
   return rows.map(toView);
 }
@@ -367,7 +367,7 @@ export function listItems(db: Db, opts: { states?: string[]; limit?: number } = 
  * decision is the Draft's. The Decision count's Inbox part, exact however many items there are.
  */
 export function countOpenDecisions(db: Db): number {
-  const waiting = WAITING_ACTION_STATUSES.map(() => "?").join(",");
+  const waiting = placeholders(WAITING_ACTION_STATUSES);
   const row = db
     .prepare(`select count(*) n from attention_items i left join actions a on a.id = i.action_id where i.state = 'open' and (a.status is null or a.status not in (${waiting}))`)
     .get(...WAITING_ACTION_STATUSES) as { n: number };

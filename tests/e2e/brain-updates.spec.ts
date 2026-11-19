@@ -54,6 +54,8 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section).toBeVisible();
   await expect(section).toContainText("Nothing was written without your review in the last 7 days.");
   await expect(section.getByRole("listitem")).toHaveCount(0);
+  // It closes the Inbox area, the last of Home's four, rather than standing as a fifth.
+  await expect(page.locator("#inbox > [data-recently-added]")).toBeVisible();
   // With no work source only the notes are read: Connections says Notes only, the empty Inbox says what was read, and the logo shows no dot.
   await expect(page.getByRole("status", { name: "Connections" }).locator('[data-state="notes_only"] .conn-row-line')).toHaveText("Notes · Notes only · Only your notes are read");
   const empty = page.locator("#inbox [data-inbox-empty]");

@@ -175,6 +175,14 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     expect(by.tomorrow).toMatchObject({ kind: "meeting_prep" });
   });
 
+  it("names an attendee without a name or email alike in the meeting and in the stored event", async () => {
+    events([event("anon", { start: { dateTime: iso(2) }, end: { dateTime: iso(3) }, attendees: [me(), guest("Mia"), { responseStatus: "accepted" }] })]);
+    const s = await gcalAdapter.refresh!(ctx());
+    const anon = s.observations.find((o) => o.externalId === "anon")!;
+    expect(anon.attention!.meeting!.attendees).toEqual(["Mia", "unknown"]);
+    expect(anon.data.attendees).toEqual(["alex@acme.com", "Mia", "unknown"]);
+  });
+
   it("invites awaiting my response become invite_response; accepting keeps the key and changes the fingerprint", async () => {
     let status = "needsAction";
     onTool(claude, SERVER, "list_events", () => jsonAnswer({ events: [event("inv", { attendees: [me(status), guest("Mia")] })] }));

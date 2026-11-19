@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMoveKeys } from "../shortcuts.ts";
 import type { ConnectionDefinition, ConnectionStatus, FeatureStatus } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useLocation } from "../components/ui.tsx";
@@ -228,6 +229,7 @@ export function ConnectionsView() {
   // Every job event too: a running Source refresh changes what a row says about its last read.
   const caps = useResource<Caps>("/capabilities", ["connections.changed", "config.changed", "job"]);
   const loc = useLocation();
+  useMoveKeys(".page .connection-toggle, .page .connection-tile-button");
   const oauth = loc.search.get("oauth");
   const openId = loc.search.get("open");
   const d = caps.data;

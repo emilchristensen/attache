@@ -271,14 +271,25 @@ function offlineReasons(c: ConnectionStatus): string[] {
   return [...new Set(notes.filter((n): n is string => !!n?.trim()))];
 }
 
+/** A failure to reach the network at all: no route, no name lookup, refused or reset, whatever words each source used. */
+const NETWORK_LEVEL = /\b(?:fetch failed|ENOTFOUND|EAI_AGAIN|getaddrinfo|ECONNREFUSED|ECONNRESET|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EHOSTDOWN|socket hang up|connection refused)\b/i;
+/** A service that answered, with an error status: whatever its body says, the network itself was reached. */
+const ANSWERED = /\bHTTP \d{3}\b/;
+/** A source that answered too slowly, which says nothing of the network itself. */
+const TIMED_OUT = /\b(?:time(?:d)? ?out|ETIMEDOUT|did not answer within|aborted)\b/i;
+
+/** The cause every network-level failure shares: being offline. */
+const OFFLINE = "offline";
+
 /**
- * Why a source was not reached, as one comparable phrase: the service files network errors, timeouts and 5xx answers
- * alike as offline and says which only in its message, so sources share a cause only when their messages match once
- * each one's own host, case and spacing are set aside. A source that recorded no reason, or several different ones,
- * shows no single cause to share.
+ * Why a source was not reached, as one comparable phrase. The service files network errors, timeouts and 5xx answers
+ * alike as offline and says which only in its message: a network-level failure (no route, no name lookup, refused)
+ * is the one shared reason "offline" whatever its words, while a server error or a timeout shares a cause only when
+ * its message matches once each one's own host, case and spacing are set aside. A source that recorded no reason, or
+ * several different ones, shows no single cause to share.
  */
 function offlineCause(c: ConnectionStatus): string | null {
-  const causes = new Set(offlineReasons(c).map((n) => n.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase()));
+  const causes = new Set(offlineReasons(c).map((n) => (NETWORK_LEVEL.test(n) && !ANSWERED.test(n) && !TIMED_OUT.test(n) ? OFFLINE : n.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase())));
   return causes.size === 1 ? [...causes][0]! : null;
 }
 

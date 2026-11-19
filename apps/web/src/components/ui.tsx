@@ -70,6 +70,11 @@ export function Empty({ title, children, action }: { title: string; children?: R
   );
 }
 
+/** Where a switched-off feature is turned back on: Settings' Features section. */
+export function TurnOnInSettings() {
+  return <Link to={settingsHref("features")}>Turn it on in Settings</Link>;
+}
+
 export function ErrorState({ error, retry, title }: { error: ApiError | Error | null; retry?: () => void; title?: string }) {
   if (!error) return null;
   const offline = (error as ApiError).code === "offline";
