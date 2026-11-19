@@ -20,6 +20,8 @@ const HANDOVER = "evidence/captures/2026-11-12-pilot-handover.md";
 /** Eight projects share a word, more than the six results Home's field shows. */
 const HELIOS = Array.from({ length: 8 }, (_, i) => `Helios workstream ${i + 1}`);
 const COLLECTIONS = ["People", "Projects", "Decisions", "Notes", "Imported", "Evidence", "Deliverables"];
+/** Nora's Role Review date, worked out once: the note and the reader check must agree even across midnight UTC. */
+const IN_A_MONTH = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
 /** A person written by hand: facts with every kind of source, one past its Review date, Notes and History. */
 const noraNote = (inAMonth: string) => `---
@@ -76,9 +78,8 @@ test.beforeAll(async ({ browser }) => {
   await harnessSave(stack, [{ action: "update", path: ATLAS, facts: [{ subject: "Launch date", value: "21 October", reason: "vendor slip" }] }], { agent: "claude-code", session: "sess-e2e-2" });
   await harnessSave(stack, [{ action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Grace", reason: "handover" }] }], { agent: "codex", session: "thread-e2e-3" });
   await harnessSave(stack, [{ action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Linus", reason: "second handover" }] }], { agent: "codex", session: "thread-e2e-4" });
-  const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
   write(stack, HANDOVER, handoverCapture);
-  write(stack, NORA, noraNote(inAMonth));
+  write(stack, NORA, noraNote(IN_A_MONTH));
   // Notes written by hand reach the index on the next rebuild.
   await api(page, "POST", "/memory/reindex");
   await expect.poll(async () => (await api<Array<{ relPath: string }>>(page, "GET", "/memory/documents?area=memory&type=person")).some((d) => d.relPath === NORA), { timeout: 30_000 }).toBe(true);
@@ -270,8 +271,7 @@ test("brain: a fact's source is a button that opens in place with pointer, keybo
 
 test("brain: the reader shows Review dates, History as stored, the Change log closed, the identity line and a waiting Proposal", async () => {
   const page = await journeys.open(`/brain?path=${encodeURIComponent(NORA)}`);
-  const inAMonth = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-  await expect(fact(page, "Role")).toContainText(`review after ${inAMonth}`);
+  await expect(fact(page, "Role")).toContainText(`review after ${IN_A_MONTH}`);
   await expect(fact(page, "Role")).not.toContainText("unverified");
   await expect(fact(page, "Prefers")).toContainText("unverified");
   await expect(fact(page, "Prefers")).toContainText("review was due 2026-02-01");
