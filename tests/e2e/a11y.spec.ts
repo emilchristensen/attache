@@ -499,6 +499,10 @@ test(`targets: on a touch ${device} every control on every screen, sheet and dia
     await arrive(page, path, h1);
     await check(path);
   }
+  // A Machine name longer than its field (a CI runner's host name is) scrolls inside the field and is not cut off.
+  await arrive(page, "/settings/machines", "Settings");
+  await page.locator("[data-machine-name]").fill("a-very-long-machine-name-from-a-build-runner-0123456789abcdef");
+  await check("Machines with a long name typed");
   for (const [where, path, h1, open] of OPENED) {
     await arrive(page, path, h1);
     await open(page);

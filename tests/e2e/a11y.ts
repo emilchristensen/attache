@@ -126,8 +126,10 @@ export function targets(scope: string): Target[] {
     let [top, left] = [r.top, r.left];
     for (let n = el.parentElement; n; n = n.parentElement) [top, left] = [top + n.scrollTop, left + n.scrollLeft];
     const layer = el.closest(".masthead, .bottom-bar, dialog, [aria-modal='true']") ?? el.closest(".page");
+    // A field scrolls what is typed in it (a long Machine name): its contents are not words cut off.
+    const field = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
     const name = (el.getAttribute("aria-label") ?? label?.textContent ?? el.textContent ?? (el as HTMLInputElement).placeholder ?? "").trim() || el.outerHTML.slice(0, 60);
-    return { name, width: r.width, height: r.height, hit, clipped: el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== "ellipsis", box: { left, top, right: left + r.width, bottom: top + r.height }, layer: layer?.className ?? "" };
+    return { name, width: r.width, height: r.height, hit, clipped: !field && el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== "ellipsis", box: { left, top, right: left + r.width, bottom: top + r.height }, layer: layer?.className ?? "" };
   });
 }
 
