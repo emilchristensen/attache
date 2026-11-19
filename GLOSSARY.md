@@ -15,9 +15,13 @@ A computer that runs Attache and holds a copy of the Brain.
 _Avoid_: Node, device, instance, client
 
 **Replication**:
-Keeping every Machine's copy of the Brain the same.
+Keeping every Machine's copy of the Brain, and the owner's Preferences, the same.
 It is opt-in, and a Brain that lives on one Machine does not need it.
 _Avoid_: Sync, backup
+
+**Preferences**:
+The owner's choices about how Attache looks and behaves, such as how Home is arranged, which follow the owner to every Machine.
+What belongs to one Machine, such as its sign-ins or whether it is the Reader, is that Machine's configuration and not a Preference.
 
 **Source refresh**:
 Reading new activity from connected sources such as Slack, Gmail and Jira into the Brain.
@@ -39,6 +43,10 @@ Attache's own screen, which shows the Brain and the Inbox and takes the owner's 
 Its screens are Home, Approvals, Brain, Connections, Jobs and Settings.
 It holds no conversation.
 _Avoid_: Chat, app, UI, web client
+
+**Widget**:
+One area of Home that the owner can place, resize, add and remove, such as the Inbox or Your day.
+_Avoid_: Gadget, applet
 
 **Search the Brain**:
 Finding passages in the Brain from the Dashboard: the field at the top of Home, the Brain screen, and `Ctrl K`, `Cmd K` or `/`, which open the search palette off Home.
@@ -92,6 +100,7 @@ Attache's access to one outside service or Harness, such as Slack, GitHub, a mod
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
 On that page each Connection is one row in its group (Notes, Work sources, Harnesses, Model) with its account, what it may read and write, and when Attache last read it; one not set up is a small tile, and one that needs sign-in moves to a "Needs you" group at the top, already open.
 Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet, and the page uses the same words.
+Disabling a Connection takes that access away, sign-in included, until the owner sets it up again.
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
@@ -148,6 +157,11 @@ Nothing is sent until the owner approves that exact version.
 Each Draft has its own page under Approvals; saving new text makes the next version and replaces the old text.
 A rejected Draft is locked: only Restore brings it back, as the next version, until it expires.
 _Avoid_: Outgoing message
+
+**Daily Briefing**:
+The summary Attache writes each morning of what needs the owner, what changed and what the day holds.
+Every place that shows it titles it "The Daily Briefing".
+_Avoid_: Wednesday Brief
 
 **Delivery unconfirmed**:
 The label on an Inbox item whose last Draft was sent but whose outcome could not be verified, so the message may or may not have arrived.
