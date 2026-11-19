@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AttentionItemView, Coverage } from "@attache/contracts";
-import { type Db, json, nowIso } from "../core/db.ts";
+import { type ActionStatus, type AttentionItemView, type Coverage, WAITING_ACTION_STATUSES } from "@attache/contracts";
+import { type Db, json, nowIso, placeholders } from "../core/db.ts";
 import { listItems } from "./engine.ts";
 import { FACT_REVIEW_KIND } from "./fact-reviews.ts";
 import { search } from "../memory/search.ts";
@@ -58,6 +58,13 @@ function sectionFor(kind: string) {
   return { id: "other", title: "Other" };
 }
 
+/** One line per Draft that waits for the owner (`WAITING_ACTION_STATUSES`), as the briefing's "Prepared for your review" says it. */
+const PREPARED_SUMMARY = {
+  draft: "Draft awaiting your review.",
+  approved: "Approved, not yet sent.",
+  revoked: "Approval revoked, waiting for your review.",
+} as const satisfies Partial<Record<ActionStatus, string>>;
+
 export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: string | null; coverage: SourceCoverage[] }): Omit<Briefing, "summary" | "deliverablePath"> {
   const items = listItems(db, { states: ["open"], limit: 200 });
   const last = db.prepare("select created_at from briefings order by created_at desc limit 1").get() as { created_at: string } | undefined;
@@ -77,8 +84,8 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
     if (!sections.has(s.id)) sections.set(s.id, { id: s.id, title: s.title, items: [] });
     sections.get(s.id)!.items.push(entry);
   }
-  const drafts = db.prepare("select id, title, status from actions where status in ('draft','approved') order by updated_at desc limit 20").all() as Array<{ id: string; title: string; status: string }>;
-  if (drafts.length) sections.set("prepared", { id: "prepared", title: "Prepared for your review", items: drafts.map((d) => ({ id: d.id, title: d.title, summary: d.status === "approved" ? "Approved, not yet sent." : "Draft awaiting your review.", url: null, isNew: false, changed: false })) });
+  const drafts = db.prepare(`select id, title, status from actions where status in (${placeholders(WAITING_ACTION_STATUSES)}) order by updated_at desc limit 20`).all(...WAITING_ACTION_STATUSES) as Array<{ id: string; title: string; status: keyof typeof PREPARED_SUMMARY }>;
+  if (drafts.length) sections.set("prepared", { id: "prepared", title: "Prepared for your review", items: drafts.map((d) => ({ id: d.id, title: d.title, summary: PREPARED_SUMMARY[d.status], url: null, isNew: false, changed: false })) });
   const proposals = new ProposalIndex(db).list({ statuses: ["proposed"], limit: 20 });
   if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.target}`, url: null, isNew: false, changed: false })) });
   const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "facts", "other"];

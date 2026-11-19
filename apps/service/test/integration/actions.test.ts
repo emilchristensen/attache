@@ -340,6 +340,53 @@ describe("A09 drafts and approvals are enforced on the server", () => {
     expect(await reviewItem()).toMatchObject({ actionId: replacement, actionStatus: "unknown" });
   });
 
+  it("a rejected Draft is not restored over a newer Draft whose send has an unknown outcome or went out", async () => {
+    const reviewItem = async () => (await svc.get("/attention")).items.find((i: any) => i.kind === "review_request");
+    const draftFor = async (body: Record<string, unknown>) => {
+      const item = await reviewItem();
+      const { job } = await svc.post(`/attention/${item.id}/draft`, body);
+      const done = await svc.waitJob(job.id);
+      expect(done.job.status).toBe("succeeded");
+      return svc.get(`/actions/${done.job.result.actionId}`);
+    };
+    // The item's last send ended unknown (the test above); the owner chooses to replace it, then rejects that Draft.
+    const uncertain = (await reviewItem()).actionId;
+    const first = await draftFor({ replaceUnconfirmed: uncertain });
+    const rejected = await svc.post(`/actions/${first.id}/reject`, {});
+    // A newer Draft is prepared and sent, and its send ends unknown too: the comment is posted but cannot be read back.
+    const newer = await draftFor({});
+    expect(newer.id).not.toBe(first.id);
+    const ap = await svc.post(`/actions/${newer.id}/approve`, { version: newer.version, payloadHash: newer.payloadHash });
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, () => ({ status: 500, json: { message: "Server Error" } }));
+    const sent = await svc.post(`/actions/${newer.id}/execute`, { nonce: ap.approval.nonce, version: newer.version, payloadHash: newer.payloadHash });
+    await svc.waitJob(sent.job.id);
+    fx.route("GET", /^\/gh\/repos\/acme\/web\/issues\/comments\/\d+$/, (req) => ({ json: posted.find((p) => String(p.id) === req.path.split("/").pop()) }));
+    expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
+    // Restoring would hide the Delivery unconfirmed warning and let the old text be sent while the newer one may have arrived.
+    const restore = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });
+    expect(restore.status).toBe(409);
+    expect(restore.body.error).toMatchObject({ code: "delivery_unconfirmed", message: "The last Draft for this item may have been sent. Check the destination, then choose to prepare a replacement." });
+    expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
+    expect(await reviewItem()).toMatchObject({ actionId: newer.id, actionStatus: "unknown" });
+    // The owner replaces the uncertain Draft, approves the replacement, then revokes that approval: it still waits for them.
+    const third = await draftFor({ replaceUnconfirmed: newer.id });
+    const approved = await svc.post(`/actions/${third.id}/approve`, { version: third.version, payloadHash: third.payloadHash });
+    await svc.post(`/actions/${third.id}/revoke`);
+    const briefed = await svc.post("/briefings", { kind: "manual" });
+    await svc.waitJob(briefed.job.id);
+    const prepared = (await svc.get("/briefings/latest")).briefing.sections.find((s: any) => s.id === "prepared");
+    expect(prepared.items).toContainEqual(expect.objectContaining({ id: third.id, summary: "Approval revoked, waiting for your review." }));
+    // Approved again and sent: the item's reply went out, so the old rejected text is not restored to be sent a second time.
+    const again = await svc.post(`/actions/${third.id}/approve`, { version: approved.version, payloadHash: approved.payloadHash });
+    const exec = await svc.post(`/actions/${third.id}/execute`, { nonce: again.approval.nonce, version: again.version, payloadHash: again.payloadHash });
+    await svc.waitJob(exec.job.id);
+    expect(await reviewItem()).toMatchObject({ actionId: third.id, actionStatus: "succeeded" });
+    const afterSent = await svc.call("POST", `/actions/${first.id}/restore`, { expectedVersion: rejected.version });
+    expect(afterSent.status).toBe(409);
+    expect(afterSent.body.error).toMatchObject({ code: "superseded", message: "A newer Draft for this item was already sent." });
+    expect((await svc.get(`/actions/${first.id}`)).status).toBe("rejected");
+  });
+
   it("draft expiry counts business hours only", () => {
     const fri = new Date("2026-10-02T16:00:00Z");
     expect(addBusinessHours(fri, 48).toISOString()).toBe("2026-10-06T16:00:00.000Z");
