@@ -142,8 +142,9 @@ function EvidenceDrawer({ target, onClose }: { target: EvidenceTarget; onClose: 
           <ErrorState error={doc.error} retry={doc.reload} title="Could not open this evidence" />
           {d && (
             <>
-              {/* Open in Brain leaves the evidence for the note: it closes, after the link has navigated (React click on the row). */}
-              <div className="row" onClick={(e) => (e.target as Element).closest(".drawer-brain-link") && onClose()}>
+              {/* Open in Brain leaves the evidence for the note: it closes once the link has navigated in this tab (React click
+                  on the row, after the link's handler; a Ctrl or Cmd click opens another tab and leaves it open). */}
+              <div className="row" onClick={(e) => e.defaultPrevented && (e.target as Element).closest(".drawer-brain-link") && onClose()}>
                 <Tabs label="How to show the file" tabs={EVIDENCE_MODES} selected={mode} onSelect={setMode} plain />
                 {d.root === "data" && d.relPath.startsWith("memory/") && (
                   <Link to={`/brain?path=${encodeURIComponent(d.relPath)}`} className="drawer-brain-link">

@@ -39,6 +39,10 @@ describe("a Source refresh's live event", () => {
   });
 
   it("says nothing changed when the refresh resolves one item and opens another: the decision count is the same", async () => {
+    // Role is due for review, on its own (this test does not lean on the one before it).
+    mkdirSync(join(svc.dataDir, "memory/people"), { recursive: true });
+    writeFileSync(join(svc.dataDir, "memory/people/nora-lind.md"), "# Nora Lind\n\n## Current state\n- **Role** (2026-01-01, review 2026-02-01): Client contact\n");
+    await refresh();
     // Role is checked again (its item resolves) while Office comes due for review (a new item opens).
     writeFileSync(join(svc.dataDir, "memory/people/nora-lind.md"), "# Nora Lind\n\n## Current state\n- **Role** (2026-01-01, review 2099-02-01): Client contact\n- **Office** (2026-01-01, review 2026-02-01): Copenhagen\n");
     const events = await refresh();

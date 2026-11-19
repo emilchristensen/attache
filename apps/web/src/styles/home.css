@@ -534,6 +534,8 @@ button.conn-row-line:hover:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* "1 more: <folder name>" can hold a name with no space to break at. */
+  overflow-wrap: anywhere;
   min-height: 36px;
   cursor: pointer;
   color: var(--ink-2);
