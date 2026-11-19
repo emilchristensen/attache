@@ -1,42 +1,11 @@
 import { useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
+import { type ConnectionDefinition, type ConnectionStatus, type DisconnectEffects } from "@attache/contracts";
 import { api, post, put } from "../api.ts";
-import { MarkdownInline, Time, useAction } from "./ui.tsx";
+import { MarkdownInline, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
 import { reconfigureSignIn, reconnectMethod, savedFields, startBrowserSignIn } from "../reconnect.ts";
+import { ConnectionFacts, CoverageDetail, DisconnectConfirm, ScopeChecks, SetupForm, WriteAuthority } from "./ConnectionParts.tsx";
 
-const COVERAGE_TEXT: Record<string, string> = {
-  complete: "Complete",
-  empty: "Complete, nothing found",
-  partial: "Partial: some items may be missing",
-  denied: "Access denied for a scope",
-  unauthorized: "Sign-in expired or rejected",
-  offline: "Service unreachable",
-  error: "Failed",
-  not_configured: "Not configured",
-  never_run: "Never refreshed",
-};
-
-export function CoverageDetail({ coverage }: { coverage: Coverage | null }) {
-  if (!coverage) return <p className="small muted">Not refreshed yet.</p>;
-  return (
-    <div className="stack-sm">
-      <div className="row small">
-        <StateTag state={coverage.state} label={COVERAGE_TEXT[coverage.state] ?? coverage.state} />
-        <span className="muted">
-          {coverage.items} item{coverage.items === 1 ? "" : "s"} · <Time iso={coverage.at} />
-        </span>
-      </div>
-      <ul className="small" style={{ margin: 0, paddingLeft: 18, color: "var(--text-2)" }}>
-        {coverage.scopes.map((s, i) => (
-          <li key={i}>
-            {s.scope}: <b>{s.state.replace(/_/g, " ")}</b> ({s.items} item{s.items === 1 ? "" : "s"}, {s.pages} page{s.pages === 1 ? "" : "s"}){s.note ? <span className="muted">: {s.note}</span> : null}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 interface Props {
   status: ConnectionStatus;
@@ -49,7 +18,7 @@ interface Props {
 
 /** What a Connection is for, in one sentence: the data folder says what Attache keeps there. */
 export function connectionDescription(status: ConnectionStatus, definition: ConnectionDefinition): string {
-  return status.settings.builtin === true ? "Where Attache keeps your memory, evidence and deliverables as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description;
+  return status.settings.builtin === true ? "Where this Machine keeps its copy of your Brain (curated notes, evidence and deliverables) as Markdown. Attache reads and writes here; your edits are picked up on the next refresh." : definition.description;
 }
 
 /** One Connection as a card with its name, description and state above its controls: Setup's Connections and Model steps. */
@@ -142,109 +111,25 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
 
   return (
     <>
-      {configured && (
-        <dl className="kv">
-          {!inRow && (
-            <>
-              <dt>Account</dt>
-              <dd>{status.account ?? "Not known"}</dd>
-            </>
-          )}
-          <dt>Last success</dt>
-          <dd>
-            <Time iso={status.lastSuccessAt} standalone />
-          </dd>
-          {status.lastError && (
-            <>
-              <dt>Last error</dt>
-              <dd className="error-text">{status.lastError}</dd>
-            </>
-          )}
-          {!inRow && definition.scopes.length > 0 && (
-            <>
-              <dt>Reading</dt>
-              <dd>{status.readScopes.map((s) => definition.scopes.find((d) => d.id === s)?.label ?? s).join(", ") || "nothing selected"}</dd>
-            </>
-          )}
-          {!inRow && definition.writeActions.length > 0 && (
-            <>
-              <dt>May write</dt>
-              <dd>{status.writeActions.length ? status.writeActions.map((a) => definition.writeActions.find((d) => d.id === a)?.label ?? a).join(", ") : "Nothing (read-only)"}</dd>
-            </>
-          )}
-        </dl>
-      )}
+      {configured && <ConnectionFacts status={status} definition={definition} inRow={inRow} />}
       {configured && !compact && definition.scopes.length > 0 && <CoverageDetail coverage={status.coverage} />}
       {testMsg && <p className="small muted">Test: {testMsg}</p>}
 
       {editing && (
-        <div className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-          {definition.unavoidableSteps.length > 0 && (
-            <div className="state partial small">
-              <strong style={{ color: "var(--warn)" }}>Before you connect</strong>
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {definition.unavoidableSteps.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <p className="small muted">{definition.setupHelp}</p>
-          {definition.authMethods.length > 1 && (
-            <label className="field">
-              How to connect
-              <select value={method} onChange={(e) => { setMethod(e.target.value); setFields(savedFor(e.target.value)); }}>
-                {definition.authMethods.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {m?.fields.map((f) => (
-            <label key={f.id} className="field">
-              {f.label}
-              {f.optional ? <span className="help">optional</span> : null}
-              {f.id === "stt" || f.id === "tts" ? (
-                <select value={fields[f.id] ?? ""} onChange={(e) => setFields({ ...fields, [f.id]: e.target.value })}>
-                  <option value="">Default</option>
-                  {(f.placeholder ?? "").split("|").map((o) => o.trim()).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input type={f.secret ? "password" : "text"} value={fields[f.id] ?? ""} placeholder={f.placeholder} autoComplete="off" spellCheck={false} onChange={(e) => setFields({ ...fields, [f.id]: e.target.value })} />
-              )}
-              {f.help && <MarkdownInline className="help" text={f.help} />}
-            </label>
-          ))}
-          {definition.scopes.length > 0 && (
-            <fieldset className="stack-sm" style={{ border: "none", padding: 0, margin: 0 }}>
-              <legend className="small" style={{ fontWeight: 560, color: "var(--text-2)", marginBottom: 4 }}>
-                What Attache may read
-              </legend>
-              {definition.scopes.map((s) => (
-                <label key={s.id} className="check small">
-                  <input type="checkbox" checked={scopes.includes(s.id)} onChange={(e) => setScopes(e.target.checked ? [...scopes, s.id] : scopes.filter((x) => x !== s.id))} />
-                  {s.label}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          <div className="row">
-            <button className="primary" disabled={busy !== null} onClick={configure}>
-              {busy === "configure" ? "Connecting…" : configured ? "Save and test" : "Connect"}
-            </button>
-            {(configured || compact) && (
-              <button className="ghost" onClick={() => setEditing(false)}>
-                Cancel
-              </button>
-            )}
-          </div>
-        </div>
+        <SetupForm
+          definition={definition}
+          method={m}
+          onMethod={(id) => {
+            setMethod(id);
+            setFields(savedFor(id));
+          }}
+          fields={fields}
+          onFields={setFields}
+          scopes={scopes}
+          onScopes={setScopes}
+          submit={{ label: busy === "configure" ? "Connecting…" : configured ? "Save and test" : "Connect", disabled: busy !== null, run: configure }}
+          onCancel={configured || compact ? () => setEditing(false) : null}
+        />
       )}
 
       {!isOAuth && configured && status.status === "needs_auth" && !editing && (
@@ -303,12 +188,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
         <details>
           <summary className="small">Change what Attache reads</summary>
           <div className="stack-sm" style={{ marginTop: 8 }}>
-            {definition.scopes.map((s) => (
-              <label key={s.id} className="check small">
-                <input type="checkbox" checked={scopes.includes(s.id)} onChange={(e) => setScopes(e.target.checked ? [...scopes, s.id] : scopes.filter((x) => x !== s.id))} />
-                {s.label}
-              </label>
-            ))}
+            <ScopeChecks definition={definition} scopes={scopes} onScopes={setScopes} />
             <div>
               <button className="small" onClick={() => run("scopes", () => put(`/connections/${status.id}/scopes`, { readScopes: scopes }).then(onChanged), "Scopes saved")}>
                 Save scopes
@@ -321,63 +201,16 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
       {configured && !compact && definition.writeActions.length > 0 && <WriteAuthority status={status} definition={definition} onChanged={onChanged} onSignIn={isOAuth ? () => signIn(true) : undefined} signInWith={signInWith} />}
 
       {preview && (
-        <div className="state error small" role="alertdialog" aria-label="Disconnect">
-          <strong>Disconnect {status.label}?</strong>
-          <span>
-            {preview.credentials > 0 ? "Attache deletes the stored credentials and stops all requests." : "Attache stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
-          </span>
-          <span>
-            Retained data: {plural(preview.observations, "observation")}, {plural(preview.attentionItems, "open Inbox item")}{preview.indexedDocuments ? `, ${plural(preview.indexedDocuments, "indexed file")}` : ""}.
-          </span>
-          <div className="row">
-            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: false }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), "Disconnected; data kept")}>
-              Disconnect, keep data
-            </button>
-            <button className="danger" onClick={() => run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData: true }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), "Disconnected; data deleted")}>
-              Disconnect and delete data
-            </button>
-            <button className="ghost" onClick={() => setPreview(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <DisconnectConfirm
+          status={status}
+          preview={preview}
+          disconnect={(deleteData) =>
+            run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), deleteData ? "Disconnected; data deleted" : "Disconnected; data kept")
+          }
+          onCancel={() => setPreview(null)}
+        />
       )}
     </>
   );
 }
 
-function WriteAuthority({ status, definition, onChanged, onSignIn, signInWith }: { status: ConnectionStatus; definition: ConnectionDefinition; onChanged: () => void; onSignIn: (() => void) | undefined; signInWith: string }) {
-  const { run } = useAction();
-  const [sel, setSel] = useState<string[]>(status.writeActions);
-  const [confirm, setConfirm] = useState(false);
-  const changed = sel.slice().sort().join() !== status.writeActions.slice().sort().join();
-  return (
-    <details>
-      <summary className="small">Write permissions ({status.writeActions.length ? "enabled" : "read-only"})</summary>
-      <div className="stack-sm" style={{ marginTop: 8 }}>
-        <p className="small muted">Writing is authorised separately from reading. Even when allowed, nothing is sent until you approve a specific draft version.</p>
-        {definition.writeActions.map((a) => (
-          <label key={a.id} className="check small">
-            <input type="checkbox" checked={sel.includes(a.id)} onChange={(e) => setSel(e.target.checked ? [...sel, a.id] : sel.filter((x) => x !== a.id))} />
-            {a.label}
-          </label>
-        ))}
-        {onSignIn && sel.length > 0 && (
-          <p className="small muted">
-            Writing needs an extra permission from the provider. <button className="small" onClick={onSignIn}>{signInWith} again to grant write access</button>
-          </p>
-        )}
-        {changed && (
-          <label className="check small">
-            <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />I understand Attache may perform these actions after I approve each one.
-          </label>
-        )}
-        <div>
-          <button className="small" disabled={!changed || (sel.length > 0 && !confirm)} onClick={() => run("write", () => put(`/connections/${status.id}/write-actions`, { writeActions: sel, confirm: true }).then(onChanged), "Write permissions saved")}>
-            Save write permissions
-          </button>
-        </div>
-      </div>
-    </details>
-  );
-}

@@ -297,13 +297,16 @@ test("brain: the reader shows Review dates, History as stored, the Change log cl
   await log.locator("summary").click();
   await expect(log.getByText(/was “14 October”/)).toBeVisible();
 
-  // A waiting Proposal for this note links to Approvals.
+  // A waiting Proposal for this note links to it in Approvals: opened in place, with the keyboard on it.
   const proposal = await api<{ id: string }>(page, "POST", "/memory/proposals", { item: { action: "update", path: ATLAS, facts: [{ subject: "Owner", value: "Mira", reason: "third handover" }] }, reason: "Handover call" });
   const waiting = reader(page).locator("[data-waiting-proposals]");
   await expect(waiting).toContainText("A change to this note waits for your OK.");
   await waiting.getByRole("link", { name: "Review it in Approvals" }).click();
-  await expect(page).toHaveURL(new RegExp(`/approvals`));
-  await expect(page.locator(`[data-proposal="${proposal.id}"], [data-row-id="${proposal.id}"]`).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/approvals\\?proposal=${proposal.id}$`));
+  const row = page.locator(`[data-approval-row="proposal"][data-row-id="${proposal.id}"]`);
+  await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(row.locator("[data-row-toggle]")).toBeFocused();
+  await expect(row.getByRole("button", { name: "Apply" })).toBeInViewport();
   await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
 
   // The identity record says where it changes.

@@ -1,4 +1,4 @@
-import { plural, type ActionView, type Citation } from "@attache/contracts";
+import { plural, WAITING_ACTION_STATUSES, type ActionView, type Citation } from "@attache/contracts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -37,7 +37,7 @@ const STATUS_TONE: Partial<Record<DraftScreen["state"], "attention" | "danger" |
 /** Kind and destination, the subject, then version, stored status and, while it can still be sent, its expiry. */
 export function DraftHeader({ d, screen }: { d: ActionView; screen: DraftScreen }) {
   const text = draftRowText(d);
-  const live = ["draft", "approved", "revoked", "rejected"].includes(d.status);
+  const live = WAITING_ACTION_STATUSES.includes(d.status) || d.status === "rejected";
   return (
     <header className="draft-head">
       <p className="draft-kind">

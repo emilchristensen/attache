@@ -1,4 +1,5 @@
 import { navigate, useLocation } from "../components/ui.tsx";
+import { useMoveKeys } from "../shortcuts.ts";
 import { Tabs, tabId, type TabItem } from "../components/Tabs.tsx";
 import { useSignals } from "../nav-signals.ts";
 import { approvalsHref, draftAt, type ApprovalsTab } from "../routes.ts";
@@ -20,6 +21,7 @@ export function ApprovalsView() {
   const signals = useSignals();
   // What was decided in this visit stays in place across the tabs and a Draft's page; leaving Approvals ends the visit.
   const visit = useApprovalsVisit();
+  useMoveKeys(".approvals-panel [data-row-toggle]");
   if (draft) return <DraftPage id={draft} />;
   const tab: ApprovalsTab = loc.search.get("tab") === "finished" ? "finished" : "waiting";
   const count = signals.badges.approvals;

@@ -1,4 +1,5 @@
-import { approvalEndedAt, type ActionView } from "@attache/contracts";
+import { approvalEndedAt, WAITING_ACTION_STATUSES, type ActionView } from "@attache/contracts";
+import { draftItemId, recordOf, textOf } from "./draft-fields.ts";
 
 /**
  * A Draft's own page as one pure rule (table-tested in `test/draft-state.test.ts`): the stored status and the
@@ -99,12 +100,10 @@ export function draftService(d: Pick<ActionView, "kind">): string {
   return SERVICE[d.kind.split(".")[0] ?? ""] ?? "the other service";
 }
 
-const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
-const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
 
 /** Where the owner checks the Draft's destination: the sent message, else the target, else the item it answers. */
 export function draftTargetUrl(d: Pick<ActionView, "target" | "receipt" | "context">): string | null {
-  return str(rec(d.receipt).url) ?? str(d.target.url) ?? str(rec(rec(d.context).item).url);
+  return textOf(recordOf(d.receipt).url) ?? textOf(d.target.url) ?? textOf(recordOf(recordOf(d.context).item).url);
 }
 
 /** Gmail's list of drafts: where a Gmail draft of unknown outcome is checked when Gmail returned no address for it. */
@@ -112,14 +111,14 @@ export const GMAIL_DRAFTS_URL = "https://mail.google.com/mail/u/0/#drafts";
 
 /** Where to check a send of unknown outcome: the receipt's address, else (a Gmail draft) Gmail's drafts, else the target. */
 export function uncertainTargetUrl(d: Pick<ActionView, "kind" | "target" | "receipt" | "context">): string | null {
-  return str(rec(d.receipt).url) ?? (d.kind === "gmail.draft" ? GMAIL_DRAFTS_URL : draftTargetUrl(d));
+  return textOf(recordOf(d.receipt).url) ?? (d.kind === "gmail.draft" ? GMAIL_DRAFTS_URL : draftTargetUrl(d));
 }
 
 /** The thing to check on the other service ("the pull request"). */
 function targetThing(d: ActionView): string {
   switch (d.kind) {
     case "github.comment":
-      return /\/issues\//.test(str(d.target.url) ?? "") ? "the issue" : "the pull request";
+      return /\/issues\//.test(textOf(d.target.url) ?? "") ? "the issue" : "the pull request";
     case "jira.comment":
       return "the Jira issue";
     case "confluence.comment":
@@ -207,7 +206,7 @@ function approved(d: ActionView, approval: NonNullable<ActionView["approval"]>, 
 /** How the latest approval was revoked: by the owner, or by the service with its reason. */
 function revocation(d: ActionView): { at: string; byService: boolean; reason: string } {
   const last = d.events.findLast((e) => e.event === "approval_revoked");
-  return { at: last?.at ?? d.updatedAt, byService: last?.actor === "service", reason: str(rec(last?.data).reason) ?? "approval revoked" };
+  return { at: last?.at ?? d.updatedAt, byService: last?.actor === "service", reason: textOf(recordOf(last?.data).reason) ?? "approval revoked" };
 }
 
 /** What keeps Send locked after the service revoked an approval, by the reason it gave. */
@@ -238,19 +237,19 @@ const lastStep = (d: ActionView) => (sends(d.kind) ? "Sent" : "Created in Gmail"
 function afterSend(d: ActionView, clock: DraftClock): DraftScreen {
   const v = `v${d.version}`;
   const service = draftService(d);
-  const receipt = rec(d.receipt);
+  const receipt = recordOf(d.receipt);
   const url = draftTargetUrl(d);
   const openOn = url ? [button("open-target", `Open on ${service}`)] : [];
-  const prepare = str(rec(rec(d.context).item).id) ? [button("prepare", "Prepare a new Draft")] : [];
+  const prepare = draftItemId(d) ? [button("prepare", "Prepare a new Draft")] : [];
   if (d.status === "executing") {
     const doing = sends(d.kind) ? `Sending ${v}` : `Creating ${v} in Gmail`;
     return { state: "sending", status: "Sending", steps: steps("done", ["Approved", "done"], [doing, "current"], v), notice: plain(`${doing}. Attache marks it ${sends(d.kind) ? "sent" : "created"} only after ${service} confirms it. This keeps running if you close the tab.`), actions: [], editor: "off" };
   }
   if (d.status === "succeeded") {
-    const at = str(receipt.verifiedAt) ?? str(receipt.at) ?? d.updatedAt;
+    const at = textOf(receipt.verifiedAt) ?? textOf(receipt.at) ?? d.updatedAt;
     return finished({ state: "sent", status: lastStep(d), steps: steps("done", ["Approved", "done"], [`${lastStep(d)} ${clock.time(at)}, verified`, "done"], v), notice: plain(`${lastStep(d)} at ${clock.time(at)} and verified on ${service}.`), actions: openOn });
   }
-  const error = str(receipt.error);
+  const error = textOf(receipt.error);
   if (d.status === "failed") {
     const why = receipt.attempted === false ? `Attache stopped before calling ${service}` : `${service} refused it`;
     return finished({
@@ -277,14 +276,14 @@ function afterSend(d: ActionView, clock: DraftClock): DraftScreen {
  * came from (Delivery unconfirmed) say the same words.
  */
 export function unknownOutcomeNotice(d: ActionView): DraftNotice {
-  const receipt = rec(d.receipt);
-  return attention(`The outcome could not be verified. The request may have reached ${draftService(d)}. Check ${targetThing(d)} before you do anything else.`, ...[str(receipt.error), str(receipt.note)].filter((l): l is string => l !== null));
+  const receipt = recordOf(d.receipt);
+  return attention(`The outcome could not be verified. The request may have reached ${draftService(d)}. Check ${targetThing(d)} before you do anything else.`, ...[textOf(receipt.error), textOf(receipt.note)].filter((l): l is string => l !== null));
 }
 
 /** A Draft that is finished without being sent: rejected (restorable until it expires) or expired. */
 function notSentFinal(d: ActionView, now: number, clock: DraftClock): DraftScreen {
   const v = `v${d.version}`;
-  const prepare = str(rec(rec(d.context).item).id) ? [button("prepare", "Prepare a new Draft")] : [];
+  const prepare = draftItemId(d) ? [button("prepare", "Prepare a new Draft")] : [];
   if (d.status === "expired") {
     return finished({ state: "expired", status: "Expired", steps: null, notice: plain(`Expired ${clock.day(d.expiresAt)}, 48 business hours after it was prepared. Nothing was sent.`), actions: [button("copy", "Copy text"), ...prepare] });
   }
@@ -310,8 +309,8 @@ function stored(input: DraftStateInput): DraftScreen {
   return waitingForApproval(d, editor, now, clock);
 }
 
-/** The stored statuses whose text the owner can change. A rejected Draft is locked until it is restored. */
-export const EDITABLE_STATUSES: ReadonlySet<string> = new Set(["draft", "approved", "revoked"]);
+/** The owner can change the text of a Draft that waits for them. A rejected Draft is locked until it is restored. */
+const editable = (d: ActionView): boolean => WAITING_ACTION_STATUSES.includes(d.status);
 
 function unsaved(d: ActionView, base: DraftScreen): DraftScreen {
   const v = `v${d.version}`;
@@ -335,7 +334,7 @@ function changedElsewhere(d: ActionView, editor: DraftEditor, base: DraftScreen)
   const lines = [what, ...(base.notice.warning ? base.notice.lines : [])];
   const wait = `Load ${v} first.`;
   // Approve and Send show, waiting, only while the stored Draft could still take them.
-  const waiting = EDITABLE_STATUSES.has(d.status) ? [button("approve", `Approve ${v}`, { disabled: wait }), button("send", sendLabel(d), { disabled: wait })] : [];
+  const waiting = editable(d) ? [button("approve", `Approve ${v}`, { disabled: wait }), button("send", sendLabel(d), { disabled: wait })] : [];
   return {
     ...base,
     state: "changed_elsewhere",
@@ -353,6 +352,6 @@ export function draftScreen(input: DraftStateInput): DraftScreen {
   const { draft: d, editor } = input;
   const base = stored(input);
   if (!editor.dirty) return base;
-  if (d.version !== editor.baseVersion || !EDITABLE_STATUSES.has(d.status)) return changedElsewhere(d, editor, base);
+  if (d.version !== editor.baseVersion || !editable(d)) return changedElsewhere(d, editor, base);
   return unsaved(d, base);
 }

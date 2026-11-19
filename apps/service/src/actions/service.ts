@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { approvalEndedAt, WAITING_ACTION_STATUSES, type ActionStatus, type ActionView } from "@attache/contracts";
-import { type Db, json, tx } from "../core/db.ts";
+import { approvalEndedAt, OPEN_ACTION_STATUSES, WAITING_ACTION_STATUSES, type ActionStatus, type ActionView } from "@attache/contracts";
+import { type Db, json, placeholders, tx } from "../core/db.ts";
 import { addBusinessHours, DRAFT_BUSINESS_HOURS } from "./expiry.ts";
 
 export const APPROVAL_TTL_MS = 15 * 60_000;
@@ -62,7 +62,7 @@ export class ActionService {
     // Refreshing a draft for the same item keeps its original creation and expiry,
     // so a periodically regenerated draft cannot postpone its own expiry.
     if (input.attentionItemKey) {
-      const existing = this.db.prepare("select id, status from actions where attention_item_key = ? and kind = ? and status in ('draft','approved','revoked') order by created_at desc limit 1").get(input.attentionItemKey, input.kind) as { id: string } | undefined;
+      const existing = this.db.prepare(`select id, status from actions where attention_item_key = ? and kind = ? and status in (${placeholders(WAITING_ACTION_STATUSES)}) order by created_at desc limit 1`).get(input.attentionItemKey, input.kind, ...WAITING_ACTION_STATUSES) as { id: string } | undefined;
       if (existing) {
         const current = this.get(existing.id)!;
         if (current.payloadHash === hash) return current;
@@ -114,14 +114,14 @@ export class ActionService {
   list(opts: { status?: string[]; limit?: number } = {}): ActionView[] {
     const status = opts.status;
     const rows = (status?.length
-      ? this.db.prepare(`select id from actions where status in (${status.map(() => "?").join(",")}) order by updated_at desc limit ?`).all(...status, opts.limit ?? 100)
+      ? this.db.prepare(`select id from actions where status in (${placeholders(status)}) order by updated_at desc limit ?`).all(...status, opts.limit ?? 100)
       : this.db.prepare("select id from actions order by updated_at desc limit ?").all(opts.limit ?? 100)) as Array<{ id: string }>;
     return rows.map((r) => this.get(r.id)!);
   }
 
   /** How many Drafts wait for the owner (`WAITING_ACTION_STATUSES`), however many there are. Settle stale ones first. */
   countWaiting(): number {
-    const row = this.db.prepare(`select count(*) n from actions where status in (${WAITING_ACTION_STATUSES.map(() => "?").join(",")})`).get(...WAITING_ACTION_STATUSES) as { n: number };
+    const row = this.db.prepare(`select count(*) n from actions where status in (${placeholders(WAITING_ACTION_STATUSES)})`).get(...WAITING_ACTION_STATUSES) as { n: number };
     return Number(row.n);
   }
 
@@ -139,7 +139,7 @@ export class ActionService {
     const a = this.require(id);
     if (a.version !== expectedVersion) throw new ActionError("version_conflict", `The draft changed (now version ${a.version}); reload before editing.`);
     if (a.status === "rejected") throw new ActionError("not_editable", "A rejected Draft cannot be edited. Restore it first.");
-    if (!["draft", "approved", "revoked"].includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
+    if (!WAITING_ACTION_STATUSES.includes(a.status)) throw new ActionError("not_editable", `A ${a.status} action cannot be edited.`);
     if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired.");
     const hash = payloadHash(a.kind, a.target, payload);
     const version = a.version + 1;
@@ -167,7 +167,7 @@ export class ActionService {
 
   reject(id: string, actor: string, reason?: string): ActionView {
     const a = this.require(id);
-    if (!["draft", "approved", "revoked"].includes(a.status)) throw new ActionError("not_rejectable", `A ${a.status} action cannot be rejected.`);
+    if (!WAITING_ACTION_STATUSES.includes(a.status)) throw new ActionError("not_rejectable", `A ${a.status} action cannot be rejected.`);
     tx(this.db, () => {
       this.db.prepare("update actions set status = 'rejected', approval = null, updated_at = ? where id = ?").run(this.now().toISOString(), id);
       this.event(id, "rejected", actor, reason ? { reason } : null);
@@ -186,7 +186,7 @@ export class ActionService {
     if (this.isExpired(a)) throw new ActionError("expired", "This draft has expired, so it can no longer be restored.");
     const key = (this.db.prepare("select attention_item_key k from actions where id = ?").get(id) as { k: string | null }).k;
     if (key) {
-      const open = this.db.prepare("select id from actions where attention_item_key = ? and id <> ? and status in ('draft','approved','revoked','executing') limit 1").get(key, id);
+      const open = this.db.prepare(`select id from actions where attention_item_key = ? and id <> ? and status in (${placeholders(OPEN_ACTION_STATUSES)}) limit 1`).get(key, id, ...OPEN_ACTION_STATUSES);
       if (open) throw new ActionError("superseded", "A newer Draft for the same item is open. Reject it before restoring this one.");
     }
     const version = a.version + 1;
@@ -223,7 +223,7 @@ export class ActionService {
    */
   expireStale(): { expired: string[]; approvalsEnded: string[] } {
     const now = this.now().toISOString();
-    const expired = (this.db.prepare("select id from actions where status in ('draft','approved','revoked') and expires_at <= ?").all(now) as Array<{ id: string }>).map((r) => r.id);
+    const expired = (this.db.prepare(`select id from actions where status in (${placeholders(WAITING_ACTION_STATUSES)}) and expires_at <= ?`).all(...WAITING_ACTION_STATUSES, now) as Array<{ id: string }>).map((r) => r.id);
     for (const id of expired) {
       tx(this.db, () => {
         this.db.prepare("update actions set status = 'expired', approval = null, updated_at = ? where id = ?").run(now, id);

@@ -310,6 +310,9 @@ export function tx<T>(db: Db, fn: () => T): T {
   }
 }
 
+/** `?,?,?`: one SQL placeholder per value, for an `in (...)` list. */
+export const placeholders = (values: readonly unknown[]): string => values.map(() => "?").join(",");
+
 export const nowIso = (): string => new Date().toISOString();
 
 export function json<T>(value: unknown, fallback: T): T {

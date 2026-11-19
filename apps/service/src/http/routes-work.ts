@@ -8,6 +8,7 @@ import { requireFeature } from "./routes-data.ts";
 import { getItem } from "../attention/engine.ts";
 import { DELIVERY_UNCONFIRMED_MESSAGE } from "../actions/service.ts";
 import { FEATURES } from "../capabilities/registry.ts";
+import type { SignInState } from "../connectors/manager.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { expandHome, folderName } from "../platform/locations.ts";
 
@@ -18,27 +19,13 @@ function featureForJob(kind: JobKind) {
   return FEATURES.find((f) => f.jobKinds.includes(kind))?.id ?? "jobs";
 }
 
-/** A Connection's sign-in state before a test, a re-saved method or a browser sign-in changes it. */
-interface Prior {
-  status: string;
-  /** The sign-in worked at some point before. */
-  workedBefore: boolean;
-  /** A Source refresh stored a read, which may now be stale. */
-  read: boolean;
-}
-
-function priorSignIn(app: App, id: string): Prior | null {
-  const row = app.db.prepare("select status, last_success_at, coverage from connections where id = ?").get(id) as { status: string; last_success_at: string | null; coverage: string | null } | undefined;
-  return row ? { status: row.status, workedBefore: !!row.last_success_at, read: !!row.coverage } : null;
-}
-
 /**
  * A source that just recovered its sign-in still shows the failed coverage of its last Source refresh: refresh it now.
  * Used wherever a sign-in can succeed again: a passed test, the method saved again, and browser sign-in. A sign-in
  * recovers when it worked before or a stored read now needs replacing; a first sign-in during Setup with nothing read
  * is left to Setup and the schedule.
  */
-function refreshIfRecovered(app: App, id: string, before: Prior | null, ok: boolean) {
+function refreshIfRecovered(app: App, id: string, before: SignInState | null, ok: boolean) {
   const rec = app.connections.record(id);
   if (!ok || !rec || !before || (before.status !== "needs_auth" && before.status !== "error") || !(before.workedBefore || before.read)) return;
   if (!rec.readScopes.length || !app.featureEnabled("attention")) return;
@@ -198,7 +185,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));
     const fields: Record<string, string> = { ...body.fields, method: body.method };
-    const before = priorSignIn(app, kind);
+    const before = app.connections.signInState(kind);
     const out = await app.connections.configure(kind, fields, body.readScopes);
     if (kind === "model") await app.refreshModel();
     // Saving the method again is how a login made outside Attache is picked up.
@@ -206,7 +193,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     return out;
   });
   r.post("/connections/:id/test", async (c) => {
-    const before = priorSignIn(app, c.params.id!);
+    const before = app.connections.signInState(c.params.id!);
     const out = await app.connections.test(c.params.id!);
     const rec = app.connections.requireRecord(c.params.id!);
     if (rec.kind === "model") await app.refreshModel();
@@ -271,7 +258,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
       const code = c.query("code");
       if (!code) return back("No authorization code returned", false);
       const rec = app.connections.requireRecord(pending.kind);
-      const before = priorSignIn(app, rec.id);
+      const before = app.connections.signInState(rec.id);
       const adapter = app.connections.adapter(pending.kind);
       try {
         // Exchange the code with the client this sign-in started with; persist it only now that it worked.

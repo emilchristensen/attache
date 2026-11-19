@@ -8,6 +8,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
+import { openRow } from "./inbox.ts";
 import { area, clock, inboxRowFor, meetingHeadsUp, MINUTE, needYou, openPrep, rowFor, SELF, setCalendar as setFixtureCalendar, type Meeting } from "./meetings.ts";
 
 let stack: Stack;
@@ -205,6 +206,10 @@ test("Not now hides only the Heads-up: the item is back in the flat Inbox and it
   // Back in the Inbox at once, in its place (not behind Show new items), and still one decision.
   await expect(rowFor(page, "triage")).toContainText("Billing triage");
   await expect(page.locator("#inbox [data-show-new]")).toBeDisabled();
+  // Opened, the row says why it is here and when it leaves, for the meeting's phase (it has not started yet).
+  await openRow(rowFor(page, "triage"));
+  await expect(rowFor(page, "triage").locator(".inbox-why")).toHaveText(/^Why it is here: A meeting with other people starts (tomorrow )?at \d\d:\d\d\. It leaves the Inbox when it ends (tomorrow )?at \d\d:\d\d\.$/);
+  await rowFor(page, "triage").locator("[data-row-toggle]").click();
   await expect(needYou(page)).toHaveText(counted!);
   await expect(page.locator("#inbox .count-line")).toHaveText(/^1 meeting above · \d+ items below need you$/);
   // In the Meeting prep type too.

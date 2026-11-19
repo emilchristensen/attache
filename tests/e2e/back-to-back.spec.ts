@@ -193,6 +193,8 @@ async function toTheOverlap(browser: Browser, pair: Pair, { keyboardOnRow }: { k
 }
 
 test("back to back with Not now: the first meeting ends under the keyboard, Enter joins nothing, and the second takes over", async ({ browser }) => {
+  // The service keeps the real clock, so this run waits in real time for the first meeting's real end:
+  // `FIRST_ENDS_AFTER_MS` plus up to a minute of rounding (about 2.6 minutes in all locally), past the 2-minute default.
   test.setTimeout(300_000);
   const pair: Pair = {
     first: { id: "handover", subject: "Pilot handover", meetLink: "https://meet.google.com/pil-ot-hand" },
@@ -266,7 +268,6 @@ test("back to back with Not now: the first meeting ends under the keyboard, Ente
 });
 
 test("back to back with Done: the keyboard leaves a promoted row in place, Done decides the first, and the second takes over", async ({ browser }) => {
-  test.setTimeout(180_000);
   const pair: Pair = {
     first: { id: "crit", subject: "Design crit", meetLink: "https://meet.google.com/cri-tic-now" },
     second: { id: "hiring", subject: "Hiring sync", meetLink: "https://meet.google.com/hir-ing-syn" },

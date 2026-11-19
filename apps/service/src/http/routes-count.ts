@@ -15,7 +15,7 @@ export function decisionTotals(app: App): DecisionTotals {
     inbox: app.featureEnabled("attention") ? countOpenDecisions(app.db) : "off",
     drafts: app.featureEnabled("drafts") ? app.actions.countWaiting() : "off",
     proposals: app.proposals.count("proposed"),
-    signIns: app.connections.statuses().filter((c) => c.status === "needs_auth").length,
+    signIns: app.connections.countSignIns(),
   };
 }
 

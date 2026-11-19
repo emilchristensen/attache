@@ -5,9 +5,9 @@
  * driven through the Dashboard against the real bundled service and the
  * TEST-ONLY fixtures.
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
-import { buildAll, startStack, type Stack } from "./stack.ts";
+import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
@@ -349,6 +349,36 @@ test("shortcuts: g then a letter jumps to each screen outside text fields and di
   await page.keyboard.press("g");
   await page.keyboard.press("j");
   await expect(page).toHaveURL(`${stack.url}/jobs`);
+});
+
+/** `j` and `k` from the page move to the first, second and back to the first of `openers`; Enter on the first opens it. */
+async function movesAndOpens(page: Page, openers: Locator, opened: (first: Locator) => Promise<void>) {
+  await expect(openers.nth(1)).toBeVisible();
+  await page.locator("main").focus();
+  await page.keyboard.press("j");
+  await expect(openers.nth(0)).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(openers.nth(1)).toBeFocused();
+  await page.keyboard.press("k");
+  await expect(openers.nth(0)).toBeFocused();
+  await page.keyboard.press("Enter");
+  await opened(openers.nth(0));
+}
+
+test("shortcuts: j, k and Enter move between and open the rows of Approvals, Jobs, Connections and the Brain's notes, as on the Inbox", async () => {
+  await harnessSave(stack, ["Ada Lind", "Bo Strand"].map((title) => ({ action: "create", type: "person", title, facts: [{ subject: "Role", value: "Vendor contact" }] })), { agent: "claude-code", session: "shell-rows" });
+  await api(await journeys.open("/jobs"), "POST", "/connections/github/refresh");
+  const page = await journeys.open("/approvals");
+  await movesAndOpens(page, page.locator(".approvals-panel [data-row-toggle]"), (first) => expect(first).toHaveAttribute("aria-expanded", "true"));
+  await page.goto(`${stack.url}/jobs`);
+  await movesAndOpens(page, page.locator(".job-rows .job-pick"), (first) => expect(first).toHaveAttribute("aria-current", "true"));
+  await page.goto(`${stack.url}/connections`);
+  await movesAndOpens(page, page.locator(".page .connection-toggle, .page .connection-tile-button"), (first) => expect(first).toHaveAttribute("aria-expanded", "true"));
+  await page.goto(`${stack.url}/brain`);
+  await movesAndOpens(page, page.locator(".note-list .note-list-item"), async (first) => {
+    await expect(first).toHaveAttribute("aria-current", "true");
+    await expect(page.locator(".library-reader h2.detail-title")).toHaveText(/^(Ada Lind|Bo Strand)$/);
+  });
 });
 
 /** The masthead's three parts do not overlap and stay inside its column: every control can be clicked. */

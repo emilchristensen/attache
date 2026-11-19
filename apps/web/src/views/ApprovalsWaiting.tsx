@@ -4,7 +4,7 @@ import { post, type ApiError } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
-import { Link, Loading, useAction } from "../components/ui.tsx";
+import { Link, Loading, useAction, useLocation } from "../components/ui.tsx";
 import { draftRowText, nothingWaits, proposalRowText } from "../approvals.ts";
 import { shownEntries, type ApprovalsVisit } from "./approvals-visit.ts";
 import { DecidedRow, KIND_MARK, type ApprovalKind } from "./ApprovalRow.tsx";
@@ -12,6 +12,28 @@ import { GroupFailure } from "../components/GroupFailure.tsx";
 import { DraftRow } from "./DraftRow.tsx";
 import { brainNoteHref, ProposalRow } from "./ProposalRow.tsx";
 import { settingsHref } from "../routes.ts";
+
+/**
+ * A link that names a waiting Proposal (`proposalHref`, from the Brain's note reader) opens its row once it is listed,
+ * brings it to the top of the page and puts the keyboard on it: once per link, so the owner can close it again.
+ */
+function useAskedProposal(asked: string | null, listed: boolean, open: (key: string) => void): void {
+  const handled = useRef<string | null>(null);
+  const [arrived, setArrived] = useState<string | null>(null);
+  useEffect(() => {
+    if (!asked || !listed || handled.current === asked) return;
+    handled.current = asked;
+    open(`p:${asked}`);
+    setArrived(asked);
+  }, [asked, listed, open]);
+  useEffect(() => {
+    if (!arrived) return;
+    const row = document.querySelector<HTMLElement>(`[data-approval-row="proposal"][data-row-id="${CSS.escape(arrived)}"]`);
+    row?.scrollIntoView({ block: "start" });
+    row?.querySelector<HTMLElement>("[data-row-toggle]")?.focus({ preventScroll: true });
+    setArrived(null);
+  }, [arrived]);
+}
 
 /** How many Drafts being sent In progress lists. */
 const SENDING_LIMIT = 50;
@@ -57,6 +79,8 @@ export function ApprovalsWaiting({ visit }: { visit: ApprovalsVisit }) {
   const draftEntries = shownEntries(visit.drafts, drafts.data ?? []);
   const proposalEntries = shownEntries(visit.proposals, proposals.data?.proposals ?? []);
   const toggle = (key: string) => setOpen(open === key ? null : key);
+  const asked = useLocation().search.get("proposal");
+  useAskedProposal(asked, proposalEntries.some((e) => e.kind === "live" && e.row.id === asked), setOpen);
   const { setJustDecided } = visit;
   const focused = useCallback(() => setJustDecided(null), [setJustDecided]);
   // A decision answered after the owner moved to Finished asks for no focus: the tab they came back by keeps it.

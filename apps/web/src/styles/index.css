@@ -1,13 +1,18 @@
 /*
  * The Dashboard's stylesheet, in cascade order: the typeface, the tokens, elements, controls, shared components,
  * the frame, then one file per screen. A rule that one screen needs goes in that screen's file; a rule two screens
- * share goes in components.css.
+ * share goes in components.css or, for citations, Brain changes and status lines, in the file named for them.
+ * accessibility.css comes after every shared component, so its touch targets and forced-colour selections win.
  */
 @import "./font.css";
 @import "./tokens.css";
 @import "./base.css";
 @import "./controls.css";
 @import "./components.css";
+@import "./citations.css";
+@import "./brain-changes.css";
+@import "./notices.css";
+@import "./accessibility.css";
 @import "./search.css";
 @import "./shell.css";
 @import "./home.css";

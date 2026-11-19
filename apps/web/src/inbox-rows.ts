@@ -197,3 +197,21 @@ export function untilText(iso: string, now: number, timeZone: string): string {
   if (startOfDay(now, timeZone, 1) === startOfDay(at, timeZone)) return `tomorrow ${clock}`;
   return `${dayMonth(today(at, timeZone), "short")} ${clock}`;
 }
+
+/** "at 14:00" today, "tomorrow at 14:00" on the next local day: a time still to come within a day or so. */
+function comingTime(at: number, now: number, timeZone: string): string {
+  const time = clockTime(at, timeZone);
+  return sameDay(at, now, timeZone) ? `at ${time}` : startOfDay(now, timeZone, 1) === startOfDay(at, timeZone) ? `tomorrow at ${time}` : `on ${dayMonth(today(at, timeZone), "long")} at ${time}`;
+}
+
+/**
+ * Why a row is here and, where it leaves by itself, when. Meeting prep says it for the meeting's phase now (the
+ * service wrote its reason when it raised the item): before the start, when it starts; during, that it runs; both
+ * that it leaves the Inbox at the scheduled end. Every other row says the service's words.
+ */
+export function rowWhy(item: Pick<AttentionItemView, "kind" | "why" | "meeting">, now: number, timeZone: string): string | null {
+  if (item.kind !== "meeting_prep" || !item.meeting) return item.why;
+  const start = Date.parse(item.meeting.start);
+  const leaves = `It leaves the Inbox when it ends ${comingTime(Date.parse(item.meeting.end), now, timeZone)}.`;
+  return now < start ? `A meeting with other people starts ${comingTime(start, now, timeZone)}. ${leaves}` : `A meeting with other people, in progress. ${leaves}`;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftTag, rowText, rowTime, snoozeChoices, untilText } from "../src/inbox-rows.ts";
+import { draftTag, rowText, rowTime, rowWhy, snoozeChoices, untilText } from "../src/inbox-rows.ts";
 
 // What a row's middle and trailing columns say, from the titles the connectors write today.
 
@@ -129,5 +129,30 @@ describe("when a snooze ends", () => {
     ["later", "2026-11-23T08:00:00Z", "23 Nov 09:00"],
   ])("%s", (_name, iso, text) => {
     expect(untilText(iso, now, zone)).toBe(text);
+  });
+});
+
+describe("why a row is here", () => {
+  const zone = "Europe/Copenhagen";
+  const meeting = { start: "2026-11-18T13:00:00Z", end: "2026-11-18T14:00:00Z", meetLink: null, attendees: ["Nora"] };
+  const prep = { kind: "meeting_prep", why: "A meeting with other people starts within 24 hours.", meeting };
+  const at = (iso: string) => Date.parse(iso);
+
+  it.each([
+    ["before the start, the same day", "2026-11-18T09:00:00Z", "A meeting with other people starts at 14:00. It leaves the Inbox when it ends at 15:00."],
+    ["before the start, the day before", "2026-11-17T22:30:00Z", "A meeting with other people starts tomorrow at 14:00. It leaves the Inbox when it ends tomorrow at 15:00."],
+    ["while it runs", "2026-11-18T13:20:00Z", "A meeting with other people, in progress. It leaves the Inbox when it ends at 15:00."],
+  ])("meeting prep says why and when it leaves for its phase: %s", (_, now, why) => {
+    expect(rowWhy(prep, at(now), zone)).toBe(why);
+  });
+
+  it("an end on the next day says so", () => {
+    expect(rowWhy({ ...prep, meeting: { ...meeting, end: "2026-11-18T23:30:00Z" } }, at("2026-11-18T13:20:00Z"), zone)).toBe("A meeting with other people, in progress. It leaves the Inbox when it ends tomorrow at 00:30.");
+  });
+
+  it("every other row, and meeting prep without its meeting, says the service's words", () => {
+    expect(rowWhy({ kind: "deadline", why: "Due today.", meeting: null }, at("2026-11-18T09:00:00Z"), zone)).toBe("Due today.");
+    expect(rowWhy({ ...prep, meeting: null }, at("2026-11-18T09:00:00Z"), zone)).toBe(prep.why);
+    expect(rowWhy({ kind: "deadline", why: null, meeting: null }, at("2026-11-18T09:00:00Z"), zone)).toBeNull();
   });
 });
