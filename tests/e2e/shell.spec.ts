@@ -376,7 +376,11 @@ test("shortcuts: j, k and Enter move between and open the rows of Approvals, Job
   const page = await journeys.open("/approvals");
   await movesAndOpens(page, page.locator(".approvals-panel [data-row-toggle]"), (first) => expect(first).toHaveAttribute("aria-expanded", "true"));
   await page.goto(`${stack.url}/jobs`);
-  await movesAndOpens(page, page.locator(".job-rows .job-pick"), (first) => expect(first).toHaveAttribute("aria-current", "true"));
+  await movesAndOpens(page, page.locator(".job-rows .job-pick"), async (first) => {
+    const id = await first.locator("xpath=ancestor::li[@data-job-row]").getAttribute("data-job-row");
+    await expect(page).toHaveURL(`${stack.url}/jobs?id=${id}`);
+    await expect(first).toHaveAttribute("aria-current", "true");
+  });
   await page.goto(`${stack.url}/connections`);
   await movesAndOpens(page, page.locator(".page .connection-toggle, .page .connection-tile-button"), (first) => expect(first).toHaveAttribute("aria-expanded", "true"));
   await page.goto(`${stack.url}/brain`);

@@ -439,6 +439,16 @@ describe("connectionsStatus: Offline sources that could not reach the network sh
     expect(rows.map((r) => r.key)).toEqual(["offline:github,jira", "offline:gmail", "offline:slack"]);
   });
 
+  it("keeps a server's error answer apart even when its body names a network failure", () => {
+    const rows = rowsOf(
+      withConnections(
+        conn("github", { coverage: unreached("api.github.com") }),
+        conn("gmail", { coverage: coverage("offline", { note: "GET /gmail/v1/users/me/threads → HTTP 502: upstream connection refused" }) }),
+      ),
+    );
+    expect(rows.map((r) => r.key)).toEqual(["offline:github", "offline:gmail"]);
+  });
+
   it("still groups timeouts whose messages match once their hosts are set aside", () => {
     const rows = rowsOf(
       withConnections(

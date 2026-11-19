@@ -273,6 +273,8 @@ function offlineReasons(c: ConnectionStatus): string[] {
 
 /** A failure to reach the network at all: no route, no name lookup, refused or reset, whatever words each source used. */
 const NETWORK_LEVEL = /\b(?:fetch failed|ENOTFOUND|EAI_AGAIN|getaddrinfo|ECONNREFUSED|ECONNRESET|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EHOSTDOWN|socket hang up|connection refused)\b/i;
+/** A service that answered, with an error status: whatever its body says, the network itself was reached. */
+const ANSWERED = /\bHTTP \d{3}\b/;
 /** A source that answered too slowly, which says nothing of the network itself. */
 const TIMED_OUT = /\b(?:time(?:d)? ?out|ETIMEDOUT|did not answer within|aborted)\b/i;
 
@@ -287,7 +289,7 @@ const OFFLINE = "offline";
  * several different ones, shows no single cause to share.
  */
 function offlineCause(c: ConnectionStatus): string | null {
-  const causes = new Set(offlineReasons(c).map((n) => (NETWORK_LEVEL.test(n) && !TIMED_OUT.test(n) ? OFFLINE : n.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase())));
+  const causes = new Set(offlineReasons(c).map((n) => (NETWORK_LEVEL.test(n) && !ANSWERED.test(n) && !TIMED_OUT.test(n) ? OFFLINE : n.replace(HOST, "<host>").replace(/\s+/g, " ").trim().toLowerCase())));
   return causes.size === 1 ? [...causes][0]! : null;
 }
 

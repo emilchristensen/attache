@@ -307,6 +307,14 @@ test("brain: the reader shows Review dates, History as stored, the Change log cl
   await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
   await expect(row.locator("[data-row-toggle]")).toBeFocused();
   await expect(row.getByRole("button", { name: "Apply" })).toBeInViewport();
+  // Closed, then Approvals without the link, then Back to the link: the row opens again.
+  await row.locator("[data-row-toggle]").click();
+  await page.locator(".masthead-nav").getByRole("link", { name: /^Approvals/ }).click();
+  await expect(page).toHaveURL(/\/approvals$/);
+  await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "false");
+  await page.goBack();
+  await expect(row.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(row.locator("[data-row-toggle]")).toBeFocused();
   await api(page, "POST", `/memory/proposals/${proposal.id}/reject`);
 
   // The identity record says where it changes.

@@ -21,6 +21,8 @@ function useAskedProposal(asked: string | null, listed: boolean, open: (key: str
   const handled = useRef<string | null>(null);
   const [arrived, setArrived] = useState<string | null>(null);
   useEffect(() => {
+    // A visit without the link forgets it, so following it again (Back included) opens the row again.
+    if (!asked) handled.current = null;
     if (!asked || !listed || handled.current === asked) return;
     handled.current = asked;
     open(`p:${asked}`);
