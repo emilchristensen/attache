@@ -1,4 +1,212 @@
-/* Settings: paired clients, Replication and its Machines. */
+/*
+ * Settings: a section list in four groups beside the one section the address names; on a narrow window the list is
+ * Settings' first screen and a section replaces it. Then the sections' own parts: paired clients, backups,
+ * Replication and its Machines.
+ */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  column-gap: var(--s-6);
+  align-items: start;
+}
+
+/* ---- the section list -------------------------------------------------------------- */
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+/* Beside a long section the list stays in view, where the window is tall enough to hold all of it. */
+@media (min-width: 961px) and (min-height: 640px) {
+  .settings-nav {
+    position: sticky;
+    top: 0;
+  }
+}
+.settings-nav-title {
+  margin: 0 0 var(--s-1);
+  padding-inline: 10px;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.settings-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-2);
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+  line-height: 20px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.settings-nav a:hover {
+  background: var(--row-hover);
+  color: var(--ink);
+}
+/* The section on screen: the selection fill and ink bar, as the Brain's collections. */
+.settings-nav a[aria-current="page"] {
+  background: var(--row-on);
+  box-shadow: inset 3px 0 0 var(--primary);
+  color: var(--ink);
+  font-weight: 600;
+}
+.settings-nav-label {
+  grid-column: 1;
+}
+/* Settings' named warning, on the section it is about, in words under its name. */
+.settings-nav-warning {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 500;
+  color: var(--attn-ink);
+}
+.settings-nav-chevron {
+  display: none;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  color: var(--ink-2);
+}
+
+/* ---- a section ---------------------------------------------------------------------- */
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+}
+/* Arriving from elsewhere focuses the section, without a ring around all of it. */
+.settings-section:focus {
+  outline: none;
+}
+.settings-section > .card + .card {
+  margin-top: 0;
+}
+.settings-section .kv {
+  margin: 0;
+}
+.settings-section-head {
+  margin-bottom: var(--s-1);
+}
+.settings-lede {
+  margin: var(--s-1) 0 0;
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: var(--fs-control);
+}
+.settings-back {
+  display: none;
+}
+.settings-missing {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+/* A narrow window: the list alone at Settings itself, a section alone with the way back above it. */
+@media (max-width: 960px) {
+  .settings-layout {
+    display: block;
+  }
+  .settings[data-place="index"] .settings-body,
+  .settings[data-place="section"] .settings-nav {
+    display: none;
+  }
+  .settings[data-place="section"] .settings-back {
+    display: inline-flex;
+    gap: 6px;
+    margin-bottom: var(--s-3);
+  }
+  .settings[data-place="missing"] .settings-body {
+    margin-bottom: var(--s-5);
+  }
+  .settings[data-place="missing"] .settings-layout {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .settings-nav {
+    gap: var(--s-5);
+  }
+  .settings-nav-title {
+    padding-inline: 0;
+  }
+  /* Each group a card of ruled rows, each row a full-width tap target with a chevron. */
+  .settings-nav ul {
+    gap: 0;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .settings-nav li + li {
+    border-top: 1px solid var(--rule);
+  }
+  .settings-nav a,
+  .settings-nav a[aria-current="page"] {
+    min-height: 48px;
+    padding: var(--s-2) var(--s-4);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--ink);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    font-weight: 500;
+  }
+  .settings-nav a:hover {
+    background: var(--row-hover);
+  }
+  .settings-nav-chevron {
+    display: block;
+  }
+  /* The card clips what is outside it, so the focus ring goes inside the row. */
+  .settings-nav a:focus-visible {
+    outline-offset: -3px;
+  }
+}
+
+/* ---- the sections' parts ------------------------------------------------------------- */
+
+.pairing-code {
+  font-size: 18px;
+  letter-spacing: 0.12em;
+}
+.backup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.backup-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-2) 0;
+}
+.backup-list li + li {
+  border-top: 1px solid var(--rule);
+}
+.backup-list .mono {
+  overflow-wrap: anywhere;
+}
+
 
 /* A paired client: its name and kind, when it was last seen, and Revoke. */
 .client-row {
@@ -87,10 +295,3 @@
   }
 }
 
-/* A section the search palette's Go to opened takes focus without a ring around the whole section. */
-.settings-section {
-  scroll-margin-top: var(--s-5);
-}
-.settings-section:focus {
-  outline: none;
-}

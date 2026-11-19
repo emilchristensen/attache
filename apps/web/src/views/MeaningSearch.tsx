@@ -54,7 +54,7 @@ function Detail({ s }: { s: MeaningStatus }) {
   }
 }
 
-/** The meaning model on this Machine: its state, and the button that downloads it. */
+/** The meaning model on this Machine: its name and state, and the button that downloads it. Settings says what it is for. */
 export function MeaningSearchCard() {
   const status = useResource<MeaningStatus>("/memory/meaning", ["meaning.changed", "memory.changed"]);
   const { busy, run } = useAction();
@@ -63,12 +63,9 @@ export function MeaningSearchCard() {
   return (
     <div className="card stack" data-meaning-search>
       <div className="row">
-        <h3 style={{ flex: 1 }}>Meaning-based search</h3>
+        <h3 style={{ flex: 1 }}>{s ? <>Model: {s.model.name}</> : "Model"}</h3>
         {s && <StateTag state={STATE[s.state]} label={LABEL[s.state]} />}
       </div>
-      <p className="small muted">
-        Meaning-based search finds notes by what they mean, so a question in other words or in Danish finds an English note. The model{s ? <> ({s.model.name})</> : null} runs on this Machine; notes never leave it, and its vectors stay out of the Brain.
-      </p>
       {status.loading && !s && <Loading lines={1} />}
       <ErrorState error={status.error} retry={status.reload} />
       {s && <Detail s={s} />}

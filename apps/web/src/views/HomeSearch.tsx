@@ -3,6 +3,7 @@ import { Icon } from "../components/icons.tsx";
 import { SearchField } from "../components/SearchField.tsx";
 import { Link } from "../components/ui.tsx";
 import { HOME_SEARCH_ID } from "../search-launch.ts";
+import { settingsHref } from "../routes.ts";
 
 /** The collections Browse opens directly. */
 const BROWSE: ReadonlyArray<{ label: string; to: string }> = [
@@ -86,7 +87,7 @@ export function HomeSearch({ recall }: { recall: boolean | undefined }) {
       </div>
       {recall === false ? (
         <p className="home-search-off">
-          Search is off. Turn on Search and recall in <Link to="/settings">Settings</Link>.
+          Search is off. Turn on Search and recall in <Link to={settingsHref("features")}>Settings</Link>.
         </p>
       ) : (
         <div className="home-search-row">

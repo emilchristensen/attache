@@ -4,6 +4,7 @@ import { ReaderLine } from "../views/ReaderLine.tsx";
 import { modalOpen } from "./dialog.ts";
 import { Icon } from "./icons.tsx";
 import { Link } from "./ui.tsx";
+import { settingsHref } from "../routes.ts";
 
 /** GET /machine: this Machine's identity. */
 interface MachineIdentity {
@@ -38,7 +39,7 @@ function LiveLine() {
 
 /**
  * This Machine, its Reader and the live connection: the masthead disclosure and the More sheet show the same lines.
- * Its link goes to Settings until Settings has a Machines and Replication section of its own (#32 of spec #14).
+ * Its link opens Settings' Machines and Replication section.
  */
 export function MachinePanel() {
   const name = useMachineName();
@@ -52,7 +53,7 @@ export function MachinePanel() {
       </p>
       <ReaderLine />
       <LiveLine />
-      <Link to="/settings">Machines and Replication</Link>
+      <Link to={settingsHref("machines")}>Machines and Replication</Link>
     </div>
   );
 }

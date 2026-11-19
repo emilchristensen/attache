@@ -2,6 +2,7 @@ import { Component, createContext, useCallback, useContext, useEffect, useMemo, 
 import MarkdownIt from "markdown-it";
 import type { ApiError } from "../api.ts";
 import { plural } from "@attache/contracts";
+import { settingsHref } from "../routes.ts";
 
 // ---- routing -------------------------------------------------------------------
 
@@ -79,7 +80,7 @@ export function ErrorState({ error, retry, title }: { error: ApiError | Error | 
       <span className="small">{error.message}</span>
       <div className="row">
         {retry && <button onClick={retry}>Try again</button>}
-        {disabled && <Link to="/settings">Open Settings</Link>}
+        {disabled && <Link to={settingsHref("features")}>Open Settings</Link>}
       </div>
     </div>
   );

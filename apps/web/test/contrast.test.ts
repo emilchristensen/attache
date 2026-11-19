@@ -70,6 +70,10 @@ const PAIRS: Pair[] = [
   ...text(["--link"], SURFACES),
   ...text(["--link"], ROW_STATES, "--paper"),
   ...text(["--attn-ink", "--danger"], SURFACES),
+  // A list of places on the page itself (Settings' section list, the Brain's collections): its words and a named
+  // warning on a hovered or chosen row over the canvas, and the warning on a hovered row of a narrow window's card.
+  ...text(["--ink", "--ink-2", "--attn-ink"], ROW_STATES, "--canvas"),
+  ...text(["--attn-ink"], ROW_STATES, "--paper"),
   // The silent-Reader banner under the masthead: danger words on the red tint.
   ...text(["--danger"], ["--red-soft"]),
   // The primary button's words on its solid ink, and the selected navigation entry.

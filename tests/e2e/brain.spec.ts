@@ -311,7 +311,8 @@ test("brain: the reader shows Review dates, History as stored, the Change log cl
   const identity = reader(page).locator("[data-identity]");
   await expect(identity).toHaveText("Your identity. It changes only from Settings.");
   await identity.getByRole("link", { name: "Settings" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page).toHaveURL(`${stack.url}/settings/identity`);
+  await expect(page.getByRole("heading", { level: 2, name: "Identity" })).toBeVisible();
 });
 
 test("brain: Recent saves has its own address and filters all, written without review, and reverted", async () => {
@@ -367,7 +368,8 @@ test("brain: Rebuild index is in the Brain's menu and in Settings", async () => 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("group", { name: "Brain menu" })).toHaveCount(0);
 
-  await page.goto(`${stack.url}/settings`);
+  // In Settings, under Service health.
+  await page.goto(`${stack.url}/settings/service`);
   const card = page.locator("[data-search-index]");
   await card.getByRole("button", { name: "Rebuild index" }).click();
   await expect(page.getByText("Rebuilding the search index. Jobs shows its progress.").first()).toBeVisible();

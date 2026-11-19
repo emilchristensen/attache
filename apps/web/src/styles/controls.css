@@ -197,6 +197,33 @@ input[type="radio"] {
   width: 16px;
   height: 16px;
 }
+.feature-body {
+  flex: 1;
+  min-width: 0;
+}
+.feature-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.feature-name {
+  font-weight: 600;
+  cursor: pointer;
+}
+.feature-name.core {
+  cursor: default;
+}
+/* Why a feature that is on is not fully working: next to its tag, before what the feature does. */
+.feature-reason {
+  margin: 2px 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink);
+}
+.feature-dependency {
+  margin-top: var(--s-2);
+}
 .feature-row .desc {
   font-size: var(--fs-meta);
   color: var(--ink-2);

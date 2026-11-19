@@ -9,6 +9,7 @@ import { connectionsStatus, moreLabel, nameList, splitRows, type ConnectionsStat
 import { connectionHref, reconfigureSignIn, reconnectMethod, retestConnection, startBrowserSignIn, testSignIn } from "../reconnect.ts";
 import { clockTime } from "../zoned-time.ts";
 import { useReader } from "./ReaderLine.tsx";
+import { settingsHref } from "../routes.ts";
 
 interface Caps {
   features: FeatureStatus[];
@@ -214,13 +215,13 @@ function RowAction({ action, describedBy, view }: { action: StatusAction; descri
       );
     case "open_settings":
       return (
-        <Link to="/settings" className="btn small">
+        <Link to={settingsHref("features")} className="btn small">
           Open Settings
         </Link>
       );
     case "machines":
       return (
-        <Link to="/settings" className="btn small">
+        <Link to={settingsHref("machines")} className="btn small">
           Machines and Replication
         </Link>
       );

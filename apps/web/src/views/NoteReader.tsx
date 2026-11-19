@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { useResource } from "../live.ts";
 import { useSignals } from "../nav-signals.ts";
-import { approvalsHref } from "../routes.ts";
+import { approvalsHref, settingsHref } from "../routes.ts";
 import { ErrorState, Link, Loading, Markdown, Time } from "../components/ui.tsx";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -178,7 +178,7 @@ export function NoteReader({ root, relPath }: { root: string; relPath: string })
           <p className="reader-identity" data-identity>
             <Icon name="key" size={16} />
             <span>
-              Your identity. It changes only from <Link to="/settings">Settings</Link>.
+              Your identity. It changes only from <Link to={settingsHref("identity")}>Settings</Link>.
             </span>
           </p>
         )}
