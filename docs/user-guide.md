@@ -143,7 +143,7 @@ Arrow keys move through places and passages, `Enter` opens the chosen one, and *
 Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
-The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+The decision keys, `w` for Start working, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
 No single key ever applies, approves, sends, rejects, reverts or disconnects.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
@@ -166,7 +166,7 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
+Home holds Search the Brain, For you now, Your day, Connections and the Inbox, which ends with Recently added.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
@@ -185,12 +185,52 @@ Home holds four areas: Search the Brain, For you now, Connections and the Inbox,
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**.
 - **For you now** shows timely Inbox items, such as meeting prep, and never contains the Daily Briefing.
   Every Heads-up says why it is here and when it leaves.
+  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
+    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
+    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
+    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
+    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
+    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
+    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
+  - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
+  - With Attention and briefings switched off, the area says so, with a link to Settings.
+- **Your day** is the ruled band between Home's upper areas.
+  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one line above timed meetings.
+  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**.
+  Select a meeting to open it in Google Calendar.
+  **Join** appears from 15 minutes before its start until its scheduled end when it has a Meet link.
+  Once the day's meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known.
+  It says **Nothing on your calendar today** only after a complete read, and otherwise distinguishes **Checking**, **Could not read**, **No calendar connected** and **Switched off**.
+  A failed read keeps the last known meetings and says when they were read.
+  The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
+  On a wide window extra meetings sit behind **N more**; in a narrow space every meeting is a list.
+  Your day is a schedule and never adds to the Attention dot's count.
+- **Connections** says whether you can trust the list below it.
+  When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
+  Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
+  Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
+  Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
+  Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
+  Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
+  Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
+  Sources that could not reach the network at all (offline: no connection, no name lookup, refused), whatever words each one recorded, share one row; a source whose service answered with an error or did not answer in time has its own row, unless another failed with the same message.
+  At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
+  Only a Connection that needs you to sign in again counts toward the dot.
+  An item list is never shown as "nothing to do" while this area shows a problem.
+
 - **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
   Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
   On a narrow window the type comes first, then the whole subject, then the source and time.
-  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
+  Every row offers **Start working**, **Snooze** and **Done** without opening it.
+  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place.
+  It keeps the item open and marks it **In progress** on every Machine; the button then reads **Continue**.
+  Opening the row shows **Not started** to clear the mark.
+  A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
+  **Snooze** opens the same return times as an opened row.
+  In a two-thirds space, Snooze and Done become icon buttons with full accessible names; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
+  Select a row to open it in place for the summary, why it is here, evidence, the main action and every decision, including **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
   The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.

@@ -8,6 +8,7 @@ import { DailyBriefing } from "./DailyBriefing.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { HomeConnections, useConnectionsStatus } from "./HomeConnections.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";
+import { YourDay } from "./YourDay.tsx";
 
 const NOTHING_ABOVE: ReadonlySet<string> = new Set();
 
@@ -29,6 +30,7 @@ export function Home() {
       <HomeSearch recall={f.recall} />
       {cfg.data && <DailyBriefing attentionOn={f.attention ?? false} clock={clock} onRead={(id) => window.history.pushState(null, "", `/briefing/${id}`)} />}
       {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
+      {cfg.data && <YourDay clock={clock} enabled={f.attention ?? false} />}
       <HomeConnections view={connections} />
       <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} after={f.capture && <RecentlyAdded />} />
     </section>

@@ -375,6 +375,7 @@ export function countOpenDecisions(db: Db): number {
 }
 
 function toView(r: Record<string, unknown>): AttentionItemView {
+  const derived = deriveState(recordOfRow(r as unknown as ItemRow).item, json<InboxDecisionPart | null>(r.decision, null), String(r.updated_at));
   return {
     id: String(r.id),
     key: String(r.item_key),
@@ -389,6 +390,7 @@ function toView(r: Record<string, unknown>): AttentionItemView {
     priority: Number(r.priority),
     state: r.state as AttentionItemView["state"],
     snoozeUntil: (r.snooze_until as string) ?? null,
+    startedAt: derived.startedAt,
     evidence: json(r.evidence, []),
     firstSeenAt: String(r.first_seen_at),
     updatedAt: String(r.updated_at),

@@ -64,6 +64,29 @@ describe("The inbox replicates", () => {
     expect(await venue(pc)).toMatchObject({ id: raised.id, key: raised.key, state: "open" });
   });
 
+  it("replicates a started item, keeps it open, and clears or ends the start with a later decision", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    writeTask(mac, day(2));
+    await refresh(mac);
+    await replicate(mac, pc);
+    const item = (await venue(pc))!;
+
+    const started = await pc.post(`/attention/${item.id}/decision`, { decision: "start" });
+    expect(started).toMatchObject({ state: "open", startedAt: expect.any(String) });
+    await replicate(pc, mac);
+    expect(await venue(mac)).toMatchObject({ state: "open", startedAt: started.startedAt });
+
+    await mac.post(`/attention/${item.id}/decision`, { decision: "reopen" });
+    await replicate(mac, pc);
+    expect(await venue(pc)).toMatchObject({ state: "open", startedAt: null });
+
+    await pc.post(`/attention/${item.id}/decision`, { decision: "start" });
+    await pc.post(`/attention/${item.id}/decision`, { decision: "done" });
+    await replicate(pc, mac);
+    expect(await venue(mac)).toMatchObject({ state: "resolved", startedAt: null });
+  });
+
   it("applies a dismiss or a snooze made on one Machine on the others", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];

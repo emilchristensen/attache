@@ -8,14 +8,15 @@ import { hueClass } from "../theme/hues.ts";
 import { inboxType } from "../inbox-types.ts";
 import { draftTag, rowText, rowTime, rowWhy, snoozeChoices, untilText } from "../inbox-rows.ts";
 import { openDraftId } from "../linked-draft.ts";
+import { firstStepFor } from "../inbox-first-step.ts";
 import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
 import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
 
 /** What the owner decided in a row; Undo reopens the item. */
-export type RowDecision = "done" | "dismiss" | "snooze" | "reopen";
+export type RowDecision = "start" | "done" | "dismiss" | "snooze" | "reopen";
 
 export interface RowActions {
-  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => void;
+  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => Promise<void>;
   prepareDraft: (item: AttentionItemView) => void;
   /** The owner's explicit choice to replace `draftId`, the item's Draft whose send has an unknown outcome. */
   prepareReplacement: (item: AttentionItemView, draftId: string) => void;
@@ -77,6 +78,7 @@ function Evidence({ item }: { item: AttentionItemView }) {
 /** The decisions under an open row: Snooze opens its times in place. */
 function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; actions: RowActions; primaryDone: boolean }) {
   const [snoozing, setSnoozing] = useState(false);
+  const subject = rowText(item).subject;
   const times = useId();
   if (item.state !== "open")
     return (
@@ -87,14 +89,14 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
   return (
     <>
       {!primaryDone && (
-        <button onClick={() => actions.decide(item, "done")} disabled={actions.busy}>
+        <button aria-label={`Done: ${subject}`} onClick={() => actions.decide(item, "done")} disabled={actions.busy}>
           Done
         </button>
       )}
-      <button aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
+      <button aria-label={`Snooze: ${subject}`} aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
         Snooze
       </button>
-      <button onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
+      <button aria-label={`Dismiss: ${subject}`} onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
         Dismiss
       </button>
       {snoozing && (
@@ -166,7 +168,7 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
         </button>
       )}
       {primary === "done" && (
-        <button className="primary" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+        <button aria-label={`Done: ${rowText(item).subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
           Done
         </button>
       )}
@@ -180,6 +182,58 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
   );
 }
 
+async function startWorking(item: AttentionItemView, actions: RowActions, onToggle: () => void, draftsOn: boolean): Promise<void> {
+  const draftId = openDraftId(item);
+  await actions.decide(item, "start");
+  if (draftId) {
+    actions.viewDraft(draftId);
+    return;
+  }
+  const step = firstStepFor(item);
+  if (step === "draft" && draftsOn && item.draftable) actions.prepareDraft(item);
+  else if (step === "source" && item.url) window.open(item.url, "_blank", "noopener,noreferrer");
+  else if (step === "calendar" && item.url) window.open(item.url, "_blank", "noopener,noreferrer");
+  else onToggle();
+}
+
+function RowQuickActions({ item, actions, onToggle, draftsOn }: { item: AttentionItemView; actions: RowActions; onToggle: () => void; draftsOn: boolean }) {
+  const [snoozing, setSnoozing] = useState(false);
+  const [compactMenu, setCompactMenu] = useState(false);
+  const subject = rowText(item).subject;
+  const times = useId();
+  const menu = useId();
+  if (item.state !== "open") return null;
+  return (
+    <div className="inbox-row-actions">
+      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => startWorking(item, actions, onToggle, draftsOn)}>
+        {item.startedAt ? "Continue" : "Start working"}
+      </button>
+      <button className="inbox-actions-menu" aria-label={`Actions: ${subject}`} aria-expanded={compactMenu} aria-controls={menu} onClick={() => setCompactMenu(!compactMenu)}>
+        Actions
+      </button>
+      <div className="inbox-row-secondary" id={menu} data-open={compactMenu || undefined}>
+        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
+          <Icon name="clock" size={16} />
+          <span>Snooze</span>
+        </button>
+        <button className="inbox-done-button" aria-label={`Done: ${subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+          <Icon name="check" size={16} />
+          <span>Done</span>
+        </button>
+      </div>
+      {snoozing && (
+        <div className="inbox-snooze" id={times} role="menu" aria-label={`Snooze: ${subject}`}>
+          {snoozeChoices(new Date()).map((t) => (
+            <button role="menuitem" key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Plain exception labels on the source line: a Draft that stands for the item, a send of unknown outcome, a change since a decision, a hidden state. */
 function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
   const draft = draftTag(item.actionStatus);
@@ -188,6 +242,7 @@ function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
       {draft && <Tag hue="blue">{draft}</Tag>}
       {unconfirmedDraftId(item) && <Tag tone="attention">{DELIVERY_UNCONFIRMED}</Tag>}
       {item.changedSinceDecision && item.state === "open" && <Tag tone="attention">Changed since your decision</Tag>}
+      {item.startedAt && item.state === "open" && <Tag tone="outline">In progress</Tag>}
       {item.state === "snoozed" && item.snoozeUntil && <Tag tone="outline">Snoozed until {untilText(item.snoozeUntil, clock.now, clock.timeZone)}</Tag>}
       {item.state === "dismissed" && <Tag tone="outline">Dismissed</Tag>}
     </>
@@ -222,13 +277,23 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { i
         <time className="inbox-time" dateTime={time.iso} title={time.label}>
           {time.text}
         </time>
+        <RowQuickActions item={item} actions={actions} onToggle={onToggle} draftsOn={draftsOn} />
       </div>
-      {open && <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} clock={clock} />}
+      {open && (
+        <>
+          {item.startedAt && (
+            <button className="small inbox-not-started" aria-label={`Not started: ${text.subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "reopen")}>
+              Not started
+            </button>
+          )}
+          <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} clock={clock} />
+        </>
+      )}
     </li>
   );
 }
 
-const DECIDED_WORDS: Readonly<Record<RowDecision, string>> = { done: "Done", dismiss: "Dismissed", snooze: "Snoozed", reopen: "Back in the Inbox" };
+const DECIDED_WORDS: Readonly<Record<RowDecision, string>> = { start: "In progress", done: "Done", dismiss: "Dismissed", snooze: "Snoozed", reopen: "Back in the Inbox" };
 
 /** A decided row stays in its place as one line with Undo, so nothing below it moves. */
 export function DecidedRow({ item, decision, until, onUndo, busy, clock }: { item: AttentionItemView; decision: RowDecision; until: string | null; onUndo: (() => void) | null; busy: boolean; clock: Clock }) {
