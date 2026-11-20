@@ -381,7 +381,7 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
     // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
     const first = page.locator("#inbox [data-inbox-row]").first();
     if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
-    const onCard = first.getByRole("button", { name: "Snooze" });
+    const onCard = first.locator(".inbox-row-actions").getByRole("button", { name: "Snooze" });
     const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
     const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
     // Control edges: a secondary button on a card and on the canvas.
@@ -440,8 +440,8 @@ test("attention: a decided row stays in place with Undo; dismiss and snooze pers
   await expect(runbook).toHaveAttribute("data-decided", "dismiss");
   const cutover = inboxRow(page, "Send the cutover plan to finance");
   await openRow(cutover);
-  await cutover.getByRole("button", { name: "Snooze" }).click();
-  await cutover.getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
+  await cutover.locator(".inbox-detail").getByRole("button", { name: "Snooze" }).click();
+  await cutover.locator(".inbox-detail").getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
   await expect(cutover).toHaveAttribute("data-decided", "snooze");
   const forYou = page.getByRole("region", { name: "For you now" });
   await forYou.getByRole("button", { name: "Briefings" }).click();
@@ -487,6 +487,11 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(countLine).toHaveText(/Draft in Approvals$/);
   // The row stays in the list with its Draft's state and View draft.
   await expect(pr).toContainText("Draft waiting");
+  await openRow(pr);
+  await pr.getByRole("button", { name: "Start working: Add checkout retry" }).click();
+  await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "draft");
+  await page.goBack();
+  await expect(pr).toContainText("In progress");
   await openRow(pr);
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");

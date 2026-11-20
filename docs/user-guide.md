@@ -145,7 +145,7 @@ Arrow keys move through places and passages, `Enter` opens the chosen one, and *
 Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
-The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+The decision keys, `w` for Start working, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
 No single key ever applies, approves, sends, rejects, reverts or disables a Connection.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
@@ -168,7 +168,7 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds three areas: Search the Brain, For you now and the Inbox, which ends with Recently added.
+Home holds Search the Brain, For you now, Your day and the Inbox, which ends with Recently added.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
@@ -202,6 +202,17 @@ Home holds three areas: Search the Brain, For you now and the Inbox, which ends 
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.
+- **Your day** is the ruled band between Home's upper areas.
+  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one line above timed meetings.
+  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**.
+  Select a meeting to open it in Google Calendar.
+  **Join** appears from 15 minutes before its start until its scheduled end when it has a Meet link.
+  Once the day's meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known.
+  It says **Nothing on your calendar today** only after a complete read, and otherwise distinguishes **Checking**, **Could not read**, **No calendar connected** and **Switched off**.
+  A failed read keeps the last known meetings and says when they were read.
+  The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
+  On a wide window extra meetings sit behind **N more**; in a narrow space every meeting is a list.
+  Your day is a schedule and never adds to the Attention dot's count.
 - **Connections** says whether you can trust the list below it.
   When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
   Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
@@ -219,7 +230,14 @@ Home holds three areas: Search the Brain, For you now and the Inbox, which ends 
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
   On a narrow window the type comes first, then the whole subject, then the source and time.
-  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
+  Every row offers **Start working**, **Snooze** and **Done** without opening it.
+  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place.
+  It keeps the item open and marks it **In progress** on every Machine; the button then reads **Continue**.
+  Opening the row shows **Not started** to clear the mark.
+  A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
+  **Snooze** opens the same return times as an opened row.
+  In a two-thirds space, Snooze and Done become icon buttons with full accessible names; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
+  Select a row to open it in place for the summary, why it is here, evidence, the main action and every decision, including **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
   The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.

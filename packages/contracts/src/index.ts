@@ -9,6 +9,7 @@ export * from "./memory.ts";
 export * from "./recall-evaluation.ts";
 export * from "./meaning.ts";
 export * from "./attention.ts";
+export * from "./agenda.ts";
 export * from "./jobs.ts";
 export * from "./actions.ts";
 export * from "./decision-count.ts";

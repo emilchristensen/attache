@@ -85,15 +85,15 @@ async function expectFold(page: Page, rows: number, what: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
-test("quiet: nothing timely, every source read; For you now is one line and four rows show at 1280 x 800", async () => {
+test("quiet: nothing timely, every source read; For you now is one line and three rows show with Your day at 1280 x 800", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
   await expect(connections(page)).toHaveCount(0);
-  await expectFold(page, 4, "complete Inbox rows on a quiet day");
+  await expectFold(page, 3, "complete Inbox rows on a quiet day with Your day");
   await captureDay(page, "quiet");
 });
 
-test("morning: an unread daily briefing leads; two rows show at 1280 x 800, four after Got it", async () => {
+test("morning: an unread daily briefing leads; one row shows with Your day at 1280 x 800, two after Got it", async () => {
   const page = await journeys.open("/");
   const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "daily" });
@@ -101,15 +101,15 @@ test("morning: an unread daily briefing leads; two rows show at 1280 x 800, four
   const lead = forYouNow(page).locator('[data-heads-up="daily-briefing"]');
   await expect(lead).toBeVisible();
   await expect(connections(page)).toHaveCount(0);
-  await expectFold(page, 2, "complete Inbox rows under an unread briefing");
+  await expectFold(page, 1, "complete Inbox rows under an unread briefing with Your day");
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
   await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expectFold(page, 4, "complete Inbox rows after Got it");
+  await expectFold(page, 2, "complete Inbox rows after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
-test("overlap: a meeting in progress, the next one, the briefing as a follower and one sign-in; one row shows at 1280 x 800", async () => {
+test("overlap: a meeting in progress, the next one, the briefing as a follower and one sign-in; Your day stays visible at 1280 x 800", async () => {
   const page = await journeys.open("/");
   await setCalendar(page, stack, [
     { id: "handover", summary: "Pilot handover", start: -10, end: 20, meetLink: "https://meet.google.com/abc-defg-hij", attendees: ["Nora Lind"] },
@@ -120,8 +120,22 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
   await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
   await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
-  await expectFold(page, 1, "complete Inbox rows during overlapping meetings with a sign-in problem");
+  const day = page.getByRole("region", { name: "Your day" });
+  await expect(day).toContainText("Pilot handover");
+  await expect(day.locator('.your-day-wide [data-phase="in-progress"]')).toContainText("Join");
+  await expect(day.locator('.your-day-wide [data-phase="upcoming"]')).toContainText("Billing triage");
+  await expectFold(page, 0, "Inbox fold during overlapping meetings with Your day");
   await captureDay(page, "overlap");
+  await page.setViewportSize(PHONE);
+  await expect(day.locator(".your-day-narrow li")).toHaveCount(2);
+  await page.route("**/api/v1/agenda?*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, coverage: { state: "offline", scopes: [], items: 0, at: new Date().toISOString() } } });
+  });
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Your day" })).toContainText("Could not read");
+  await expect(page.getByRole("region", { name: "Your day" })).toContainText("Pilot handover");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
@@ -186,6 +200,47 @@ function heavyDay(template: AttentionItemView, now: number): AttentionItemView[]
 
 /** heavy-day-v1's 38 decisions: 28 Inbox items (two have their Draft waiting), four Drafts and six Proposals. */
 const HEAVY_TOTALS: DecisionTotals = { inbox: 28, drafts: 4, proposals: 6, signIns: 0 };
+
+test("Your day states: checking, complete empty, nothing more, no calendar and switched off", async () => {
+  const page = await journeys.open("/");
+  const day = page.getByRole("region", { name: "Your day" });
+  const response = { connection: { id: "gcal", status: "connected" }, events: [], readAt: new Date().toISOString(), coverage: { state: "complete", scopes: [], items: 0, at: new Date().toISOString() } };
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: response }));
+  await page.reload();
+  await expect(day).toContainText("Nothing on your calendar today");
+  await captureDay(page, "empty-agenda");
+
+  const now = Date.now();
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: { ...response, events: [
+    { id: "finished", start: new Date(now - 60_000).toISOString(), end: new Date(now - 1).toISOString(), allDay: false, title: "Finished meeting", response: "accepted", calendarUrl: "https://calendar.google.com/finished", meetLink: null },
+    { id: "tomorrow", start: new Date(now + 86_400_000).toISOString(), end: new Date(now + 86_401_000).toISOString(), allDay: false, title: "Tomorrow meeting", response: "accepted", calendarUrl: "https://calendar.google.com/tomorrow", meetLink: null },
+  ] } }));
+  await page.reload();
+  await expect(day).toContainText("Nothing more today");
+  await expect(day).toContainText("Tomorrow meeting");
+  await captureDay(page, "finished-agenda");
+
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: { ...response, connection: null, readAt: null, coverage: null } }));
+  await page.reload();
+  await expect(day).toContainText("No calendar connected");
+
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({ json: response });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(day).toContainText("Checking");
+  await expect(day).toContainText("Nothing on your calendar today");
+
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await api(page, "PUT", "/features", { changes: { attention: false }, cascade: true });
+  await page.reload();
+  await expect(day).toContainText("Switched off");
+  await api(page, "PUT", "/features", { changes: { attention: true }, cascade: true });
+});
 
 test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed for now; the first rows still show at 1280 x 800", async () => {
   const page = await journeys.open("/");

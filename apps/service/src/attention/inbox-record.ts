@@ -50,7 +50,7 @@ export const InboxItemPart = z.object({
 });
 export type InboxItemPart = z.infer<typeof InboxItemPart>;
 
-export const DECISIONS = ["dismiss", "snooze", "reopen", "done"] as const;
+export const DECISIONS = ["start", "dismiss", "snooze", "reopen", "done"] as const;
 export type InboxDecisionKind = (typeof DECISIONS)[number];
 
 export const InboxDecisionPart = z.object({
@@ -84,6 +84,7 @@ export function parseInboxRecord(value: unknown): InboxRecord | null {
 export interface DerivedState {
   state: AttentionItemView["state"];
   snoozeUntil: string | null;
+  startedAt: string | null;
   /** The fingerprint the decision applies to; null when there is none, or it was a reopen. */
   decidedFingerprint: string | null;
 }
@@ -101,12 +102,13 @@ export function meetingOver(item: Pick<InboxItemPart, "meeting">, now: string): 
  */
 export function deriveState(item: Pick<InboxItemPart, "fingerprint" | "resolvedAt" | "meeting">, decision: InboxDecisionPart | null, now: string): DerivedState {
   const decidedFingerprint = decision && decision.decision !== "reopen" ? decision.fingerprint : null;
-  const base = { snoozeUntil: null, decidedFingerprint };
-  if (item.resolvedAt || meetingOver(item, now)) return { ...base, state: "resolved" };
+  const startedAt = decision?.decision === "start" && decision.fingerprint === item.fingerprint ? decision.at : null;
+  const base = { snoozeUntil: null, startedAt, decidedFingerprint };
+  if (item.resolvedAt || meetingOver(item, now)) return { ...base, state: "resolved", startedAt: null };
   if (decision?.decision === "snooze" && decision.until && decision.until > now) return { ...base, state: "snoozed", snoozeUntil: decision.until };
   if (decision && decision.fingerprint === item.fingerprint) {
-    if (decision.decision === "dismiss") return { ...base, state: "dismissed" };
-    if (decision.decision === "done") return { ...base, state: "resolved" };
+    if (decision.decision === "dismiss") return { ...base, state: "dismissed", startedAt: null };
+    if (decision.decision === "done") return { ...base, state: "resolved", startedAt: null };
   }
   return { ...base, state: "open" };
 }
