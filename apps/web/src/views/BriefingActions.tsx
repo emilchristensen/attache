@@ -36,7 +36,7 @@ export function BriefingActions({ running, hasBriefing, start, onMeetingContext 
   return (
     <div className="briefing-actions" ref={root}>
       <button ref={button} className="small briefing-actions-trigger" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen(!open)}>
-        Briefings
+        Briefing options
         <Icon name="chevron" className="briefing-actions-chevron" />
       </button>
       {open && (

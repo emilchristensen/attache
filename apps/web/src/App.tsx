@@ -10,6 +10,7 @@ import { Pair } from "./views/Pair.tsx";
 import { ServiceUnreachable } from "./views/ServiceUnreachable.tsx";
 import { Setup } from "./views/Setup.tsx";
 import { Home } from "./views/Home.tsx";
+import { BriefingPage } from "./views/BriefingPage.tsx";
 import { ApprovalsView } from "./views/Approvals.tsx";
 import { BrainView } from "./views/Brain.tsx";
 import { JobsView } from "./views/Jobs.tsx";
@@ -24,6 +25,7 @@ interface Session {
 /** Each screen's view; the shell around it comes from `components/Shell.tsx`. */
 const VIEWS: Record<ScreenId, () => ReactNode> = {
   home: () => <Home />,
+  briefing: () => <BriefingPage />,
   approvals: () => <ApprovalsView />,
   brain: () => <BrainView />,
   connections: () => <ConnectionsView />,

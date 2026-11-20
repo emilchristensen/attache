@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { BriefingViewSchema } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
 import type { Briefing } from "./briefing.ts";
 
@@ -10,29 +10,12 @@ import type { Briefing } from "./briefing.ts";
  */
 export const BRIEFING_KEY = "briefing";
 
-const Related = z.object({ title: z.string(), relPath: z.string(), lines: z.tuple([z.number(), z.number()]) });
-const Item = z.object({ id: z.string(), title: z.string(), summary: z.string(), url: z.string().nullable(), isNew: z.boolean(), changed: z.boolean(), related: z.array(Related).optional() });
-const Section = z.object({ id: z.string(), title: z.string(), items: z.array(Item) });
-const Scope = z.object({ scope: z.string(), state: z.string(), items: z.number(), pages: z.number(), note: z.string().optional() });
-const Coverage = z.object({ state: z.string(), scopes: z.array(Scope), items: z.number(), at: z.string(), note: z.string().optional() });
-const SourceCoverage = z.object({ id: z.string(), label: z.string(), kind: z.string(), coverage: Coverage.nullable(), lastSuccessAt: z.string().nullable(), status: z.string() });
-const Counts = z.object({ open: z.number(), new: z.number(), changed: z.number(), drafts: z.number(), proposals: z.number(), failedSources: z.number() });
-
-const StoredBriefing = z.object({
-  id: z.string().min(1),
-  kind: z.enum(["daily", "away", "manual"]),
-  createdAt: z.iso.datetime(),
-  since: z.string().nullable(),
-  summary: z.string(),
-  sections: z.array(Section),
-  coverage: z.array(SourceCoverage),
-  counts: Counts,
-});
+const StoredBriefing = BriefingViewSchema.omit({ deliverablePath: true });
 
 /** What a briefing's deliverable carries in its frontmatter. */
 export function briefingFrontmatter(b: Omit<Briefing, "deliverablePath">): Record<string, unknown> {
-  const { id, kind, createdAt, since, summary, sections, coverage, counts } = b;
-  return { [BRIEFING_KEY]: { id, kind, createdAt, since, summary, sections, coverage, counts } };
+  const { id, kind, createdAt, since, summary, sections, lead, topPicks, updates, coverage, counts } = b;
+  return { [BRIEFING_KEY]: { id, kind, createdAt, since, summary, sections, lead, topPicks, updates, coverage, counts } };
 }
 
 /** The newest briefing among the deliverables in this Machine's copy of the Brain, or null when none carries one. */

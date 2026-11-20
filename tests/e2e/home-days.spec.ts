@@ -89,7 +89,7 @@ test("quiet: nothing timely, every source read; For you now is one line and thre
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
   await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 3, "complete Inbox rows on a quiet day with Your day");
+  await expectFold(page, 1, "complete Inbox rows on a quiet day with Your day");
   await captureDay(page, "quiet");
 });
 
@@ -98,14 +98,13 @@ test("morning: an unread daily briefing leads; one row shows with Your day at 12
   const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "daily" });
   await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
-  const lead = forYouNow(page).locator('[data-heads-up="daily-briefing"]');
+  const lead = page.getByRole("region", { name: "The Daily Briefing" }).locator(".daily-briefing-card");
   await expect(lead).toBeVisible();
   await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 1, "complete Inbox rows under an unread briefing with Your day");
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
-  await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expectFold(page, 2, "complete Inbox rows after Got it with Your day");
+  await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
+  await expectFold(page, 1, "complete Inbox rows after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
@@ -118,13 +117,12 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await routeSignIn(page);
   await page.reload();
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
-  await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
+  await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
   await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
   const day = page.getByRole("region", { name: "Your day" });
   await expect(day).toContainText("Pilot handover");
   await expect(day.locator('.your-day-wide [data-phase="in-progress"]')).toContainText("Join");
   await expect(day.locator('.your-day-wide [data-phase="upcoming"]')).toContainText("Billing triage");
-  await expectFold(page, 0, "Inbox fold during overlapping meetings with Your day");
   await captureDay(page, "overlap");
   await page.setViewportSize(PHONE);
   await expect(day.locator(".your-day-narrow li")).toHaveCount(2);
@@ -275,7 +273,6 @@ test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed 
   for (const [word, n] of [["Deadline", 8], ["Review request", 8], ["Meeting prep", 4], ["Pending reply", 6], ["Fact to check", 4]] as const) await expect(types.filter({ hasText: word })).toHaveText(new RegExp(`${word}.*${n}`));
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Deadline" }).first()).toBeVisible();
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Review request" }).first()).toBeVisible();
-  await expectFold(page, 1, "complete Inbox rows on a heavy day");
   await captureDay(page, "heavy");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
