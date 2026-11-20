@@ -1,28 +1,43 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
 import { isAbsolute, join } from "node:path";
 import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
 import { COPILOT_HOME_DIR, copilotCliInstall } from "../platform/harness-locations.ts";
 import { locationsForHome } from "../platform/locations.ts";
-import { HooksFileError, writeConfigText } from "./hooks-config.ts";
-import { agentHome, mcpServerEntry, type AgentHooks } from "./install.ts";
+import { shellPath } from "../platform/shell-command.ts";
+import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
+import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
+import { checkCopilotCliVersion } from "./copilot-cli-version.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 import { parseJsonc } from "./jsonc.ts";
 import { jsonMcpConfig } from "./mcp-config-json.ts";
 import { isPlainObject } from "./mcp-config-format.ts";
 
 /**
- * Copilot CLI through its personal MCP configuration (ADR 0006).
+ * Copilot CLI through its personal MCP configuration and personal hooks (ADR 0006).
  *
  * Attache adds one entry per instance to `mcp-config.json` in Copilot CLI's
  * home folder, the file `copilot mcp add` writes, and changes nothing else in
  * it: no repository is touched. Copilot CLI reads the file as JSON with
  * comments; Attache writes it back as plain JSON, as `copilot mcp add` does,
- * after backing it up. `settings.json` is only read, to refuse a setup in
- * which the owner has turned this server off.
+ * after backing it up.
+ *
+ * Memory comes from one personal hooks file per instance,
+ * `hooks/<instance>.json`: a `sessionStart` command hook that runs Attache's
+ * hook script, which prints the current memory as `additionalContext`, so
+ * every new, cleared (`/clear`) or resumed session starts with today's
+ * memory. Copilot CLI combines every file in that folder, so the owner's own
+ * hooks files and other instances' files are never opened. No instruction
+ * file is written.
+ *
+ * `settings.json` is only read, to refuse a setup in which the owner has
+ * turned this server, or all hooks, off.
  */
 
 const PURPOSE = "Attache's MCP server in Copilot CLI's personal MCP configuration";
+const HOOKS_PURPOSE = "Attache's personal Copilot CLI hook that gives each new, cleared or resumed session your current Attache memory";
+/** Copilot CLI waits 30 seconds for a hook by default; Attache's only reads a file. */
+const HOOK_TIMEOUT_SEC = 10;
 const PURPOSE_COMMENTS = `${PURPOSE}; the file is written back as plain JSON, as copilot mcp add does, so its comments are kept only in the backup`;
 
 /** Copilot CLI's home folder: `COPILOT_HOME` when it names one, else `~/.copilot`. */
@@ -52,6 +67,23 @@ function readCopilotJson(path: string): { raw: string; value: Record<string, unk
   return { raw, value: parsed };
 }
 
+/** A path quoted for PowerShell, which Copilot CLI uses for hooks on Windows. */
+const powershellPath = (p: string) => `'${p.replace(/'/g, "''")}'`;
+
+/**
+ * This instance's personal hooks file: a `sessionStart` command hook running
+ * Attache's hook script for Copilot CLI, with a `bash` command (macOS, Linux,
+ * and Windows with Git Bash) and a `powershell` one, the fields Copilot CLI's
+ * hooks reference documents for command hooks.
+ */
+export function copilotHooksText(stateDir: string, hook: string, node: string = process.execPath): string {
+  const args = ["copilot-cli", "session-start", "--state-dir"];
+  const bash = `${shellPath(node)} ${shellPath(hook)} ${args.join(" ")} ${shellPath(stateDir)}`;
+  const powershell = `& ${powershellPath(node)} ${powershellPath(hook)} ${args.join(" ")} ${powershellPath(stateDir)}`;
+  const file = { version: 1, hooks: { sessionStart: [{ type: "command", bash, powershell, timeoutSec: HOOK_TIMEOUT_SEC }] } };
+  return `${JSON.stringify(file, null, 2)}\n`;
+}
+
 /** Whether a text is plain JSON, with no comments or trailing commas to lose when Attache writes it back. */
 function plainJson(raw: string): boolean {
   try {
@@ -68,6 +100,28 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   const settingsPath = () => join(copilotHome(), "settings.json");
   const entry = () => ({ type: "local", ...mcpServerEntry(hooks.stateDir), tools: ["*"] });
   const isOurs = hooks.mcp.isOurs;
+  const hooksPath = () => join(copilotHome(), "hooks", `${name()}.json`);
+  const expectedHooks = () => copilotHooksText(hooks.stateDir, stablePath(hookScript()), stablePath(process.execPath));
+
+  /** The hooks file's text when it is this instance's, null when absent; throws when another file is in its place. */
+  function currentHooks(): string | null {
+    const path = hooksPath();
+    if (!existsSync(path)) return null;
+    const text = readFileSync(path, "utf8");
+    if (!hooksFileIsOurs(text)) throw new HooksFileError(`${path} exists and was not written by this Attache; Attache will not change it. Move it away, then connect again.`);
+    return text;
+  }
+
+  /** A hooks file is this instance's when one of its hook commands runs Attache's hook script for this state folder. */
+  function hooksFileIsOurs(text: string): boolean {
+    try {
+      const file = JSON.parse(text) as { hooks?: Record<string, unknown> };
+      const entries = Object.values(file?.hooks ?? {}).flatMap((list) => (Array.isArray(list) ? list : []));
+      return entries.some((e) => isPlainObject(e) && typeof e.bash === "string" && hooks.isOurs(e.bash));
+    } catch {
+      return false;
+    }
+  }
 
   /** The configuration as plain JSON text ("" when absent), with the raw text it came from. Throws on a file Attache must not change. */
   function config(): { raw: string; json: string } {
@@ -75,12 +129,16 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
     return { raw: read?.raw ?? "", json: read ? JSON.stringify(read.value) : "" };
   }
 
-  /** Throws, naming the file, when Copilot CLI's settings turn this instance's server off. */
+  /** Throws, naming the file, when the installed Copilot CLI is too old or its settings turn this instance's server, or all hooks, off. */
   function checkSettings() {
+    checkCopilotCliVersion(agentHome());
     const settings = readCopilotJson(settingsPath())?.value;
     const disabled = settings?.disabledMcpServers;
     if (Array.isArray(disabled) && disabled.includes(name())) {
       throw new HooksFileError(`${settingsPath()} turns off the MCP server "${name()}" (disabledMcpServers), so Copilot CLI would not start it. Run copilot mcp enable ${name()}, then connect again. Attache changed nothing.`);
+    }
+    if (settings?.disableAllHooks === true) {
+      throw new HooksFileError(`${settingsPath()} turns off all hooks (disableAllHooks), so Copilot CLI would not run the hook that gives its sessions your Attache memory. Remove that setting, then connect again. Attache changed nothing.`);
     }
   }
 
@@ -94,60 +152,91 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
     return mine.length === 1 && mine[0]![0] === name() && isDeepStrictEqual(mine[0]![1], entry());
   };
 
-  /** The change connecting makes, worked out before anything is written. */
-  function plan(): { changes: HarnessFileChange[]; after: string } {
+  /** The changes connecting makes, each with the text it writes, worked out before anything is written. */
+  function plan(): Array<HarnessFileChange & { text: string }> {
     checkSettings();
     const { raw, json } = config();
-    if (isCurrent(json)) return { changes: [], after: raw };
-    const after = jsonMcpConfig.withServer(json, configPath(), name(), entry(), isOurs);
-    const exists = existsSync(configPath());
-    const purpose = exists && raw.trim() && !plainJson(raw) ? PURPOSE_COMMENTS : PURPOSE;
-    return { changes: [{ path: configPath(), change: exists ? "update" : "create", backup: exists, purpose }], after };
+    const hooksText = currentHooks();
+    const changes: Array<HarnessFileChange & { text: string }> = [];
+    if (!isCurrent(json)) {
+      const exists = existsSync(configPath());
+      const purpose = exists && raw.trim() && !plainJson(raw) ? PURPOSE_COMMENTS : PURPOSE;
+      changes.push({ path: configPath(), change: exists ? "update" : "create", backup: exists, purpose, text: jsonMcpConfig.withServer(json, configPath(), name(), entry(), isOurs) });
+    }
+    if (hooksText !== expectedHooks()) changes.push({ path: hooksPath(), change: hooksText === null ? "create" : "update", backup: hooksText !== null, purpose: HOOKS_PURPOSE, text: expectedHooks() });
+    return changes;
   }
+  const withoutText = ({ text: _text, ...c }: HarnessFileChange & { text: string }): HarnessFileChange => c;
 
   const restartRequired = true;
   const adapter: HarnessAdapter = {
     kind: "copilot-cli",
     label: "Copilot CLI",
-    capabilities: { mcp: true, memory: "none", capture: "none" },
+    capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" },
     restartRequired,
     manualSetup: true,
     setupNote:
-      "Attache adds its MCP server to Copilot CLI's personal MCP configuration (mcp-config.json in ~/.copilot, or in COPILOT_HOME when the Attache service has it set); your other MCP servers and settings are not changed, and no repository is touched. Start a new copilot session after connecting, or run /mcp reload in a running one. A repository's own .mcp.json can replace a server of the same name for sessions in that repository. If Copilot CLI was not found, you can still connect.",
+      "Attache adds its MCP server to Copilot CLI's personal MCP configuration (mcp-config.json in ~/.copilot, or in COPILOT_HOME when the Attache service has it set) and one personal hooks file (hooks/attache.json there) whose session-start hook gives each new, cleared or resumed session your current Attache memory; your other MCP servers, hooks and settings are not changed, and no repository is touched. Memory needs the Agent sessions feature on and Copilot CLI 1.0.22 or later. Copilot CLI reads hooks when it starts, so start a new copilot process after connecting. A session keeps the memory it started with: after /compact it has none until you /clear, resume or start a new one. A repository whose .github/copilot/settings.json sets disableAllHooks turns Attache's hook off for sessions there, and a repository's own .mcp.json can replace a server of the same name. If Copilot CLI was not found, you can still connect.",
     detect: (home) => copilotCliFound(home),
-    preview: () => ({ changes: plan().changes, restartRequired }),
+    preview: () => ({ changes: plan().map(withoutText), restartRequired }),
     apply: () => {
-      const { changes, after } = plan();
+      const changes = plan();
       const backups: string[] = [];
       for (const c of changes) {
-        const { backup } = writeConfigText(c.path, after, hooks.backupDir);
-        if (backup) backups.push(backup);
+        if (c.change === "create") replaceFile(c.path, c.text);
+        else {
+          const { backup } = writeConfigText(c.path, c.text, hooks.backupDir);
+          if (backup) backups.push(backup);
+        }
       }
-      return { changes, backups, restartRequired };
+      return { changes: changes.map(withoutText), backups, restartRequired };
     },
     status: (): HarnessStatusReport => {
       const path = configPath();
+      const hooksFile = hooksPath();
       try {
         checkSettings();
         const { json } = config();
-        if (isCurrent(json)) return { state: "current", message: `Attache's MCP server in ${path}`, files: [path] };
-        if (ours(json).length) return { state: "stale", message: `Attache's MCP server in ${path} is out of date. Set up again to fix it.`, files: [path] };
-        return { state: "missing", message: `Attache's MCP server is not in ${path}. Set up again to fix it.`, files: [] };
+        const hooksText = currentHooks();
+        const mcp = isCurrent(json) ? "current" : ours(json).length ? "stale" : "missing";
+        const memory = hooksText === expectedHooks() ? "current" : hooksText === null ? "missing" : "stale";
+        const files = [...(mcp === "missing" ? [] : [path]), ...(memory === "missing" ? [] : [hooksFile])];
+        if (mcp === "current" && memory === "current") return { state: "current", message: `Attache's MCP server in ${path}, and its memory hook in ${hooksFile}`, files };
+        if (mcp === "missing" && memory === "missing") return { state: "missing", message: `Attache's MCP server is not in ${path}, and its memory hook ${hooksFile} is missing. Set up again to fix it.`, files };
+        const problems = [
+          ...(mcp === "stale" ? [`Attache's MCP server in ${path} is out of date`] : mcp === "missing" ? [`Attache's MCP server is not in ${path}`] : []),
+          ...(memory === "stale" ? [`Attache's memory hook ${hooksFile} is out of date`] : memory === "missing" ? [`Attache's memory hook ${hooksFile} is missing`] : []),
+        ];
+        return { state: "stale", message: `${problems.join("; ")}. Set up again to fix it.`, files };
       } catch (e) {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
     },
     refresh: () => adapter.apply(),
     uninstall: () => {
+      const removed: HarnessFileChange[] = [];
+      const failures: string[] = [];
       const path = configPath();
       try {
         const { json } = config();
-        if (!ours(json).length) return { removed: [], failures: [] };
-        writeConfigText(path, jsonMcpConfig.withoutServers(json, path, isOurs), hooks.backupDir);
-        return { removed: [{ path, change: "update", backup: true, purpose: PURPOSE }], failures: [] };
+        if (ours(json).length) {
+          writeConfigText(path, jsonMcpConfig.withoutServers(json, path, isOurs), hooks.backupDir);
+          removed.push({ path, change: "update", backup: true, purpose: PURPOSE });
+        }
       } catch (e) {
-        return { removed: [], failures: [`Could not remove Attache's MCP server from ${path}: ${(e as Error).message}`] };
+        failures.push(`Could not remove Attache's MCP server from ${path}: ${(e as Error).message}`);
       }
+      const hooksFile = hooksPath();
+      try {
+        // Another file in its place is the owner's: it stays.
+        if (existsSync(hooksFile) && hooksFileIsOurs(readFileSync(hooksFile, "utf8"))) {
+          rmSync(hooksFile);
+          removed.push({ path: hooksFile, change: "remove", backup: false, purpose: HOOKS_PURPOSE });
+        }
+      } catch (e) {
+        failures.push(`Could not remove Attache's memory hook ${hooksFile}: ${(e as Error).message}`);
+      }
+      return { removed, failures };
     },
   };
   return adapter;

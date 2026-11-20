@@ -62,11 +62,26 @@ const antigravity: HookProfile = {
   sessionStartOutput: () => "",
 };
 
+/** The tag around memory Attache injects, which transcript parsers strip (transcripts.ts). */
+const memoryBlock = (context: string) => `<attache-memory>\n${context.trim()}\n</attache-memory>`;
+
+/**
+ * Copilot CLI: camelCase input (`sessionId`, `cwd`, `transcriptPath` on the
+ * events that have it); a sessionStart command hook hands context back as one
+ * JSON object with `additionalContext`, which Copilot CLI adds to the
+ * conversation as a message of its own.
+ */
+const copilotCli: HookProfile = {
+  parse: (p) => ({ sessionId: str(p.sessionId) ?? "unknown", cwd: str(p.cwd), transcriptPath: str(p.transcriptPath) }),
+  sessionStartOutput: (context) => (context.trim() ? JSON.stringify({ additionalContext: memoryBlock(context) }) : ""),
+};
+
 export const HOOK_PROFILES: Record<string, HookProfile> = {
   "claude-code": claudeStyle,
   // Codex uses the same input fields and output shape as Claude Code.
   codex: { ...claudeStyle, locateTranscript: locateCodexRollout },
   antigravity,
+  "copilot-cli": copilotCli,
 };
 
 export const HOOK_EVENTS: HookEvent[] = ["session-start", "pre-compact", "session-end", "turn-end"];
