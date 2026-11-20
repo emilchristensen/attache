@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import type { HarnessApplyResult, HarnessCapabilities, HarnessFileChange, HarnessPreview, HarnessState, HarnessStatusReport, HarnessUninstallResult } from "@attache/contracts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import type { AgentHooks, HarnessStatus } from "./install.ts";
+import { copilotCliAdapter } from "./copilot-cli-adapter.ts";
 import { openCodeAdapter } from "./opencode-adapter.ts";
 import { piAdapter } from "./pi-adapter.ts";
 
@@ -101,7 +102,7 @@ export function legacyHarnessAdapter(a: AgentIntegration, hooks: AgentHooks, con
 
 /** Every Harness Attache can connect, as adapters. */
 export function harnessAdapters(hooks: AgentHooks, context: () => string): HarnessAdapter[] {
-  return [...AGENT_INTEGRATIONS.map((a) => legacyHarnessAdapter(a, hooks, context)), piAdapter(hooks), openCodeAdapter(hooks)];
+  return [...AGENT_INTEGRATIONS.map((a) => legacyHarnessAdapter(a, hooks, context)), piAdapter(hooks), openCodeAdapter(hooks), copilotCliAdapter(hooks)];
 }
 
 /** `current` when everything matches, `stale` when every part is there but some are out of date, `missing` otherwise. */

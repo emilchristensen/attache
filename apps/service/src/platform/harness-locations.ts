@@ -137,3 +137,23 @@ export function openCodeInstall(loc: PlatformLocations): HarnessInstall {
 }
 
 const executableNamesIn = (loc: PlatformLocations, dir: string, name: string) => toolCandidates({ ...loc, toolDirs: [dir] }, name);
+
+/**
+ * Copilot CLI's home folder, relative to the home folder, on every operating
+ * system unless `COPILOT_HOME` points elsewhere. It is not a sign that Copilot
+ * CLI is installed: the GitHub Copilot app and SDK-hosted runtimes share it.
+ */
+export const COPILOT_HOME_DIR = ".copilot";
+
+/**
+ * Where Copilot CLI may be installed: the usual tool folders (its install
+ * script uses `~/.local/bin` or `/usr/local/bin`, Homebrew its own), and the
+ * folder `gh copilot` downloads it to. It is often an npm global package or a
+ * WinGet install whose folder Attache cannot always know, so not finding it
+ * here is uncertain rather than final.
+ */
+export function copilotCliInstall(loc: PlatformLocations): HarnessInstall {
+  const { join } = pathFor(loc.os);
+  const executables = toolCandidates(loc, "copilot");
+  return { executables, presence: [...executables, join(loc.home, ".local", "share", "gh", "copilot")] };
+}

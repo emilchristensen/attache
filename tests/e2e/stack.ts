@@ -86,6 +86,8 @@ export async function startStack(): Promise<Stack> {
   // OpenCode's config folder is under the test home, and the Machine's own OpenCode is never asked for its version.
   for (const key of ["XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG"]) delete env[key];
   env.ATTACHE_OPENCODE_BIN = join(base, "no-opencode");
+  // Copilot CLI's home folder is under the test home too.
+  delete env.COPILOT_HOME;
   let service: ChildProcess | null = null;
   // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
   let port = 0;
