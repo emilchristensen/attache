@@ -83,3 +83,8 @@ export interface HarnessUninstallResult {
   /** One message per part that could not be removed, each naming its file; empty when everything went. */
   failures: string[];
 }
+
+/** What a disconnect left in the Harness, in the owner's words, or null when it removed everything. */
+export function uninstallProblem(r: HarnessUninstallResult): string | null {
+  return r.failures.length ? `Disconnected, but some of Attache's entries remain: ${r.failures.join(" ")}` : null;
+}

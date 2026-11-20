@@ -4,6 +4,8 @@
  * already open, when a Connection needs sign-in, where Home's Reconnect lands. Driven through the Dashboard against the
  * real bundled service and the TEST-ONLY fixtures; it sets itself up through the API, so it runs on its own.
  */
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { connection, connectionToggle, openConnection } from "./connections.ts";
@@ -308,6 +310,37 @@ test("captures: the page in light, dark and narrow, with a row open and with a s
   await expect(claudeCode.locator(":focus")).toHaveCount(1);
   await page.unroute("**/api/v1/capabilities");
   await page.setViewportSize({ width: 1360, height: 900 });
+});
+
+test("a Harness shows its capabilities and every file it will change before connecting, its state once connected, and what a disconnect could not remove", async () => {
+  mkdirSync(join(stack.agentHome, ".codex"), { recursive: true });
+  const page = await journeys.open("/connections");
+  const codex = await openConnection(page, "codex");
+  await expect(codex.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: read fresh from your Brain when a session starts",
+    "Session capture: at compaction and when the session ends",
+  ]);
+  const files = codex.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([`Create ${join(stack.agentHome, ".codex", "hooks.json")}: Attache's hooks for Codex`, `Create ${join(stack.agentHome, ".codex", "config.toml")}: Attache's MCP server`]);
+  // Nothing is written until the owner connects.
+  expect(existsSync(join(stack.agentHome, ".codex", "config.toml"))).toBe(false);
+  await codex.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "codex");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  await expect(row.locator("[data-harness-state]")).toContainText("Up to date");
+
+  // A hooks file the owner broke by hand: the state says so, and disconnecting names what remains.
+  const hooks = join(stack.agentHome, ".codex", "hooks.json");
+  writeFileSync(hooks, `${readFileSync(hooks, "utf8")}\n// mine`);
+  await page.reload();
+  const broken = await openConnection(page, "codex");
+  await expect(broken.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "failed");
+  await broken.getByRole("button", { name: "Disconnect…" }).click();
+  await broken.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect(page.getByText(/Disconnected, but some of Attache's entries remain: .*hooks\.json/).first()).toBeVisible();
+  expect(readFileSync(join(stack.agentHome, ".codex", "config.toml"), "utf8")).not.toContain("--state-dir");
+  rmSync(join(stack.agentHome, ".codex"), { recursive: true });
 });
 
 test("no unresolved console errors across the Connections journeys", () => {

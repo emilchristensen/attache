@@ -514,6 +514,9 @@ Every Harness Connection goes through one boundary, `HarnessAdapter` (`agents/ha
 Each adapter reports MCP access, memory (`none`, `runtime-fresh`, `managed-file`) and session capture (`none`, `with-final-event`, `without-final-event`) separately, and whether a running Harness must restart before a change takes effect.
 Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part it could not remove with its file.
 Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
+The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).
+`GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disconnecting returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
+`ConnectionDefinition.harness` gives the Dashboard each capability and the restart requirement.
 
 ### MCP server in each Harness
 
