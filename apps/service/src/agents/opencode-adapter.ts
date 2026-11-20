@@ -1,12 +1,14 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
 import { OPENCODE_CONFIG_DIR } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
-import { agentHome, mcpServerEntry, type AgentHooks } from "./install.ts";
+import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 import { parseJsonc } from "./jsonc.ts";
 import { checkOpenCodeVersion, openCodeFound } from "./opencode-version.ts";
+import { ATTACHE_MEMORY_TAG } from "./pi-adapter.ts";
 
 /**
  * OpenCode through its official plugin API (ADR 0006).
@@ -19,11 +21,28 @@ import { checkOpenCodeVersion, openCodeFound } from "./opencode-version.ts";
  * owner's `opencode.json(c)` is never written and there is no second,
  * persistent copy to drift. Attache reads those files only to refuse a setup
  * in which the registration could not work.
+ *
+ * The same plugin gives each model call the Brain's current memory: OpenCode
+ * 1's `experimental.chat.system.transform` and OpenCode 2's `context` session
+ * hook run before every agent-loop call, and the plugin adds the session
+ * context the service keeps (the hook script's `sessionContext`) to that
+ * call's system prompt only, wrapped in <attache-memory> tags. Neither
+ * OpenCode saves the system prompt, so a resumed or compacted session never
+ * carries old memory and session capture never reads it as the owner's words.
+ * OpenCode 1 also runs the transform for its compaction summary; the plugin
+ * skips that one call so no summary restates memory that later goes stale.
+ * OpenCode 2 summarises through a separate hook the plugin leaves alone.
  */
 
-const MARKER = "// Managed by Attache: registers this Attache instance's MCP server each time OpenCode loads this plugin.";
+/**
+ * Every version of the plugin starts with `OWNER`, and its ownership line
+ * names the instance; only the rest of the first line changes, so a file an
+ * earlier version wrote is still recognised as this instance's.
+ */
+const OWNER = "// Managed by Attache: ";
+const MARKER = `${OWNER}registers this Attache instance's MCP server and gives its memory to each OpenCode session.`;
 const INSTANCE = "// attache-instance: ";
-const PURPOSE = "Attache's OpenCode plugin, which registers Attache's MCP server each time OpenCode loads it";
+const PURPOSE = "Attache's OpenCode plugin, which registers Attache's MCP server and gives your Attache memory to each OpenCode session";
 
 /**
  * OpenCode's global config folder: `OPENCODE_CONFIG_DIR` when it names one
@@ -38,8 +57,13 @@ export function openCodeConfigDir(): string {
   return join(agentHome(), ...OPENCODE_CONFIG_DIR.split("/"));
 }
 
-/** The plugin text for one Attache instance: plain ES module code with no imports, so it needs no npm install. */
-export function openCodePluginText(stateDir: string, id: string): string {
+/**
+ * The plugin text for one Attache instance: plain ES module code with no
+ * static imports, so it needs no npm install. It loads this install's hook
+ * script only when a model call needs memory, so a missing script costs the
+ * memory and never the MCP registration.
+ */
+export function openCodePluginText(stateDir: string, id: string, hook: string): string {
   const entry = mcpServerEntry(stateDir);
   const command = [entry.command, ...entry.args];
   return [
@@ -49,18 +73,53 @@ export function openCodePluginText(stateDir: string, id: string): string {
     "",
     `const ID = ${JSON.stringify(id)};`,
     `const COMMAND = ${JSON.stringify(command)};`,
+    `const STATE_DIR = ${JSON.stringify(stateDir)};`,
+    `const HOOK = ${JSON.stringify(pathToFileURL(hook).href)};`,
+    "",
+    "let hook;",
+    "",
+    "/** The Brain's current memory for a session in `folder`, wrapped in Attache's tag, or null; read from the files Attache keeps up to date. */",
+    "async function memory(folder) {",
+    "  let text;",
+    "  try {",
+    "    hook ??= import(HOOK);",
+    "    text = (await hook).sessionContext(STATE_DIR, folder || process.cwd());",
+    "  } catch {",
+    "    // Attache moved or is gone: try again on the next call, and never break the session.",
+    "    hook = undefined;",
+    "    return null;",
+    "  }",
+    `  return text && text.trim() ? "<${ATTACHE_MEMORY_TAG}>\\n" + text.trim() + "\\n</${ATTACHE_MEMORY_TAG}>" : null;`,
+    "}",
     "",
     "export default {",
     "  id: ID,",
-    "  // OpenCode 2: plugins manage MCP servers through transforms, which OpenCode drops when the plugin unloads.",
     "  async setup(ctx) {",
+    "    // OpenCode 2: plugins manage MCP servers through transforms, which OpenCode drops when the plugin unloads.",
     '    await ctx.mcp.transform((mcp) => mcp.set(ID, { type: "local", command: COMMAND, codemode: false }));',
+    "    // Before every agent-loop call of a session in this plugin's folder; OpenCode 2 does not save what it adds.",
+    '    await ctx.session.hook("context", async (event) => {',
+    "      const text = await memory(ctx.location && ctx.location.directory);",
+    '      if (text) event.system.push({ type: "text", text });',
+    "    });",
     "  },",
-    "  // OpenCode 1 (1.18.29 and later): the config hook edits the configuration OpenCode is about to use.",
-    "  async server() {",
+    "  // OpenCode 1 (1.18.29 and later).",
+    "  async server(input) {",
+    "    // Sessions whose next call is OpenCode's compaction summary, which gets no memory.",
+    "    const compacting = new Set();",
     "    return {",
+    "      // Edits the configuration OpenCode is about to use.",
     "      async config(config) {",
     '        config.mcp = { ...(config.mcp ?? {}), [ID]: { type: "local", command: COMMAND, enabled: true } };',
+    "      },",
+    '      async "experimental.session.compacting"(event) {',
+    "        compacting.add(event.sessionID);",
+    "      },",
+    "      // Before every model call; OpenCode 1 does not save the system prompt.",
+    '      async "experimental.chat.system.transform"(event, output) {',
+    "        if (event.sessionID && compacting.delete(event.sessionID)) return;",
+    "        const text = await memory(input && input.directory);",
+    "        if (text) output.system.push(text);",
     "      },",
     "    };",
     "  },",
@@ -71,7 +130,7 @@ export function openCodePluginText(stateDir: string, id: string): string {
 
 /** The state folder an Attache plugin file belongs to, or null for a file Attache did not write. */
 function instanceOf(text: string): string | null {
-  if (!text.startsWith(MARKER)) return null;
+  if (!text.startsWith(OWNER)) return null;
   const line = text.split("\n").find((l) => l.startsWith(INSTANCE));
   try {
     const parsed = JSON.parse(line?.slice(INSTANCE.length) ?? "") as { stateDir?: unknown };
@@ -124,7 +183,7 @@ function turnedOffBy(plugins: unknown, id: string): string | null {
 export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   const id = () => hooks.ownerKey();
   const plugin = () => join(openCodeConfigDir(), "plugins", `${id()}.js`);
-  const expected = () => openCodePluginText(hooks.stateDir, id());
+  const expected = () => openCodePluginText(hooks.stateDir, id(), stablePath(hookScript()));
 
   /** The plugin file's text when it is this instance's, null when absent; throws when another file is in its place. */
   function current(): string | null {
@@ -160,11 +219,11 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   const adapter: HarnessAdapter = {
     kind: "opencode",
     label: "OpenCode",
-    capabilities: { mcp: true, memory: "none", capture: "none" },
+    capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" },
     restartRequired,
     manualSetup: true,
     setupNote:
-      "Attache adds one plugin to OpenCode's global plugins folder that registers Attache's MCP server each time OpenCode loads it; your opencode.json(c), MCP servers and other plugins are not changed. Works with OpenCode 1 (1.18.29 or later) and OpenCode 2. Restart OpenCode after connecting (for OpenCode 2's background service, run opencode service restart). If OpenCode was not found, you can still connect: Attache uses ~/.config/opencode, or XDG_CONFIG_HOME or OPENCODE_CONFIG_DIR when the Attache service has them set.",
+      "Attache adds one plugin to OpenCode's global plugins folder that registers Attache's MCP server each time OpenCode loads it, and adds your current Attache memory to the system prompt of every model call without saving it in the session, so resumed and compacted sessions always see today's memory; your opencode.json(c), MCP servers and other plugins are not changed. Memory needs the Agent sessions feature on. Works with OpenCode 1 (1.18.29 or later) and OpenCode 2. Restart OpenCode after connecting (for OpenCode 2's background service, run opencode service restart). If OpenCode was not found, you can still connect: Attache uses ~/.config/opencode, or XDG_CONFIG_HOME or OPENCODE_CONFIG_DIR when the Attache service has them set.",
     detect: (home) => openCodeFound(home),
     preview: () => ({ changes: plan(), restartRequired }),
     apply: () => {
@@ -186,7 +245,7 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
         const text = current();
         if (text === null) return { state: "missing", message: `Attache's OpenCode plugin is not in ${path}. Set up again to fix it.`, files: [] };
         if (text !== expected()) return { state: "stale", message: `Attache's OpenCode plugin ${path} is out of date. Set up again to fix it.`, files: [path] };
-        return { state: "current", message: `Attache's OpenCode plugin ${path}, which registers Attache's MCP server each time OpenCode loads it`, files: [path] };
+        return { state: "current", message: `Attache's OpenCode plugin ${path}, which registers Attache's MCP server and gives your Attache memory to each OpenCode session`, files: [path] };
       } catch (e) {
         return { state: "failed", message: (e as Error).message, files: [] };
       }

@@ -537,15 +537,21 @@ It answers model calls from a local stand-in model the test starts, so it needs 
 
 ### OpenCode
 
-OpenCode connects through its own plugin API (`agents/opencode-adapter.ts`), with MCP access only.
+OpenCode connects through its own plugin API (`agents/opencode-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
 OpenCode 1 (`opencode-ai`) and OpenCode 2 (`@opencode/cli`) both install an `opencode` command, read the same config folders and have incompatible plugin APIs, so Attache writes one plugin file that carries both entry points: OpenCode 1 (1.18.29 and later) calls its `server()` and runs the `config` hook, which adds this instance's server to the configuration it is about to use; OpenCode 2 reads its `id` and runs `setup(ctx)`, which adds the server with `ctx.mcp.transform` (`codemode: false`, so the tools stay on the native tool list).
 Both registrations live in memory only, so the owner's `opencode.json(c)` is never written.
+The same file gives every model call the Brain's current memory: OpenCode 1's `experimental.chat.system.transform` and OpenCode 2's `context` session hook run before each agent-loop call, import this install's hook script, read the session context the service keeps for the session's folder (`sessionContext`; OpenCode 1's plugin `directory`, OpenCode 2's `ctx.location.directory`, one plugin instance per folder) and add it to that call's system prompt wrapped in `<attache-memory>` tags.
+Neither OpenCode saves the system prompt, so a resumed or compacted session never carries old memory and session capture never sees it; a transcript parser that meets an `<attache-memory>` block anyway strips it like the other injected tags.
+OpenCode 1 also runs the transform for its compaction summary, so the plugin's `experimental.session.compacting` hook marks the session and the next transform for it (the summary) adds nothing; OpenCode 2 summarises through its separate `compaction` hook, which the plugin does not use.
+OpenCode 1 also runs the transform for its title request, which therefore gets memory too; OpenCode 2's title request does not.
+The hook script is loaded only when a model call needs memory, so a missing script costs the memory and never the MCP registration; memory follows the Agent sessions feature as for Pi.
 The file is `<config dir>/plugins/attache.js` (`attache-<hash>.js` for another instance, which is also its OpenCode 2 plugin id, since OpenCode 2 refuses two plugins with one id), where the config dir is `OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`.
 Before writing, the adapter asks the installed `opencode --version` (`agents/opencode-version.ts`; `ATTACHE_OPENCODE_BIN` replaces the lookup in tests) and refuses an OpenCode 1 older than 1.18.29, a major version other than 1 or 2, or output it cannot read; no OpenCode found is a manual connection.
 It reads OpenCode's global `config.json`, `opencode.json`, `opencode.jsonc` and the file `OPENCODE_CONFIG` names (JSON with comments, `agents/jsonc.ts`) only to refuse a file that does not parse, a same-name MCP server (either OpenCode's shape) the plugin would replace, or an OpenCode 2 `plugins` list that turns the plugin off.
 Project-level configuration is not checked.
-The marker and ownership rules are Pi's; a running OpenCode (or OpenCode 2's background service) must restart to load a change.
+The marker and ownership rules are Pi's (owner recognised by the `// Managed by Attache: ` prefix plus the instance line, so the MCP-only file an earlier version wrote is refreshed or removed); a running OpenCode (or OpenCode 2's background service) must restart to load a change.
 `test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disconnecting.
+It also drives a private `opencode serve` against a local stand-in model (no credentials) to check that every agent-loop call carries the Brain's current memory after a Brain change, a compaction and a resume (a new server continuing the session), that compaction requests carry none, that OpenCode's database and data folder never contain it, and that none is sent after disconnecting.
 It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
 
 ### Copilot CLI

@@ -367,17 +367,17 @@ test("Pi is its own Harness: MCP access and memory, its one extension file and t
   rmSync(join(stack.agentHome, ".pi"), { recursive: true });
 });
 
-test("OpenCode is its own Harness: MCP access only, its one plugin file and the restart it needs, connectable even when Attache did not find OpenCode", async () => {
+test("OpenCode is its own Harness: MCP access and memory, its one plugin file and the restart it needs, connectable even when Attache did not find OpenCode", async () => {
   const plugins = join(stack.agentHome, ".config", "opencode", "plugins");
   const page = await journeys.open("/connections");
   const opencode = await openConnection(page, "opencode");
   await expect(opencode.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: not given to new sessions",
+    "Memory: read fresh from your Brain when a session starts",
     "Session capture: none; use the wrap-up prompt to keep what a conversation decided",
   ]);
   const files = opencode.getByLabel("Files Attache will change");
-  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${plugins.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.js: Attache's OpenCode plugin, which registers Attache's MCP server each time OpenCode loads it$`)]);
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${plugins.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.js: Attache's OpenCode plugin, which registers Attache's MCP server and gives your Attache memory to each OpenCode session$`)]);
   await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
   expect(existsSync(plugins)).toBe(false);
   await opencode.getByRole("button", { name: "Connect" }).click();

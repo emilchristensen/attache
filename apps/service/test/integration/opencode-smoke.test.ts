@@ -1,15 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 
 /**
  * Smoke test against the real OpenCode executable, in an isolated home: connecting OpenCode through
- * Attache makes the real OpenCode load Attache's plugin and connect Attache's MCP server, and
- * disconnecting leaves OpenCode with no Attache server. It runs only where `opencode` is on PATH (or
- * `ATTACHE_OPENCODE_EXECUTABLE` names it) and is skipped otherwise. It needs no model credentials.
+ * Attache makes the real OpenCode load Attache's plugin, connect Attache's MCP server and send the
+ * Brain's current memory with each model call without saving it, and disconnecting leaves OpenCode
+ * with no Attache server and no memory. The model is a local stand-in that records what OpenCode
+ * sends it, so no model account is needed. It runs only where `opencode` is on PATH (or
+ * `ATTACHE_OPENCODE_EXECUTABLE` names it) and is skipped otherwise.
  *
  * OpenCode 1 lists its MCP servers itself (`opencode mcp list`). OpenCode 2 loads plugins in its
  * server, so the test starts a private one (`opencode serve`) and asks it.
@@ -41,7 +44,7 @@ function opencode(args: string[], timeout = 90_000): string {
   return plain(`${r.stdout ?? ""}${r.stderr ?? ""}`);
 }
 
-/** OpenCode 2: start a private server in the isolated home and return its URL. */
+/** Start a private OpenCode server in the isolated home and return its URL. */
 async function serve(): Promise<{ url: string; child: ChildProcess }> {
   const child = spawn(OPENCODE!, ["serve", "--port", "0"], { cwd: join(root, "work"), env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
   let out = "";
@@ -49,7 +52,7 @@ async function serve(): Promise<{ url: string; child: ChildProcess }> {
   child.stderr!.on("data", (d) => (out += String(d)));
   const deadline = Date.now() + 60_000;
   for (;;) {
-    const url = /listening on (http:\/\/\S+)/.exec(plain(out))?.[1];
+    const url = /listening on (http:\/\/[^\s/]+)/.exec(plain(out))?.[1];
     if (url) return { url, child };
     if (child.exitCode !== null) throw new Error(`opencode serve exited with ${child.exitCode}: ${out}`);
     if (Date.now() > deadline) throw new Error(`opencode serve did not start within 60 s: ${out}`);
@@ -94,6 +97,90 @@ async function mcpServers(server: string | null): Promise<Record<string, string>
   }
 }
 
+let model: Server;
+interface ModelMessage {
+  role: string;
+  content: unknown;
+}
+/** The messages of every request OpenCode sent the stand-in model, oldest first. */
+let requests: ModelMessage[][] = [];
+
+/** A local OpenAI-compatible model that answers every request with "pong" and records what it was sent. */
+async function startModel(): Promise<number> {
+  model = createServer((req, res) => {
+    let body = "";
+    req.on("data", (d) => (body += String(d)));
+    req.on("end", () => {
+      if (body) requests.push((JSON.parse(body) as { messages?: ModelMessage[] }).messages ?? []);
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      const chunk = (choice: object, extra: object = {}) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "stand-in", choices: [{ index: 0, ...choice }], ...extra })}\n\n`);
+      chunk({ delta: { role: "assistant", content: "pong" }, finish_reason: null });
+      chunk({ delta: {}, finish_reason: "stop" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
+      res.end("data: [DONE]\n\n");
+    });
+  });
+  await new Promise<void>((r) => model.listen(0, "127.0.0.1", r));
+  return (model.address() as { port: number }).port;
+}
+
+/** Text of one message as the model received it. */
+const textOf = (m: ModelMessage) => (typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((b: { text?: string }) => b.text ?? "").join("") : "");
+/** The Attache memory blocks in one request, wherever OpenCode put them in its system prompt. */
+const memoryIn = (messages: ModelMessage[]) => messages.flatMap((m) => textOf(m).match(/<attache-memory>[\s\S]*?<\/attache-memory>/g) ?? []);
+/** The last user message of a request; OpenCode 1's `run` sends a prompt wrapped in double quotes. */
+const lastUser = (r: ModelMessage[]) => textOf([...r].reverse().find((m) => m.role === "user") ?? { role: "user", content: "" }).replace(/^"(.*)"$/s, "$1");
+
+/** Run an OpenCode command without blocking this process, which also serves the stand-in model, and return what it printed. */
+function opencodeAsync(args: string[], timeout = 90_000): Promise<string> {
+  return new Promise((resolve) => {
+    const child = spawn(OPENCODE!, args, { cwd: join(root, "work"), env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
+    let out = "";
+    child.stdout!.on("data", (d) => (out += String(d)));
+    child.stderr!.on("data", (d) => (out += String(d)));
+    const timer = setTimeout(() => child.kill(), timeout);
+    child.on("close", () => (clearTimeout(timer), resolve(plain(out))));
+  });
+}
+
+/** Send one prompt to the running server, continuing the newest session unless `fresh`, and wait for the answer. */
+async function prompt(url: string, text: string, fresh = false) {
+  const out = await opencodeAsync(["run", major === 1 ? "--attach" : "--server", url, ...(fresh ? [] : ["--continue"]), text]);
+  // OpenCode 1 prints no answer when attached to a server, so the stand-in's record is the proof the prompt ran.
+  expect(requests.some((r) => lastUser(r) === text), `${out}\n${JSON.stringify(requests.map(lastUser))}`).toBe(true);
+}
+
+/** Compact the newest session and wait until OpenCode has stopped asking the model for its summary. */
+async function compact(url: string) {
+  const before = requests.length;
+  if (major === 1) {
+    const [session] = (await (await fetch(`${url}/session`)).json()) as Array<{ id: string }>;
+    const r = await fetch(`${url}/session/${session!.id}/summarize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ providerID: "stand-in", modelID: "stand-in", auto: false }) });
+    expect(r.ok).toBe(true);
+  } else {
+    const [session] = (JSON.parse(await opencodeAsync(["api", "session.list", "--server", url])) as { data: Array<{ id: string }> }).data;
+    expect(await opencodeAsync(["api", "session.compact", "--param", `sessionID=${session!.id}`, "-d", "{}", "--server", url])).toMatch(/compaction/);
+  }
+  // OpenCode 2 retries a summary the stand-in cannot fill in; wait until the requests stop.
+  await expect.poll(() => requests.length, { timeout: 30_000 }).toBeGreaterThan(before);
+  for (let n = -1; n !== requests.length; ) {
+    n = requests.length;
+    await sleep(2_000);
+  }
+}
+
+/** Save a project note and wait until the service has put it in the session context OpenCode's plugin reads. */
+async function remember(title: string) {
+  await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title, facts: [{ subject: "Status", value: `${title} is on track` }] }] });
+  const file = join(svc.stateDir, "agents", "session-context.md");
+  await expect.poll(() => (existsSync(file) ? readFileSync(file, "utf8") : "")).toContain(title);
+}
+
+/** Every byte OpenCode saved about its sessions: its database files and data folder. */
+function savedByOpenCode(): string {
+  const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? files(join(dir, f)) : [join(dir, f)])) : []);
+  return [...readdirSync(root).filter((f) => f.startsWith("opencode.db")).map((f) => join(root, f)), ...files(join(root, "data"))].map((f) => readFileSync(f, "latin1")).join("\n");
+}
+
 describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
   beforeAll(async () => {
     root = mkdtempSync(join(tmpdir(), "attache-opencode-smoke-"));
@@ -119,14 +206,21 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     delete env.OPENCODE_CONFIG_CONTENT;
     process.env.XDG_CONFIG_HOME = env.XDG_CONFIG_HOME;
     process.env.ATTACHE_OPENCODE_BIN = OPENCODE!;
+    // The stand-in model, as OpenCode's own configuration names it; Attache only reads this file.
+    const port = await startModel();
+    mkdirSync(join(root, "config", "opencode"), { recursive: true });
+    const provider = { npm: "@ai-sdk/openai-compatible", name: "stand-in", options: { baseURL: `http://127.0.0.1:${port}/v1`, apiKey: "none" }, models: { "stand-in": { name: "stand-in" } } };
+    writeFileSync(join(root, "config", "opencode", "opencode.json"), JSON.stringify({ provider: { "stand-in": provider }, model: "stand-in/stand-in", small_model: "stand-in/stand-in" }));
     const version = opencode(["--version"]).trim();
     major = Number(/(\d+)\.\d+\.\d+/.exec(version)?.[1]);
     expect([1, 2], `opencode --version printed "${version}"`).toContain(major);
     svc = await startTestService({ stateDir: mkdtempSync(join(tmpdir(), "attache-opencode-smoke-state-")) });
+    await svc.post("/setup/identity", { name: "Ada Lovelace", email: "ada@example.com", confirm: true });
   });
   afterAll(async () => {
     delete process.env.XDG_CONFIG_HOME;
     delete process.env.ATTACHE_OPENCODE_BIN;
+    await new Promise((r) => model?.close(r));
     await svc?.stop();
     if (root) rmSync(root, { recursive: true, force: true });
   });
@@ -142,11 +236,66 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     expect(servers[server], JSON.stringify(servers)).toMatch(/connected/);
   });
 
+  it("sends the Brain's current memory with every model call, fresh after a Brain change, a compaction and a resume, and never saves it", { timeout: 300_000 }, async () => {
+    await remember("Orion migration");
+    requests = [];
+    let server = await serve();
+    try {
+      await prompt(server.url, "first question", true);
+      await remember("Vega launch");
+      await prompt(server.url, "second question");
+      await compact(server.url);
+      await remember("Lyra audit");
+      await prompt(server.url, "after compaction");
+    } finally {
+      server.child.kill();
+    }
+    const prompts = ["first question", "second question", "after compaction"];
+    const turns = prompts.map((p) => requests.find((r) => lastUser(r) === p)!);
+    // One memory block per agent-loop call, holding the Brain's memory at that moment.
+    expect(turns.map((r) => memoryIn(r).length)).toEqual([1, 1, 1]);
+    expect(memoryIn(turns[0]!)[0]).toContain("Orion migration");
+    expect(memoryIn(turns[0]!)[0]).not.toContain("Vega launch");
+    expect(memoryIn(turns[1]!)[0]).toContain("Vega launch");
+    expect(memoryIn(turns[2]!)[0]).toContain("Lyra audit");
+    // OpenCode's compaction summary is written without Attache's memory, so it cannot carry old memory forward.
+    const summaries = requests.filter((r) => /summar/i.test(r.map(textOf).join("\n")) && !prompts.includes(lastUser(r)));
+    expect(summaries.length).toBeGreaterThan(0);
+    for (const r of summaries) expect(memoryIn(r)).toEqual([]);
+
+    await remember("Rigel handover");
+    requests = [];
+    server = await serve();
+    try {
+      await prompt(server.url, "resumed question");
+    } finally {
+      server.child.kill();
+    }
+    const resumed = requests.find((r) => lastUser(r) === "resumed question")!;
+    expect(resumed.some((m) => textOf(m).includes("first question") || /summar/i.test(textOf(m)))).toBe(true);
+    expect(memoryIn(resumed)).toHaveLength(1);
+    expect(memoryIn(resumed)[0]).toContain("Rigel handover");
+
+    const saved = savedByOpenCode();
+    expect(saved).toContain("resumed question");
+    expect(saved).not.toContain("attache-memory");
+    expect(saved).not.toContain("Orion migration is on track");
+  });
+
   it("leaves OpenCode with no Attache plugin or server after disconnecting", { timeout: 180_000 }, async () => {
     const d = await svc.post<{ harness: { failures: string[] } }>("/connections/opencode/disconnect", { deleteData: false });
     expect(d.harness.failures).toEqual([]);
     expect(readdirSync(plugins()).filter((f) => f.startsWith("attache"))).toEqual([]);
     const servers = await mcpServers(null);
     expect(Object.keys(servers).filter((n) => n.startsWith("attache"))).toEqual([]);
+    requests = [];
+    const server = await serve();
+    try {
+      await prompt(server.url, "after disconnecting", true);
+    } finally {
+      server.child.kill();
+    }
+    expect(requests.length).toBeGreaterThan(0);
+    for (const r of requests) expect(memoryIn(r)).toEqual([]);
   });
 });
