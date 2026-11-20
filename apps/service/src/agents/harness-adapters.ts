@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import type { HarnessApplyResult, HarnessCapabilities, HarnessFileChange, HarnessPreview, HarnessState, HarnessStatusReport, HarnessUninstallResult } from "@attache/contracts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import type { AgentHooks, HarnessStatus } from "./install.ts";
+import { piAdapter } from "./pi-adapter.ts";
 
 /**
  * The Harness integration boundary (ADR 0006): every Harness Connection is
@@ -24,6 +25,11 @@ export interface HarnessAdapter {
   setupNote: string;
   /** Whether the Harness is installed under the home folder whose settings Attache edits. */
   detect(home: string): boolean;
+  /**
+   * The owner may connect even when `detect` finds nothing, because Attache
+   * cannot see every place the Harness installs to (e.g. an npm global folder).
+   */
+  manualSetup?: boolean;
   /** The changes `apply` would make; writes nothing. */
   preview(): HarnessPreview;
   /** Connect: write this instance's entries. Connecting again changes nothing. */
@@ -94,7 +100,7 @@ export function legacyHarnessAdapter(a: AgentIntegration, hooks: AgentHooks, con
 
 /** Every Harness Attache can connect, as adapters. */
 export function harnessAdapters(hooks: AgentHooks, context: () => string): HarnessAdapter[] {
-  return AGENT_INTEGRATIONS.map((a) => legacyHarnessAdapter(a, hooks, context));
+  return [...AGENT_INTEGRATIONS.map((a) => legacyHarnessAdapter(a, hooks, context)), piAdapter(hooks)];
 }
 
 /** `current` when everything matches, `stale` when every part is there but some are out of date, `missing` otherwise. */

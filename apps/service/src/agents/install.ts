@@ -85,8 +85,10 @@ export interface HarnessStatus {
  * anything is written.
  */
 export class AgentHooks {
-  private readonly stateDir: string;
-  private readonly backupDir: string;
+  /** This Attache instance's state folder, which every entry it writes points at. */
+  readonly stateDir: string;
+  /** Where each Harness file is backed up before it changes. */
+  readonly backupDir: string;
   /** Attache's MCP server in each Harness's configuration. */
   readonly mcp: McpRegistration;
 

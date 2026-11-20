@@ -33,7 +33,8 @@ export function agentAdapter(h: HarnessAdapter): ConnectorAdapter {
       harness: { capabilities: h.capabilities, restartRequired: h.restartRequired },
     },
     async configure() {
-      if (!h.detect(agentHome())) throw new RemoteError(`${notFound} Install it, then connect it here.`, "not_configured");
+      // A Harness Attache cannot always find (manualSetup) is still connected when the owner asks.
+      if (!h.manualSetup && !h.detect(agentHome())) throw new RemoteError(`${notFound} Install it, then connect it here.`, "not_configured");
       try {
         const r = h.apply();
         return { authMethod: lifecycle ? "hooks" : "mcp", configPath: h.status().files[0] ?? null, changed: r.changes.map((c) => c.path), backups: r.backups, restartRequired: r.restartRequired };
@@ -43,8 +44,10 @@ export function agentAdapter(h: HarnessAdapter): ConnectorAdapter {
       }
     },
     async test() {
-      if (!h.detect(agentHome())) return { ok: false, state: "not_configured", account: null, message: notFound };
       const s = h.status();
+      if (!h.detect(agentHome()) && !(h.manualSetup && s.state !== "missing")) {
+        return { ok: false, state: "not_configured", account: null, message: h.manualSetup ? `${notFound} If it is installed somewhere Attache does not look, connect it here anyway.` : notFound };
+      }
       return { ok: s.state === "current", state: s.state === "current" ? "complete" : "error", account: s.state === "failed" ? null : (s.files[0] ?? null), message: s.message };
     },
   };

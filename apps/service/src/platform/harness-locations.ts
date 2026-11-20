@@ -96,3 +96,21 @@ export function harnessInstalls(loc: PlatformLocations): Record<HarnessKind, Har
     "claude-desktop": { executables: [], presence: [...claudeDesktopApp(loc), at(CLAUDE_DESKTOP_DIR[loc.os])] },
   };
 }
+
+/**
+ * Pi keeps its global settings, `mcp.json` and auto-discovered extensions in
+ * one agent folder under the home folder on every operating system, unless
+ * `PI_CODING_AGENT_DIR` points elsewhere.
+ */
+export const PI_AGENT_DIR = ".pi/agent";
+
+/**
+ * Where Pi may be installed. Pi is usually an npm global package, whose
+ * folder Attache cannot always know (a Node version manager, a custom
+ * prefix), so not finding it here is uncertain rather than final.
+ */
+export function piInstall(loc: PlatformLocations): HarnessInstall {
+  const { join } = pathFor(loc.os);
+  const executables = toolCandidates(loc, "pi");
+  return { executables, presence: [join(loc.home, ".pi"), ...executables] };
+}
