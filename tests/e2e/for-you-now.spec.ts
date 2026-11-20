@@ -99,7 +99,7 @@ test("morning: the daily briefing leads with one development, its why, Read brie
   // Its share of the first viewport leaves room for the Inbox heading and two complete rows.
   expect(await areaHeight(page), "For you now with an unread briefing").toBeLessThanOrEqual(BUDGET.unread);
   // A healthy morning with an unread briefing: the Inbox heading and two complete typed rows above the fold.
-  await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
+  await expect(page.locator("[data-connection-banner]")).toHaveCount(0);
   expect(await completeRows(page), "complete Inbox rows under an unread briefing").toBeGreaterThanOrEqual(2);
   // Read briefing opens every point, the linked counts and the file, in place.
   await lead.getByRole("button", { name: "Read briefing" }).click();
@@ -190,7 +190,7 @@ test("Got it: the briefing shrinks to one Earlier today line, remembered in this
   // With overlapping meetings above it too, meeting-prep.spec measures the same case.
   await routeSignIn(page);
   await page.reload();
-  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(page.locator('[data-connection-banner][data-state="sign_in"]')).toBeVisible();
   expect(await completeRows(page), "complete Inbox rows with a sign-in problem").toBeGreaterThanOrEqual(1);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

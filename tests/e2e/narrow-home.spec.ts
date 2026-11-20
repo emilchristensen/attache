@@ -68,7 +68,7 @@ async function routeMixedHealth(page: Page) {
   });
 }
 
-const connections = (page: Page) => page.getByRole("status", { name: "Connections" });
+const connections = (page: Page) => page.locator("[data-connection-banner]");
 
 /** A related note whose title has no space to break at, as a file name with underscores can be. */
 const UNBROKEN_TITLE = "Pilot_handover_checklist_for_the_client_kiosk_rollout_2026_11_18";
@@ -90,7 +90,7 @@ async function phoneHome(): Promise<Page> {
   await routeMixedHealth(page);
   await routeUnbrokenNote(page);
   await page.reload();
-  await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
   await expect(meetingHeadsUp(page, "Pilot handover")).toHaveAttribute("data-meeting-phase", "in-progress");
   await openPrep(meetingHeadsUp(page, "Pilot handover"));
   await openPrep(meetingHeadsUp(page, "Billing triage"));
@@ -107,10 +107,10 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
     await page.mouse.move(1, 1);
     // The frame itself never scrolls: only the page does, so the masthead and the bottom bar stay where they are.
     expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight), `${width} px document scrolls`).toBeLessThanOrEqual(0);
-    const targets = await page.evaluate(measureTargets, '[aria-label="Home"]');
+    const targets = await page.evaluate(measureTargets, '[data-connection-banner], [aria-label="Home"]');
     const names = targets.map((t) => t.name);
     // Every control the ticket names is among them: the related note, both meetings' decisions and destinations, Reconnect.
-    for (const name of ["Nora Lind", UNBROKEN_TITLE, "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "View details", "Open in Connections"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
+    for (const name of ["Nora Lind", UNBROKEN_TITLE, "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "Connection issue actions"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
     const small = targets.filter((t) => t.width < TARGET - 0.01 || t.height < TARGET - 0.01).map((t) => `${t.name} ${Math.round(t.width)}x${Math.round(t.height)}`);
     expect(small, `${width} px targets under ${TARGET} px`).toEqual([]);
     expect(targets.filter((t) => t.clipped).map((t) => t.name), `${width} px targets with words cut off`).toEqual([]);
@@ -136,33 +136,29 @@ test("destinations: each meeting's Join and Calendar open its own event", async 
 
 test("keyboard: Tab goes through the visible controls in reading order", async () => {
   const page = await phoneHome();
-  // Number the visible controls of For you now and Connections in document order, and note where each is drawn.
+  // Number the visible controls of the banner and For you now in document order, and note where each is drawn.
   const count = await page.evaluate(() => {
-    const scope = [...document.querySelectorAll(".for-you-now, .home-connections")];
+    const scope = [...document.querySelectorAll("[data-connection-banner], .for-you-now")];
     const controls = scope.flatMap((s) => [...s.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), summary")]).filter((el) => el.getClientRects().length > 0);
     controls.forEach((el, n) => el.setAttribute("data-tab-n", String(n)));
-    (document.querySelector<HTMLElement>(".for-you-now h2") ?? document.body).focus();
+    controls[0]?.focus();
     return controls.length;
   });
   const visited: Array<{ n: number; top: number; left: number }> = [];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; visited.length < count && i < count + 10; i++) {
+    const current = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement;
+      const r = el.getBoundingClientRect();
+      let top = r.top;
+      for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
+      return { n: Number(el.getAttribute("data-tab-n") ?? -1), top, left: r.left };
+    });
+    if (current.n >= 0) visited.push(current);
     await page.keyboard.press("Tab");
-    visited.push(
-      await page.evaluate(() => {
-        const el = document.activeElement as HTMLElement;
-        const r = el.getBoundingClientRect();
-        let top = r.top;
-        for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
-        return { n: Number(el.getAttribute("data-tab-n") ?? -1), top, left: r.left };
-      }),
-    );
   }
   expect(visited.map((v) => v.n)).toEqual([...Array(count).keys()]);
-  // Reading order: each stop is on a later line, or further along the same line.
-  const backwards = visited.slice(1).filter((v, i) => {
-    const prev = visited[i]!;
-    return v.top < prev.top - 2 || (Math.abs(v.top - prev.top) <= 2 && v.left < prev.left);
-  });
+  // Reading order never jumps to an earlier line; the banner may wrap controls onto another column.
+  const backwards = visited.slice(1).filter((v, i) => v.top < visited[i]!.top - 2);
   expect(backwards).toEqual([]);
 });
 
@@ -226,8 +222,8 @@ test("captures: Home's meeting prep and Connections rows on a phone, light and d
 test("Reconnect from the keyboard opens the Connection its row names", async () => {
   const page = await phoneHome();
   const github = (await api<{ connections: Array<{ id: string; kind: string }> }>(page, "GET", "/capabilities")).connections.find((c) => c.kind === "github")!;
-  const row = connections(page).locator('.conn-row[data-state="sign_in"]');
-  await expect(row).toHaveAttribute("data-subject", "GitHub");
+  const row = connections(page);
+  await expect(row).toContainText("GitHub · Sign-in needed");
   await row.getByRole("button", { name: "Reconnect" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/connections\\?open=${github.id}$`));

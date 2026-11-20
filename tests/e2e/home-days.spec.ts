@@ -56,7 +56,7 @@ test.afterAll(async () => {
 });
 
 const forYouNow = (page: Page) => page.getByRole("region", { name: "For you now" });
-const connections = (page: Page) => page.getByRole("status", { name: "Connections" });
+const connections = (page: Page) => page.locator("[data-connection-banner]");
 
 /** Home as it is now, in each theme at 1280 x 800 and 375 x 812, scrolled to the top with the pointer out of the way. */
 async function captureDay(page: Page, day: string) {
@@ -88,7 +88,7 @@ async function expectFold(page: Page, rows: number, what: string) {
 test("quiet: nothing timely, every source read; For you now is one line and four rows show at 1280 x 800", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
-  await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
+  await expect(connections(page)).toHaveCount(0);
   await expectFold(page, 4, "complete Inbox rows on a quiet day");
   await captureDay(page, "quiet");
 });
@@ -100,7 +100,7 @@ test("morning: an unread daily briefing leads; two rows show at 1280 x 800, four
   await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
   const lead = forYouNow(page).locator('[data-heads-up="daily-briefing"]');
   await expect(lead).toBeVisible();
-  await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
+  await expect(connections(page)).toHaveCount(0);
   await expectFold(page, 2, "complete Inbox rows under an unread briefing");
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
@@ -119,7 +119,7 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await page.reload();
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
   await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
   await expectFold(page, 1, "complete Inbox rows during overlapping meetings with a sign-in problem");
   await captureDay(page, "overlap");
   await page.unrouteAll({ behavior: "ignoreErrors" });

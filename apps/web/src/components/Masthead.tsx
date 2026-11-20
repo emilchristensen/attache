@@ -1,3 +1,4 @@
+import type { ConnectionsStatus } from "../connection-status.ts";
 import { navBadge, spokenTotal, type NavSignals } from "../nav-signals.ts";
 import { SCREENS, type ScreenId } from "../routes.ts";
 import { Icon } from "./icons.tsx";
@@ -11,7 +12,7 @@ import { Link } from "./ui.tsx";
  * Machine's disclosure. On a narrow window only the mark stays (and the disclosure while the live connection is
  * lost); the bottom bar takes the screens.
  */
-export function Masthead({ current, signals, onSearch }: { current: ScreenId | null; signals: NavSignals; onSearch: () => void }) {
+export function Masthead({ current, signals, connections, onSearch }: { current: ScreenId | null; signals: NavSignals; connections: ConnectionsStatus; onSearch: () => void }) {
   return (
     <header className="masthead">
       <div className="masthead-inner">
@@ -21,7 +22,7 @@ export function Masthead({ current, signals, onSearch }: { current: ScreenId | n
         </Link>
         <nav className="masthead-nav" aria-label="Main">
           {SCREENS.map((s) => (
-            <ScreenLink key={s.id} screen={s} current={current === s.id} badge={navBadge(signals, s.id, current)} warning={s.id === "settings" ? signals.settingsWarning : null} />
+            <ScreenLink key={s.id} screen={s} current={current === s.id} badge={navBadge(signals, s.id, current)} warning={s.id === "settings" ? signals.settingsWarning : null} healthy={s.id === "connections" && connections.kind === "all_good"} />
           ))}
         </nav>
         <div className="masthead-tools">

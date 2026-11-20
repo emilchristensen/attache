@@ -40,7 +40,7 @@ export function ConnectionCard(props: Props) {
 
 /**
  * Everything the owner can see and do for one Connection: its details, last Source refresh, setup form, sign-in,
- * Test, Refresh now, Reconfigure, Disconnect, what it reads and what it may write. `inRow`: the Connections page's
+   * Test, Refresh now, Reconfigure, Disable, what it reads and what it may write. `inRow`: the Connections page's
  * row already shows the account and what it reads and writes in its columns, so they are not repeated.
  */
 /**
@@ -175,7 +175,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
                     Reconfigure
                   </button>
                   <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<DisconnectEffects>(`/connections/${status.id}/disconnect-preview`)))}>
-                    Disconnect…
+                    Disable…
                   </button>
                 </>
               )}
@@ -205,7 +205,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
           status={status}
           preview={preview}
           disconnect={(deleteData) =>
-            run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), deleteData ? "Disconnected; data deleted" : "Disconnected; data kept")
+            run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), deleteData ? "Disabled; data deleted" : "Disabled; data kept")
           }
           onCancel={() => setPreview(null)}
         />

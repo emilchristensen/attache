@@ -388,7 +388,7 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await sheet.getByRole("checkbox", { name: "Use the decision keys" }).check();
   await expect(sheet.getByRole("table", { name: "Inbox decisions, on" })).toBeVisible();
   // Nothing irreversible ever has a single key.
-  await expect(sheet).not.toContainText(/\b(Apply|Approve|Send|Reject|Revert|Disconnect)\b/);
+  await expect(sheet).not.toContainText(/\b(Apply|Approve|Send|Reject|Revert|Disable)\b/);
   await page.keyboard.press("Escape");
   await toggles.nth(0).focus();
   await page.keyboard.press("d");

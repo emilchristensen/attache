@@ -32,7 +32,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
   It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
   Home's For you now brings the daily briefing forward in the morning, meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), and the briefings you ask for, each saying why it is there and when it leaves.
-  Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
+  A full-width Connection banner under the masthead names the issue that most needs you, what may be missing and the one thing to do; when everything works, Connections carries a green dot.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
   Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
@@ -52,7 +52,8 @@ The logo's dot, the tab's icon and its title, such as "(14) Attache", show how m
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.
-The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect on Home lands on it.
+The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect in the banner lands on it.
+Disable asks what it affects before Attache takes the Connection's access away.
 
 ## Install
 

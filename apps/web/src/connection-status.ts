@@ -535,6 +535,25 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   return { kind: "problems", rows: sorted, working: ctx.reading ? { sources, others } : null };
 }
 
+/** One issue for the shell banner; checking and non-problem states occupy no space. */
+export function connectionBanner(status: ConnectionsStatus): { issue: StatusRow; more: number; fix: StatusAction | null; disableConnectionId: string | null } | null {
+  if (status.kind !== "problems") return null;
+  const issue = status.rows[0];
+  if (!issue || issue.state === "checking") return null;
+  const singleConnection =
+    issue.action?.kind === "reconnect" || issue.action?.kind === "test" || issue.action?.kind === "open_connections"
+      ? issue.action.connectionId ?? null
+      : issue.action?.kind === "refresh" && issue.action.connectionIds.length === 1
+        ? issue.action.connectionIds[0]!
+        : null;
+  return {
+    issue,
+    more: status.rows.length - 1,
+    fix: issue.action,
+    disableConnectionId: singleConnection && !singleConnection.includes(",") ? singleConnection : null,
+  };
+}
+
 /** The rows that show, and the rest behind one "N more" disclosure. */
 export function splitRows(rows: StatusRow[]): { shown: StatusRow[]; more: StatusRow[] } {
   return { shown: rows.slice(0, MAX_ROWS), more: rows.slice(MAX_ROWS) };

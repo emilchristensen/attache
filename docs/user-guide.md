@@ -126,9 +126,11 @@ When Replication is blocked or the repository refused this Machine, Settings car
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
-When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
-When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
-**Connections** also opens with the Reader and its last Source refresh, and Home's Connections area turns red with **Not reading** while no Machine reads.
+When live updates to the service drop, the button itself says **Reconnecting** or **Offline** until they are back; work in progress carries on in the service meanwhile.
+A full-width Connection banner sits directly under the masthead on every screen except **Connections**.
+It names the issue that most needs you with its source, state and what may be missing, counts any others as more connection issues, and offers the fixing action, **Disable** for a problem owned by one Connection, and **Go to Connections**.
+When the Reader has gone silent, the banner says **Not reading** until a Reader is back.
+A healthy setup has no banner, and Connections in the masthead carries a green dot.
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
@@ -144,7 +146,7 @@ Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
 The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
-No single key ever applies, approves, sends, rejects, reverts or disconnects.
+No single key ever applies, approves, sends, rejects, reverts or disables a Connection.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
 
@@ -166,7 +168,7 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
+Home holds three areas: Search the Brain, For you now and the Inbox, which ends with Recently added.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
@@ -343,7 +345,7 @@ Whatever you press, the page stays on the same Draft.
 - **Send** works only when the connection is authorised to write that kind of action.
   Until then the page says "Cannot send yet." with the reason, and **Open Connections** when the fix is there.
   Attache rechecks everything on the service immediately before sending and marks the Draft sent only after the other service confirms it.
-- **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
+- **Revoke approval** takes an approval back; Attache also revokes one itself when its Connection is disabled, its write permission is removed or Drafts are switched off, and says which.
 - **Reject** locks the Draft, and nothing is sent.
   Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
   Restore is refused while a newer Draft for the same item waits, was sent, or has an unknown outcome.
@@ -360,7 +362,7 @@ Drafts expire after 48 business hours.
 Below it each Connection you set up is one row in its group: **Notes**, **Work sources**, **Harnesses** and **Model**.
 A row shows the Connection's name, its account (or folder, or the settings file a Harness was installed in), what Attache may read and write there, and when Attache last read it, each in its own column.
 A Connection that works carries no state word; one with a problem says so under its name in the same words Home uses, such as **Down**, **Offline**, **Partly read** or **Not read yet**.
-Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disconnect…**, what Attache reads and its write permissions.
+Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disable…**, what Attache reads and its write permissions.
 Connections you have not set up are small tiles under their group; a tile opens across the group into its setup form.
 The Notes group also has **Import a folder**, which reads a Markdown folder or Obsidian vault without changing it.
 
@@ -407,7 +409,7 @@ Connect each one you use under Connections → *Harnesses*; its tile says exactl
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
-  Your other settings, hooks and MCP servers are kept, each file is backed up to Attache's `backups/` folder first, and **Disconnect** removes exactly what Attache added.
+  Your other settings, hooks and MCP servers are kept, each file is backed up to Attache's `backups/` folder first, and **Disable** removes exactly what Attache added.
   A file Attache cannot read (for example JSON with comments, or TOML that does not parse) is refused with a message that names it, and nothing is changed.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
@@ -437,10 +439,10 @@ Connect each one you use under Connections → *Harnesses*; its tile says exactl
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/attache-memory.md`.
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Attache hooks.
-  Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Attache's again; reconnecting updates Attache's hooks in place and leaves yours where they are.
+  Codex remembers trust by position, so after you disable it you may need to review hooks listed after Attache's again; connecting it again updates Attache's hooks in place and leaves yours where they are.
 - **If Attache is not running,** sessions are queued on your computer and saved the next time it starts.
 
-Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Attache's MCP server; Claude Desktop stays connected.
+Turning *Agent sessions* off in Settings disables Claude Code, Codex and Antigravity and removes their hooks and Attache's MCP server; Claude Desktop stays connected.
 Uninstalling Attache removes them all.
 
 ## Meeting captures
@@ -497,7 +499,7 @@ When Attache starts after the upgrade, it removes the skill folders it installed
   With it on, a save from that Harness is written without asking; switch it off and that Harness asks you to confirm every save.
   A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
   The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
-  Disconnecting a Harness forgets its setting, so connecting it again starts with auto-accept on.
+  Disabling a Harness forgets its setting, so connecting it again starts with auto-accept on.
   A save written without review still records the Harness and session, and Recent saves on the Brain screen marks it **auto-accepted**, so you can see and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.

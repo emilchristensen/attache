@@ -99,8 +99,9 @@ _Avoid_: client, coding agent
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
 On that page each Connection is one row in its group (Notes, Work sources, Harnesses, Model) with its account, what it may read and write, and when Attache last read it; one not set up is a small tile, and one that needs sign-in moves to a "Needs you" group at the top, already open.
-Home's Connections area shows only the Connections that need a look, each with its state word, such as Sign-in needed, Down or Not read yet, and the page uses the same words.
+The Connection banner shows the first Connection issue under the masthead on every screen except Connections, with the same state word as the page, such as Sign-in needed, Down or Not read yet.
 Disabling a Connection takes that access away, sign-in included, until the owner sets it up again.
+_Avoid_: Disconnect
 
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
@@ -148,7 +149,7 @@ _Avoid_: Item category
 
 **Decision keys**:
 The single keys that decide on the focused Inbox row: `d` Done, `s` Snooze, `x` Dismiss.
-They are off until the owner switches them on in the shortcut sheet, and no key ever applies, approves, sends, rejects, reverts or disconnects.
+They are off until the owner switches them on in the shortcut sheet, and no key ever applies, approves, sends, rejects, reverts or disables a Connection.
 _Avoid_: Hotkeys
 
 **Draft**:

@@ -179,7 +179,7 @@ function ConnectionTile({ status, definition, open, onToggle, onChanged, testRes
     <li className="connection-tile" data-connection={status.id} data-open={open || undefined}>
       <button type="button" className="connection-tile-button" aria-expanded={open} aria-controls={detailId} onClick={onToggle}>
         <span className="connection-tile-name">{status.label}</span>
-        <span className="connection-tile-meta">{status.status === "disconnected" ? "Disconnected" : "Not set up"}</span>
+        <span className="connection-tile-meta">{status.status === "disconnected" ? "Disabled" : "Not set up"}</span>
         <Icon name="chevron" size={16} className="connection-chevron" />
       </button>
       <div id={detailId} className="connection-detail stack" hidden={!open}>

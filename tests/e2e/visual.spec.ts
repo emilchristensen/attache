@@ -182,32 +182,27 @@ async function approvalsScreens(page: Page, prefix: string) {
 }
 
 async function homeConnectionsScreens(page: Page) {
-  const area = page.getByRole("status", { name: "Connections" });
-  const capture = async (path: string) => {
-    await page.waitForTimeout(300);
-    await area.screenshot({ path });
-  };
+  const banner = page.locator("[data-connection-banner]");
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(stack.url);
-    await expect(area).toContainText("All good");
-    await capture(`test-results/screens/${scheme}-home-connections.png`);
+    await expect(banner).toHaveCount(0);
+    await page.locator(".masthead-nav").screenshot({ path: `test-results/screens/${scheme}-home-connections-healthy.png` });
   }
   await routeBadDay(page);
   const badDay = async (path: string) => {
     await page.goto(stack.url);
-    await expect(area.locator(".conn-row")).toHaveCount(4);
-    await area.locator(".conn-row-line").first().click();
-    await area.getByText("1 more: Jira (not read yet)").click();
-    await capture(path);
+    await expect(banner).toBeVisible();
+    await page.waitForTimeout(300);
+    await banner.screenshot({ path });
   };
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await badDay(`test-results/screens/${scheme}-home-connections-problems.png`);
+    await badDay(`test-results/screens/${scheme}-connection-banner-problems.png`);
   }
   await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await badDay("test-results/screens/narrow-home-connections-problems.png");
+  await badDay("test-results/screens/narrow-connection-banner-problems.png");
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.unroute("**/api/v1/capabilities");
 }

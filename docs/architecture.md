@@ -296,7 +296,7 @@ Installs from before ADR 0003 drop their stored conversations and messages on up
 
 ## Connections and transports
 
-Every connection is an adapter with setup, test, Source refresh, disconnect and coverage accounting (`apps/service/src/connectors/`).
+Every connection is an adapter with setup, test, Source refresh, Disable and coverage accounting (`apps/service/src/connectors/`).
 Remote sources use one of three transports.
 
 - **GitHub** uses its REST API with a token or the GitHub CLI login.
@@ -322,7 +322,7 @@ Remote sources use one of three transports.
   The session waits for MCP connections (`MCP_CONNECTION_NONBLOCKING=false`); one that still meets a `pending` connector stops at init, before any call, and is started again.
   Independent pages (for example the first page of DMs and of mentions) share one session, so a Slack Source refresh is a few sessions rather than one per call.
 
-Authorization for the claude.ai connectors lives in claude.ai, so Attache stores no credential for them; disconnecting stops Attache's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
+Authorization for the claude.ai connectors lives in claude.ai, so Attache stores no credential for them; Disabling stops Attache's requests and deletes its retained data on request, while the connector itself stays connected in claude.ai.
 Write actions keep the approval rules below.
 The claude.ai connector tools and the Jira MCP comment tool cannot attach hidden metadata, so recovery after an interrupted write recognises an earlier attempt by content: it must be the user's own (the account id is required, never guessed), created after the pending attempt started (the outbox records that time and passes it as `since`, with two minutes of clock-skew allowance), with the same text once formatting is ignored (Markdown, ADF, Slack mrkdwn and storage HTML render links and emphasis differently).
 Gmail drafts must also be in the same thread; Confluence comments still carry a hidden effect marker in storage format.
@@ -403,7 +403,7 @@ The attention engine follows these rules:
 - Status becomes `succeeded` only when the adapter returns a verified remote id (followed by a read-back where the API allows).
   Otherwise `failed` with the error, or `unknown` if the call timed out after sending.
 - Receipts and every attempt are stored in `action_events`.
-- Revoking an approval, disabling write authority or disconnecting prevents later execution.
+- Revoking an approval, disabling write authority or Disabling a Connection prevents later execution.
 - Expiry uses 48 business hours (weekends skipped); refreshing a draft keeps its original `created`.
 - A draft prepared for an Inbox item records the item's key (`attention_item_key`), and the item's row links to the newest one (`attention_items.action_id`).
   The link is never cleared: reading items joins it to `actions` (`SELECT_VIEW` in `attention/engine.ts`), so `AttentionItemView` carries `actionId` and the draft's current `actionStatus`, and `GET /attention` first marks drafts past their deadline expired, as `GET /actions` does.
@@ -506,7 +506,7 @@ The hook reads the remotes of the session's folder from the repository's own git
 A save or a Proposal that sets a project's `Repositories` fact to anything that is not a list of repositories is refused (`memory/save-items.ts`, the validation both share).
 Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Attache's own model calls run with `--setting-sources ""`, so neither recurses.
-Turning the feature off disconnects every Harness with hooks; `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
+Turning the feature off disables every Harness with hooks; `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
 
 ### MCP server in each Harness
 
@@ -516,7 +516,7 @@ The entry is named `attache` for the default install (`attache-<hash>` for anoth
 JSON files are edited as JSON (`agents/mcp-config-json.ts`); Codex's TOML is edited as text, taking out Attache's `[mcp_servers.<name>]` tables and appending a fresh one, and a TOML parser checks before and after that nothing but Attache's entry changed, so comments and layout survive and any other outcome is refused (`agents/mcp-config-toml.ts`).
 An entry under Attache's name that Attache did not add is refused, as is a file that does not parse.
 Every change across the hooks file, the MCP file and the rule file is worked out before the first write, so a refused file leaves the Harness untouched.
-Disconnecting removes the hooks, the rule and the server, trying each even when another fails, and reports the failures together.
+Disabling removes the hooks, the rule and the server, trying each even when another fails, and reports the failures together.
 
 When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.attache-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
 The MCP prompts replace those skills, and there is no `attache save` command any more, because a Harness with auto-accept off has the owner confirm a save inside the Harness, which a shell cannot do.
@@ -578,7 +578,7 @@ The server starts even when the service is down, because a Harness launches its 
   If so, the tool writes through `POST /memory/save` with `autoAccept: true` and no confirmation request; the service checks the setting again and refuses the save (409 `auto_accept_off`) when it is off.
   Auto-accept is on by default (ADR 0004): a connected Harness Attache knows is on unless the `harness_settings` table of the service database (`agents/auto-accept.ts`) stores it off; a Harness that is not connected, and an unknown MCP client (one that is not a Harness Attache knows), are always off, because the Dashboard has no switch for them.
   The table is local to the Machine and never in the Brain, so Replication never carries it; the upgrade to ADR 0004 switched every stored setting on, once.
-  `GET /harnesses` lists each connected Harness with its switch and `PUT /harnesses/:id/auto-accept` changes it; a Harness that is not connected is refused, and disconnecting one deletes its row, so connecting it again starts on.
+  `GET /harnesses` lists each connected Harness with its switch and `PUT /harnesses/:id/auto-accept` changes it; a Harness that is not connected is refused, and Disabling one deletes its row, so connecting it again starts on.
   Every change an auto-accepted save makes is marked in the change log (`memory_changes.auto_accepted`) beside its Harness and session, and Recent saves shows the mark.
   It never applies to the identity record, which no save can change.
   Otherwise it sends an MCP confirmation request (`elicitation/create`, form mode, no fields) listing every item (`mcp/confirmation.ts`), with a 2-minute limit (`CONFIRMATION_TIMEOUT_MS`).
@@ -602,7 +602,7 @@ The server starts even when the service is down, because a Harness launches its 
 `capabilities/registry.ts` is the single definition of features (recall, capture, attention, drafts, jobs, sessions) and connections, with their dependencies, required scopes, schedules and job kinds.
 The setup checklist, dependency validation, API access checks (`requireFeature`) and scheduler all read it.
 Disabling a feature disables its schedules, rejects its endpoints with `feature_disabled`, and cancels its queued jobs.
-Disconnecting a connection deletes its credentials, stops new requests, cancels queued jobs that depend on it, revokes pending approvals targeting it, and offers to keep or delete its retained observations.
+Disabling a Connection deletes its credentials, stops new requests, cancels queued jobs that depend on it, revokes pending approvals targeting it, and offers to keep or delete its retained observations.
 
 ## Clients
 
