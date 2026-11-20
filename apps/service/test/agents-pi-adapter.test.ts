@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { AgentHooks } from "../src/agents/install.ts";
 import { harnessAdapters } from "../src/agents/harness-adapters.ts";
+import { writeContextFiles } from "../src/agents/context-files.ts";
 
 /**
  * Pi (earendil-works/pi) through its official extension API: Attache owns one
@@ -52,13 +53,35 @@ describe("previewing Pi", () => {
   });
 });
 
-/** Load an extension file the way Pi does (a default-exported factory) against a stand-in for Pi's extension API. */
-async function load(path: string) {
-  const registered: Array<{ name: string; config: { command: string; args: string[]; exposure?: string } }> = [];
-  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: (api: unknown) => void };
-  mod.default({ registerMcpServer: (name: string, config: never) => registered.push({ name, config }) });
-  return registered;
+type Handler = (event: unknown, ctx: unknown) => unknown;
+interface PiMessage {
+  role: string;
+  customType?: string;
+  content?: unknown;
+  display?: boolean;
 }
+
+/** Load an extension file the way Pi does (a default-exported factory) against a stand-in for Pi's extension API. */
+async function loadExtension(path: string) {
+  const registered: Array<{ name: string; config: { command: string; args: string[]; exposure?: string } }> = [];
+  const handlers = new Map<string, Handler[]>();
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: (api: unknown) => void };
+  mod.default({
+    registerMcpServer: (name: string, config: never) => registered.push({ name, config }),
+    on: (event: string, handler: Handler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+  });
+  /** What Pi sends the model on one call: the messages after every `context` handler, as Pi chains them. */
+  const context = async (messages: PiMessage[], cwd: string): Promise<PiMessage[]> => {
+    let current = messages;
+    for (const h of handlers.get("context") ?? []) {
+      const r = (await h({ type: "context", messages: structuredClone(current) }, { cwd })) as { messages?: PiMessage[] } | undefined;
+      if (r?.messages) current = r.messages;
+    }
+    return current;
+  };
+  return { registered, handlers, context };
+}
+const load = async (path: string) => (await loadExtension(path)).registered;
 
 describe("connecting Pi", () => {
   it("writes an extension that registers this instance's MCP server, with its tools declared to the model, each time it loads", async () => {
@@ -116,6 +139,24 @@ describe("refreshing Pi", () => {
     expect(readFileSync(r.backups[0]!, "utf8")).toBe(old);
     expect(pi().status().state).toBe("current");
     expect(pi().refresh()).toMatchObject({ changes: [], backups: [] });
+  });
+
+  it("recognises the MCP-only extension an earlier Attache wrote as its own: refreshing upgrades it to give memory, and disconnecting removes it", async () => {
+    pi().apply();
+    const path = ours();
+    // What the MCP-only version wrote: its own first line, the same ownership line, and no memory.
+    const earlier = readFileSync(path, "utf8")
+      .replace(/^[^\n]*/, "// Managed by Attache: registers this Attache instance's MCP server in each Pi session.")
+      .replace(/\nlet hook;[\s\S]*$/, "\nexport default function attache(pi) {\n  pi.registerMcpServer(SERVER, CONFIG);\n}\n");
+    writeFileSync(path, earlier);
+    expect(pi().status().state).toBe("stale");
+    const r = pi().refresh();
+    expect(r.changes).toEqual([expect.objectContaining({ path, change: "update", backup: true })]);
+    expect(readFileSync(r.backups[0]!, "utf8")).toBe(earlier);
+    expect((await loadExtension(path)).handlers.has("context")).toBe(true);
+    writeFileSync(path, earlier);
+    expect(pi().uninstall()).toMatchObject({ removed: [expect.objectContaining({ path, change: "remove" })], failures: [] });
+    expect(existsSync(path)).toBe(false);
   });
 });
 
@@ -207,7 +248,65 @@ describe("finding Pi", () => {
     expect(pi().detect(home)).toBe(true);
   });
 
-  it("reports MCP access only, and that a running Pi must reload", () => {
-    expect({ ...pi().capabilities, restartRequired: pi().restartRequired }).toEqual({ mcp: true, memory: "none", capture: "none", restartRequired: true });
+  it("reports MCP access and runtime-fresh memory, no session capture, and that a running Pi must reload", () => {
+    expect({ ...pi().capabilities, restartRequired: pi().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "none", restartRequired: true });
+  });
+});
+
+describe("Attache memory in Pi sessions", () => {
+  const user = (text: string): PiMessage => ({ role: "user", content: [{ type: "text", text }] });
+  const memoryOf = (messages: PiMessage[]) => messages.filter((m) => m.role === "custom" && m.customType === "attache-memory");
+  const project = (dir: string, remote: string) => write(join(dir, ".git", "config"), `[remote "origin"]\n\turl = ${remote}\n`);
+
+  it("puts the Brain's current memory ahead of the conversation on every model call, read fresh each time", async () => {
+    writeContextFiles(stateDir, "## Attache memory\n\nOrion cutover is planned for December.\n", []);
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const first = await ext.context([user("hello")], home);
+    expect(first).toHaveLength(2);
+    expect(first[0]).toMatchObject({ role: "custom", customType: "attache-memory", display: false });
+    expect(first[0]!.content).toBe("<attache-memory>\n## Attache memory\n\nOrion cutover is planned for December.\n</attache-memory>");
+    expect(first[1]).toEqual(user("hello"));
+
+    writeContextFiles(stateDir, "## Attache memory\n\nOrion cutover moved to January.\n", []);
+    const second = await ext.context([user("hello"), user("again")], home);
+    expect(memoryOf(second).map((m) => m.content)).toEqual(["<attache-memory>\n## Attache memory\n\nOrion cutover moved to January.\n</attache-memory>"]);
+  });
+
+  it("replaces memory a resumed or compacted session still carries, so only the current memory reaches the model", async () => {
+    writeContextFiles(stateDir, "Current memory\n", []);
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const stale: PiMessage = { role: "custom", customType: "attache-memory", content: "<attache-memory>\nOld memory\n</attache-memory>", display: false };
+    const sent = await ext.context([stale, user("hello"), stale], home);
+    expect(memoryOf(sent).map((m) => m.content)).toEqual(["<attache-memory>\nCurrent memory\n</attache-memory>"]);
+    expect(sent.filter((m) => m.role === "user")).toEqual([user("hello")]);
+  });
+
+  it("gives a session in one of a project's repositories that project's memory", async () => {
+    const repo = at("code", "orion");
+    project(repo, "git@github.com:acme/orion.git");
+    writeContextFiles(stateDir, "Global memory\n", [{ slug: "orion", repositories: ["github.com/acme/orion"], text: "Orion memory\n" }]);
+    pi().apply();
+    const ext = await loadExtension(ours());
+    expect(memoryOf(await ext.context([user("hi")], repo))[0]!.content).toBe("<attache-memory>\nOrion memory\n</attache-memory>");
+    expect(memoryOf(await ext.context([user("hi")], home))[0]!.content).toBe("<attache-memory>\nGlobal memory\n</attache-memory>");
+  });
+
+  it("adds nothing while Attache has no memory for sessions, and leaves the conversation as it is", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    expect(await ext.context([user("hello")], home)).toEqual([user("hello")]);
+  });
+
+  it("another Attache instance's extension gives its own instance's memory", async () => {
+    const other = tempDir("attache-pi-other-state-");
+    writeContextFiles(stateDir, "Mine\n", []);
+    writeContextFiles(other, "Theirs\n", []);
+    pi().apply();
+    piFor(other).apply();
+    const files = readdirSync(EXTENSIONS()).map((f) => join(EXTENSIONS(), f));
+    const sent = await Promise.all(files.map(async (f) => memoryOf(await (await loadExtension(f)).context([user("hi")], home))[0]!.content));
+    expect(sent.sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
   });
 });

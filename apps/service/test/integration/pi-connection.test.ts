@@ -30,14 +30,27 @@ interface Status {
 }
 const connection = async () => (await svc.get<Status[]>("/connections")).find((s) => s.kind === "pi")!;
 
-/** What Attache's extension registers when Pi loads it, through a stand-in for Pi's extension API. */
-async function registeredByExtension(): Promise<{ name: string; config: { command: string; args: string[] } }> {
+type ContextHandler = (event: { messages: unknown[] }, ctx: { cwd: string }) => Promise<{ messages?: Array<{ role: string; customType?: string; content?: unknown }> } | undefined>;
+
+/** Load Attache's extension the way Pi does, through a stand-in for Pi's extension API: what it registers, and its `context` handlers. */
+async function loadExtension() {
   const [file] = readdirSync(EXTENSIONS).filter((f) => f.startsWith("attache"));
   const calls: Array<{ name: string; config: { command: string; args: string[] } }> = [];
+  const context: ContextHandler[] = [];
   const mod = (await import(`${join(EXTENSIONS, file!)}?v=${Math.random()}`)) as { default: (api: unknown) => void };
-  mod.default({ registerMcpServer: (name: string, config: never) => calls.push({ name, config }) });
+  mod.default({ registerMcpServer: (name: string, config: never) => calls.push({ name, config }), on: (event: string, h: ContextHandler) => event === "context" && context.push(h) });
   expect(calls).toHaveLength(1);
-  return calls[0]!;
+  return { ...calls[0]!, context };
+}
+const registeredByExtension = loadExtension;
+
+/** The Attache memory the extension puts ahead of a conversation on a model call, or null. */
+async function memoryForModelCall(): Promise<string | null> {
+  const { context } = await loadExtension();
+  expect(context).toHaveLength(1);
+  const r = await context[0]!({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }, { cwd: HOME });
+  const memory = r?.messages?.find((m) => m.role === "custom" && m.customType === "attache-memory");
+  return typeof memory?.content === "string" ? memory.content : null;
 }
 
 beforeAll(async () => {
@@ -55,10 +68,12 @@ afterAll(async () => {
 });
 
 describe("Pi as a Harness Connection", () => {
-  it("is its own Connection that reports MCP access only and that a running Pi must reload", async () => {
+  it("is its own Connection that reports MCP access and memory, no session capture, and that a running Pi must reload", async () => {
     const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; harness?: unknown; authMethods: Array<{ id: string }> }> }>("/capabilities")).definitions;
     const def = defs.find((d) => d.kind === "pi");
-    expect(def).toMatchObject({ label: "Pi", authMethods: [{ id: "mcp" }], harness: { restartRequired: true, capabilities: { mcp: true, memory: "none", capture: "none" } } });
+    expect(def).toMatchObject({ label: "Pi", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" } } });
+    expect((def as { description?: string }).description).toMatch(/memory/);
+    expect((def as { description?: string }).description).not.toMatch(/save your Pi sessions/);
     expect((await connection()).status).not.toBe("connected");
   });
 
@@ -84,6 +99,12 @@ describe("Pi as a Harness Connection", () => {
     const r = await callTool<{ passages: Array<{ title: string }> }>(client, "search", { query: "Orion cutover" });
     expect(r.isError).toBe(false);
     expect(r.data.passages[0]!.title).toBe("Orion migration");
+  });
+
+  it("gives each Pi model call the Brain's current memory, which follows the Brain when it changes", async () => {
+    await expect.poll(memoryForModelCall).toMatch(/^<attache-memory>\n[\s\S]*Orion migration[\s\S]*\n<\/attache-memory>$/);
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Vega launch", facts: [{ subject: "Status", value: "Launch review on Thursday" }] }] });
+    await expect.poll(memoryForModelCall).toMatch(/Vega launch/);
   });
 
   it("disconnecting removes Attache's extension only, and says what it removed", async () => {

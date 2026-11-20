@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
 import { locationsForHome } from "../platform/locations.ts";
 import { PI_AGENT_DIR, piInstall } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
-import { agentHome, mcpServerEntry, type AgentHooks } from "./install.ts";
+import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 
 /**
@@ -17,11 +18,33 @@ import type { HarnessAdapter } from "./harness-adapters.ts";
  * `settings.json`, so there is never a second, persistent copy to drift.
  * Attache reads those two files only to refuse a setup in which the
  * registration could not work.
+ *
+ * The same extension gives each model call the Brain's current memory: Pi's
+ * `context` event runs before every call, and the extension puts the session
+ * context the service keeps (the hook script's `sessionContext`) ahead of the
+ * conversation for that call only. Pi does not save what a `context` handler
+ * adds, so a resumed or compacted session never carries old memory, and
+ * session capture never reads it as the owner's words.
  */
 
-const MARKER = "// Managed by Attache: registers this Attache instance's MCP server in each Pi session.";
+/**
+ * Every version of the extension starts with `OWNER`, and its ownership line
+ * names the instance; only the rest of the first line changes, so a file an
+ * earlier version wrote is still recognised as this instance's.
+ */
+const OWNER = "// Managed by Attache: ";
+const MARKER = `${OWNER}registers this Attache instance's MCP server and gives its memory to each Pi session.`;
 const INSTANCE = "// attache-instance: ";
-const PURPOSE = "Attache's Pi extension, which registers Attache's MCP server in each Pi session";
+const PURPOSE = "Attache's Pi extension, which registers Attache's MCP server and gives your Attache memory to each Pi session";
+
+/**
+ * How Attache's memory is marked in what Pi sends the model: a custom message
+ * of this type whose text is wrapped in this tag. Pi does not save it, but a
+ * transcript parser must still drop any custom message of this type, and
+ * strip the tag from any text, should one ever reach a session file.
+ */
+export const PI_MEMORY_CUSTOM_TYPE = "attache-memory";
+export const ATTACHE_MEMORY_TAG = "attache-memory";
 
 /** Pi's agent folder: `PI_CODING_AGENT_DIR` when it names one, else `~/.pi/agent`. */
 export function piAgentDir(): string {
@@ -30,8 +53,13 @@ export function piAgentDir(): string {
   return join(agentHome(), ...PI_AGENT_DIR.split("/"));
 }
 
-/** The extension text for one Attache instance: plain code Pi loads through jiti, with no imports. */
-export function piExtensionText(stateDir: string, server: string): string {
+/**
+ * The extension text for one Attache instance: plain code Pi loads through
+ * jiti, with no static imports. It loads this install's hook script only when
+ * a model call needs memory, so a missing script costs the memory and never
+ * the MCP registration.
+ */
+export function piExtensionText(stateDir: string, server: string, hook: string): string {
   const config = { ...mcpServerEntry(stateDir), description: "Attache: search, read and save to your Brain", exposure: "direct" };
   return [
     MARKER,
@@ -40,9 +68,34 @@ export function piExtensionText(stateDir: string, server: string): string {
     "",
     `const SERVER = ${JSON.stringify(server)};`,
     `const CONFIG = ${JSON.stringify(config, null, 2)};`,
+    `const STATE_DIR = ${JSON.stringify(stateDir)};`,
+    `const HOOK = ${JSON.stringify(pathToFileURL(hook).href)};`,
+    `const MEMORY = ${JSON.stringify(PI_MEMORY_CUSTOM_TYPE)};`,
+    "",
+    "let hook;",
+    "",
+    "/** The Brain's current memory for a session in `folder`, or null; read from the files Attache keeps up to date. */",
+    "async function memory(folder) {",
+    "  try {",
+    "    hook ??= import(HOOK);",
+    "    return (await hook).sessionContext(STATE_DIR, folder);",
+    "  } catch {",
+    "    // Attache moved or is gone: try again on the next call, and never break the session.",
+    "    hook = undefined;",
+    "    return null;",
+    "  }",
+    "}",
     "",
     "export default function attache(pi) {",
     "  pi.registerMcpServer(SERVER, CONFIG);",
+    "  // Before every model call: drop any earlier copy of Attache's memory, then put the current one first. Pi does not save it.",
+    "  pi.on(\"context\", async (event, ctx) => {",
+    "    const messages = event.messages.filter((m) => !(m && m.role === \"custom\" && m.customType === MEMORY));",
+    "    const text = await memory(ctx && ctx.cwd ? ctx.cwd : process.cwd());",
+    "    if (!text) return messages.length === event.messages.length ? undefined : { messages };",
+    `    const content = "<${ATTACHE_MEMORY_TAG}>\\n" + text.trim() + "\\n</${ATTACHE_MEMORY_TAG}>";`,
+    "    return { messages: [{ role: \"custom\", customType: MEMORY, content, display: false, timestamp: 0 }, ...messages] };",
+    "  });",
     "}",
     "",
   ].join("\n");
@@ -50,7 +103,7 @@ export function piExtensionText(stateDir: string, server: string): string {
 
 /** The state folder an Attache extension file belongs to, or null for a file Attache did not write. */
 function instanceOf(text: string): string | null {
-  if (!text.startsWith(MARKER)) return null;
+  if (!text.startsWith(OWNER)) return null;
   const line = text.split("\n").find((l) => l.startsWith(INSTANCE));
   try {
     const parsed = JSON.parse(line?.slice(INSTANCE.length) ?? "") as { stateDir?: unknown };
@@ -82,7 +135,7 @@ const sameServer = (a: string, b: string) => a.replace(/_/g, "-").toLowerCase() 
 export function piAdapter(hooks: AgentHooks): HarnessAdapter {
   const server = () => hooks.ownerKey();
   const extension = () => join(piAgentDir(), "extensions", `${server()}.ts`);
-  const expected = () => piExtensionText(hooks.stateDir, server());
+  const expected = () => piExtensionText(hooks.stateDir, server(), stablePath(hookScript()));
 
   /** Throws, naming the file, when Pi's setup would refuse or hide this instance's registration. */
   function checkPiSetup() {
@@ -118,11 +171,11 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
   const adapter: HarnessAdapter = {
     kind: "pi",
     label: "Pi",
-    capabilities: { mcp: true, memory: "none", capture: "none" },
+    capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" },
     restartRequired,
     manualSetup: true,
     setupNote:
-      "Attache adds one extension to Pi's extensions folder that registers Attache's MCP server each time Pi starts a session, for that session only; your Pi settings, mcp.json and other extensions are not changed. Needs Pi 0.99.0 or later with its built-in MCP support on. Run /reload in a Pi session that is already open, or start a new one. If Pi was not found, you can still connect: Attache uses ~/.pi/agent, or PI_CODING_AGENT_DIR when the Attache service has it set.",
+      "Attache adds one extension to Pi's extensions folder that registers Attache's MCP server each time Pi starts a session, for that session only, and sends your current Attache memory with every model call without saving it in the session, so resumed and compacted sessions always see today's memory; your Pi settings, mcp.json and other extensions are not changed. Memory needs the Agent sessions feature on. Needs Pi 0.99.0 or later with its built-in MCP support on. Run /reload in a Pi session that is already open, or start a new one. If Pi was not found, you can still connect: Attache uses ~/.pi/agent, or PI_CODING_AGENT_DIR when the Attache service has it set.",
     detect: (home) => (process.env.PI_CODING_AGENT_DIR ? true : piInstall(locationsForHome(home)).presence.some((p) => existsSync(p))),
     preview: () => ({ changes: plan(), restartRequired }),
     apply: () => {

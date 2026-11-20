@@ -343,17 +343,17 @@ test("a Harness shows its capabilities and every file it will change before conn
   rmSync(join(stack.agentHome, ".codex"), { recursive: true });
 });
 
-test("Pi is its own Harness: MCP access only, its one extension file and the reload it needs, connectable even when Attache did not find Pi", async () => {
+test("Pi is its own Harness: MCP access and memory, its one extension file and the reload it needs, connectable even when Attache did not find Pi", async () => {
   const extensions = join(stack.agentHome, ".pi", "agent", "extensions");
   const page = await journeys.open("/connections");
   const pi = await openConnection(page, "pi");
   await expect(pi.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: not given to new sessions",
+    "Memory: read fresh from your Brain when a session starts",
     "Session capture: none; use the wrap-up prompt to keep what a conversation decided",
   ]);
   const files = pi.getByLabel("Files Attache will change");
-  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${extensions.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.ts: Attache's Pi extension, which registers Attache's MCP server in each Pi session$`)]);
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${extensions.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.ts: Attache's Pi extension, which registers Attache's MCP server and gives your Attache memory to each Pi session$`)]);
   await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
   expect(existsSync(extensions)).toBe(false);
   await pi.getByRole("button", { name: "Connect" }).click();

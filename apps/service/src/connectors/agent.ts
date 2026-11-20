@@ -22,9 +22,7 @@ export function agentAdapter(h: HarnessAdapter): ConnectorAdapter {
     definition: {
       kind: h.kind as ConnectionKind,
       label: h.label,
-      description: lifecycle
-        ? `Reach your Brain from ${h.label} through Attache's MCP server, save your ${h.label} sessions in the Brain, and give each new session your Attache memory.`
-        : `Reach your Brain from ${h.label} through Attache's MCP server: search, read, save and audit, and the save, audit and wrap-up prompts.`,
+      description: describe(h),
       authMethods: [lifecycle ? { id: "hooks", label: "MCP server and hooks", fields: [] } : { id: "mcp", label: "MCP server", fields: [] }],
       scopes: [],
       writeActions: [],
@@ -51,4 +49,14 @@ export function agentAdapter(h: HarnessAdapter): ConnectorAdapter {
       return { ok: s.state === "current", state: s.state === "current" ? "complete" : "error", account: s.state === "failed" ? null : (s.files[0] ?? null), message: s.message };
     },
   };
+}
+
+/** What connecting gives the owner, naming memory and session capture only where the Harness has them. */
+function describe(h: HarnessAdapter): string {
+  const { memory, capture } = h.capabilities;
+  if (memory !== "none" && capture !== "none") return `Reach your Brain from ${h.label} through Attache's MCP server, save your ${h.label} sessions in the Brain, and give each new session your Attache memory.`;
+  const mcp = `Reach your Brain from ${h.label} through Attache's MCP server: search, read, save and audit, and the save, audit and wrap-up prompts`;
+  if (memory !== "none") return `${mcp}; and give each ${h.label} session your current Attache memory.`;
+  if (capture !== "none") return `${mcp}; and save your ${h.label} sessions in the Brain.`;
+  return `${mcp}.`;
 }
