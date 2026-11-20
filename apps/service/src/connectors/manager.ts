@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { plural, WAITING_ACTION_STATUSES, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
+import { plural, uninstallProblem, WAITING_ACTION_STATUSES, type ConnectionKind, type ConnectionStatus, type Coverage, type DisconnectEffects, type HarnessUninstallResult } from "@attache/contracts";
 import { type Db, json, nowIso, placeholders, tx } from "../core/db.ts";
 import type { SecretStore } from "../platform/secret-store/index.ts";
 import type { Logger } from "../core/log.ts";
@@ -53,7 +53,7 @@ export interface SignInState {
 export class ConnectionManager {
   private readonly d: ManagerDeps;
   /** Hooks wired by the app: cancel dependent jobs, revoke approvals, notify clients. */
-  onDisconnect: (id: string, kind: ConnectionKind) => { cancelledJobs: string[]; revokedActions: string[] } = () => ({ cancelledJobs: [], revokedActions: [] });
+  onDisconnect: (id: string, kind: ConnectionKind) => { cancelledJobs: string[]; revokedActions: string[]; harness?: HarnessUninstallResult } = () => ({ cancelledJobs: [], revokedActions: [] });
   onChange: (id: string) => void = () => {};
   /** In-flight syncs per connection, aborted when the connection is disconnected. */
   private readonly inflight = new Map<string, Set<AbortController>>();
@@ -161,6 +161,8 @@ export class ConnectionManager {
       coverage: json<Coverage | null>(row.coverage, null),
       authMethod: authMethod ?? "",
       setupHelp: a?.definition.setupHelp ?? "",
+      // Read from the Harness's own files each time, so an edit made outside Attache shows at once.
+      ...(a?.harness && r.status !== "disconnected" && r.status !== "not_configured" ? { harness: a.harness.status() } : {}),
     };
   }
 
@@ -265,7 +267,7 @@ export class ConnectionManager {
    * work, revoke approvals that target this connection, and keep or delete the
    * retained data according to the user's explicit choice.
    */
-  async disconnect(id: string, opts: { deleteData: boolean }): Promise<{ effects: DisconnectEffects; cancelledJobs: string[]; revokedActions: string[]; deleted: boolean }> {
+  async disconnect(id: string, opts: { deleteData: boolean }): Promise<{ effects: DisconnectEffects; cancelledJobs: string[]; revokedActions: string[]; harness?: HarnessUninstallResult; deleted: boolean }> {
     const rec = this.requireRecord(id);
     if (rec.settings.builtin) throw new RemoteError("The Attache data folder cannot be disconnected; export a backup or uninstall instead.", "error");
     const effects = this.disconnectEffects(id);
@@ -274,6 +276,9 @@ export class ConnectionManager {
     for (const n of this.adapter(rec.kind).secretNames) await this.d.secrets.delete(this.secretKey(id, n));
     this.d.db.prepare("update connections set status = 'disconnected', write_actions = '[]', updated_at = ? where id = ?").run(nowIso(), id);
     const hooks = this.onDisconnect(id, rec.kind);
+    // What a Harness could not remove stays on the Connection, so the owner can see what remains and recover it.
+    const remains = hooks.harness ? uninstallProblem(hooks.harness) : null;
+    if (remains) this.d.db.prepare("update connections set last_error = ?, last_error_at = ? where id = ?").run(remains, nowIso(), id);
     if (opts.deleteData) {
       tx(this.d.db, () => {
         this.d.db.prepare("delete from observations where connection_id = ?").run(id);

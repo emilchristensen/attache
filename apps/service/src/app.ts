@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import type { ConnectionKind, FeatureId, JobView } from "@attache/contracts";
+import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView } from "@attache/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
@@ -28,8 +28,9 @@ import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
-import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
+import { AGENT_INTEGRATIONS } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
+import { harnessAdapters } from "./agents/harness-adapters.ts";
 import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
@@ -182,7 +183,7 @@ export class App {
     this.memory.indexer.onChange(() => this.settleMergeNotices());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
-    this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
+    this.adapters = new Map([...ADAPTERS, ...harnessAdapters(this.sessions.hooks, () => this.sessions.contextText()).map((h) => [h.kind as ConnectionKind, agentAdapter(h)] as const)]);
     this.connections = new ConnectionManager({
       db: this.db,
       secrets: this.secrets,
@@ -212,19 +213,17 @@ export class App {
       this.bus.emit("event", { type: "connections.changed", id });
     };
     this.connections.onDisconnect = (id, kind) => {
-      const agent = integrationFor(kind);
-      if (agent) {
+      const harness = this.adapters.get(kind)?.harness;
+      let removed: HarnessUninstallResult | undefined;
+      if (harness) {
         // Connecting the Harness again starts with auto-accept on, as a new Harness does (ADR 0004).
-        this.autoAccept.forget(agent.kind);
-        try {
-          this.sessions.hooks.uninstall(agent);
-        } catch (e) {
-          this.log.error("could not remove agent hooks", { agent: kind, error: (e as Error).message });
-        }
+        this.autoAccept.forget(kind);
+        removed = harness.uninstall();
+        if (removed.failures.length) this.log.error("could not remove every Attache entry from a Harness", { agent: kind, failures: removed.failures });
       }
       const cancelledJobs = this.jobs.cancelWhere((j) => j.connectionId === id || (kind === "model" && (j.kind === "research" || j.kind === "draft")), `Connection ${id} was disconnected`);
       const revokedActions = this.actions.revokeWhere((a) => a.connectionId === id, "connection disconnected");
-      return { cancelledJobs, revokedActions };
+      return { cancelledJobs, revokedActions, ...(removed ? { harness: removed } : {}) };
     };
     this.jobs.gate = (job) => this.jobGate(job);
     this.jobs.onUnsuccessful = (job) => {
