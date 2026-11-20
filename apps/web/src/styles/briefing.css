@@ -24,4 +24,4 @@
 .briefing-item { display: grid; gap: var(--s-1); padding: var(--s-3) 0; color: inherit; text-decoration: none; }
 .briefing-item + .briefing-item { border-top: 1px solid var(--rule); }
 @container (max-width: 600px) { .daily-briefing-card { grid-template-columns: 1fr; } .briefing-painting { min-height: 160px; } .briefing-painting strong { font-size: 2.4rem; } .briefing-lead { padding: var(--s-4); } }
-@container (max-width: 300px) { .briefing-painting { display: none; } .daily-briefing-head { align-items: flex-start; } .requested-briefing { display: block; } }
+@container (max-width: 300px) { .briefing-painting { display: none; } .daily-briefing-head { align-items: flex-start; } .briefing-empty { align-items: stretch; flex-direction: column; } .briefing-empty strong + * { margin-left: 0; } .briefing-empty button { width: 100%; } .requested-briefing { display: block; } }

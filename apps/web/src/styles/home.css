@@ -467,9 +467,10 @@ button.count-chip {
 @container (max-width: 540px) {
   .your-day { grid-template-columns: minmax(0, 1fr); gap: var(--s-2); }
   .your-day-events { display: grid; gap: var(--s-2); }
-  .your-day-event { padding: 8px 0 8px var(--s-3); }
+  .your-day-event { grid-template-columns: minmax(0, 1fr); padding: 8px 0 8px var(--s-3); }
+  .your-day-time { grid-column: 1; }
   .your-day-title a { display: inline-flex; align-items: center; min-height: 44px; }
-  .your-day-event .button { min-width: 44px; min-height: 44px; }
+  .your-day-event .button { grid-column: 1; justify-self: start; min-width: 44px; min-height: 44px; }
   .your-day-wide, .your-day-more { display: none; }
   .your-day-narrow { display: grid; }
 }
