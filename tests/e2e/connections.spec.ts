@@ -93,7 +93,7 @@ test("groups: the Reader first, then rows in Notes, Work sources, Harnesses and 
   const row = await box(page, `${work} .connection-row`);
   expect(tile.width).toBeLessThan(row.width / 3);
   expect(tile.height).toBeLessThanOrEqual(64);
-  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop", "Pi"]);
+  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop", "Pi", "OpenCode"]);
   // The data folder is described in the glossary's words: the Machine's copy of the Brain.
   await openConnection(page, "vault-data");
   await expect(connection(page, "vault-data")).toContainText("Where this Machine keeps its copy of your Brain (curated notes, evidence and deliverables) as Markdown.");
@@ -365,6 +365,30 @@ test("Pi is its own Harness: MCP access only, its one extension file and the rel
   await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
   await expect.poll(() => readdirSync(extensions)).toEqual([]);
   rmSync(join(stack.agentHome, ".pi"), { recursive: true });
+});
+
+test("OpenCode is its own Harness: MCP access only, its one plugin file and the restart it needs, connectable even when Attache did not find OpenCode", async () => {
+  const plugins = join(stack.agentHome, ".config", "opencode", "plugins");
+  const page = await journeys.open("/connections");
+  const opencode = await openConnection(page, "opencode");
+  await expect(opencode.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: not given to new sessions",
+    "Session capture: none; use the wrap-up prompt to keep what a conversation decided",
+  ]);
+  const files = opencode.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${plugins.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.js: Attache's OpenCode plugin, which registers Attache's MCP server each time OpenCode loads it$`)]);
+  await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
+  expect(existsSync(plugins)).toBe(false);
+  await opencode.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "opencode");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  expect(readdirSync(plugins)).toHaveLength(1);
+  const connected = await openConnection(page, "opencode");
+  await connected.getByRole("button", { name: "Disconnect…" }).click();
+  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect.poll(() => readdirSync(plugins)).toEqual([]);
+  rmSync(join(stack.agentHome, ".config"), { recursive: true });
 });
 
 test("no unresolved console errors across the Connections journeys", () => {

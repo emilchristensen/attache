@@ -138,6 +138,7 @@ describe("what each Harness reports it can do", () => {
       antigravity: { mcp: true, memory: "managed-file", capture: "without-final-event", restartRequired: false },
       "claude-desktop": { mcp: true, memory: "none", capture: "none", restartRequired: true },
       pi: { mcp: true, memory: "none", capture: "none", restartRequired: true },
+      opencode: { mcp: true, memory: "none", capture: "none", restartRequired: true },
     });
   });
 
