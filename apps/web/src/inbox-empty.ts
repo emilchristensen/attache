@@ -42,8 +42,6 @@ export interface CountFailures {
 export interface EmptyInboxInput {
   count: DecisionCount;
   reach: InboxReach;
-  /** How many open items For you now shows above as meeting prep (they are not listed here). */
-  above: number;
   /** The parts a failed request left inexact (as opposed to not having answered yet). */
   failed: CountFailures;
   now: number;
@@ -64,8 +62,6 @@ export interface EmptyInbox {
   /** A count request failed: Retry asks again. */
   retry: boolean;
 }
-
-const MEETINGS_ABOVE = "The meeting prep above is open. Not now brings it back here.";
 
 const line = (text: string, link: EmptyLine["link"] = null): EmptyLine => ({ text, link });
 
@@ -125,7 +121,7 @@ const capital = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
  * moment's "No open Inbox items." before "Nothing needs you." would be a claim taken back). A part a failed request
  * left inexact is named: as not counted when nothing of it is known, as not all counted beside a lower bound.
  */
-export function emptyInbox({ count, reach, above, failed, now, timeZone }: EmptyInboxInput): EmptyInbox | null {
+export function emptyInbox({ count, reach, failed, now, timeZone }: EmptyInboxInput): EmptyInbox | null {
   const tally = { approvals: count.approvals, signIns: count.connections };
   // Nothing known of a part, and no failure behind it: it is still being asked.
   const asking = PARTS.some((p) => !tally[p.key].exact && tally[p.key].count === 0 && !failed[p.key]);
@@ -133,7 +129,6 @@ export function emptyInbox({ count, reach, above, failed, now, timeZone }: Empty
   const clear = count.total.exact && count.total.count === 0 && reach.kind === "all";
   const elsewhere = [count.approvals, count.connections].some((t) => t.count > 0 || !t.exact);
   const lines: EmptyLine[] = [];
-  if (above > 0) lines.push(line(MEETINGS_ABOVE));
   lines.push(line(readLine(reach, now, timeZone)));
   lines.push(...waitLines(count));
   const lost = PARTS.filter((p) => failed[p.key] && !tally[p.key].exact);
@@ -142,5 +137,5 @@ export function emptyInbox({ count, reach, above, failed, now, timeZone }: Empty
   if (none.length) lines.push(line(`${capital(nameList(none))} could not be counted, so Attache cannot say that nothing needs you.`));
   if (some.length) lines.push(line(`${capital(nameList(some))} could not all be counted.`));
   const retry = lost.length > 0;
-  return { title: title(reach, clear, above > 0, elsewhere), clear, lines, retry };
+  return { title: title(reach, clear, false, elsewhere), clear, lines, retry };
 }

@@ -180,18 +180,17 @@ Its Waiting tab holds Drafts to send and Changes to the Brain (and In progress, 
 _Avoid_: Drafts page
 
 **Heads-up**:
-Something Attache brings forward before the owner knows they need it, such as meeting prep, shown in For you now while it is timely.
-Every Heads-up says why it is here and when it leaves; "Got it" puts it away in this browser.
-A meeting prep Heads-up is a view of its Inbox item, not a second item: "Done" decides the item, "Not now" hides only the Heads-up.
+Something Attache brings forward before the owner knows they need it, shown as the reason an Inbox item appears in For you now.
+A Heads-up is a view of that Inbox item, never a second decision.
 
 **Meeting prep**:
 An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
-From 15 minutes before the start it shows in For you now instead of the Inbox, with Join first once the meeting runs.
-A meeting that ends while the pointer or keyboard is on it shows "Meeting ended" in its place until the owner moves on, and a row the keyboard is on when its meeting moves up says "Moved up to For you now"; neither has anything to press.
+From 15 minutes before the start until the meeting starts, unread prep can show in For you now and remains in the Inbox throughout.
 _Avoid_: Occupant, nudge
 
 **For you now**:
-The area on Home that shows the Heads-ups that are timely now, the most urgent one leading, or one quiet line when none is.
+The area on Home that curates open Inbox items by urgency: meeting prep, a reply nearly late, something due today, then a Daily Briefing pick.
+It shows at most five entries, each with its reason, while every open item stays listed in the Inbox with a Suggested now tag when it is also curated.
 _Avoid_: Proactive area
 
 **Your day**:
