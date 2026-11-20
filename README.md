@@ -32,7 +32,8 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, offers Start working, Snooze and Done without opening the row, keeps started work marked In progress across Machines, and keeps still while new items wait behind "Show new items".
   It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
   Home keeps The Daily Briefing in its own area all day.
-  For you now brings meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), while briefings you ask for appear above the Daily Briefing for four hours.
+  For you now curates at most five open Inbox items by urgency: unread meeting prep within 15 minutes, replies nearly late, items due today and the Daily Briefing's picks, each with a short reason and the same row actions as the Inbox.
+  Every open item stays in the Inbox, with a Suggested now tag when it is also curated.
   Your day shows today's calendar meetings in the browser's time zone, with the meeting in progress marked, ended meetings dimmed, unanswered invitations named, and Join from 15 minutes before a meeting through its scheduled end.
   A full-width Connection banner under the masthead names the issue that most needs you, what may be missing and the one thing to do; when everything works, Connections carries a green dot.
 - **Approvals.**

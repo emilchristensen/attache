@@ -1,5 +1,5 @@
 import { draftHref } from "../routes.ts";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useResource } from "../live.ts";
@@ -14,11 +14,11 @@ import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
-import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
-import { rowText, snoozeChoices } from "../inbox-rows.ts";
+import { ALL_TYPES, groupRows, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
+import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { moveAmongRows, useRowKeys, type RowKey } from "../shortcuts.ts";
-import { DecidedRow, InboxRow, MovedUpRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
+import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
 
 /**
@@ -136,20 +136,16 @@ interface RowsProps {
   actions: RowActions;
   draftsOn: boolean;
   onUndo: (entry: ListEntry) => void;
-  /** The row the keyboard is on whose meeting moved up into For you now, drawn in its place at its height. */
-  movedUp: { id: string; height: number | undefined } | null;
 }
 
-function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo, movedUp }: RowsProps) {
+function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo, suggested }: RowsProps & { suggested: ReadonlySet<string> }) {
   return (
     <ul className="inbox-rows">
       {entries.map((e) =>
-        e.item.id === movedUp?.id && !e.decided ? (
-          <MovedUpRow key={e.item.id} item={e.item} height={movedUp.height} />
-        ) : e.decided ? (
+        e.decided ? (
           <DecidedRow key={e.item.id} item={e.item} decision={e.decided.decision} until={e.decided.until} onUndo={e.decided.decision === "reopen" ? null : () => onUndo(e)} busy={actions.busy} clock={clock} />
         ) : (
-          <InboxRow key={e.item.id} item={e.item} open={openId === e.item.id} onToggle={() => onToggle(e.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} />
+          <InboxRow key={e.item.id} item={e.item} open={openId === e.item.id} onToggle={() => onToggle(e.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} suggested={suggested.has(e.item.id)} />
         ),
       )}
     </ul>
@@ -194,59 +190,6 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
 }
 
 /**
- * The row the keyboard is on (its item id), and each row's height as last drawn while it had the focus. Spread
- * `focusProps` on the Inbox.
- */
-function useFocusedRow() {
-  const [id, setId] = useState<string | null>(null);
-  const height = useRef<{ id: string; height: number } | null>(null);
-  useLayoutEffect(() => {
-    const row = id ? document.querySelector<HTMLElement>(`#inbox [data-inbox-row][data-item-id="${CSS.escape(id)}"]:not([data-moved-up])`) : null;
-    if (row && id) height.current = { id, height: row.offsetHeight };
-  });
-  const rowOf = (target: EventTarget | null) => (target instanceof Element ? (target.closest<HTMLElement>("[data-inbox-row]")?.dataset.itemId ?? null) : null);
-  return {
-    id,
-    heightOf: (of: string) => (height.current?.id === of ? height.current.height : undefined),
-    focusProps: {
-      onFocus: (e: FocusEvent<HTMLElement>) => setId(rowOf(e.target)),
-      onBlur: (e: FocusEvent<HTMLElement>) => {
-        if (!rowOf(e.relatedTarget)) setId(null);
-      },
-    },
-  };
-}
-
-/**
- * The item whose row the keyboard is on (`focusedId`) when its meeting moves up into For you now (`above`), as it was
- * then; null otherwise. It stays while the keyboard does, even once the meeting ends or leaves the open list, until
- * the row is listed here again (Not now).
- */
-function useMovedUp(focusedId: string | null, above: ReadonlySet<string>, answered: readonly AttentionItemView[] | null, live: readonly AttentionItemView[] | null): AttentionItemView | null {
-  const [standing, setStanding] = useState<AttentionItemView | null>(null);
-  const promoted = focusedId && above.has(focusedId) ? (answered?.find((i) => i.id === focusedId) ?? null) : null;
-  useEffect(() => {
-    if (promoted && promoted !== standing) setStanding(promoted);
-  }, [promoted, standing]);
-  if (promoted) return promoted;
-  return standing && standing.id === focusedId && !live?.some((i) => i.id === focusedId) ? standing : null;
-}
-
-/**
- * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
- * Show new items.
- */
-function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionItemView[] | null, now: number, welcomeBack: (ids: readonly string[]) => void): void {
-  const before = useRef(above);
-  useEffect(() => {
-    if (before.current === above) return;
-    const back = live ? backFromAbove(before.current, above, live, now) : [];
-    before.current = above;
-    welcomeBack(back);
-  });
-}
-
-/**
  * The Inbox list. `attentionOn` is null until the feature switches are known. `connections` is Home's Connections area: an empty list says nothing needs the owner only when the
  * count is exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed
  * request shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the
@@ -270,32 +213,21 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   // A switched-off feature is not a failure: Home says the Inbox is off instead.
   const failure = source.error && source.error.code !== "feature_disabled" ? source.error : null;
   const answered = source.data?.items ?? null;
-  const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
-  // A meeting that moves up while the keyboard is on its row keeps that row's place until the keyboard moves on.
-  const focused = useFocusedRow();
-  const keptItem = useMovedUp(hiddenView ? null : focused.id, above, answered, live);
-  const kept = keptItem?.id ?? null;
-  const rows = useMemo(() => {
-    if (!keptItem || !answered) return live;
-    const listed = listedBelow(answered, new Set([...above].filter((id) => id !== keptItem.id)), clock.now);
-    return listed.some((i) => i.id === keptItem.id) ? listed : [...listed, keptItem];
-  }, [keptItem, answered, above, clock.now, live]);
-  const list = useInboxList(rows, source.askedAt, hiddenView ? "hidden" : order, order);
-  const keptSubject = keptItem ? rowText(keptItem).subject : null;
+  const live = answered;
+  const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
   useEffect(() => {
-    if (keptSubject) setSaid(`${keptSubject} moved up to For you now.`);
-  }, [keptSubject]);
-  useBackFromAbove(above, open.data?.items ?? null, clock.now, list.welcomeBack);
+    if (!hiddenView && above.size) list.welcomeBack([...above]);
+  }, [above, hiddenView, list]);
   const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
 
   const typed = useMemo(() => list.entries.filter((e) => withType([e.item], place.type).length > 0), [list.entries, place.type]);
   const arrivals = useMemo(() => withType(list.arrivals, place.type), [list.arrivals, place.type]);
   const expanded = useMemo(() => new Set(place.expanded), [place.expanded]);
-  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded, kept) : null;
+  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded, null) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
   // The range counts items listed here: a row standing in for a meeting that moved up is not one.
-  const listedCount = (entries: readonly ListEntry[]) => entries.filter((e) => e.item.id !== kept).length;
+  const listedCount = (entries: readonly ListEntry[]) => entries.length;
 
   // A decision moves an item between the open list and Hidden, so both are asked again.
   const reloadOpen = open.reload;
@@ -364,9 +296,9 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0 && reveal === null, settled);
   const empty =
     live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
-      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
+      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
       : null;
-  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo, movedUp: kept ? { id: kept, height: focused.heightOf(kept) } : null };
+  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo, suggested: above };
 
   if (attentionOn === null)
     return (
@@ -392,7 +324,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
     );
 
   return (
-    <section ref={section} id="inbox" className="inbox" aria-labelledby={heading} {...focused.focusProps}>
+    <section ref={section} id="inbox" className="inbox" aria-labelledby={heading}>
       <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null} above={above}>
         <InboxTools
           items={live}

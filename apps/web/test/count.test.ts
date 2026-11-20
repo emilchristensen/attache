@@ -295,23 +295,23 @@ describe("homeLine", () => {
     expect(homeLine(rows(items(3), 200), new Set(), exact(3))).toBeNull();
   });
   it("relates rows to decisions when an item's Draft waits in Approvals", () => {
-    expect(homeLine(rows([...items(3), item("draft")], 200), new Set(), exact(3))).toBe("3 items below need you · 1 Draft in Approvals");
+    expect(homeLine(rows([...items(3), item("draft")], 200), new Set(), exact(3))).toBe("3 items need you here · 1 Draft in Approvals");
   });
-  it("counts a promoted meeting above, once", () => {
+  it("does not mention a meeting above because the Inbox keeps every open item", () => {
     const meeting = item(null, "meeting_prep");
-    expect(homeLine(rows([meeting, ...items(3), item("approved"), item("revoked")], 200), new Set([meeting.id]), exact(4))).toBe("1 meeting above · 3 items below need you · 2 Drafts in Approvals");
+    expect(homeLine(rows([meeting, ...items(3), item("approved"), item("revoked")], 200), new Set([meeting.id]), exact(4))).toBe("4 items need you here · 2 Drafts in Approvals");
   });
-  it("uses the singular for one item below", () => {
-    expect(homeLine(rows([item(), item("draft")], 200), new Set(), exact(1))).toBe("1 item below needs you · 1 Draft in Approvals");
+  it("uses the singular for one item", () => {
+    expect(homeLine(rows([item(), item("draft")], 200), new Set(), exact(1))).toBe("1 item needs you here · 1 Draft in Approvals");
   });
   it("counts the rows on screen when the count is only a lower bound and the list is whole", () => {
-    expect(homeLine(rows([...items(2), item("draft")], 200), new Set(), lower(1))).toBe("2 items below need you · 1 Draft in Approvals");
+    expect(homeLine(rows([...items(2), item("draft")], 200), new Set(), lower(1))).toBe("2 items need you here · 1 Draft in Approvals");
   });
-  it("takes the decisions below from the exact count when the list is full, and the Drafts as a lower bound", () => {
-    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), exact(250))).toBe("250 items below need you · at least 1 Draft in Approvals");
+  it("takes the decisions from the exact count when the list is full, and the Drafts as a lower bound", () => {
+    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), exact(250))).toBe("250 items need you here · at least 1 Draft in Approvals");
   });
   it("says at least for both when the list is full and the count is not exact", () => {
-    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), lower(2))).toBe("At least 2 items below need you · at least 1 Draft in Approvals");
+    expect(homeLine(rows([...items(2), item("draft")], 3), new Set(), lower(2))).toBe("At least 2 items need you here · at least 1 Draft in Approvals");
   });
   it("says nothing when the Inbox has not answered", () => {
     expect(homeLine(failed, new Set(), exact(0))).toBeNull();

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Icon } from "../components/icons.tsx";
@@ -253,7 +253,7 @@ function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
  * One Inbox row: kind (stamp and word), the subject with its source line, and the time. The subject is the button
  * that opens the row in place; the whole line is its click target.
  */
-export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { item: AttentionItemView; open: boolean; onToggle: () => void; actions: RowActions; draftsOn: boolean; clock: Clock }) {
+export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reason, suggested = false }: { item: AttentionItemView; open: boolean; onToggle: () => void; actions: RowActions; draftsOn: boolean; clock: Clock; reason?: string; suggested?: boolean }) {
   const detail = useId();
   const described = useId();
   const text = rowText(item);
@@ -269,7 +269,8 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { i
           </button>
           <p className="inbox-source" id={described}>
             <span className="sr-only">{type.word}, </span>
-            <span>{text.source}</span>
+            <span>{reason ?? text.source}</span>
+            {(reason || suggested) && <Tag tone="outline">Suggested now</Tag>}
             <Labels item={item} clock={clock} />
             <span className="sr-only">, {time.label}</span>
           </p>
@@ -315,27 +316,6 @@ export function DecidedRow({ item, decision, until, onUndo, busy, clock }: { ite
             Undo
           </button>
         )}
-      </div>
-    </li>
-  );
-}
-
-/**
- * A meeting prep row the keyboard was on when its meeting moved up into For you now: its place keeps the row's size
- * and says so, with nothing to press, and the focus stays here, until the keyboard moves on. Then the row goes, as
- * every promoted meeting does: it is one item, shown once.
- */
-export function MovedUpRow({ item, height }: { item: AttentionItemView; height: number | undefined }) {
-  const ref = useRef<HTMLLIElement>(null);
-  // The row's controls went with it: the focus they had stays in its place.
-  useLayoutEffect(() => ref.current?.focus({ preventScroll: true }), []);
-  return (
-    <li ref={ref} tabIndex={-1} className="inbox-row decided" style={height ? { height } : undefined} data-inbox-row data-row-toggle data-item-id={item.id} data-item-key={item.key} data-type={inboxType(item).id} data-moved-up>
-      <div className="inbox-line">
-        <Kind item={item} />
-        <p className="inbox-decided">
-          <strong>Moved up to For you now:</strong> <span>{rowText(item).subject}</span>
-        </p>
       </div>
     </li>
   );

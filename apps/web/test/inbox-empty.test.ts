@@ -37,7 +37,7 @@ const READ_ALL: InboxReach = { kind: "all", sources: 5, lastReadAt: READ_AT };
 const GMAIL_SIGN_IN: InboxReach = { kind: "partial", sources: 4, missing: [{ subject: "Gmail", word: "Sign-in needed" }] };
 
 function input(over: Partial<EmptyInboxInput> = {}): EmptyInboxInput {
-  return { count: NOTHING, reach: READ_ALL, above: 0, failed: NO_FAILURE, now: NOW, timeZone: TZ, ...over };
+  return { count: NOTHING, reach: READ_ALL, failed: NO_FAILURE, now: NOW, timeZone: TZ, ...over };
 }
 
 describe("inboxReach: what Home's Connections area says was read", () => {
@@ -86,11 +86,6 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
       ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "At least 1 approval waits on its own page. [approvals]", "Approvals could not all be counted.", "[Retry]"],
     ],
     ["a failure beside a part still being asked: nothing to say yet", { count: count(known(0), unknown, unknown), failed: APPROVALS_FAILED }, null],
-    [
-      "meeting prep above while an approval waits: the list is what is empty",
-      { above: 1, count: count(known(1), known(1), known(0)) },
-      ["No other open Inbox items.", "The meeting prep above is open. Not now brings it back here.", "All 5 sources were read, last at 09:14.", "1 approval waits on its own page. [approvals]"],
-    ],
     ["one source read and one not", { reach: { kind: "partial", sources: 1, missing: [{ subject: "Gmail", word: "Down" }] } }, ["Nothing found in the one source that was read.", "Not read: Gmail (down)."]],
     ["notes only: never that all work is clear", { reach: { kind: "notes" } }, ["Nothing found in your notes.", "No work source is connected, so only your notes were read."]],
     ["approvals wait: no open items, and where the decisions are", { count: count(known(0), known(4), known(0)) }, ["No open Inbox items.", "All 5 sources were read, last at 09:14.", "4 approvals wait on their own page. [approvals]"]],
@@ -112,22 +107,6 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
     ["the Inbox's own number still counting", { count: count(unknown, known(0), known(0)) }, null],
     ["Connections still being checked", { reach: { kind: "unknown", checking: true } }, ["No open Inbox items.", "Connections are still being checked, so Attache cannot say yet what was read."]],
     ["Connections could not be checked", { reach: { kind: "unknown", checking: false } }, ["No open Inbox items.", "Connections could not be checked, so Attache cannot say what was read."]],
-    [
-      "only meeting prep above, every source read",
-      { above: 1, count: count(known(1), known(0), known(0)) },
-      ["Nothing else needs your attention.", "The meeting prep above is open. Not now brings it back here.", "All 5 sources were read, last at 09:14."],
-    ],
-    [
-      "meeting prep above, a source not read",
-      { above: 2, reach: GMAIL_SIGN_IN, count: count(known(2), known(0), known(1)) },
-      ["Nothing else found in the 4 sources that were read.", "The meeting prep above is open. Not now brings it back here.", "Not read: Gmail (sign-in needed).", "A Connection needs your sign-in, above."],
-    ],
-    ["meeting prep above, notes only", { above: 1, reach: { kind: "notes" }, count: count(known(1), known(0), known(0)) }, ["Nothing else found in your notes.", "The meeting prep above is open. Not now brings it back here.", "No work source is connected, so only your notes were read."]],
-    [
-      "meeting prep above, Connections unknown",
-      { above: 1, reach: { kind: "unknown", checking: true }, count: count(known(1), known(0), known(0)) },
-      ["No other open Inbox items.", "The meeting prep above is open. Not now brings it back here.", "Connections are still being checked, so Attache cannot say yet what was read."],
-    ],
   ])("%s", (_name, over, expected) => {
     const e = words(input(over));
     expect(e).toEqual(expected);
@@ -146,7 +125,7 @@ describe("emptyInbox: an empty Inbox claims no more than was read", () => {
       { reach: { kind: "unknown", checking: false } },
       { count: count(known(0), known(1), known(0)) },
       { count: count(known(0), unknown, known(0)), failed: APPROVALS_FAILED },
-      { count: count(known(1), known(0), known(0)), above: 1 },
+      { count: count(known(1), known(0), known(0)) },
     ];
     for (const c of cases) expect(emptyInbox(input(c))?.clear).toBe(false);
   });

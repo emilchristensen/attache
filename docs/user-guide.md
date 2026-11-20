@@ -116,7 +116,7 @@ The screen you are on is filled in ink.
 A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
-When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
+When the rows and the decisions differ, a line under the heading relates them, such as "3 items need you here · 1 Draft in Approvals": an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
 The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
 The count is exact however many decisions wait.
@@ -185,17 +185,16 @@ Home holds Search the Brain, For you now, Your day and the Inbox, which ends wit
   **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**.
-- **For you now** shows timely Inbox items, such as meeting prep, and never contains the Daily Briefing.
-  Every Heads-up says why it is here and when it leaves.
-  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
-    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
-    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
-    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
-    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
-    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
-    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
-  - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
-  - With Attention and briefings switched off, the area says so, with a link to Settings.
+- **For you now** is a short curated list of the Inbox items to act on now.
+  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and this morning's Daily Briefing picks.
+  Each row gives its reason, such as "Starts in 12 min, prep not read" or "Nora has waited since Tuesday"; an item appears once under its most urgent reason.
+  At most five items show, followed by the count of the rest in the Inbox.
+  Every row has **Start working**, **Snooze** and **Done**, and opens with the same detail as its Inbox row.
+  Starting an item keeps it in progress when its reason still applies.
+  Meeting prep leaves the list when **Start working** opens it, but the row stays in the complete Inbox with **Suggested now** until then.
+  An entry never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
+  With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
+  With Attention and briefings switched off, the area says so with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
   It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one line above timed meetings.
   The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**.

@@ -160,16 +160,15 @@ export function tabTitle(total: Tally): string {
  */
 export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, promoted: ReadonlySet<string>, home: Tally): string | null {
   if (inbox.kind !== "rows") return null;
-  const above = inbox.rows.filter((i) => promoted.has(i.id) && !draftWaits(i)).length;
-  const below = inbox.rows.filter((i) => !promoted.has(i.id));
+  void promoted;
+  const below = inbox.rows;
   const inApprovals = below.filter(draftWaits).length;
-  if (above === 0 && inApprovals === 0) return null;
+  if (inApprovals === 0) return null;
   const full = inbox.limit !== null && inbox.rows.length >= inbox.limit;
-  const decisions = full && home.exact ? home.count - above : below.length - inApprovals;
+  const decisions = full ? home.count : below.length - inApprovals;
   const atLeast = full && !home.exact ? "At least " : "";
   return [
-    above > 0 && plural(above, "meeting") + " above",
-    `${atLeast}${plural(decisions, "item")} below ${decisions === 1 && !atLeast ? "needs" : "need"} you`,
+    `${atLeast}${plural(decisions, "item")} ${decisions === 1 && !atLeast ? "needs" : "need"} you here`,
     inApprovals > 0 && `${full ? "at least " : ""}${plural(inApprovals, "Draft")} in Approvals`,
   ]
     .filter(Boolean)
