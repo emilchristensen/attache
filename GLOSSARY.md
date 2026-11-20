@@ -146,8 +146,13 @@ What an Inbox row shows an item to be: an explicit word such as "Review request"
 Types belong to families (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System) for Group by type; a kind the Dashboard does not know shows under Other with a readable word.
 _Avoid_: Item category
 
+**In progress**:
+An open Inbox item whose first step the owner has taken with Start working.
+It keeps its place and Decision count, and the mark replicates to every Machine until Not started, Done, Dismiss, resolved evidence or changed evidence ends it.
+_Avoid_: Started item
+
 **Decision keys**:
-The single keys that decide on the focused Inbox row: `d` Done, `s` Snooze, `x` Dismiss.
+The single keys that decide on the focused Inbox row: `w` Start working, `d` Done, `s` Snooze, `x` Dismiss.
 They are off until the owner switches them on in the shortcut sheet, and no key ever applies, approves, sends, rejects, reverts or disconnects.
 _Avoid_: Hotkeys
 

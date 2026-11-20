@@ -47,7 +47,7 @@ function InboxEmpty({ empty, retry }: { empty: EmptyInbox; retry: (() => void) |
 }
 
 /** What each decision key decides on the focused row. */
-const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "done", snooze: "snooze", dismiss: "dismiss" };
+const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { start: "start", done: "done", snooze: "snooze", dismiss: "dismiss" };
 
 /**
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
@@ -181,6 +181,10 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
       const decision = KEY_DECISION[key];
       const item = live?.find((i) => i.id === row?.dataset.itemId);
       if (!decision || !item || item.state !== "open" || busy) return false;
+      if (decision === "start") {
+        decide(item, decision);
+        return true;
+      }
       decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
       return true;
     },
@@ -303,11 +307,16 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   const { decided } = list;
   const decide = useCallback(
     (item: AttentionItemView, decision: RowDecision, until?: string) =>
-      void run(`decide:${item.id}`, async () => {
+      run(`decide:${item.id}`, async () => {
         await post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) });
-        decided(item, decision, until ?? null);
-        focusAfter(item.id, "undo");
+        if (decision !== "start") {
+          decided(item, decision, until ?? null);
+          focusAfter(item.id, "undo");
+        }
         reload();
+        return true;
+      }).then((ok) => {
+        if (!ok) throw new Error("Could not record the decision");
       }),
     [run, decided, focusAfter, reload],
   );

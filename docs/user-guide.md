@@ -143,7 +143,7 @@ Arrow keys move through places and passages, `Enter` opens the chosen one, and *
 Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
-The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+The decision keys, `w` for Start working, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
 No single key ever applies, approves, sends, rejects, reverts or disconnects.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
@@ -228,7 +228,14 @@ Home holds Search the Brain, For you now, Your day, Connections and the Inbox, w
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
   On a narrow window the type comes first, then the whole subject, then the source and time.
-  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
+  Every row offers **Start working**, **Snooze** and **Done** without opening it.
+  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place.
+  It keeps the item open and marks it **In progress** on every Machine; the button then reads **Continue**.
+  Opening the row shows **Not started** to clear the mark.
+  A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
+  **Snooze** opens the same return times as an opened row.
+  In a two-thirds space, Snooze and Done become icon buttons with full accessible names; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
+  Select a row to open it in place for the summary, why it is here, evidence, the main action and every decision, including **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
   The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.

@@ -29,7 +29,7 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   The Brain screen reads them side by side with their collections, opens each fact's source in place, and lists every recent save with its origin and one-click Revert.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
-  Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
+  Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, offers Start working, Snooze and Done without opening the row, keeps started work marked In progress across Machines, and keeps still while new items wait behind "Show new items".
   It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
   Home's For you now brings the daily briefing forward in the morning, meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), and the briefings you ask for, each saying why it is there and when it leaves.
   Your day shows today's calendar meetings in the browser's time zone, with the meeting in progress marked, ended meetings dimmed, unanswered invitations named, and Join from 15 minutes before a meeting through its scheduled end.
