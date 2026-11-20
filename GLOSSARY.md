@@ -188,6 +188,10 @@ _Avoid_: Occupant, nudge
 The area on Home that shows the Heads-ups that are timely now, the most urgent one leading, or one quiet line when none is.
 _Avoid_: Proactive area
 
+**Your day**:
+The ruled band on Home that shows today's calendar meetings in the browser's current time zone, using the last events the Google Calendar Connection read.
+It is a schedule, not an Inbox item, so it never adds to the Decision count.
+
 **Briefing**:
 A short summary Attache writes of what changed, what needs the owner and what is prepared: the daily briefing on a schedule, or an Away summary or a briefing the owner asked for.
 The daily briefing is a Heads-up until noon; one the owner asked for, for four hours.

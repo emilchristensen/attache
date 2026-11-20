@@ -166,7 +166,7 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
+Home holds Search the Brain, For you now, Your day, Connections and the Inbox, which ends with Recently added.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
@@ -200,6 +200,17 @@ Home holds four areas: Search the Brain, For you now, Connections and the Inbox,
   - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.
+- **Your day** is the ruled band between Home's upper areas.
+  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one line above timed meetings.
+  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**.
+  Select a meeting to open it in Google Calendar.
+  **Join** appears from 15 minutes before its start until its scheduled end when it has a Meet link.
+  Once the day's meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known.
+  It says **Nothing on your calendar today** only after a complete read, and otherwise distinguishes **Checking**, **Could not read**, **No calendar connected** and **Switched off**.
+  A failed read keeps the last known meetings and says when they were read.
+  The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
+  On a wide window extra meetings sit behind **N more**; in a narrow space every meeting is a list.
+  Your day is a schedule and never adds to the Attention dot's count.
 - **Connections** says whether you can trust the list below it.
   When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
   Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
