@@ -14,3 +14,4 @@ export * from "./actions.ts";
 export * from "./decision-count.ts";
 export * from "./errors.ts";
 export * from "./wording.ts";
+export * from "./harness.ts";

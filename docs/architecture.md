@@ -508,6 +508,13 @@ Antigravity has no session-start hook, so the same text is written to an always-
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Attache's own model calls run with `--setting-sources ""`, so neither recurses.
 Turning the feature off disconnects every Harness with hooks; `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
 
+### Harness adapters
+
+Every Harness Connection goes through one boundary, `HarnessAdapter` (`agents/harness-adapters.ts`, data types in `packages/contracts/src/harness.ts`, ADR 0006): detect, preview, apply, status, refresh and uninstall.
+Each adapter reports MCP access, memory (`none`, `runtime-fresh`, `managed-file`) and session capture (`none`, `with-final-event`, `without-final-event`) separately, and whether a running Harness must restart before a change takes effect.
+Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part it could not remove with its file.
+Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
+
 ### MCP server in each Harness
 
 Connecting a Harness also registers Attache's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).

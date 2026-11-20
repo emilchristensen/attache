@@ -1,7 +1,8 @@
-import type { ConnectorAdapter, TestResult } from "./types.ts";
+import type { ConnectorAdapter } from "./types.ts";
 import { RemoteError } from "./http.ts";
 import type { AgentIntegration } from "../agents/integrations.ts";
-import { agentHome, type AgentHooks, type HarnessStatus } from "../agents/install.ts";
+import { agentHome, type AgentHooks } from "../agents/install.ts";
+import { harnessStatusMessage } from "../agents/harness-adapters.ts";
 import { HooksFileError } from "../agents/hooks-config.ts";
 
 /**
@@ -40,28 +41,11 @@ export function agentAdapter(a: AgentIntegration, hooks: AgentHooks, context: ()
     async test() {
       if (!a.detect(agentHome())) return { ok: false, state: "not_configured", account: null, message: notFound };
       try {
-        return describe(hooks.status(a));
+        const s = hooks.status(a);
+        return { ok: s.current, state: s.current ? "complete" : "error", account: s.path ?? s.mcp.path, message: harnessStatusMessage(s) };
       } catch (e) {
         return { ok: false, state: "error", account: null, message: (e as Error).message };
       }
     },
   };
-}
-
-/** "a, b and c". */
-const list = (parts: string[]) => (parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : (parts[0] ?? ""));
-
-function describe(s: HarnessStatus): TestResult {
-  const account = s.path ?? s.mcp.path;
-  if (s.current) {
-    const n = s.installed.length;
-    const parts = [...(s.path ? [`${n} Attache hook${n === 1 ? "" : "s"} in ${s.path}`] : []), ...(s.rules ? [`memory rule ${s.rules}`] : []), `Attache's MCP server in ${s.mcp.path}`];
-    return { ok: true, state: "complete", account, message: list(parts) };
-  }
-  const missing = [
-    ...(s.hooksCurrent ? [] : s.installed.length ? [`the Attache hooks in ${s.path} are out of date`] : [`no Attache hooks in ${s.path}`]),
-    ...(s.mcp.registered ? (s.mcp.current ? [] : [`Attache's MCP server in ${s.mcp.path} is out of date`]) : [`Attache's MCP server is not in ${s.mcp.path}`]),
-  ];
-  const what = missing.length ? list(missing) : `the memory rule ${s.rules} is missing`;
-  return { ok: false, state: "error", account, message: `${what.charAt(0).toUpperCase()}${what.slice(1)}. Set up again to fix it.` };
 }
