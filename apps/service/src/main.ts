@@ -15,6 +15,7 @@ import { MeaningSearch } from "./meaning/service.ts";
 import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { createLogger } from "./core/log.ts";
 import { AgentHooks } from "./agents/install.ts";
+import { piAdapter } from "./agents/pi-adapter.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
@@ -139,22 +140,32 @@ async function agentHooksCmd(argv: string[]) {
   const sub = argv[1] ?? "status";
   const only = arg("agent", argv);
   const picked = only ? integrationFor(only) : null;
-  if (only && !picked) throw new Error(`Unknown agent ${only}. Agents: ${AGENT_INTEGRATIONS.map((a) => a.kind).join(", ")}`);
-  const agents = picked ? [picked] : AGENT_INTEGRATIONS;
+  const kinds = [...AGENT_INTEGRATIONS.map((a) => a.kind), "pi"];
+  if (only && !picked && only !== "pi") throw new Error(`Unknown agent ${only}. Agents: ${kinds.join(", ")}`);
+  const agents = picked ? [picked] : only ? [] : AGENT_INTEGRATIONS;
+  // Pi is connected through its own adapter (an extension file), not hooks and an MCP configuration.
+  const pi = !only || only === "pi" ? piAdapter(hooks) : null;
   if (sub === "status") {
-    return out(JSON.stringify(agents.map((a) => {
-      const s = hooks.status(a);
-      return { agent: a.kind, path: s.path, hooks: s.installed.length, mcp: s.mcp.registered ? s.mcp.path : null, current: s.current, rules: s.rules };
-    })));
+    return out(JSON.stringify([
+      ...agents.map((a) => {
+        const s = hooks.status(a);
+        return { agent: a.kind, path: s.path, hooks: s.installed.length, mcp: s.mcp.registered ? s.mcp.path : null, current: s.current, rules: s.rules };
+      }),
+      ...(pi ? [(({ state, files }) => ({ agent: "pi", path: files[0] ?? null, state, current: state === "current" }))(pi.status())] : []),
+    ]));
   }
   if (sub === "uninstall") {
-    const results = hooks.uninstallAll(agents);
+    const piResult = pi?.uninstall();
+    const results = [
+      ...hooks.uninstallAll(agents),
+      ...(piResult ? [{ agent: "pi", path: piResult.removed[0]?.path ?? null, removed: piResult.removed.length, mcp: null, ...(piResult.failures.length ? { error: piResult.failures.join(" ") } : {}) }] : []),
+    ];
     out(JSON.stringify(results));
     const failed = results.filter((r) => r.error);
     if (failed.length) throw new Error(`Could not remove the Attache hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention attache-agent-hook and the MCP server that runs \`attache mcp\` by hand.`);
     return;
   }
-  throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${AGENT_INTEGRATIONS.map((a) => a.kind).join("|")}]`);
+  throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${kinds.join("|")}]`);
 }
 
 function cliIo(): CliIo {

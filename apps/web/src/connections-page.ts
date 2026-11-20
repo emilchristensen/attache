@@ -28,7 +28,7 @@ export interface PageGroup {
 const GROUPS: ReadonlyArray<{ id: Exclude<GroupId, "needs_you">; title: string; kinds: readonly ConnectionKind[] }> = [
   { id: "notes", title: "Notes", kinds: ["vault"] },
   { id: "work", title: "Work sources", kinds: ["github", "jira", "confluence", "slack", "gmail", "gcal"] },
-  { id: "harnesses", title: "Harnesses", kinds: ["claude-code", "codex", "antigravity", "claude-desktop"] },
+  { id: "harnesses", title: "Harnesses", kinds: ["claude-code", "codex", "antigravity", "claude-desktop", "pi"] },
   { id: "model", title: "Model", kinds: ["model"] },
 ];
 

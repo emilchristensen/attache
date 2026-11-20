@@ -517,6 +517,17 @@ Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdap
 The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).
 `GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disconnecting returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
 `ConnectionDefinition.harness` gives the Dashboard each capability and the restart requirement.
+An adapter with `manualSetup` (Pi) can be connected even when `detect` finds nothing, since Attache cannot see every folder the Harness installs to.
+
+### Pi
+
+Pi connects through its own extension API (`agents/pi-adapter.ts`), with MCP access only.
+Attache writes one extension per instance, `<agent dir>/extensions/attache.ts` (`attache-<hash>.ts` for another instance), where the agent dir is `~/.pi/agent` or `PI_CODING_AGENT_DIR`.
+Pi loads it on its own and it calls `pi.registerMcpServer` with the same `attache mcp --state-dir <state>` command as every other Harness, `exposure: "direct"`, so the tools are declared to the model; Pi keeps that registration for the session only, so Pi's `mcp.json` and `settings.json` are never written.
+They are read only to refuse a setup the registration could not work in: a file that does not parse, `-builtin:mcp` in `settings.json`, or a same-name server in `mcp.json`, which Pi would use instead.
+The file's first line marks it as Attache's and names its state folder; a file in its place without that marker is left alone.
+A running Pi needs `/reload` (or a new session) to load a change, so the adapter reports a restart.
+`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, and gone after disconnecting.
 
 ### MCP server in each Harness
 

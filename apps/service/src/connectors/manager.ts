@@ -19,7 +19,7 @@ import { scanFactReviews } from "../attention/fact-reviews.ts";
 import { planScan, type IndexRoot } from "../memory/indexer.ts";
 import type { MemoryStore } from "../memory/store.ts";
 
-export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"];
+export const SINGLETON_KINDS: ConnectionKind[] = ["github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop", "pi"];
 
 /** Where a connection's secret lives in the secret store. Replication's credential helper reads the GitHub token by it. */
 export function connectionSecretKey(connectionId: string, name: string): string {

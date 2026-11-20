@@ -111,7 +111,7 @@ function FeaturesStep({ onBack, onNext }: { onBack: () => void; onNext: () => vo
 }
 
 const SOURCE_KINDS = ["github", "jira", "confluence", "slack", "gmail", "gcal"];
-const HARNESS_KINDS = ["claude-code", "codex", "antigravity", "claude-desktop"];
+const HARNESS_KINDS = ["claude-code", "codex", "antigravity", "claude-desktop", "pi"];
 
 function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const caps = useResource<Caps>("/capabilities", ["connections.changed"]);
@@ -126,7 +126,7 @@ function ConnectionsStep({ onBack, onNext }: { onBack: () => void; onNext: () =>
       <ErrorState error={caps.error} retry={caps.reload} />
       {caps.data && SOURCE_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <h2>Harnesses</h2>
-      <p className="muted">Connect the Harnesses you use. Each gets Attache's MCP server, so it can search, read and save to your Brain without asking; you can switch that off per Harness in Settings. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Only Attache's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
+      <p className="muted">Connect the Harnesses you use. Each gets Attache's MCP server, so it can search, read and save to your Brain without asking; you can switch that off per Harness in Settings. Claude Code, Codex and Antigravity also get hooks that save each session with a short summary of what was decided and give every new session your memory. Pi gets one Attache extension that registers the MCP server in each Pi session. Only Attache's own entries are added to each configuration file, the file is backed up first, and everything else in it is left as it is.</p>
       {caps.data && HARNESS_KINDS.map((k) => <SetupCard key={k} kind={k} caps={caps.data!} onChanged={caps.reload} />)}
       <Nav onBack={onBack} onNext={onNext} nextLabel="Continue" />
     </section>

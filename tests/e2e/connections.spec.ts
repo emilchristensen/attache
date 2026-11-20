@@ -4,7 +4,7 @@
  * already open, when a Connection needs sign-in, where Home's Reconnect lands. Driven through the Dashboard against the
  * real bundled service and the TEST-ONLY fixtures; it sets itself up through the API, so it runs on its own.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
@@ -93,7 +93,7 @@ test("groups: the Reader first, then rows in Notes, Work sources, Harnesses and 
   const row = await box(page, `${work} .connection-row`);
   expect(tile.width).toBeLessThan(row.width / 3);
   expect(tile.height).toBeLessThanOrEqual(64);
-  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop"]);
+  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop", "Pi"]);
   // The data folder is described in the glossary's words: the Machine's copy of the Brain.
   await openConnection(page, "vault-data");
   await expect(connection(page, "vault-data")).toContainText("Where this Machine keeps its copy of your Brain (curated notes, evidence and deliverables) as Markdown.");
@@ -341,6 +341,30 @@ test("a Harness shows its capabilities and every file it will change before conn
   await expect(page.getByText(/Disconnected, but some of Attache's entries remain: .*hooks\.json/).first()).toBeVisible();
   expect(readFileSync(join(stack.agentHome, ".codex", "config.toml"), "utf8")).not.toContain("--state-dir");
   rmSync(join(stack.agentHome, ".codex"), { recursive: true });
+});
+
+test("Pi is its own Harness: MCP access only, its one extension file and the reload it needs, connectable even when Attache did not find Pi", async () => {
+  const extensions = join(stack.agentHome, ".pi", "agent", "extensions");
+  const page = await journeys.open("/connections");
+  const pi = await openConnection(page, "pi");
+  await expect(pi.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: not given to new sessions",
+    "Session capture: none; use the wrap-up prompt to keep what a conversation decided",
+  ]);
+  const files = pi.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${extensions.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.ts: Attache's Pi extension, which registers Attache's MCP server in each Pi session$`)]);
+  await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
+  expect(existsSync(extensions)).toBe(false);
+  await pi.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "pi");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  expect(readdirSync(extensions)).toHaveLength(1);
+  const connected = await openConnection(page, "pi");
+  await connected.getByRole("button", { name: "Disconnect…" }).click();
+  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect.poll(() => readdirSync(extensions)).toEqual([]);
+  rmSync(join(stack.agentHome, ".pi"), { recursive: true });
 });
 
 test("no unresolved console errors across the Connections journeys", () => {
