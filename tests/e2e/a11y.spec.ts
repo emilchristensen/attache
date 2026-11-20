@@ -203,18 +203,18 @@ test("screen reader: every screen, opened state, Setup and pairing pass axe's WC
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-test("screen reader: Home's three areas are named in order, the navigation names counts in words and Home carries no badge on Home", async () => {
+test("screen reader: Home's four areas are named in order, the navigation names counts in words and Home carries no badge on Home", async () => {
   const page = await journeys.open("/");
   const home = page.getByRole("region", { name: "Home" });
   await expect(home.getByRole("search", { name: "Brain" })).toBeVisible();
   await expect(home.getByRole("region", { name: "For you now" })).toBeVisible();
+  await expect(home.getByRole("region", { name: "Your day" })).toBeVisible();
   await expect(home.getByRole("region", { name: "Inbox" })).toBeVisible();
   const order = await page.evaluate(() =>
-    [".home-search", ".for-you-now", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
+    [".home-search", ".for-you-now", ".your-day", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
   );
-  expect(order, "search, For you now, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
-  // Three areas and nothing else: Recently added closes the Inbox area rather than standing as a fourth.
-  await expect(home.locator("> *")).toHaveCount(3);
+  expect(order, "search, For you now, Your day, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
+  await expect(home.locator("> *")).toHaveCount(4);
   for (const [viewport, bar] of [[{ width: 1360, height: 900 }, ".masthead-nav"], [PHONE, ".bottom-bar"]] as const) {
     await page.setViewportSize(viewport);
     const nav = page.locator(bar);
