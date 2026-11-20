@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { AgentHooks } from "../src/agents/install.ts";
 import { harnessAdapters } from "../src/agents/harness-adapters.ts";
+import { writeContextFiles } from "../src/agents/context-files.ts";
 
 /**
  * OpenCode through its official plugin API: Attache owns one plugin file per
@@ -50,8 +51,8 @@ interface Server {
 
 /** Load a plugin file as OpenCode 1 does (the default export's `server()` hooks, then the `config` hook on a live config). */
 async function loadV1(path: string, config: Record<string, unknown> = {}) {
-  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { server: () => Promise<{ config?: (c: Record<string, unknown>) => Promise<void> }> } };
-  const hooks = await mod.default.server();
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { server: (input: { directory: string }) => Promise<{ config?: (c: Record<string, unknown>) => Promise<void> }> } };
+  const hooks = await mod.default.server({ directory: home });
   await hooks.config?.(config);
   return config as { mcp?: Record<string, Server> };
 }
@@ -61,7 +62,7 @@ async function loadV2(path: string, existing: Record<string, Server> = {}) {
   const servers = new Map(Object.entries(existing));
   const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { id: string; setup: (ctx: unknown) => Promise<void> } };
   const editor = { list: () => [...servers], get: (n: string) => servers.get(n), set: (n: string, c: Server) => servers.set(n, c), update: () => {}, remove: (n: string) => servers.delete(n) };
-  await mod.default.setup({ mcp: { transform: async (cb: (e: typeof editor) => void) => cb(editor) } });
+  await mod.default.setup({ location: { directory: home }, mcp: { transform: async (cb: (e: typeof editor) => void) => cb(editor) }, session: { hook: async () => ({ dispose: async () => {} }) } });
   return { id: mod.default.id, servers: Object.fromEntries(servers) };
 }
 
@@ -154,6 +155,30 @@ describe("refreshing OpenCode", () => {
     expect(openCode().status().state).toBe("current");
     expect(openCode().refresh()).toMatchObject({ changes: [], backups: [] });
   });
+});
+
+it("recognises the MCP-only plugin an earlier Attache wrote as its own: refreshing upgrades it with a backup, disconnecting removes it", () => {
+  openCode().apply();
+  const name = ours().replace(/^.*[\\/]/, "").replace(/\.js$/, "");
+  // What the MCP-only version wrote: its own first line, the same ownership line.
+  const earlier = [
+    "// Managed by Attache: registers this Attache instance's MCP server each time OpenCode loads this plugin.",
+    "// Attache rewrites this file when you connect OpenCode again and removes it when you disconnect; edits here are lost.",
+    `// attache-instance: ${JSON.stringify({ stateDir })}`,
+    "",
+    `const ID = ${JSON.stringify(name)};`,
+    "export default { id: ID, async setup() {}, async server() { return {}; } };",
+    "",
+  ].join("\n");
+  writeFileSync(ours(), earlier);
+  expect(openCode().status().state).toBe("stale");
+  const r = openCode().refresh();
+  expect(r.changes).toEqual([expect.objectContaining({ change: "update", backup: true })]);
+  expect(readFileSync(r.backups[0]!, "utf8")).toBe(earlier);
+  expect(openCode().status().state).toBe("current");
+  writeFileSync(ours(), earlier);
+  expect(openCode().uninstall().removed).toHaveLength(1);
+  expect(readdirSync(PLUGINS())).toEqual([]);
 });
 
 describe("two Attache instances on one Machine", () => {
@@ -296,7 +321,122 @@ describe("OpenCode versions", () => {
     expect(openCode().detect(home)).toBe(true);
   });
 
-  it("reports MCP access only, and that a running OpenCode must restart", () => {
-    expect({ ...openCode().capabilities, restartRequired: openCode().restartRequired }).toEqual({ mcp: true, memory: "none", capture: "none", restartRequired: true });
+  it("reports MCP access and runtime-fresh memory, no session capture, and that a running OpenCode must restart", () => {
+    expect({ ...openCode().capabilities, restartRequired: openCode().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "none", restartRequired: true });
+  });
+});
+
+/** OpenCode 1 as the plugin sees it for a session in `directory`: the system-prompt hook, the compaction hook, and the system prompt it is about to send. */
+async function v1Session(path: string, directory: string) {
+  type V1Hooks = Record<string, (input: Record<string, unknown>, output: Record<string, unknown>) => Promise<void>>;
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { server: (input: { directory: string }) => Promise<V1Hooks> } };
+  const hooks = await mod.default.server({ directory });
+  return {
+    /** The system prompt one model call of `sessionID` gets. */
+    async call(sessionID = "ses_1"): Promise<string[]> {
+      const output = { system: ["You are OpenCode."] };
+      await hooks["experimental.chat.system.transform"]?.({ sessionID, model: {} }, output);
+      return output.system;
+    },
+    async compacting(sessionID = "ses_1") {
+      await hooks["experimental.session.compacting"]?.({ sessionID }, { context: [] });
+    },
+  };
+}
+
+/** OpenCode 2 as the plugin sees it for a session in `directory`: the `context` hook it registered, and the system parts one model call gets. */
+async function v2Session(path: string, directory: string) {
+  const registered: Record<string, (e: { sessionID: string; system: Array<{ type: string; text: string }> }) => Promise<void> | void> = {};
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { setup: (ctx: unknown) => Promise<void> } };
+  await mod.default.setup({
+    location: { directory },
+    mcp: { transform: async () => ({ dispose: async () => {} }) },
+    session: { hook: async (name: string, cb: (typeof registered)[string]) => ((registered[name] = cb), { dispose: async () => {} }) },
+  });
+  return {
+    hooks: Object.keys(registered),
+    async call(): Promise<string[]> {
+      const event = { sessionID: "ses_1", system: [{ type: "text", text: "You are OpenCode." }] };
+      await registered.context?.(event);
+      return event.system.map((p) => p.text);
+    },
+  };
+}
+
+const memoryIn = (system: string[]) => system.filter((t) => t.includes("<attache-memory>"));
+
+describe("Attache memory in OpenCode sessions", () => {
+  const project = (dir: string, remote: string) => write(join(dir, ".git", "config"), `[remote "origin"]\n\turl = ${remote}\n`);
+
+  it("adds the Brain's current memory to the system prompt of every OpenCode 1 model call, read fresh each time", async () => {
+    writeContextFiles(stateDir, "## Attache memory\n\nOrion cutover is planned for December.\n", []);
+    openCode().apply();
+    const s = await v1Session(ours(), home);
+    expect(await s.call()).toEqual(["You are OpenCode.", "<attache-memory>\n## Attache memory\n\nOrion cutover is planned for December.\n</attache-memory>"]);
+    writeContextFiles(stateDir, "## Attache memory\n\nOrion cutover moved to January.\n", []);
+    expect(memoryIn(await s.call())).toEqual(["<attache-memory>\n## Attache memory\n\nOrion cutover moved to January.\n</attache-memory>"]);
+  });
+
+  it("adds the Brain's current memory to the system prompt of every OpenCode 2 agent-loop call, read fresh each time", async () => {
+    writeContextFiles(stateDir, "Orion is on track.\n", []);
+    openCode().apply();
+    const s = await v2Session(ours(), home);
+    // The context hook runs for the agent loop only; compaction and titles have hooks of their own, which Attache leaves alone.
+    expect(s.hooks).toEqual(["context"]);
+    expect(await s.call()).toEqual(["You are OpenCode.", "<attache-memory>\nOrion is on track.\n</attache-memory>"]);
+    writeContextFiles(stateDir, "Orion slipped a week.\n", []);
+    expect(memoryIn(await s.call())).toEqual(["<attache-memory>\nOrion slipped a week.\n</attache-memory>"]);
+  });
+
+  it("keeps memory out of OpenCode 1's compaction summary, so a compacted session never carries old memory, and gives the next call current memory", async () => {
+    writeContextFiles(stateDir, "Old memory\n", []);
+    openCode().apply();
+    const s = await v1Session(ours(), home);
+    await s.compacting("ses_1");
+    // The summary request of ses_1 follows; another session's call is unaffected.
+    expect(memoryIn(await s.call("ses_2"))).toHaveLength(1);
+    expect(memoryIn(await s.call("ses_1"))).toEqual([]);
+    writeContextFiles(stateDir, "New memory\n", []);
+    expect(memoryIn(await s.call("ses_1"))).toEqual(["<attache-memory>\nNew memory\n</attache-memory>"]);
+  });
+
+  it("gives a session in one of a project's repositories that project's memory, in either OpenCode", async () => {
+    const repo = at("code", "orion");
+    project(repo, "git@github.com:acme/orion.git");
+    writeContextFiles(stateDir, "Global memory\n", [{ slug: "orion", repositories: ["github.com/acme/orion"], text: "Orion memory\n" }]);
+    openCode().apply();
+    expect(memoryIn(await (await v1Session(ours(), repo)).call())).toEqual(["<attache-memory>\nOrion memory\n</attache-memory>"]);
+    expect(memoryIn(await (await v2Session(ours(), repo)).call())).toEqual(["<attache-memory>\nOrion memory\n</attache-memory>"]);
+    expect(memoryIn(await (await v1Session(ours(), home)).call())).toEqual(["<attache-memory>\nGlobal memory\n</attache-memory>"]);
+  });
+
+  it("adds nothing while Attache has no memory for sessions", async () => {
+    openCode().apply();
+    expect(await (await v1Session(ours(), home)).call()).toEqual(["You are OpenCode."]);
+    expect(await (await v2Session(ours(), home)).call()).toEqual(["You are OpenCode."]);
+  });
+
+  it("still registers the MCP server, and only skips memory, when Attache's memory reader cannot be loaded", async () => {
+    writeContextFiles(stateDir, "Memory\n", []);
+    process.env.ATTACHE_AGENT_HOOK_SCRIPT = join(home, "gone", "attache-agent-hook.mjs");
+    try {
+      openCode().apply();
+    } finally {
+      delete process.env.ATTACHE_AGENT_HOOK_SCRIPT;
+    }
+    expect(await (await v1Session(ours(), home)).call()).toEqual(["You are OpenCode."]);
+    const v2 = await loadV2(ours());
+    expect(Object.keys(v2.servers)).toEqual([v2.id]);
+  });
+
+  it("another Attache instance's plugin gives its own instance's memory", async () => {
+    const other = tempDir("attache-opencode-other-state-");
+    writeContextFiles(stateDir, "Mine\n", []);
+    writeContextFiles(other, "Theirs\n", []);
+    openCode().apply();
+    openCodeFor(other).apply();
+    const files = readdirSync(PLUGINS()).map((f) => join(PLUGINS(), f));
+    const sent = await Promise.all(files.map(async (f) => memoryIn(await (await v2Session(f, home)).call())[0]));
+    expect(sent.sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
   });
 });

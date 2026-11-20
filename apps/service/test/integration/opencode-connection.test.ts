@@ -36,12 +36,31 @@ const connection = async () => (await svc.get<Status[]>("/connections")).find((s
 /** The MCP server Attache's plugin registers when OpenCode 1 loads it (its `config` hook), as an MCP client starts it. */
 async function registeredByPlugin(): Promise<{ command: string; args: string[] }> {
   const [file] = readdirSync(PLUGINS).filter((f) => f.startsWith("attache"));
-  const mod = (await import(`${join(PLUGINS, file!)}?v=${Math.random()}`)) as { default: { server: () => Promise<{ config: (c: { mcp?: Record<string, { command: string[] }> }) => Promise<void> }> } };
+  const mod = (await import(`${join(PLUGINS, file!)}?v=${Math.random()}`)) as { default: { server: (input: { directory: string }) => Promise<{ config: (c: { mcp?: Record<string, { command: string[] }> }) => Promise<void> }> } };
   const config: { mcp?: Record<string, { command: string[] }> } = {};
-  await (await mod.default.server()).config(config);
+  await (await mod.default.server({ directory: HOME })).config(config);
   const [command, ...args] = Object.values(config.mcp!)[0]!.command;
   return { command: command!, args };
 }
+
+/** The system prompt Attache's plugin gives one model call of a session in the agent home, as OpenCode 1 and OpenCode 2 build it. */
+async function systemPromptForModelCall(): Promise<{ v1: string[]; v2: string[] }> {
+  const [file] = readdirSync(PLUGINS).filter((f) => f.startsWith("attache"));
+  type Plugin = {
+    server: (input: { directory: string }) => Promise<Record<string, (i: object, o: { system: string[] }) => Promise<void>>>;
+    setup: (ctx: object) => Promise<void>;
+  };
+  const plugin = ((await import(`${join(PLUGINS, file!)}?v=${Math.random()}`)) as { default: Plugin }).default;
+  const v1 = { system: ["You are OpenCode."] };
+  await (await plugin.server({ directory: HOME }))["experimental.chat.system.transform"]!({ sessionID: "ses_1", model: {} }, v1);
+  let context: ((e: { system: Array<{ type: string; text: string }> }) => Promise<void>) | undefined;
+  const hook = async (name: string, cb: typeof context) => ((name === "context" ? (context = cb) : undefined), { dispose: async () => {} });
+  await plugin.setup({ location: { directory: HOME }, mcp: { transform: async () => ({ dispose: async () => {} }) }, session: { hook } });
+  const v2 = { sessionID: "ses_1", system: [{ type: "text", text: "You are OpenCode." }] };
+  await context!(v2);
+  return { v1: v1.system, v2: v2.system.map((p) => p.text) };
+}
+const memoryFor = async (opencode: "v1" | "v2") => (await systemPromptForModelCall())[opencode].find((t) => t.startsWith("<attache-memory>")) ?? null;
 
 beforeAll(async () => {
   delete process.env.XDG_CONFIG_HOME;
@@ -62,9 +81,12 @@ afterAll(async () => {
 });
 
 describe("OpenCode as a Harness Connection", () => {
-  it("is its own Connection that reports MCP access only and that a running OpenCode must restart", async () => {
-    const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; harness?: unknown; authMethods: Array<{ id: string }> }> }>("/capabilities")).definitions;
-    expect(defs.find((d) => d.kind === "opencode")).toMatchObject({ label: "OpenCode", authMethods: [{ id: "mcp" }], harness: { restartRequired: true, capabilities: { mcp: true, memory: "none", capture: "none" } } });
+  it("is its own Connection that reports MCP access and memory, no session capture, and that a running OpenCode must restart", async () => {
+    const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; description?: string; harness?: unknown }> }>("/capabilities")).definitions;
+    const def = defs.find((d) => d.kind === "opencode");
+    expect(def).toMatchObject({ label: "OpenCode", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" } } });
+    expect(def!.description).toMatch(/memory/);
+    expect(def!.description).not.toMatch(/save your sessions/);
     expect((await connection()).status).not.toBe("connected");
   });
 
@@ -93,6 +115,12 @@ describe("OpenCode as a Harness Connection", () => {
     expect((await connection()).harness?.state).toBe("current");
     expect(readdirSync(PLUGINS).sort()).toEqual([expect.stringMatching(/^attache(-[0-9a-f]{8})?\.js$/), "mine.js"]);
     expect(readFileSync(join(CONFIG, "opencode.jsonc"), "utf8")).toBe(OWN_CONFIG);
+  });
+
+  it("gives each OpenCode model call the Brain's current memory in its system prompt, which follows the Brain when it changes", async () => {
+    for (const opencode of ["v1", "v2"] as const) await expect.poll(() => memoryFor(opencode)).toMatch(/^<attache-memory>\n[\s\S]*Orion migration[\s\S]*\n<\/attache-memory>$/);
+    await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Vega launch", facts: [{ subject: "Status", value: "Launch review on Thursday" }] }] });
+    for (const opencode of ["v1", "v2"] as const) await expect.poll(() => memoryFor(opencode)).toMatch(/Vega launch/);
   });
 
   it("the server the plugin registers, started as OpenCode starts it, reaches the Brain", async () => {
