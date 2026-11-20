@@ -9,6 +9,7 @@ import { HooksFileError, ourHooks, replaceFile, ourNamedHooks, readSettings, sam
 import type { AgentIntegration } from "./integrations.ts";
 import { McpRegistration } from "./mcp-registration.ts";
 import type { McpServerEntry } from "./mcp-config.ts";
+import type { HarnessFileChange } from "@attache/contracts";
 
 /** Home directory whose Harness settings Attache edits. Tests point this at a temporary folder. */
 export function agentHome(): string {
@@ -143,6 +144,24 @@ export class AgentHooks {
     return { path, before, next };
   }
 
+  /**
+   * The files connecting would change, worked out without writing anything.
+   * Throws, like `install`, on a file Attache must not change.
+   */
+  preview(a: AgentIntegration, context: string): HarnessFileChange[] {
+    const hooks = this.planHooks(a);
+    const mcp = this.mcp.planInstall(a);
+    this.checkRules(a);
+    const rules = this.rulesPath(a);
+    const changes: HarnessFileChange[] = [];
+    const change = (path: string, purpose: string): HarnessFileChange => ({ path, change: existsSync(path) ? "update" : "create", backup: existsSync(path), purpose });
+    if (hooks && JSON.stringify(hooks.next) !== JSON.stringify(hooks.before)) changes.push(change(hooks.path, `Attache's hooks for ${a.label}`));
+    if (mcp.after !== mcp.before) changes.push(change(mcp.path, "Attache's MCP server"));
+    // The rule file is Attache's own, so it is replaced without a backup.
+    if (rules && !(existsSync(rules) && readFileSync(rules, "utf8") === ruleFileText(context))) changes.push({ ...change(rules, "your Attache memory, as an always-on rule"), backup: false });
+    return changes;
+  }
+
   install(a: AgentIntegration, context: string): { path: string | null; backup: string | null; hooks: HookSpec[]; mcp: { path: string; backup: string | null } } {
     // Every change is worked out first: a file Attache must not change stops the connection before anything is written.
     const hooks = this.planHooks(a);
@@ -192,6 +211,13 @@ export class AgentHooks {
    * even when another fails; the failures are reported together afterwards.
    */
   uninstall(a: AgentIntegration): { path: string | null; removed: number; backup: string | null; mcp: string | null } {
+    const r = this.removeParts(a);
+    if (r.errors.length) throw new HooksFileError(r.errors.join(" "));
+    return { ...r.hooks, mcp: r.mcp };
+  }
+
+  /** Every part of `uninstall`, with what each removed and one message per part that failed. */
+  removeParts(a: AgentIntegration): { rules: string | null; hooks: { path: string | null; removed: number; backup: string | null }; mcp: string | null; errors: string[] } {
     const errors: string[] = [];
     const attempt = <T>(fallback: T, run: () => T): T => {
       try {
@@ -201,19 +227,21 @@ export class AgentHooks {
         return fallback;
       }
     };
-    attempt(undefined, () => this.removeRules(a));
+    const rules = attempt(null as string | null, () => this.removeRules(a));
     const hooks = attempt({ path: this.configPath(a), removed: 0, backup: null as string | null }, () => this.uninstallHooks(a));
     const mcp = attempt(null as string | null, () => {
       const r = this.mcp.apply(this.mcp.planUninstall(a));
       return r.changed ? r.path : null;
     });
-    if (errors.length) throw new HooksFileError(errors.join(" "));
-    return { ...hooks, mcp };
+    return { rules, hooks, mcp, errors };
   }
 
-  private removeRules(a: AgentIntegration) {
+  /** The rule file it removed, if any. */
+  private removeRules(a: AgentIntegration): string | null {
     const rules = this.rulesPath(a);
-    if (rules && existsSync(rules) && readFileSync(rules, "utf8").includes(RULE_MARKER)) rmSync(rules);
+    if (!rules || !existsSync(rules) || !readFileSync(rules, "utf8").includes(RULE_MARKER)) return null;
+    rmSync(rules);
+    return rules;
   }
 
   private uninstallHooks(a: AgentIntegration): { path: string | null; removed: number; backup: string | null } {
