@@ -15,6 +15,7 @@ import { MeaningSearch } from "./meaning/service.ts";
 import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { createLogger } from "./core/log.ts";
 import { AgentHooks } from "./agents/install.ts";
+import { copilotCliAdapter } from "./agents/copilot-cli-adapter.ts";
 import { openCodeAdapter } from "./agents/opencode-adapter.ts";
 import { piAdapter } from "./agents/pi-adapter.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
@@ -141,8 +142,8 @@ async function agentHooksCmd(argv: string[]) {
   const sub = argv[1] ?? "status";
   const only = arg("agent", argv);
   const picked = only ? integrationFor(only) : null;
-  // Pi and OpenCode are connected through their own adapters (one extension or plugin file), not hooks and an MCP configuration.
-  const fileAdapters = [piAdapter(hooks), openCodeAdapter(hooks)];
+  // Pi, OpenCode and Copilot CLI are connected through their own adapters (one extension or plugin file, or one MCP entry), not hooks and an MCP configuration.
+  const fileAdapters = [piAdapter(hooks), openCodeAdapter(hooks), copilotCliAdapter(hooks)];
   const kinds = [...AGENT_INTEGRATIONS.map((a) => a.kind), ...fileAdapters.map((a) => a.kind)];
   if (only && !kinds.includes(only)) throw new Error(`Unknown agent ${only}. Agents: ${kinds.join(", ")}`);
   const agents = picked ? [picked] : only ? [] : AGENT_INTEGRATIONS;

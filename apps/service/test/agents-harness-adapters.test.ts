@@ -139,6 +139,7 @@ describe("what each Harness reports it can do", () => {
       "claude-desktop": { mcp: true, memory: "none", capture: "none", restartRequired: true },
       pi: { mcp: true, memory: "none", capture: "none", restartRequired: true },
       opencode: { mcp: true, memory: "none", capture: "none", restartRequired: true },
+      "copilot-cli": { mcp: true, memory: "none", capture: "none", restartRequired: true },
     });
   });
 
