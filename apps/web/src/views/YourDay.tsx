@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { AgendaResponse } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
@@ -21,19 +21,24 @@ function Meeting({ event, zone }: { event: DayEvent; zone: string }) {
 
 export function YourDay({ clock, enabled }: { clock: HeadsUpClock; enabled: boolean }) {
   const range = useMemo(() => yourDayRange(clock.now, clock.timeZone), [clock.now, clock.timeZone]);
-  const agenda = useResource<AgendaResponse>(`/agenda?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`, ["connections.changed", "job"]);
-  const view = agenda.data ? yourDay({ ...agenda.data, ...clock, enabled }) : null;
+  const agenda = useResource<AgendaResponse>(enabled ? `/agenda?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}` : null, ["connections.changed", "job"]);
+  const last = useRef<AgendaResponse | null>(null);
+  useEffect(() => {
+    if (agenda.data) last.current = agenda.data;
+  }, [agenda.data]);
+  const data = agenda.data ?? last.current;
+  const view = enabled && data ? yourDay({ ...data, ...clock, enabled }) : !enabled ? { state: "off" as const, events: [], tomorrow: null, more: 0 } : null;
   return (
     <section className="your-day" aria-labelledby="your-day-heading" data-state={view?.state ?? "checking"}>
       <h2 id="your-day-heading">Your day</h2>
       <div className="your-day-body">
         {(!view || view.state === "checking") && !agenda.error && <p className="your-day-message">Checking</p>}
-        {agenda.error && <p className="your-day-message">Could not read. <button className="link" onClick={agenda.reload}>Retry</button></p>}
+        {agenda.error && !data && <p className="your-day-message">Could not read. <button className="link" onClick={agenda.reload}>Retry</button></p>}
         {view?.state === "off" && <p className="your-day-message">Switched off. <a href="/settings">Open Settings</a></p>}
         {view?.state === "unconnected" && <p className="your-day-message">No calendar connected. <a href="/connections">Open Connections</a></p>}
-        {view?.state === "error" && <>
-          <p className="your-day-message">Could not read{view && agenda.data?.readAt ? ` · Last read ${clockTime(Date.parse(agenda.data.readAt), clock.timeZone)}` : ""}. <button className="link" onClick={agenda.reload}>Retry</button></p>
-          <ul className="your-day-events">{view.events.map((event) => <Meeting key={event.id} event={event} zone={clock.timeZone} />)}</ul>
+        {(agenda.error && !!data || view?.state === "error") && <>
+          <p className="your-day-message">Could not read{data?.readAt ? ` · Last read ${clockTime(Date.parse(data.readAt), clock.timeZone)}` : ""}. <button className="link" onClick={agenda.reload}>Retry</button></p>
+          <ul className="your-day-events">{view?.events.map((event) => <Meeting key={event.id} event={event} zone={clock.timeZone} />)}</ul>
         </>}
         {view?.state === "events" && <>
           {!!view.events.some((event) => event.allDay) && <p className="your-day-all-day">{view.events.filter((event) => event.allDay && event.visible).map((event) => event.title).join(" · ")}</p>}

@@ -46,8 +46,11 @@ describe("Your day", () => {
     expect(yourDay({ ...base, events: [], coverage: { ...base.coverage, state: "offline" } }).state).toBe("error");
     expect(yourDay({ ...base, events: [], connection: null }).state).toBe("unconnected");
     expect(yourDay({ ...base, enabled: false, events: [] }).state).toBe("off");
-    const view = yourDay({ ...base, events: Array.from({ length: YOUR_DAY_VISIBLE + 3 }, (_, i) => event(`e${i}`, `2026-11-20T0${i}:00:00Z`, `2026-11-20T0${i}:30:00Z`)) });
-    expect(view.events.filter((e) => e.visible)).toHaveLength(YOUR_DAY_VISIBLE);
+    const meetings = Array.from({ length: YOUR_DAY_VISIBLE + 3 }, (_, i) => event(`e${i}`, `2026-11-20T${String(i).padStart(2, "0")}:00:00Z`, `2026-11-20T${String(i).padStart(2, "0")}:30:00Z`));
+    const allDay = Array.from({ length: 3 }, (_, i) => event(`day-${i}`, "2026-11-20", "2026-11-21", { allDay: true }));
+    const view = yourDay({ ...base, events: [...allDay, ...meetings] });
+    expect(view.events.filter((e) => e.allDay && e.visible)).toHaveLength(3);
+    expect(view.events.filter((e) => !e.allDay && e.visible)).toHaveLength(YOUR_DAY_VISIBLE);
     expect(view.more).toBe(3);
   });
 });

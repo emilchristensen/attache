@@ -45,19 +45,21 @@ export function yourDay(input: YourDayInput): YourDayView {
     const phase = event.endMs <= input.now ? "ended" : event.startMs <= input.now ? "in-progress" : "upcoming";
     return { id: event.id, start: event.start, end: event.end, allDay: event.allDay, title: event.title, response: event.response, calendarUrl: event.calendarUrl, meetLink: event.meetLink, phase, joinable: !event.allDay && !!event.meetLink && input.now >= event.startMs - MEETING_LEAD_MS && input.now < event.endMs, visible };
   };
-  const todayEvents = all.filter((event) => event.startMs < tomorrowStart && event.endMs > today).map((event, index) => decorate(event, index < YOUR_DAY_VISIBLE));
+  const todayEvents = all.filter((event) => event.startMs < tomorrowStart && event.endMs > today);
+  let timed = 0;
+  const visibleEvents = todayEvents.map((event) => decorate(event, event.allDay || timed++ < YOUR_DAY_VISIBLE));
   const tomorrow = all.find((event) => event.startMs >= tomorrowStart && event.startMs < afterTomorrow);
   const failed = !!input.coverage && !["complete", "empty"].includes(input.coverage.state);
-  const ended = todayEvents.length > 0 && todayEvents.every((event) => event.phase === "ended");
-  let state: YourDayView["state"] = todayEvents.length && !ended ? "events" : "checking";
+  const ended = visibleEvents.length > 0 && visibleEvents.every((event) => event.phase === "ended");
+  let state: YourDayView["state"] = visibleEvents.length && !ended ? "events" : "checking";
   if (failed) state = "error";
   else if (ended) state = "nothing-more";
-  else if (todayEvents.length === 0) {
+  else if (visibleEvents.length === 0) {
     if (tomorrow) state = "nothing-more";
     else if (input.coverage?.state === "complete" || input.coverage?.state === "empty") state = "empty";
     else state = "checking";
   }
-  return { state, events: todayEvents, tomorrow: tomorrow ? decorate(tomorrow, false) : null, more: Math.max(0, todayEvents.length - YOUR_DAY_VISIBLE) };
+  return { state, events: visibleEvents, tomorrow: tomorrow ? decorate(tomorrow, false) : null, more: Math.max(0, timed - YOUR_DAY_VISIBLE) };
 }
 
 function eventStart(event: AgendaEvent, timeZone: string): number {

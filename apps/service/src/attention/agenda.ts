@@ -23,15 +23,17 @@ export function agenda(db: Db, connections: ConnectionManager, from: string, to:
     const start = typeof data.start === "string" ? data.start : null;
     const end = typeof data.end === "string" ? data.end : null;
     if (!start || !end) return [];
+    const allDay = data.allDay === true;
     const startMs = eventTime(start);
     const endMs = eventTime(end);
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= rangeEnd || endMs <= rangeStart) return [];
+    const pad = allDay ? 14 * 3_600_000 : 0;
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= rangeEnd + pad || endMs <= rangeStart - pad) return [];
     if (data.selfResponseStatus === "declined") return [];
     return [{
       id: row.external_id,
       start,
       end,
-      allDay: data.allDay === true,
+      allDay,
       title: row.title,
       response: typeof data.selfResponseStatus === "string" ? data.selfResponseStatus : "needsAction",
       calendarUrl: row.url,

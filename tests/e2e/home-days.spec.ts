@@ -201,6 +201,47 @@ function heavyDay(template: AttentionItemView, now: number): AttentionItemView[]
 /** heavy-day-v1's 38 decisions: 28 Inbox items (two have their Draft waiting), four Drafts and six Proposals. */
 const HEAVY_TOTALS: DecisionTotals = { inbox: 28, drafts: 4, proposals: 6, signIns: 0 };
 
+test("Your day states: checking, complete empty, nothing more, no calendar and switched off", async () => {
+  const page = await journeys.open("/");
+  const day = page.getByRole("region", { name: "Your day" });
+  const response = { connection: { id: "gcal", status: "connected" }, events: [], readAt: new Date().toISOString(), coverage: { state: "complete", scopes: [], items: 0, at: new Date().toISOString() } };
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: response }));
+  await page.reload();
+  await expect(day).toContainText("Nothing on your calendar today");
+  await captureDay(page, "empty-agenda");
+
+  const now = Date.now();
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: { ...response, events: [
+    { id: "finished", start: new Date(now - 60_000).toISOString(), end: new Date(now - 1).toISOString(), allDay: false, title: "Finished meeting", response: "accepted", calendarUrl: "https://calendar.google.com/finished", meetLink: null },
+    { id: "tomorrow", start: new Date(now + 86_400_000).toISOString(), end: new Date(now + 86_401_000).toISOString(), allDay: false, title: "Tomorrow meeting", response: "accepted", calendarUrl: "https://calendar.google.com/tomorrow", meetLink: null },
+  ] } }));
+  await page.reload();
+  await expect(day).toContainText("Nothing more today");
+  await expect(day).toContainText("Tomorrow meeting");
+  await captureDay(page, "finished-agenda");
+
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => route.fulfill({ json: { ...response, connection: null, readAt: null, coverage: null } }));
+  await page.reload();
+  await expect(day).toContainText("No calendar connected");
+
+  await page.unroute("**/api/v1/agenda?*");
+  await page.route("**/api/v1/agenda?*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({ json: response });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(day).toContainText("Checking");
+  await expect(day).toContainText("Nothing on your calendar today");
+
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await api(page, "PUT", "/features", { changes: { attention: false }, cascade: true });
+  await page.reload();
+  await expect(day).toContainText("Switched off");
+  await api(page, "PUT", "/features", { changes: { attention: true }, cascade: true });
+});
+
 test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed for now; the first rows still show at 1280 x 800", async () => {
   const page = await journeys.open("/");
   const now = Date.now();

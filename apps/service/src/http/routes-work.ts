@@ -183,6 +183,7 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   // ---- connections ------------------------------------------------------------------------
   r.get("/connections", () => app.connections.statuses());
   r.get("/agenda", (c) => {
+    requireFeature(app, "attention");
     const from = c.query("from");
     const to = c.query("to");
     if (!from || !to) throw new HttpError(400, "invalid_request", "Agenda needs from and to timestamps");
