@@ -11,6 +11,7 @@ import { FEATURES } from "../capabilities/registry.ts";
 import type { SignInState } from "../connectors/manager.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { expandHome, folderName } from "../platform/locations.ts";
+import { agenda } from "../attention/agenda.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -181,6 +182,16 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
 
   // ---- connections ------------------------------------------------------------------------
   r.get("/connections", () => app.connections.statuses());
+  r.get("/agenda", (c) => {
+    const from = c.query("from");
+    const to = c.query("to");
+    if (!from || !to) throw new HttpError(400, "invalid_request", "Agenda needs from and to timestamps");
+    try {
+      return agenda(app.db, app.connections, from, to);
+    } catch (e) {
+      throw new HttpError(400, "invalid_request", (e as Error).message);
+    }
+  });
   r.post("/connections/:kind/configure", async (c) => {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));

@@ -85,15 +85,15 @@ async function expectFold(page: Page, rows: number, what: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
-test("quiet: nothing timely, every source read; For you now is one line and four rows show at 1280 x 800", async () => {
+test("quiet: nothing timely, every source read; For you now is one line and three rows show with Your day at 1280 x 800", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
   await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 4, "complete Inbox rows on a quiet day");
+  await expectFold(page, 3, "complete Inbox rows on a quiet day with Your day");
   await captureDay(page, "quiet");
 });
 
-test("morning: an unread daily briefing leads; two rows show at 1280 x 800, four after Got it", async () => {
+test("morning: an unread daily briefing leads; one row shows with Your day at 1280 x 800, two after Got it", async () => {
   const page = await journeys.open("/");
   const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "daily" });
@@ -101,15 +101,15 @@ test("morning: an unread daily briefing leads; two rows show at 1280 x 800, four
   const lead = forYouNow(page).locator('[data-heads-up="daily-briefing"]');
   await expect(lead).toBeVisible();
   await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 2, "complete Inbox rows under an unread briefing");
+  await expectFold(page, 1, "complete Inbox rows under an unread briefing with Your day");
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
   await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expectFold(page, 4, "complete Inbox rows after Got it");
+  await expectFold(page, 2, "complete Inbox rows after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
-test("overlap: a meeting in progress, the next one, the briefing as a follower and one sign-in; one row shows at 1280 x 800", async () => {
+test("overlap: a meeting in progress, the next one, the briefing as a follower and one sign-in; Your day stays visible at 1280 x 800", async () => {
   const page = await journeys.open("/");
   await setCalendar(page, stack, [
     { id: "handover", summary: "Pilot handover", start: -10, end: 20, meetLink: "https://meet.google.com/abc-defg-hij", attendees: ["Nora Lind"] },
@@ -120,8 +120,22 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
   await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
   await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
-  await expectFold(page, 1, "complete Inbox rows during overlapping meetings with a sign-in problem");
+  const day = page.getByRole("region", { name: "Your day" });
+  await expect(day).toContainText("Pilot handover");
+  await expect(day.locator('.your-day-wide [data-phase="in-progress"]')).toContainText("Join");
+  await expect(day.locator('.your-day-wide [data-phase="upcoming"]')).toContainText("Billing triage");
+  await expectFold(page, 0, "Inbox fold during overlapping meetings with Your day");
   await captureDay(page, "overlap");
+  await page.setViewportSize(PHONE);
+  await expect(day.locator(".your-day-narrow li")).toHaveCount(2);
+  await page.route("**/api/v1/agenda?*", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({ response, json: { ...body, coverage: { state: "offline", scopes: [], items: 0, at: new Date().toISOString() } } });
+  });
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Your day" })).toContainText("Could not read");
+  await expect(page.getByRole("region", { name: "Your day" })).toContainText("Pilot handover");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
