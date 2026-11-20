@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inboxReach } from "../src/inbox-empty.ts";
 import type { ConnectionStatus, Coverage, CoverageState, FeatureStatus, ReaderView } from "@attache/contracts";
-import { connectionsStatus, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
+import { connectionBanner, connectionsStatus, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
 
 // Fixtures of the three answers the Dashboard already asks for: /connections, /capabilities (features) and /reader.
 
@@ -84,6 +84,41 @@ function onlyRow(i: StatusInputs): StatusRow {
   expect(rows).toHaveLength(1);
   return rows[0]!;
 }
+
+describe("connectionBanner: the one issue shown under the masthead", () => {
+  it("shows the first issue, counts the rest and offers only the buttons its state supports", () => {
+    const mixed = withConnections(
+      conn("slack", { status: "needs_auth" }),
+      conn("gmail", { status: "error" }),
+      conn("github", { coverage: coverage("partial") }),
+    );
+    expect(connectionBanner(connectionsStatus(mixed))).toMatchObject({
+      issue: { subject: "Slack", state: "sign_in" },
+      more: 2,
+      fix: { kind: "reconnect", connectionId: "slack" },
+      disableConnectionId: "slack",
+    });
+  });
+
+  it("does not offer Disable for an issue shared by several Connections", () => {
+    const shared = withConnections(
+      conn("github", { coverage: unreached("api.github.com") }),
+      conn("gmail", { coverage: unreached("gmail.googleapis.com") }),
+      conn("slack", { coverage: unreached("slack.com") }),
+    );
+    expect(connectionBanner(connectionsStatus(shared))).toMatchObject({
+      issue: { state: "offline" },
+      more: 0,
+      fix: { kind: "refresh", connectionIds: ["github", "gmail", "slack"] },
+      disableConnectionId: null,
+    });
+  });
+
+  it("does not raise a banner for Checking or a healthy setup", () => {
+    expect(connectionBanner(connectionsStatus(inputs({ reader: { state: "waiting" } })))).toBeNull();
+    expect(connectionBanner(connectionsStatus(inputs()))).toBeNull();
+  });
+});
 
 describe("connectionsStatus: the green line", () => {
   it("says All good, with what was checked, only when all three answers arrived and everything is healthy", () => {

@@ -203,7 +203,7 @@ test("back to back with Not now: the first meeting ends under the keyboard, Ente
   const { own, page, ends, base, first, second } = await toTheOverlap(browser, pair, { keyboardOnRow: false });
 
   // The fold, in both themes: the meeting in progress, the next one and the briefing as lines, one sign-in problem.
-  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(page.locator('[data-connection-banner][data-state="sign_in"]')).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     expect(await completeRows(page), `complete Inbox rows during back-to-back meetings, ${scheme}`).toBeGreaterThanOrEqual(1);

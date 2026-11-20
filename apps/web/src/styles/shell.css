@@ -122,6 +122,13 @@
   align-items: center;
   gap: 6px;
 }
+.connection-healthy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
+}
 
 .masthead-tools {
   margin-left: auto;
@@ -293,6 +300,88 @@
 .banner.danger {
   background: var(--red-soft);
   color: var(--danger);
+}
+.connection-banner {
+  position: relative;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.connection-banner-copy {
+  display: flex;
+  flex: 1 1 360px;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.connection-banner-line,
+.connection-banner-more {
+  overflow-wrap: anywhere;
+}
+.connection-banner-more {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.connection-banner-primary,
+.connection-banner-secondary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: none;
+}
+.connection-banner .btn,
+.connection-banner button {
+  color: inherit;
+  border-color: currentColor;
+  min-height: 44px;
+}
+.connection-banner > .state {
+  flex: 1 0 100%;
+  background: var(--paper);
+}
+.connection-banner-menu {
+  display: none;
+  position: relative;
+}
+.connection-banner-menu-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--s-1));
+  display: grid;
+  min-width: 180px;
+  max-width: calc(100vw - 2 * var(--gutter));
+  gap: var(--s-1);
+  background: var(--paper);
+  padding: var(--s-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+@media (max-width: 720px) {
+  .connection-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+  .connection-banner-copy {
+    display: block;
+  }
+  .connection-banner-line span {
+    display: block;
+  }
+  .connection-banner-more {
+    grid-column: 2 / -1;
+  }
+  .connection-banner-secondary {
+    display: none;
+  }
+  .connection-banner-menu {
+    display: block;
+  }
+  .connection-banner > .state {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ---- the sheets: More and the keyboard shortcuts ------------------------------------------------ */

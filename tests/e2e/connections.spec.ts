@@ -146,10 +146,10 @@ test("a row opens in place with every action the card had: Test, Refresh now, wh
   await expect(detail.getByRole("combobox", { name: "How to connect" })).toHaveValue("token");
   await detail.getByRole("button", { name: "Cancel" }).click();
 
-  await detail.getByRole("button", { name: "Disconnect…" }).click();
-  const confirm = detail.getByRole("alertdialog", { name: "Disconnect" });
-  await expect(confirm).toContainText("Disconnect GitHub?");
-  await expect(confirm.getByRole("button", { name: "Disconnect, keep data" })).toBeVisible();
+   await detail.getByRole("button", { name: "Disable…" }).click();
+   const confirm = detail.getByRole("alertdialog", { name: "Disable" });
+   await expect(confirm).toContainText("Disable GitHub?");
+   await expect(confirm.getByRole("button", { name: "Disable, keep data" })).toBeVisible();
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
 
@@ -175,10 +175,10 @@ test("a tile opens in place across its group into the setup form, and the Notes 
   await expect(page.locator('[data-group="work"] .connection-row[data-connection="slack"]')).toBeVisible({ timeout: 30_000 });
   await expect(slack.locator(".connection-detail")).toContainText("Test: Slack answered through claude.ai");
   // Disconnected, it is a tile again, and its setup form no longer shows the old test result.
-  await slack.getByRole("button", { name: "Disconnect…" }).click();
-  await slack.getByRole("button", { name: "Disconnect, keep data" }).click();
+   await slack.getByRole("button", { name: "Disable…" }).click();
+   await slack.getByRole("button", { name: "Disable, keep data" }).click();
   await expect(page.locator('[data-group="work"] .connection-tile[data-connection="slack"]')).toBeVisible();
-  await expect(slack.locator(".connection-tile-meta")).toHaveText("Disconnected");
+   await expect(slack.locator(".connection-tile-meta")).toHaveText("Disabled");
   await expect(slack.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
   await expect(slack.locator(".connection-detail")).not.toContainText("Test:");
 
@@ -206,9 +206,9 @@ test("Needs you: a revoked token signs GitHub out, Home's Reconnect opens its ro
   await page.goto(`${stack.url}/`);
 
   // Home: one amber sign-in row; its Reconnect needs a new token, so it opens GitHub's own row on Connections.
-  const area = page.getByRole("status", { name: "Connections" });
-  const signIn = area.locator('.conn-row[data-state="sign_in"]');
-  await expect(signIn.locator(".conn-row-line")).toHaveText("GitHub · Sign-in needed · Reviews may be missing");
+  const area = page.locator("[data-connection-banner]");
+  const signIn = area;
+  await expect(signIn).toContainText("GitHub · Sign-in needed · Reviews may be missing");
   await signIn.getByRole("button", { name: "Reconnect" }).click();
   await expect(page).toHaveURL(`${stack.url}/connections?open=github`);
 

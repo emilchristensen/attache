@@ -1,15 +1,14 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type FeatureStatus, type ReaderView } from "@attache/contracts";
-import { post } from "../api.ts";
+import { useEffect, useMemo, useState } from "react";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type DisconnectEffects, type FeatureStatus, type ReaderView } from "@attache/contracts";
+import { api, post } from "../api.ts";
 import { useResource, type Resource } from "../live.ts";
-import { Link, navigate, Time, useAction } from "../components/ui.tsx";
+import { Link, navigate, useAction } from "../components/ui.tsx";
 import { Icon } from "../components/icons.tsx";
-import { hueClass } from "../theme/hues.ts";
-import { connectionsStatus, moreLabel, nameList, splitRows, type ConnectionsStatus, type Reply, type StatusAction, type StatusRow } from "../connection-status.ts";
+import { connectionBanner, connectionsStatus, type ConnectionsStatus, type Reply, type StatusAction } from "../connection-status.ts";
 import { connectionHref, reconfigureSignIn, reconnectMethod, retestConnection, startBrowserSignIn, testSignIn } from "../reconnect.ts";
-import { clockTime } from "../zoned-time.ts";
 import { useReader } from "./ReaderLine.tsx";
 import { settingsHref } from "../routes.ts";
+import { DisconnectConfirm } from "../components/ConnectionParts.tsx";
 
 interface Caps {
   features: FeatureStatus[];
@@ -95,66 +94,6 @@ export function useConnectionsStatus(): ConnectionsView {
   };
 }
 
-/** "this Machine" inside a sentence, another Machine by its name. */
-function readerInSentence(reader: string): string {
-  return reader === "This Machine" ? "this Machine" : reader;
-}
-
-function AllGood({ status }: { status: Extract<ConnectionsStatus, { kind: "all_good" }> }) {
-  return (
-    <div className={`conn-good ${hueClass("green")}`}>
-      <Icon name="check" size={18} />
-      <h2 id="home-connections-title" className="conn-title">
-        Connections
-      </h2>
-      <span className="conn-good-word">All good</span>
-      <span className="conn-good-meta">
-        {plural(status.sources, "source")} read
-        {status.lastReadAt && (
-          <>
-            {" "}
-            <Time iso={status.lastReadAt} /> by {readerInSentence(status.reader)}
-          </>
-        )}
-        {status.others > 0 && <> · {status.others === 1 ? "1 other Connection works" : `${status.others} other Connections work`}</>}
-      </span>
-      <Link to="/connections" className="conn-details">
-        View details
-      </Link>
-    </div>
-  );
-}
-
-function LastRead({ lastRead }: { lastRead: StatusRow["lastRead"] }) {
-  if (!lastRead.length) return null;
-  if (lastRead.length === 1) {
-    const at = lastRead[0]!.at;
-    return <p>{at ? <>Last read <Time iso={at} />.</> : "Never read."}</p>;
-  }
-  return (
-    <p>
-      Last read:{" "}
-      {lastRead.map((r, n) => (
-        <span key={r.name}>
-          {n > 0 && ", "}
-          {r.name} {r.at ? <Time iso={r.at} /> : "never"}
-        </span>
-      ))}
-      .
-    </p>
-  );
-}
-
-function Retry({ retry }: { retry: StatusRow["retry"] }) {
-  if (!retry) return null;
-  if (retry.kind === "none") return <p>Nothing is read again by itself.</p>;
-  return (
-    <p>
-      The next automatic read is at about <time dateTime={retry.at}>{clockTime(Date.parse(retry.at), Intl.DateTimeFormat().resolvedOptions().timeZone)}</time>.
-    </p>
-  );
-}
-
 function RowAction({ action, describedBy, view }: { action: StatusAction; describedBy: string; view: ConnectionsView }) {
   const { busy, run } = useAction();
   switch (action.kind) {
@@ -228,110 +167,60 @@ function RowAction({ action, describedBy, view }: { action: StatusAction; descri
   }
 }
 
-/**
- * One problem: icon, subject, state word and what may be missing stay on the collapsed line beside the one button;
- * the sentence, what failed, the last read and any scheduled retry open in place.
- */
-function ProblemRow({ row, view }: { row: StatusRow; view: ConnectionsView }) {
-  const [open, setOpen] = useState(false);
-  const lineId = useId();
-  const detailId = useId();
-  const expandable = row.state !== "checking";
-  const line = (
-    <>
-      <Icon name={row.icon} size={18} className="conn-row-icon" />
-      <span className="conn-row-text" id={lineId}>
-        <span className="conn-subject">{row.subject}</span>
-        <span className="conn-sep"> · </span>
-        <span className="conn-word">{row.word}</span>
-        {row.impact !== row.word && (
-          <>
-            <span className="conn-sep"> · </span>
-            <span className="conn-impact">{row.impact}</span>
-          </>
-        )}
-      </span>
-    </>
-  );
+/** The highest-priority Connection issue under the masthead, once per issue change. */
+export function ConnectionBanner({ view }: { view: ConnectionsView }) {
+  const banner = connectionBanner(view.status);
+  const [preview, setPreview] = useState<{ status: ConnectionStatus; effects: DisconnectEffects } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  if (!banner) return null;
+  const { issue } = banner;
+  const lineId = `connection-banner-${issue.key}`;
+  const connection = banner.disableConnectionId ? view.caps?.connections.find((c) => c.id === banner.disableConnectionId) : undefined;
+  const disable = () => {
+    if (!banner.disableConnectionId) return;
+    void api<DisconnectEffects>(`/connections/${encodeURIComponent(banner.disableConnectionId)}/disconnect-preview`).then((effects) => {
+      const status = view.caps?.connections.find((c) => c.id === banner.disableConnectionId);
+      if (status) setPreview({ status, effects });
+    });
+  };
+  const announcement = `${issue.subject} · ${issue.word} · ${issue.impact}`;
   return (
-    <li className={`conn-row ${hueClass(row.hue)}`} data-state={row.state} data-subject={row.subject}>
-      {expandable ? (
-        <button type="button" className="conn-row-line" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen(!open)}>
-          {line}
-          <Icon name="chevron" size={16} className="conn-row-chevron" />
-        </button>
-      ) : (
-        <div className="conn-row-line">{line}</div>
-      )}
-      {row.action && (
-        <div className="conn-row-action">
-          <RowAction action={row.action} describedBy={lineId} view={view} />
-        </div>
-      )}
-      {expandable && (
-        <div id={detailId} className="conn-row-detail" hidden={!open}>
-          <p>{row.sentence}</p>
-          {row.failure && <p className="conn-failure">{row.failure}</p>}
-          {row.alsoAffected.length > 0 && <p>Also waiting on it: {nameList(row.alsoAffected)}.</p>}
-          <LastRead lastRead={row.lastRead} />
-          <Retry retry={row.retry} />
-        </div>
-      )}
-    </li>
-  );
-}
-
-function workingLine(working: { sources: number; others: number }): string | null {
-  const parts = [working.sources && plural(working.sources, "other source"), working.others && plural(working.others, "other Connection")].filter(Boolean);
-  if (!parts.length) return null;
-  return `The ${parts.join(" and ")} ${working.sources + working.others === 1 ? "works" : "work"}.`;
-}
-
-function Problems({ status, view }: { status: Extract<ConnectionsStatus, { kind: "problems" }>; view: ConnectionsView }) {
-  const { shown, more } = splitRows(status.rows);
-  const working = status.working && workingLine(status.working);
-  return (
-    <>
-      <div className="conn-head">
-        <h2 id="home-connections-title" className="conn-title">
-          Connections
-        </h2>
-        {working && <span className="conn-working">{working}</span>}
-        <Link to="/connections" className="conn-details">
-          View details
-        </Link>
+    <section className={`connection-banner banner ${issue.hue === "red" ? "danger" : "warn"}`} aria-label="Connection issue" data-connection-banner data-state={issue.state}>
+      <Icon name={issue.icon} />
+      <div className="connection-banner-copy">
+        <span id={lineId} className="connection-banner-line">
+          <strong>{issue.subject}</strong> · <strong>{issue.word}</strong> · <span>{issue.impact}</span>
+        </span>
       </div>
-      <ul className="conn-rows">
-        {shown.map((r) => (
-          <ProblemRow key={r.key} row={r} view={view} />
-        ))}
-      </ul>
-      {more.length > 0 && (
-        <details className="conn-more">
-          <summary>
-            <Icon name="chevron" size={16} className="conn-more-chevron" />
-            {moreLabel(more)}
-          </summary>
-          <ul className="conn-rows">
-            {more.map((r) => (
-              <ProblemRow key={r.key} row={r} view={view} />
-            ))}
-          </ul>
-        </details>
+      <div className="connection-banner-primary">{banner.fix && <RowAction action={banner.fix} describedBy={lineId} view={view} />}</div>
+      {banner.more > 0 && <Link to="/connections" className="connection-banner-more">{plural(banner.more, "more connection issue")}</Link>}
+      <div className="connection-banner-secondary">
+        {connection && <button className="ghost danger small" onClick={disable}>Disable</button>}
+        <Link to="/connections" className="btn ghost small">Go to Connections</Link>
+      </div>
+      <div className="connection-banner-menu">
+        <button className="ghost" aria-expanded={menuOpen} aria-label="Connection issue actions" onClick={() => setMenuOpen(!menuOpen)}>Actions</button>
+        {menuOpen && (
+          <div className="connection-banner-menu-popover">
+            {connection && <button className="ghost danger" onClick={disable}>Disable</button>}
+            <Link to="/connections" className="btn ghost">Go to Connections</Link>
+          </div>
+        )}
+      </div>
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</span>
+      {preview && (
+        <DisconnectConfirm
+          status={preview.status}
+          preview={preview.effects}
+          disconnect={(deleteData) => {
+            void post(`/connections/${preview.status.id}/disconnect`, { deleteData }).then(() => {
+              setPreview(null);
+              view.reload();
+            });
+          }}
+          onCancel={() => setPreview(null)}
+        />
       )}
-    </>
-  );
-}
-
-/**
- * Home's third area: one green line when every source was read and every Connection works, otherwise one row per
- * problem. A polite status region, so a change is announced once. Working Connections are never listed.
- */
-export function HomeConnections({ view }: { view: ConnectionsView }) {
-  const { status } = view;
-  return (
-    <section className="home-connections" role="status" aria-labelledby="home-connections-title" data-connections={status.kind}>
-      {status.kind === "all_good" ? <AllGood status={status} /> : <Problems status={status} view={view} />}
     </section>
   );
 }

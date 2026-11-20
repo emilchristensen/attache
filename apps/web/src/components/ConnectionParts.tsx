@@ -6,7 +6,7 @@ import { StateTag } from "./StateTag.tsx";
 
 /**
  * The parts `ConnectionControls` (ConnectionCard.tsx) draws: what is known of a Connection, its last Source refresh,
- * the setup form, what it may read and write, and the disconnect confirmation. The controls own the Connection's
+  * the setup form, what it may read and write, and the Disable confirmation. The controls own the Connection's
  * state and pass it in.
  */
 
@@ -175,11 +175,11 @@ export function SetupForm({ definition, method, onMethod, fields, onFields, scop
   );
 }
 
-/** What disconnecting stops, cancels and keeps, with both ways to disconnect and Cancel. */
+/** What disabling stops, cancels and keeps, with both ways to disable and Cancel. */
 export function DisconnectConfirm({ status, preview, disconnect, onCancel }: { status: ConnectionStatus; preview: DisconnectEffects; disconnect: (deleteData: boolean) => void; onCancel: () => void }) {
   return (
-    <div className="state error small" role="alertdialog" aria-label="Disconnect">
-      <strong>Disconnect {status.label}?</strong>
+    <div className="state error small" role="alertdialog" aria-label="Disable">
+      <strong>Disable {status.label}?</strong>
       <span>
         {preview.credentials > 0 ? "Attache deletes the stored credentials and stops all requests." : "Attache stops reading from it."} {plural(preview.queuedJobs, "queued job")} will be cancelled and approvals for {plural(preview.drafts, "draft")} revoked.
       </span>
@@ -188,10 +188,10 @@ export function DisconnectConfirm({ status, preview, disconnect, onCancel }: { s
       </span>
       <div className="row">
         <button className="danger" onClick={() => disconnect(false)}>
-          Disconnect, keep data
+          Disable, keep data
         </button>
         <button className="danger" onClick={() => disconnect(true)}>
-          Disconnect and delete data
+          Disable and delete data
         </button>
         <button className="ghost" onClick={onCancel}>
           Cancel

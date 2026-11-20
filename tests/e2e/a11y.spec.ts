@@ -203,19 +203,19 @@ test("screen reader: every screen, opened state, Setup and pairing pass axe's WC
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-test("screen reader: Home's four areas are named in order, the navigation names counts in words and Home carries no badge on Home", async () => {
+test("screen reader: Home's five areas are named in order, the navigation names counts in words and Home carries no badge on Home", async () => {
   const page = await journeys.open("/");
   const home = page.getByRole("region", { name: "Home" });
   await expect(home.getByRole("search", { name: "Brain" })).toBeVisible();
+  await expect(home.getByRole("region", { name: "The Daily Briefing" })).toBeVisible();
   await expect(home.getByRole("region", { name: "For you now" })).toBeVisible();
-  await expect(home.getByRole("status", { name: "Connections" })).toBeVisible();
+  await expect(home.getByRole("region", { name: "Your day" })).toBeVisible();
   await expect(home.getByRole("region", { name: "Inbox" })).toBeVisible();
   const order = await page.evaluate(() =>
-    [".home-search", ".for-you-now", ".home-connections", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
+    [".home-search", ".daily-briefing-area", ".for-you-now", ".your-day", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
   );
-  expect(order, "search, For you now, Connections, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
-  // Four areas and nothing else: Recently added closes the Inbox area rather than standing as a fifth.
-  await expect(home.locator("> *")).toHaveCount(4);
+  expect(order, "search, The Daily Briefing, For you now, Your day, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
+  await expect(home.locator("> *")).toHaveCount(5);
   for (const [viewport, bar] of [[{ width: 1360, height: 900 }, ".masthead-nav"], [PHONE, ".bottom-bar"]] as const) {
     await page.setViewportSize(viewport);
     const nav = page.locator(bar);
@@ -440,7 +440,7 @@ test("reduced motion: nothing animates, and a jump the Dashboard makes itself la
 test("colour vision: in grayscale and under each colour-vision deficiency every Inbox type keeps its own glyph and word, and a service failure keeps its warning triangle", async () => {
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 1280, height: 800 });
-  // Gmail's Connection fails: Home's Connections area shows it with the warning triangle.
+  // Gmail's Connection fails: the shell banner shows it with the warning triangle.
   await page.route("**/api/v1/capabilities", async (route) => {
     const res = await route.fetch();
     const body = (await res.json()) as { connections: Array<{ kind: string; status: string; lastError: string | null }> };
@@ -448,7 +448,7 @@ test("colour vision: in grayscale and under each colour-vision deficiency every 
     await route.fulfill({ response: res, json: body });
   });
   await arrive(page, "/", "Home");
-  const failure = page.locator('.home-connections .conn-row[data-state="down"]');
+  const failure = page.locator('[data-connection-banner][data-state="down"]');
   await expect(failure).toContainText("Gmail");
   const cdp = await page.context().newCDPSession(page);
   const kinds = await page.locator("#inbox [data-inbox-row]").evaluateAll((rows) => [...new Set(rows.map((r) => r.getAttribute("data-type")!))]);

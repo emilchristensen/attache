@@ -56,7 +56,7 @@ test.afterAll(async () => {
 });
 
 const forYouNow = (page: Page) => page.getByRole("region", { name: "For you now" });
-const connections = (page: Page) => page.getByRole("status", { name: "Connections" });
+const connections = (page: Page) => page.locator("[data-connection-banner]");
 
 /** Home as it is now, in each theme at 1280 x 800 and 375 x 812, scrolled to the top with the pointer out of the way. */
 async function captureDay(page: Page, day: string) {
@@ -85,11 +85,11 @@ async function expectFold(page: Page, rows: number, what: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
-test("quiet: nothing timely, every source read; For you now is one line and three rows show with Your day at 1280 x 800", async () => {
+test("quiet: nothing timely, every source read; For you now is one line and one row shows with Your day and The Daily Briefing", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
-  await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 1, "complete Inbox rows on a quiet day with Your day");
+  await expect(connections(page)).toHaveCount(0);
+  await expectFold(page, 1, "complete Inbox rows on a quiet day with Your day and The Daily Briefing");
   await captureDay(page, "quiet");
 });
 
@@ -100,11 +100,12 @@ test("morning: an unread daily briefing leads; one row shows with Your day at 12
   await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
   const lead = page.getByRole("region", { name: "The Daily Briefing" }).locator(".daily-briefing-card");
   await expect(lead).toBeVisible();
-  await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
+  await expect(connections(page)).toHaveCount(0);
+  await expect(page.locator("#inbox h2").first()).toBeVisible();
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
   await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
-  await expectFold(page, 1, "complete Inbox rows after Got it with Your day");
+  await expectFold(page, 0, "Inbox fold after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
@@ -118,11 +119,12 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await page.reload();
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
   await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
-  await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
   const day = page.getByRole("region", { name: "Your day" });
   await expect(day).toContainText("Pilot handover");
   await expect(day.locator('.your-day-wide [data-phase="in-progress"]')).toContainText("Join");
   await expect(day.locator('.your-day-wide [data-phase="upcoming"]')).toContainText("Billing triage");
+  await expect(connections(page)).toBeVisible();
   await captureDay(page, "overlap");
   await page.setViewportSize(PHONE);
   await expect(day.locator(".your-day-narrow li")).toHaveCount(2);
@@ -273,6 +275,7 @@ test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed 
   for (const [word, n] of [["Deadline", 8], ["Review request", 8], ["Meeting prep", 4], ["Pending reply", 6], ["Fact to check", 4]] as const) await expect(types.filter({ hasText: word })).toHaveText(new RegExp(`${word}.*${n}`));
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Deadline" }).first()).toBeVisible();
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Review request" }).first()).toBeVisible();
+  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
   await captureDay(page, "heavy");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });

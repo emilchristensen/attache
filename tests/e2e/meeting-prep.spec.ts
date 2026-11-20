@@ -187,7 +187,7 @@ test("in progress: overlapping meetings lead with Join, the next one follows as 
   // The fold: with both meetings, the briefing follower and one sign-in problem, the first Inbox row is still whole.
   await routeSignIn(page);
   await page.reload();
-  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(page.locator('[data-connection-banner][data-state="sign_in"]')).toBeVisible();
   await expect(meetingHeadsUp(page, "Billing triage")).toBeVisible();
   expect(await completeRows(page), "complete Inbox rows during overlapping meetings").toBeGreaterThanOrEqual(1);
   await page.unrouteAll({ behavior: "ignoreErrors" });

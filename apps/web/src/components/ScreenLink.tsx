@@ -30,12 +30,13 @@ export function BadgeCount({ badge }: { badge: Badge | undefined }) {
  * One screen in the navigation, the current one marked by shape and contrast. A named `warning` (Settings' Replication
  * problem) shows as the brass dot with its name: read out and on hover, or in words where there is room (`warningShown`).
  */
-export function ScreenLink({ screen, current, badge, warning, warningShown = false, icon = false }: { screen: Screen; current: boolean; badge?: Badge; warning?: string | null; warningShown?: boolean; icon?: boolean }) {
+export function ScreenLink({ screen, current, badge, warning, warningShown = false, icon = false, healthy = false }: { screen: Screen; current: boolean; badge?: Badge; warning?: string | null; warningShown?: boolean; icon?: boolean; healthy?: boolean }) {
   return (
     <Link to={screen.to} aria-current={current ? "page" : undefined} aria-label={spokenName(screen.label, [badge?.label, warning])} title={warning ?? `g then ${screen.key}`}>
       {icon && <Icon name={screen.icon} size={20} />}
       <span className="screen-label">{screen.label}</span>
       <BadgeCount badge={badge} />
+      {healthy && <span className="connection-healthy-dot" aria-label="All Connections work" />}
       {warning && (
         <span className="screen-warning">
           <AttentionDot decorative />

@@ -312,6 +312,15 @@ a.source-chip {
 }
 
 @container (max-width: 440px) {
+  button.inbox-subject {
+    position: relative;
+    z-index: 2;
+    min-height: 44px;
+  }
+  button.inbox-subject::after {
+    content: none;
+    position: static;
+  }
   .inbox-row-actions {
     grid-column: 1 / -1;
   }

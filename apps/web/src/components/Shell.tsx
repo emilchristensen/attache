@@ -5,7 +5,7 @@ import { screenAt } from "../routes.ts";
 import { focusHomeSearch } from "../search-launch.ts";
 import { useShortcuts } from "../shortcuts.ts";
 import { useTabSignal } from "../tab-signal.ts";
-import { ReaderWarning } from "../views/ReaderLine.tsx";
+import { ConnectionBanner, useConnectionsStatus } from "../views/HomeConnections.tsx";
 import { BottomBar } from "./BottomBar.tsx";
 import { Masthead } from "./Masthead.tsx";
 import { MoreSheet } from "./MoreSheet.tsx";
@@ -27,6 +27,7 @@ function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
 export function Shell({ children, path }: { children: ReactNode; path: string }) {
   const current = screenAt(path);
   const signals = useNavSignals();
+  const connections = useConnectionsStatus();
   const [sheet, setSheet] = useState<"more" | "shortcuts" | "search" | null>(null);
   const moreButton = useRef<HTMLButtonElement>(null);
   // Each sheet closes only itself: a sheet's close event arrives a moment late, after another may have opened.
@@ -55,8 +56,8 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <a className="skip-link" href="#main" onClick={skipToContent}>
         Skip to content
       </a>
-      <Masthead current={current} signals={signals} onSearch={search} />
-      <ReaderWarning />
+      <Masthead current={current} signals={signals} onSearch={search} connections={connections.status} />
+      {current !== "connections" && <ConnectionBanner view={connections} />}
       {/* Present from the start and empty, so what a Source refresh changed is read out when it is written. */}
       <p className="sr-only" role="status" data-count-announcement>
         {announcement}
