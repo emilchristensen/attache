@@ -553,7 +553,8 @@ A file that does not parse, a non-object `mcpServers` or a same-name server Atta
 `~/.copilot` alone is not a sign that Copilot CLI is installed (the GitHub Copilot app and SDK-hosted runtimes share it): detection looks for a `copilot` executable in the tool folders and for `gh copilot`'s download folder, and connecting stays possible without either.
 A running session must start again, or run `/mcp reload`; a repository's own `.mcp.json` can replace a same-name server for sessions in that repository.
 `test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in (skipped where it is not on PATH or in `ATTACHE_COPILOT_EXECUTABLE`): `copilot mcp list --json` and `copilot mcp get --json` show Attache's server as a user server, enabled, next to the owner's; the server as Copilot CLI read it starts and answers from the Brain; after disconnecting only the owner's is listed.
-It passed against `@github/copilot` 1.0.114 on macOS. A Copilot CLI session needs a GitHub sign-in, so the smoke test does not show a session starting the server itself.
+It passed against `@github/copilot` 1.0.114 on macOS.
+A Copilot CLI session needs a GitHub sign-in, so the smoke test does not show a session starting the server itself.
 
 ### MCP server in each Harness
 
