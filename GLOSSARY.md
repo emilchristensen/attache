@@ -165,9 +165,9 @@ A rejected Draft is locked: only Restore brings it back, as the next version, un
 _Avoid_: Outgoing message
 
 **Daily Briefing**:
-The summary Attache writes each morning of what needs the owner, what changed and what the day holds.
+The summary Attache writes each morning of what needs the owner, what changed and what the day holds, shown in its own area of Home.
 Every place that shows it titles it "The Daily Briefing".
-_Avoid_: Wednesday Brief
+_Avoid_: Wednesday Brief, Morning briefing
 
 **Delivery unconfirmed**:
 The label on an Inbox item whose last Draft was sent but whose outcome could not be verified, so the message may or may not have arrived.
@@ -180,7 +180,7 @@ Its Waiting tab holds Drafts to send and Changes to the Brain (and In progress, 
 _Avoid_: Drafts page
 
 **Heads-up**:
-Something Attache brings forward before the owner knows they need it, such as the daily briefing or meeting prep, shown while it is timely.
+Something Attache brings forward before the owner knows they need it, such as meeting prep, shown in For you now while it is timely.
 Every Heads-up says why it is here and when it leaves; "Got it" puts it away in this browser.
 A meeting prep Heads-up is a view of its Inbox item, not a second item: "Done" decides the item, "Not now" hides only the Heads-up.
 
@@ -200,7 +200,7 @@ It is a schedule, not an Inbox item, so it never adds to the Decision count.
 
 **Briefing**:
 A short summary Attache writes of what changed, what needs the owner and what is prepared: the daily briefing on a schedule, or an Away summary or a briefing the owner asked for.
-The daily briefing is a Heads-up until noon; one the owner asked for, for four hours.
+The Daily Briefing stays on Home for its day; one the owner asked for stays for four hours.
 _Avoid_: Digest
 
 **Decision count**:

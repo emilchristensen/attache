@@ -2,7 +2,7 @@ import type { App } from "../app.ts";
 import { SOURCE_REFRESH_EVENT, type SourceRefreshEvent } from "@attache/contracts";
 import type { JobContext } from "./queue.ts";
 import { EffectCheckError, JobBlockedError } from "./queue.ts";
-import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
+import { applyModelWords, composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
 import { briefingFrontmatter } from "../attention/replicated-briefing.ts";
 import { getItem } from "../attention/engine.ts";
 import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
@@ -81,15 +81,18 @@ async function runBriefing(app: App, ctx: JobContext) {
   ctx.progress(0.75, "Composing briefing");
   const base = composeBriefing(app.db, { kind, since: typeof ctx.input.since === "string" ? ctx.input.since : null, coverage: coverageList(app) });
   let summary = deterministicSummary(base);
+  let words: Pick<Briefing, "lead" | "updates"> = base;
   const model = await app.model();
   if (model) {
     try {
-      summary = await modelSummary(model, base, ctx.signal);
+      const applied = applyModelWords(base, await modelSummary(model, base, ctx.signal));
+      words = applied;
+      summary = applied.summary ?? summary;
     } catch (e) {
       ctx.event("model_unavailable", { error: (e as Error).message });
     }
   }
-  const briefing: Briefing = { ...base, summary, deliverablePath: null };
+  const briefing: Briefing = { ...base, ...words, summary, deliverablePath: null };
   const saved = await ctx.effect(`briefing:${ctx.job.id}`, async () => {
     const title = kind === "away" ? `Away summary since ${String(base.since ?? "").slice(0, 10)}` : `Briefing ${base.createdAt.slice(0, 10)}`;
     const { relPath } = app.memory.writeDeliverable("briefings", title, renderBriefingMarkdown(briefing), { briefing_kind: kind, ...briefingFrontmatter(briefing) });

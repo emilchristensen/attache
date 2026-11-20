@@ -85,11 +85,11 @@ async function expectFold(page: Page, rows: number, what: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
-test("quiet: nothing timely, every source read; For you now is one line and three rows show with Your day at 1280 x 800", async () => {
+test("quiet: nothing timely, every source read; For you now is one line and one row shows with Your day and The Daily Briefing", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
   await expect(connections(page)).toHaveCount(0);
-  await expectFold(page, 3, "complete Inbox rows on a quiet day with Your day");
+  await expectFold(page, 1, "complete Inbox rows on a quiet day with Your day and The Daily Briefing");
   await captureDay(page, "quiet");
 });
 
@@ -98,14 +98,14 @@ test("morning: an unread daily briefing leads; one row shows with Your day at 12
   const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "daily" });
   await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
-  const lead = forYouNow(page).locator('[data-heads-up="daily-briefing"]');
+  const lead = page.getByRole("region", { name: "The Daily Briefing" }).locator(".daily-briefing-card");
   await expect(lead).toBeVisible();
   await expect(connections(page)).toHaveCount(0);
   await expectFold(page, 1, "complete Inbox rows under an unread briefing with Your day");
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
-  await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expectFold(page, 2, "complete Inbox rows after Got it with Your day");
+  await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
+  await expectFold(page, 1, "complete Inbox rows after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
@@ -118,7 +118,7 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   await routeSignIn(page);
   await page.reload();
   await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
-  await expect(forYouNow(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
+  await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
   await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
   const day = page.getByRole("region", { name: "Your day" });
   await expect(day).toContainText("Pilot handover");

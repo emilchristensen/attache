@@ -153,7 +153,7 @@ The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Ap
 ### Look
 
 The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
-Headings are set in Georgia, and the morning briefing leads Home on an amber page of its own.
+Headings are set in Georgia, and The Daily Briefing leads Home in its own painting card.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
 The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
@@ -179,12 +179,14 @@ Home holds Search the Brain, For you now, Your day and the Inbox, which ends wit
   **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
   Searching starts no job and changes nothing.
 - **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
-- **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
+- **The Daily Briefing** is its own Home area for the whole day.
+  It shows the latest briefing written today, its time, a locally shipped public-domain painting, credit, and **First on your list**.
+  **Read briefing** opens the briefing page; **Got it** folds the card to one line that opens again.
+  **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
+  When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
+  An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**.
+- **For you now** shows timely Inbox items, such as meeting prep, and never contains the Daily Briefing.
   Every Heads-up says why it is here and when it leaves.
-  - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
-    **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
-    **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
-    Yesterday's briefing never shows as today's.
   - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
     Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
     **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
@@ -192,14 +194,6 @@ Home holds Search the Brain, For you now, Your day and the Inbox, which ends wit
     With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
     While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
     A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
-  - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
-  - Under a meeting a briefing is one line, the Earlier today line too, and **Read briefing** opens why it is there with the briefing, so the Inbox's first row still shows above the fold during back-to-back meetings.
-  - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
-  - When nothing is timely, the area is one quiet line that says what comes next: when a meeting's prep shows, or when the Reader's next daily briefing is scheduled.
-  - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
-  - Got it and Not now are remembered in this browser only, so another browser or Machine still shows the Heads-up.
-  - When a Heads-up arrives while you read further down, the page keeps your place.
-  - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
   - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
   - With Attention and briefings switched off, the area says so, with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
@@ -225,6 +219,7 @@ Home holds Search the Brain, For you now, Your day and the Inbox, which ends wit
   At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
   Only a Connection that needs you to sign in again counts toward the dot.
   An item list is never shown as "nothing to do" while this area shows a problem.
+
 - **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
   Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
