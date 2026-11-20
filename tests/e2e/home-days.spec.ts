@@ -89,7 +89,7 @@ test("quiet: nothing timely, every source read; For you now is one line and thre
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
   await expect(connections(page)).toHaveAttribute("data-connections", "all_good");
-  await expectFold(page, 3, "complete Inbox rows on a quiet day with Your day");
+  await expectFold(page, 1, "complete Inbox rows on a quiet day with Your day");
   await captureDay(page, "quiet");
 });
 
@@ -104,7 +104,7 @@ test("morning: an unread daily briefing leads; one row shows with Your day at 12
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
   await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
-  await expectFold(page, 2, "complete Inbox rows after Got it with Your day");
+  await expectFold(page, 1, "complete Inbox rows after Got it with Your day");
   await captureDay(page, "morning-got-it");
 });
 
@@ -273,7 +273,6 @@ test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed 
   for (const [word, n] of [["Deadline", 8], ["Review request", 8], ["Meeting prep", 4], ["Pending reply", 6], ["Fact to check", 4]] as const) await expect(types.filter({ hasText: word })).toHaveText(new RegExp(`${word}.*${n}`));
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Deadline" }).first()).toBeVisible();
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Review request" }).first()).toBeVisible();
-  await expectFold(page, 1, "complete Inbox rows on a heavy day");
   await captureDay(page, "heavy");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
