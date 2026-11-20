@@ -10,8 +10,7 @@ import { plural, READER_SILENT_AFTER_MS, type ReaderView } from "@attache/contra
 import { Disclosure } from "../components/Disclosure.tsx";
 import { Icon, type IconName } from "../components/icons.tsx";
 import { TurnOnInSettings, useAction } from "../components/ui.tsx";
-import { BriefingActions } from "./BriefingActions.tsx";
-import { BriefingDetail, MeetingContext } from "./BriefingParts.tsx";
+import { BriefingDetail } from "./BriefingParts.tsx";
 import { useBriefingJob } from "./briefing-job.ts";
 import { MeetingEnded, MeetingLead, MeetingLine, type MeetingHandlers } from "./MeetingHeadsUp.tsx";
 
@@ -249,13 +248,12 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
   const items = openInbox.data?.items ?? null;
   const { settled, settle } = useSettledHeadsUps();
   const latest = useLatestBriefing(attentionOn);
-  const { job, start } = useBriefingJob(attentionOn);
+  const { job } = useBriefingJob(attentionOn);
   const schedule = useBriefingSchedule(attentionOn, clock.now);
   const { held, holding, focused, holdProps } = useHold("data-heads-up-key");
   // Got it, Not now and Done pressed in this tab apply at once, even while held; another tab's wait until the hold ends.
   const [mine, setMine] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const [context, setContext] = useState(false);
   const [said, setSaid] = useState("");
   const doneHere = useDoneHere(items);
   const doneKeys = useMemo(() => [...doneHere.done].map((id) => `meeting:${id}`), [doneHere.done]);
@@ -349,10 +347,6 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
     ended: ended.has(h.key) ? { height: entries.heights.get(h.key), takeFocus: focused === h.key } : null,
     underLead: !!slot.lead,
   });
-  const actions = <BriefingActions running={!!job} hasBriefing={typeof latest.value === "object" && latest.value !== null} start={start} onMeetingContext={() => setContext(true)} />;
-  const meetingContext = context && typeof latest.value === "object" && latest.value !== null && (
-    <MeetingContext briefing={latest.value} now={clock.now} timeZone={clock.timeZone} onClose={() => setContext(false)} />
-  );
   const quiet = !slot.lead && !slot.followers.length;
 
   // Without a lead the title shrinks to the quiet line's size, so lines alone cost the Inbox little room.
@@ -370,7 +364,6 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
             {status}
           </p>
         )}
-        {actions}
       </div>
       <div className="heads-ups" ref={entries.ref} {...holdProps}>
         {slot.lead && <Lead key={slot.lead.key} {...entry(slot.lead)} />}
@@ -396,7 +389,6 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
           {status}
         </p>
       )}
-      {meetingContext}
       <span className="sr-only" role="status">
         {said}
       </span>

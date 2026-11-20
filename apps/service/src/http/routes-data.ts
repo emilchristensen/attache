@@ -4,7 +4,7 @@ import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
 import { RECALL_EXCLUDE, searchByMeaning } from "../memory/search.ts";
 import { getItem, listItems } from "../attention/engine.ts";
-import { latestBriefing } from "../attention/briefing.ts";
+import { latestBriefing, latestBriefings } from "../attention/briefing.ts";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { resolveInside } from "../memory/policy.ts";
@@ -227,5 +227,9 @@ export function registerDataRoutes(r: Router, app: App) {
   r.get("/briefings/latest", () => {
     requireFeature(app, "attention");
     return { briefing: latestBriefing(app.db) };
+  });
+  r.get("/briefings", () => {
+    requireFeature(app, "attention");
+    return latestBriefings(app.db);
   });
 }

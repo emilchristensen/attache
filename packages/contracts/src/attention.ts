@@ -90,3 +90,27 @@ export const AttentionDraftInput = z.object({
 });
 
 export type AttentionDraftBody = z.infer<typeof AttentionDraftInput>;
+
+const BriefingLead = z.object({ itemId: z.string().min(1), headline: z.string().min(1).max(160), explanation: z.string().min(1).max(500) });
+const BriefingUpdate = z.object({ itemId: z.string().min(1), headline: z.string().min(1).max(160), text: z.string().min(1).max(500) });
+const BriefingRelated = z.object({ title: z.string(), relPath: z.string(), lines: z.tuple([z.number(), z.number()]) });
+const BriefingItem = z.object({ id: z.string().min(1), title: z.string(), summary: z.string(), url: z.string().nullable(), isNew: z.boolean(), changed: z.boolean(), related: z.array(BriefingRelated).optional() });
+const BriefingSection = z.object({ id: z.string(), title: z.string(), items: z.array(BriefingItem) });
+const BriefingCounts = z.object({ open: z.number().int().nonnegative(), new: z.number().int().nonnegative(), changed: z.number().int().nonnegative(), drafts: z.number().int().nonnegative(), proposals: z.number().int().nonnegative(), failedSources: z.number().int().nonnegative() });
+
+export const BriefingViewSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["daily", "away", "manual"]),
+  createdAt: z.iso.datetime(),
+  since: z.string().nullable(),
+  summary: z.string(),
+  sections: z.array(BriefingSection),
+  lead: BriefingLead.nullable(),
+  topPicks: z.array(z.string().min(1)).max(5),
+  updates: z.array(BriefingUpdate),
+  coverage: z.array(z.unknown()),
+  counts: BriefingCounts,
+  deliverablePath: z.string().nullable(),
+});
+
+export type BriefingView = z.infer<typeof BriefingViewSchema>;

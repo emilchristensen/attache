@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { parse, stringify } from "yaml";
 import { join } from "node:path";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 import { AFTER_WRITE, CHECK, idOf, readerOn, runSchedules, tickAllDue, waitForJobs, waitUntilIdle } from "./reader-helpers.ts";
@@ -80,6 +81,25 @@ describe("the Reader's Source refresh", () => {
     await pc.clock.advance(CHECK);
     await waitUntilIdle(pc);
     expect((await pc.get("/briefings/latest")).briefing).toEqual(onMac);
+    expect(onMac).toMatchObject({ lead: null, topPicks: expect.any(Array), updates: expect.any(Array) });
+  });
+
+  it("rejects malformed briefing fields read from another Machine", async () => {
+    world = await startMachines(["Work Mac", "Home PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await waitUntilIdle(mac);
+    const briefing = tickAllDue(mac).find((r) => r.id === "attention:briefing")!;
+    await waitForJobs(mac, [briefing.jobId!]);
+    const path = join(mac.dataDir, (await mac.get("/briefings/latest")).briefing.deliverablePath);
+    const text = readFileSync(path, "utf8");
+    const end = text.indexOf("\n---", 4);
+    const meta = parse(text.slice(4, end)) as Record<string, any>;
+    meta.briefing.topPicks = "invalid";
+    writeFileSync(path, `---\n${stringify(meta)}---${text.slice(end + 4)}`);
+    await mac.clock.advance(AFTER_WRITE);
+    await pc.clock.advance(CHECK);
+    await waitUntilIdle(pc);
+    expect((await pc.get("/briefings/latest")).briefing).toBeNull();
   });
 
   it("still runs on the Machine the owner is on when started by hand", async () => {
