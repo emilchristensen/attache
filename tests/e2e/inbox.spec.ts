@@ -104,6 +104,39 @@ test("rows: kind stamp and word, subject, source line and time; a review request
   await page.close();
 });
 
+test("row actions: Start working stays open and becomes Continue, then Not started clears progress; Snooze and Done decide in place", async () => {
+  const page = await journeys.open("/");
+  const row = inboxRow(page, "Add checkout retry");
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Snooze: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Done: Add checkout retry" })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 780 });
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeHidden();
+  await row.getByRole("button", { name: "Actions: Add checkout retry" }).click();
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Snooze: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Done: Add checkout retry" })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await row.getByRole("button", { name: "Start working: Add checkout retry" }).click();
+  await expect(row.getByRole("button", { name: "Continue: Add checkout retry" })).toBeVisible();
+  await expect(row).toContainText("In progress");
+  await page.reload();
+  await expect(row).toContainText("In progress");
+  await openRow(row);
+  await row.getByRole("button", { name: "Not started: Add checkout retry" }).click();
+  await expect(row).not.toContainText("In progress");
+
+  await row.getByRole("button", { name: "Snooze: Add checkout retry" }).first().click();
+  await expect(row.getByRole("menu", { name: "Snooze: Add checkout retry" })).toBeVisible();
+  await row.getByRole("menuitem").first().click();
+  await expect(row).toHaveAttribute("data-decided", "snooze");
+  await row.getByRole("button", { name: "Undo" }).click();
+  await row.getByRole("button", { name: "Done: Add checkout retry" }).first().click();
+  await expect(row).toHaveAttribute("data-decided", "done");
+  await row.getByRole("button", { name: "Undo" }).click();
+  await page.close();
+});
+
 test("rows without colour: in grayscale a review request and a pending reply still differ by glyph and word", async () => {
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -373,9 +406,11 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await expect(toggles.nth(0)).toBeFocused();
   const first = rows(page).first();
   const subject = await toggles.nth(0).textContent();
-  // Off by default: d changes nothing.
+  // Off by default: w and d change nothing.
+  await page.keyboard.press("w");
   await page.keyboard.press("d");
   await expect(first).not.toHaveAttribute("data-decided");
+  await expect(first).not.toContainText("In progress");
   // Enter opens the row in place.
   await page.keyboard.press("Enter");
   await expect(toggles.nth(0)).toHaveAttribute("aria-expanded", "true");
@@ -389,6 +424,7 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await expect(sheet.getByRole("table", { name: "Inbox decisions, on" })).toBeVisible();
   // Nothing irreversible ever has a single key.
   await expect(sheet).not.toContainText(/\b(Apply|Approve|Send|Reject|Revert|Disconnect)\b/);
+  await expect(sheet).toContainText("Start working");
   await page.keyboard.press("Escape");
   await toggles.nth(0).focus();
   await page.keyboard.press("d");
@@ -469,7 +505,7 @@ test("captures: Home's first viewport, an open row, a decided row and Group by t
     await review.locator("[data-row-toggle]").click();
     const cutover = inboxRow(page, "Send the cutover plan to finance");
     await openRow(cutover);
-    await cutover.getByRole("button", { name: "Done" }).click();
+    await cutover.locator(".inbox-detail").getByRole("button", { name: "Done" }).click();
     await expect(cutover).toHaveAttribute("data-decided", "done");
     await page.locator("#inbox").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/screens/${scheme}-home-inbox-decided.png` });

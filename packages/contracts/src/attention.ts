@@ -61,6 +61,7 @@ export interface AttentionItemView {
   priority: number;
   state: "open" | "dismissed" | "snoozed" | "resolved";
   snoozeUntil: string | null;
+  startedAt: string | null;
   evidence: Array<{ label: string; url?: string; relPath?: string; lines?: [number, number]; observedAt: string }>;
   firstSeenAt: string;
   updatedAt: string;
@@ -75,7 +76,7 @@ export interface AttentionItemView {
 }
 
 export const AttentionDecision = z.object({
-  decision: z.enum(["dismiss", "snooze", "reopen", "done"]),
+  decision: z.enum(["start", "dismiss", "snooze", "reopen", "done"]),
   until: z.string().datetime().optional(),
 });
 

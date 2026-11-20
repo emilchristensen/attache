@@ -63,6 +63,7 @@ select.inbox-picker {
 /* ---- the rows ------------------------------------------------------------------------------------ */
 
 .inbox-rows {
+  container-type: inline-size;
   list-style: none;
   margin: var(--s-3) 0 0;
   padding: 0;
@@ -82,6 +83,44 @@ select.inbox-picker {
 }
 .inbox-row:not(.decided) > .inbox-line:hover {
   background: var(--row-hover);
+}
+.inbox-row-actions {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  position: relative;
+  z-index: 1;
+}
+.inbox-row-actions > .inbox-start {
+  border: 1px solid var(--ink);
+  background: transparent;
+}
+.inbox-row-secondary {
+  display: contents;
+}
+.inbox-row-secondary button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+.inbox-actions-menu {
+  display: none;
+}
+.inbox-row-actions .inbox-snooze {
+  position: absolute;
+  left: 0;
+  top: calc(100% + var(--s-1));
+  z-index: 2;
+  padding: var(--s-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+.inbox-not-started {
+  margin-left: calc(185px + 14px + 4px);
 }
 .inbox-kind {
   display: flex;
@@ -261,6 +300,51 @@ a.source-chip {
   color: var(--ink-2);
 }
 
+@container (max-width: 620px) {
+  .inbox-row-secondary button span {
+    display: none;
+  }
+  .inbox-row-secondary button {
+    width: 36px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+}
+
+@container (max-width: 440px) {
+  .inbox-row-actions {
+    grid-column: 1 / -1;
+  }
+  .inbox-actions-menu {
+    display: inline-flex;
+  }
+  .inbox-row-actions > .inbox-start {
+    display: none;
+  }
+  .inbox-row-actions:has(.inbox-row-secondary[data-open]) > .inbox-start {
+    display: inline-flex;
+  }
+  .inbox-row-secondary {
+    display: none;
+    grid-column: 1 / -1;
+  }
+  .inbox-row-secondary[data-open] {
+    display: flex;
+    flex-basis: 100%;
+    gap: var(--s-2);
+  }
+  .inbox-row-secondary button {
+    width: auto;
+    padding-inline: var(--s-3);
+  }
+  .inbox-row-secondary button span {
+    display: inline;
+  }
+  .inbox-row-actions {
+    flex-wrap: wrap;
+  }
+}
+
 /* ---- the empty list: what was read and what waits elsewhere, under the list's own rule ------------------------ */
 
 .inbox-empty {
@@ -385,6 +469,9 @@ a.source-chip {
   }
   .inbox-detail {
     padding: 0 2px var(--s-4);
+  }
+  .inbox-not-started {
+    margin-left: 2px;
   }
 }
 
