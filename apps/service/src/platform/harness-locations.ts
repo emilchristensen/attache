@@ -114,3 +114,26 @@ export function piInstall(loc: PlatformLocations): HarnessInstall {
   const executables = toolCandidates(loc, "pi");
   return { executables, presence: [join(loc.home, ".pi"), ...executables] };
 }
+
+/**
+ * OpenCode's global config folder, relative to the home folder:
+ * `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`, on every operating
+ * system (OpenCode 1 and 2 both use XDG paths, also on macOS).
+ */
+export const OPENCODE_CONFIG_DIR = ".config/opencode";
+
+/**
+ * Where OpenCode may be installed: its curl installer's `~/.opencode/bin`,
+ * then the usual tool folders. OpenCode is often an npm global package or a
+ * Homebrew formula whose folder Attache cannot always know, so not finding it
+ * here is uncertain rather than final.
+ */
+export function openCodeInstall(loc: PlatformLocations): HarnessInstall {
+  const { join } = pathFor(loc.os);
+  const installer = executableNamesIn(loc, join(loc.home, ".opencode", "bin"), "opencode");
+  const executables = [...installer, ...toolCandidates(loc, "opencode")];
+  // The config folder is not a sign: other tools write plugins there without OpenCode being installed.
+  return { executables, presence: [join(loc.home, ".opencode"), ...executables] };
+}
+
+const executableNamesIn = (loc: PlatformLocations, dir: string, name: string) => toolCandidates({ ...loc, toolDirs: [dir] }, name);

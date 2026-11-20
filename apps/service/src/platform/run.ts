@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { win32 } from "node:path";
 import { launchTool } from "./launch.ts";
 
@@ -33,4 +33,21 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
     });
     if (opts.input !== undefined) child.stdin?.end(opts.input);
   });
+}
+
+/**
+ * `run`, waiting for the tool: for a short question to a tool (such as its
+ * `--version`) from code that cannot wait asynchronously. Never throws.
+ */
+export function runSync(cmd: string, args: string[], opts: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): RunResult {
+  let launch;
+  try {
+    launch = launchTool(cmd, args);
+  } catch (e) {
+    return { code: 1, stdout: "", stderr: (e as Error).message, timedOut: false };
+  }
+  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) });
+  const timedOut = !!opts.timeoutMs && (r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+  const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : (r.error?.message ?? "");
+  return { code: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr || reason, timedOut };
 }

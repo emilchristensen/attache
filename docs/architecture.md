@@ -529,6 +529,19 @@ The file's first line marks it as Attache's and names its state folder; a file i
 A running Pi needs `/reload` (or a new session) to load a change, so the adapter reports a restart.
 `test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, and gone after disconnecting.
 
+### OpenCode
+
+OpenCode connects through its own plugin API (`agents/opencode-adapter.ts`), with MCP access only.
+OpenCode 1 (`opencode-ai`) and OpenCode 2 (`@opencode/cli`) both install an `opencode` command, read the same config folders and have incompatible plugin APIs, so Attache writes one plugin file that carries both entry points: OpenCode 1 (1.18.29 and later) calls its `server()` and runs the `config` hook, which adds this instance's server to the configuration it is about to use; OpenCode 2 reads its `id` and runs `setup(ctx)`, which adds the server with `ctx.mcp.transform` (`codemode: false`, so the tools stay on the native tool list).
+Both registrations live in memory only, so the owner's `opencode.json(c)` is never written.
+The file is `<config dir>/plugins/attache.js` (`attache-<hash>.js` for another instance, which is also its OpenCode 2 plugin id, since OpenCode 2 refuses two plugins with one id), where the config dir is `OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`.
+Before writing, the adapter asks the installed `opencode --version` (`agents/opencode-version.ts`; `ATTACHE_OPENCODE_BIN` replaces the lookup in tests) and refuses an OpenCode 1 older than 1.18.29, a major version other than 1 or 2, or output it cannot read; no OpenCode found is a manual connection.
+It reads OpenCode's global `config.json`, `opencode.json`, `opencode.jsonc` and the file `OPENCODE_CONFIG` names (JSON with comments, `agents/jsonc.ts`) only to refuse a file that does not parse, a same-name MCP server (either OpenCode's shape) the plugin would replace, or an OpenCode 2 `plugins` list that turns the plugin off.
+Project-level configuration is not checked.
+The marker and ownership rules are Pi's; a running OpenCode (or OpenCode 2's background service) must restart to load a change.
+`test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disconnecting.
+It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
+
 ### MCP server in each Harness
 
 Connecting a Harness also registers Attache's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).
