@@ -168,7 +168,11 @@ When a Source refresh changes how many decisions wait, it hears the new total on
 
 ### Home
 
-Home holds Search the Brain, For you now, Your day and the Inbox, which ends with Recently added.
+Home holds Search the Brain, The Daily Briefing, For you now, Your day and the Inbox, which ends with Recently added.
+At 960 px and wider, Search the Brain, The Daily Briefing and Your day span the reading column; For you now uses one third beside the Inbox at two thirds.
+From 600 to 959 px, the shared row splits in half.
+Below 600 px, the areas stack as Search the Brain, The Daily Briefing, For you now, Your day and Inbox.
+Each area responds to the space it is given, so an area in a narrow column looks and behaves as it does on a phone.
 
 - **Search the Brain** sits under a short line with the word Home and today's date.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.

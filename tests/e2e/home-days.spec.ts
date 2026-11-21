@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AttentionItemView, ConnectionStatus, DecisionTotals } from "@attache/contracts";
 import { api, JourneyBrowser } from "./browser.ts";
-import { completeRows, routeSignIn } from "./home-fold.ts";
+import { completeForYouNow, completeRows, routeSignIn } from "./home-fold.ts";
 import { MINUTE, SELF, setCalendar } from "./meetings.ts";
 import { buildAll, ROOT, startStack, type Stack } from "./stack.ts";
 
@@ -24,6 +24,7 @@ function morningZone(): string {
 }
 
 const DESKTOP = { width: 1280, height: 800 };
+const TABLET = { width: 800, height: 1024 };
 const PHONE = { width: 375, height: 812 };
 const SCHEMES = ["light", "dark"] as const;
 
@@ -58,9 +59,9 @@ test.afterAll(async () => {
 const forYouNow = (page: Page) => page.getByRole("region", { name: "For you now" });
 const connections = (page: Page) => page.locator("[data-connection-banner]");
 
-/** Home as it is now, in each theme at 1280 x 800 and 375 x 812, scrolled to the top with the pointer out of the way. */
+/** Home as it is now, in each theme at desktop, tablet and phone sizes, scrolled to the top with the pointer out of the way. */
 async function captureDay(page: Page, day: string) {
-  for (const [viewport, prefix] of [[DESKTOP, ""], [PHONE, "narrow-"]] as const) {
+  for (const [viewport, prefix] of [[DESKTOP, ""], [TABLET, "tablet-"], [PHONE, "narrow-"]] as const) {
     await page.setViewportSize(viewport);
     for (const scheme of SCHEMES) {
       await page.emulateMedia({ colorScheme: scheme });
@@ -85,6 +86,29 @@ async function expectFold(page: Page, rows: number, what: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
+test("arrangement: desktop thirds, tablet halves, and phone reading order", async () => {
+  const page = await journeys.open("/");
+  await expect(page.getByRole("region", { name: "The Daily Briefing" })).toBeVisible();
+  for (const [viewport, arrangement] of [[DESKTOP, "desktop"], [TABLET, "tablet"], [PHONE, "phone"]] as const) {
+    await page.setViewportSize(viewport);
+    const boxes = await page.evaluate(() => Object.fromEntries(["daily", "for-you", "day", "inbox"].map((name) => {
+      const selector = name === "daily" ? ".daily-briefing-area" : name === "for-you" ? ".for-you-now" : name === "day" ? ".your-day" : "#inbox";
+      const box = document.querySelector(selector)!.getBoundingClientRect();
+      return [name, { top: box.top, left: box.left, width: box.width, bottom: box.bottom }];
+    })));
+    if (arrangement === "phone") {
+      expect(boxes["daily"]!.bottom).toBeLessThanOrEqual(boxes["for-you"]!.top + 1);
+      expect(boxes["for-you"]!.bottom).toBeLessThanOrEqual(boxes["day"]!.top + 1);
+      expect(boxes["day"]!.bottom).toBeLessThanOrEqual(boxes["inbox"]!.top + 1);
+      for (const box of Object.values(boxes)) expect(box.width).toBeCloseTo(boxes["daily"]!.width, 0);
+    } else {
+      expect(boxes["for-you"]!.top).toBeCloseTo(boxes["inbox"]!.top, 0);
+      expect(boxes["for-you"]!.width / boxes["inbox"]!.width).toBeCloseTo(arrangement === "desktop" ? 0.5 : 1, 1);
+      expect(boxes["for-you"]!.left).toBeLessThan(boxes["inbox"]!.left);
+    }
+  }
+});
+
 test("quiet: nothing timely, every source read; For you now is one line and one row shows with Your day and The Daily Briefing", async () => {
   const page = await journeys.open("/");
   await expect(forYouNow(page)).toHaveAttribute("data-for-you-now", "quiet");
@@ -100,8 +124,14 @@ test("morning: an unread daily briefing leads; one row shows with Your day at 12
   await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
   const lead = page.getByRole("region", { name: "The Daily Briefing" }).locator(".daily-briefing-card");
   await expect(lead).toBeVisible();
+  await expect(forYouNow(page).locator("[data-inbox-row]")).not.toHaveCount(0, { timeout: 20_000 });
   await expect(connections(page)).toHaveCount(0);
   await expect(page.locator("#inbox h2").first()).toBeVisible();
+  for (const scheme of SCHEMES) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect(await completeForYouNow(page), `For you now complete entries, ${scheme}`).toBeGreaterThanOrEqual(2);
+    expect(await completeRows(page), `Inbox complete rows, ${scheme}`).toBeGreaterThanOrEqual(2);
+  }
   await captureDay(page, "morning");
   await lead.getByRole("button", { name: "Got it" }).click();
   await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
@@ -117,7 +147,7 @@ test("overlap: a meeting in progress, the next one, the briefing as a follower a
   ]);
   await routeSignIn(page);
   await page.reload();
-  await expect(forYouNow(page).locator('[data-heads-up="meeting-prep"]')).toHaveCount(2);
+  await expect(forYouNow(page).locator('[data-item-key^="gcal:"]')).toHaveCount(2);
   await expect(page.getByRole("region", { name: "The Daily Briefing" }).locator(".briefing-folded")).toBeVisible();
   await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
   const day = page.getByRole("region", { name: "Your day" });

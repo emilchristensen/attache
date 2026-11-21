@@ -25,9 +25,11 @@ export function Home() {
     <section ref={page} className="page page-inbox" aria-label="Home">
       <HomeSearch recall={f.recall} />
       {cfg.data && <DailyBriefing attentionOn={f.attention ?? false} clock={clock} onRead={(id) => window.history.pushState(null, "", `/briefing/${id}`)} />}
-      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
-      {cfg.data && <YourDay clock={clock} enabled={f.attention ?? false} />}
-      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} after={f.capture && <RecentlyAdded />} />
+      <div className="home-areas">
+        {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
+        {cfg.data && <YourDay clock={clock} enabled={f.attention ?? false} />}
+        <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} after={f.capture && <RecentlyAdded />} />
+      </div>
     </section>
   );
 }

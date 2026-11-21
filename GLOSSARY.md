@@ -191,11 +191,13 @@ _Avoid_: Occupant, nudge
 **For you now**:
 The area on Home that curates open Inbox items by urgency: meeting prep, a reply nearly late, something due today, then a Daily Briefing pick.
 It shows at most five entries, each with its reason, while every open item stays listed in the Inbox with a Suggested now tag when it is also curated.
+It shares a row with the Inbox at one third on desktop and one half on tablet, and takes a full row before Your day on a phone.
 _Avoid_: Proactive area
 
 **Your day**:
 The ruled band on Home that shows today's calendar meetings in the browser's current time zone, using the last events the Google Calendar Connection read.
 It is a schedule, not an Inbox item, so it never adds to the Decision count.
+Home places it after the Daily Briefing; the phone arrangement moves it between For you now and the Inbox.
 
 **Briefing**:
 A short summary Attache writes of what changed, what needs the owner and what is prepared: the daily briefing on a schedule, or an Away summary or a briefing the owner asked for.
