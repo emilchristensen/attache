@@ -6,7 +6,10 @@ import { AgentHooks, mcpServerEntry } from "../src/agents/install.ts";
 import { harnessAdapters } from "../src/agents/harness-adapters.ts";
 import { locationsForHome } from "../src/platform/locations.ts";
 import { writeContextFiles } from "../src/agents/context-files.ts";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { listSpool, spoolCopyPath } from "../src/agents/spool.ts";
+import { parseCopilotCli } from "../src/agents/copilot-cli-transcript.ts";
+import { assistant, events, start, user } from "./fixtures/agents/copilot-cli.ts";
 
 /**
  * Copilot CLI through its personal MCP configuration: Attache adds this
@@ -27,7 +30,7 @@ const CONFIG = () => at(".copilot/mcp-config.json");
 const SETTINGS = () => at(".copilot/settings.json");
 /** This instance's personal hooks file: one file per instance in Copilot CLI's personal hooks folder. */
 const HOOKS = (state = stateDir) => at(".copilot/hooks", `${nameOf(state)}.json`);
-const HOOKS_PURPOSE = "Attache's personal Copilot CLI hook that gives each new, cleared or resumed session your current Attache memory";
+const HOOKS_PURPOSE = "Attache's personal Copilot CLI hooks that give each new, cleared or resumed session your current Attache memory and save the conversation after each turn, before compaction and when the session ends";
 const read = (p = CONFIG()) => JSON.parse(readFileSync(p, "utf8")) as { mcpServers?: Record<string, Record<string, unknown>> } & Record<string, unknown>;
 const copilotFor = (state: string) => harnessAdapters(new AgentHooks(state, backups), () => "").find((a) => a.kind === "copilot-cli")!;
 const copilot = () => copilotFor(stateDir);
@@ -46,10 +49,11 @@ beforeEach(() => {
 });
 
 describe("previewing Copilot CLI", () => {
-  it("reports MCP access and runtime-fresh memory, a restart, and the two personal files it would create", () => {
+  it("reports MCP access, runtime-fresh memory, capture with a final event, a restart, and the two personal files it would create", () => {
     const a = copilot();
     expect(a.label).toBe("Copilot CLI");
-    expect(a.capabilities).toEqual({ mcp: true, memory: "runtime-fresh", capture: "none" });
+    expect(a.capabilities).toEqual({ mcp: true, memory: "runtime-fresh", capture: "with-final-event" });
+    expect(a.setupNote).toMatch(/only a Copilot CLI that is killed or crashes mid-turn can lose that newest turn/);
     expect(a.manualSetup).toBe(true);
     expect(a.preview()).toEqual({
       restartRequired: true,
@@ -264,7 +268,7 @@ describe.skipIf(process.platform === "win32")("Attache memory in Copilot CLI ses
     copilot().apply();
     const file = hooksFile();
     expect(file.version).toBe(1);
-    expect(Object.keys(file.hooks)).toEqual(["sessionStart"]);
+    expect(Object.keys(file.hooks)).toContain("sessionStart");
     expect(file.hooks.sessionStart).toEqual([{ type: "command", bash: expect.stringContaining("attache-agent-hook"), powershell: expect.stringMatching(/^& '.*attache-agent-hook.*' copilot-cli session-start --state-dir '/), timeoutSec: 10 }]);
     expect(file.hooks.sessionStart![0]!.bash).toContain(" copilot-cli session-start --state-dir ");
   });
@@ -324,7 +328,7 @@ describe("the owner's personal hooks", () => {
     copilot().apply();
     const old = readFileSync(HOOKS(), "utf8").replace(/"timeoutSec": 10/, '"timeoutSec": 30');
     write(HOOKS(), old);
-    expect(copilot().status()).toMatchObject({ state: "stale", message: expect.stringMatching(/memory hook .* is out of date/) });
+    expect(copilot().status()).toMatchObject({ state: "stale", message: expect.stringMatching(/hooks file .* is out of date/) });
     const r = copilot().refresh();
     expect(r.changes).toEqual([{ path: HOOKS(), change: "update", backup: true, purpose: HOOKS_PURPOSE }]);
     expect(readFileSync(r.backups[0]!, "utf8")).toBe(old);
@@ -374,5 +378,101 @@ describe.skipIf(process.platform === "win32")("the installed Copilot CLI's versi
   it("connects when the version cannot be read, since Copilot CLI updates itself", () => {
     fakeCopilot("garbled");
     expect(copilot().apply().changes).toHaveLength(2);
+  });
+});
+
+describe.skipIf(process.platform === "win32")("saving Copilot CLI sessions", () => {
+  const ID = "6128c6ac-b9e7-479c-acc8-6918e02e109b";
+  const work = () => at("work");
+  const eventsPath = (root = at(".copilot"), id = ID) => join(root, "session-state", id, "events.jsonl");
+  /** The hook.start event Copilot CLI writes for a hook run, carrying the hook's own input. */
+  const hookStart = (hookType: string, input: Record<string, unknown>) => JSON.stringify({ id: `h-${hookType}`, timestamp: "2026-11-21T20:50:32.000Z", parentId: null, type: "hook.start", data: { hookInvocationId: "x", hookType, input } });
+  const session = (lines: string[]) => [...lines.map((l) => `${l}\n`)].join("");
+  const BEFORE = events([start(0), user("Should the cutover wait for the audit?", 1), assistant("Yes, until Friday.", 2)]).trim().split("\n");
+  const stopInput = (extra: Record<string, unknown> = {}) => ({ sessionId: ID, timestamp: 1795294232036, cwd: work(), transcriptPath: eventsPath(), stopReason: "end_turn", stop_hook_active: false, ...extra });
+  const spooled = () => listSpool(stateDir).map((r) => ({ event: r.event, agent: r.agent, sessionId: r.sessionId, cwd: r.cwd, text: r.copy ? readFileSync(spoolCopyPath(stateDir, r)!, "utf8") : null, error: r.error ?? null }));
+
+  /** Run one of the hooks file's commands the way Copilot CLI does, with its input on stdin, without blocking this process. */
+  function runHookCommand(hookType: string, input: Record<string, unknown>, env: NodeJS.ProcessEnv = {}): Promise<{ status: number | null; stdout: string; ms: number }> {
+    const command = hooksFile().hooks[hookType]![0]!.bash as string;
+    const t0 = Date.now();
+    return new Promise((resolve) => {
+      const child = spawn("bash", ["-c", command], { env: { ...process.env, HOME: home, CLAUDE_INVOKED_BY: "", ATTACHE_AGENT_HOOK_DISABLED: "", ...env } });
+      let stdout = "";
+      child.stdout.on("data", (d) => (stdout += String(d)));
+      child.on("close", (status) => resolve({ status, stdout, ms: Date.now() - t0 }));
+      child.stdin.end(JSON.stringify(input));
+    });
+  }
+
+  beforeEach(() => {
+    mkdirSync(work(), { recursive: true });
+    copilot().apply();
+    // The Agent sessions feature is on: the service keeps a session context.
+    writeContextFiles(stateDir, "memory", []);
+  });
+
+  it("adds agentStop, preCompact and sessionEnd command hooks to the same personal hooks file", () => {
+    const file = hooksFile();
+    expect(Object.keys(file.hooks)).toEqual(["sessionStart", "agentStop", "preCompact", "sessionEnd"]);
+    for (const [hookType, event] of [["agentStop", "turn-end"], ["preCompact", "pre-compact"], ["sessionEnd", "session-end"]] as const) {
+      expect(file.hooks[hookType]).toEqual([{ type: "command", bash: expect.stringContaining(` copilot-cli ${event} --state-dir `), powershell: expect.stringContaining(` copilot-cli ${event} --state-dir '`), timeoutSec: 10 }]);
+    }
+  });
+
+  it("a finished turn spools a copy of the session's events.jsonl once Copilot CLI has written the turn, and prints nothing", async () => {
+    write(eventsPath(), session(BEFORE));
+    // Copilot CLI writes the turn's events, and the hook's own hook.start after them, shortly after it starts the hook.
+    const run = runHookCommand("agentStop", stopInput());
+    setTimeout(() => writeFileSync(eventsPath(), session([...BEFORE, events([user("Check the env file", 3), assistant("Done.", 4)]).trim(), hookStart("agentStop", stopInput())])), 300);
+    const r = await run;
+    expect(r).toMatchObject({ status: 0, stdout: "" });
+    const [record, ...rest] = spooled();
+    expect(rest).toEqual([]);
+    expect(record).toMatchObject({ event: "turn-end", agent: "copilot-cli", sessionId: ID, cwd: work() });
+    expect(parseCopilotCli(record!.text!).turns.map((t) => t.text)).toEqual(["Should the cutover wait for the audit?", "Yes, until Friday.", "Check the env file", "Done."]);
+  });
+
+  it("a compaction spools the session before Copilot CLI compacts it", async () => {
+    const input = { sessionId: ID, timestamp: 1795294297442, cwd: work(), transcriptPath: eventsPath(), trigger: "manual", customInstructions: "" };
+    write(eventsPath(), session([...BEFORE, hookStart("preCompact", input)]));
+    expect((await runHookCommand("preCompact", input)).status).toBe(0);
+    expect(spooled().map((r) => [r.event, parseCopilotCli(r.text!).turns.length])).toEqual([["pre-compact", 2]]);
+  });
+
+  it("a session end, whose input names no transcript, finds events.jsonl in Copilot CLI's home folder", async () => {
+    const input = { sessionId: ID, timestamp: 1795294310947, cwd: work(), reason: "user_exit" };
+    write(eventsPath(), session([...BEFORE, hookStart("sessionEnd", input)]));
+    expect((await runHookCommand("sessionEnd", input)).status).toBe(0);
+    const elsewhere = tempDir("attache-copilot-home2-");
+    write(eventsPath(elsewhere), session([...BEFORE, hookStart("sessionEnd", input)]));
+    expect((await runHookCommand("sessionEnd", input, { COPILOT_HOME: elsewhere })).status).toBe(0);
+    expect(spooled().map((r) => [r.event, r.error, parseCopilotCli(r.text!).turns.length])).toEqual([
+      ["session-end", null, 2],
+      ["session-end", null, 2],
+    ]);
+  });
+
+  it("copies what is there when Copilot CLI never writes the hook's start (a session /clear ends), after a bounded wait", async () => {
+    const input = { sessionId: ID, timestamp: 1, cwd: work(), reason: "user_exit" };
+    write(eventsPath(), session(BEFORE));
+    const r = await runHookCommand("sessionEnd", input);
+    expect(r.status).toBe(0);
+    expect(r.ms).toBeLessThan(8_000);
+    expect(spooled().map((x) => [x.event, parseCopilotCli(x.text!).turns.length])).toEqual([["session-end", 2]]);
+  });
+
+  it("never spools for a subagent's agentStop, which names the parent's events.jsonl", async () => {
+    const input = stopInput({ sessionId: "3879bcc5-1220-473e-beb5-cdae729e1f0f", agentId: "3879bcc5-1220-473e-beb5-cdae729e1f0f", agentType: "explore", parentAgentId: ID });
+    write(eventsPath(), session([...BEFORE, hookStart("agentStop", input)]));
+    expect(await runHookCommand("agentStop", input)).toMatchObject({ status: 0, stdout: "" });
+    expect(spooled()).toEqual([]);
+  });
+
+  it("spools nothing for sessions tools start on their own", async () => {
+    write(eventsPath(), session([...BEFORE, hookStart("agentStop", stopInput())]));
+    await runHookCommand("agentStop", stopInput(), { CLAUDE_INVOKED_BY: "sdk" });
+    await runHookCommand("agentStop", stopInput(), { ATTACHE_AGENT_HOOK_DISABLED: "1" });
+    expect(spooled()).toEqual([]);
   });
 });

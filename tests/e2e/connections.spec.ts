@@ -391,7 +391,7 @@ test("OpenCode is its own Harness: MCP access, memory and session capture at eac
   rmSync(join(stack.agentHome, ".config"), { recursive: true });
 });
 
-test("Copilot CLI is its own Harness: MCP access and runtime-fresh memory, its personal MCP configuration and hooks file, and the restart it needs, connectable even when Attache did not find Copilot CLI", async () => {
+test("Copilot CLI is its own Harness: MCP access, runtime-fresh memory and session capture, its personal MCP configuration and hooks file, and the restart it needs, connectable even when Attache did not find Copilot CLI", async () => {
   const config = join(stack.agentHome, ".copilot", "mcp-config.json");
   const hooks = join(stack.agentHome, ".copilot", "hooks");
   const ownHooks = join(hooks, "mine.json");
@@ -405,12 +405,12 @@ test("Copilot CLI is its own Harness: MCP access and runtime-fresh memory, its p
   await expect(copilot.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
     "Memory: read fresh from your Brain when a session starts",
-    "Session capture: none; use the wrap-up prompt to keep what a conversation decided",
+    "Session capture: at compaction and when the session ends",
   ]);
   const files = copilot.getByLabel("Files Attache will change");
   await expect(files.getByRole("listitem")).toHaveText([
     `Update ${config}: Attache's MCP server in Copilot CLI's personal MCP configuration (backed up first)`,
-    new RegExp(`^Create ${hooks.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.json: Attache's personal Copilot CLI hook that gives each new, cleared or resumed session your current Attache memory$`),
+    new RegExp(`^Create ${hooks.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.json: Attache's personal Copilot CLI hooks that give each new, cleared or resumed session your current Attache memory and save the conversation after each turn, before compaction and when the session ends$`),
   ]);
   await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
   await copilot.getByRole("button", { name: "Connect" }).click();

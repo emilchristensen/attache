@@ -148,8 +148,8 @@ export class AgentSessions {
     const parsed = source.parse(raw);
     if (!parsed.turns.length) {
       if (parsed.problem) this.reportUnreadable(r, copy, source.label, parsed.problem);
-      // A plugin's snapshot of a session with nothing said yet, or of a subagent's side-chain, is no failure.
-      else if (raw.trim() && !source.partial) this.keepUnparsed(r, copy);
+      // A plugin's snapshot of a session with nothing said yet, or of a subagent's side-chain, is no failure; nor is a strict parser's empty session.
+      else if (raw.trim() && !source.partial && !source.strict) this.keepUnparsed(r, copy);
       return false;
     }
     const existing = this.row(r.agent, r.sessionId);

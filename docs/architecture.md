@@ -571,7 +571,7 @@ It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
 
 ### Copilot CLI
 
-Copilot CLI connects through its personal MCP configuration and personal hooks (`agents/copilot-cli-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
+Copilot CLI connects through its personal MCP configuration and personal hooks (`agents/copilot-cli-adapter.ts`), with MCP access, runtime-fresh memory and session capture with a final event.
 Attache adds one entry per instance to `<Copilot home>/mcp-config.json`, the file `copilot mcp add` writes, where the Copilot home is `COPILOT_HOME` when it is absolute, else `~/.copilot`; no repository file is touched.
 The entry is `{ type: "local", command, args, tools: ["*"] }` under the instance's owner key (`attache`, or `attache-<hash>`), and it is recognised as this instance's by its `--state-dir` argument, as in the other MCP configurations, so a stale entry under another name is replaced and other instances' entries are kept.
 Copilot CLI reads the file as JSON with comments (`agents/jsonc.ts`); Attache writes it back as plain JSON, as `copilot mcp add` does (seen with 1.0.114), backs it up first, and says in the preview when the file had comments that only the backup keeps.
@@ -590,6 +590,17 @@ Seen with 1.0.114 against a stand-in model: the memory reaches the model as a us
 A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns the hook off for its sessions; Attache cannot see that.
 The smoke test also runs real sessions with no GitHub sign-in through Copilot CLI's offline mode with a custom provider (`COPILOT_OFFLINE`, `COPILOT_PROVIDER_BASE_URL`) and a local stand-in model, checking the memory in new, resumed and (with python3 driving the interactive terminal) `/clear`ed sessions, that `events.jsonl` holds it only on `hook.end`, and that none reaches a session after disconnecting.
 It does not show the name Copilot CLI's MCP client gives itself.
+
+Session capture adds `agentStop` (`turn-end`), `preCompact` (`pre-compact`) and `sessionEnd` (`session-end`) command hooks to the same hooks file (`hook-profiles.ts` `COPILOT_HOOK_EVENTS`); each copies the session's `events.jsonl` into the spool like the other hook Harnesses' transcripts.
+`agentStop` and `preCompact` name it in `transcriptPath`; `sessionEnd` does not, so the hook derives `<Copilot home>/session-state/<sessionId>/events.jsonl` (`COPILOT_HOME` from Copilot CLI's environment, else `~/.copilot`).
+Seen with 1.0.114: Copilot CLI writes events to the file in batches about 100 ms apart, after it starts a hook, so when a hook starts the turn that just ended is not in the file yet (in `-p` mode the file may not exist yet).
+The hook therefore waits, at most 3 s, until the file holds its own `hook.start` event (same `hookType`, `sessionId` and `timestamp` as its input), which comes after the turn's events; the `sessionEnd` of a session `/clear` replaces never gets one, and its copy then holds everything up to the last turn, which that turn's `agentStop` already saved.
+A subagent's `agentStop` carries `agentId` and the parent's `transcriptPath` and is never captured.
+The file only grows: compaction (`session.compaction_start`/`_complete`, the summary in `summaryContent`) and `--resume` (`session.resume`) append to it, so every copy holds every earlier copy and the service takes the newest by position, like Claude Code's (`session-sources.ts`, not `partial`).
+`agents/copilot-cli-transcript.ts` reads it: the first event must be `session.start` with `data.version` 1 and `producer` `copilot-agent`; `user.message` `data.content` (not `transformedContent`) and `assistant.message` `data.content` are the turns; events with `agentId`, user messages with a `source` or `isAutopilotContinuation`, assistant messages with `parentToolCallId` or `phase: "thinking"` are dropped, as are whole kinds (`session`, `hook` where the memory is, `tool`, `subagent`, `system`, `skill`, `instruction`, `permission`) and turn markers; any other event type, version, producer or content shape yields no turns and a `problem` naming the Copilot CLI events format.
+A partly written last line is left for the next copy; a file with nothing said is no failure (`SessionSource.strict`).
+Only a Copilot CLI killed or crashing mid-turn can lose that turn; `sessionEnd` fires on exit, on `-p` completion and when the terminal closes (seen).
+The smoke test runs a session that reads a secret-bearing file with the `view` tool, resumes it and (with python3) `/compact`s it, and checks the archive holds only the owner's and Copilot CLI's words, each once.
 
 ### MCP server in each Harness
 

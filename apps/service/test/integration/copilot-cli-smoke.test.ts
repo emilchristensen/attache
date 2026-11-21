@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { callTool, mcpClients } from "./mcp-client.ts";
-import { contextFile } from "../../src/agents/spool.ts";
+import { contextFile, listSpool } from "../../src/agents/spool.ts";
 
 /**
  * Smoke test against the real Copilot CLI executable, in an isolated home: after Attache connects
@@ -24,11 +24,18 @@ import { contextFile } from "../../src/agents/spool.ts";
  * stored as a conversation message in the session's events.jsonl; and that after disconnecting a
  * new session gets none.
  *
+ * Capture: the stand-in makes a session read a secret-bearing file with Copilot CLI's view tool;
+ * Attache's agentStop and sessionEnd hooks copy the session's events.jsonl and the service archives
+ * only the owner's and Copilot CLI's words, never the file's text; a resumed session's turns join the
+ * same conversation once each; /compact (where python3 can drive the terminal) saves the conversation
+ * before compacting and summarises it straight away; after disconnecting nothing is copied.
+ *
  * It needs no GitHub sign-in, and runs with none: every token variable is removed and `gh` gets an
  * empty config folder. It does not show the name Copilot CLI's MCP client gives itself.
  *
- * ADR 0006: Attache may call Copilot CLI's MCP access officially supported only while this passes,
- * for the Copilot CLI versions it ran against; a failure here withdraws that claim for Copilot CLI only.
+ * ADR 0006: Attache may call Copilot CLI's MCP access, memory and session capture officially
+ * supported only while this passes, for the Copilot CLI versions it ran against; a failure here
+ * withdraws that claim for Copilot CLI only (a failing capture case, the capture claim only).
  */
 
 function findCopilot(): string | null {
@@ -60,10 +67,20 @@ async function startModel(): Promise<string> {
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify({ data: [{ id: "stand-in", object: "model" }] }));
       }
-      if (body) requests.push((JSON.parse(body) as { messages?: ModelMessage[] }).messages ?? []);
+      const request = body ? (JSON.parse(body) as { messages?: ModelMessage[]; tools?: Array<{ function?: { name?: string } }> }) : {};
+      const messages = request.messages ?? [];
+      if (body) requests.push(messages);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const chunk = (choice: object, extra: object = {}) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "stand-in", choices: [{ index: 0, ...choice }], ...extra })}\n\n`);
-      chunk({ delta: { role: "assistant", content: "pong" }, finish_reason: null });
+      // Asked to read the secret file, it first reads it with Copilot CLI's view tool, then answers without repeating it.
+      const last = messages[messages.length - 1];
+      if (last?.role === "user" && textOf(last).includes(READ_SECRET) && request.tools?.some((t) => t.function?.name === "view")) {
+        chunk({ delta: { role: "assistant", tool_calls: [{ index: 0, id: `call_${requests.length}`, type: "function", function: { name: "view", arguments: "" } }] }, finish_reason: null });
+        chunk({ delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ path: secretFile }) } }] }, finish_reason: null });
+        chunk({ delta: {}, finish_reason: "tool_calls" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
+        return res.end("data: [DONE]\n\n");
+      }
+      chunk({ delta: { role: "assistant", content: last?.role === "tool" ? "I read the file and left it alone." : "pong" }, finish_reason: null });
       chunk({ delta: {}, finish_reason: "stop" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
       res.end("data: [DONE]\n\n");
     });
@@ -71,6 +88,13 @@ async function startModel(): Promise<string> {
   await new Promise<void>((r) => model.listen(0, "127.0.0.1", r));
   return `http://127.0.0.1:${(model.address() as { port: number }).port}/v1`;
 }
+
+/** What a prompt says to make the stand-in read the secret file with a tool. */
+const READ_SECRET = "READ-THE-NOTES";
+/** Plain text only the secret file holds, which redaction never rewrites. */
+const TOOL_OUTPUT = "TOOL-OUTPUT-5521";
+const SECRET = "sk-live-abcdef1234567890";
+let secretFile: string;
 
 const textOf = (m: ModelMessage) => (typeof m.content === "string" ? m.content : Array.isArray(m.content) ? m.content.map((b: { text?: string }) => b.text ?? "").join("") : "");
 /** The Attache memory blocks in one request to the model. */
@@ -84,7 +108,7 @@ const sessionEnv = () => ({ ...env, COPILOT_OFFLINE: "true", COPILOT_PROVIDER_BA
 /** Run `copilot -p` without blocking this process, which also serves the stand-in model; returns the session id it printed. */
 function promptSession(prompt: string, resume?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = [...(resume ? [`--resume=${resume}`] : []), "-p", prompt, "--no-color", "--no-auto-update"];
+    const args = [...(resume ? [`--resume=${resume}`] : []), "-p", prompt, "--no-color", "--no-auto-update", "--allow-all-tools"];
     const child = spawn(COPILOT!, args, { cwd: join(root, "work"), env: sessionEnv(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: process.platform === "win32" });
     let out = "";
     child.stdout!.on("data", (d) => (out += String(d)));
@@ -139,9 +163,54 @@ while True:
         os.write(fd, b"\\r" if text == "<enter>" else text.encode())
 os.kill(pid, 9)
 `;
+type Type = (line: string) => Promise<void>;
+/**
+ * Run an interactive Copilot CLI against the stand-in model through the PTY driver: `steps` types
+ * lines and waits for the model to be asked about them; closing the terminal afterwards ends the
+ * session the way closing a terminal window does.
+ */
+async function interactive(args: string[], steps: (type: Type, answered: (prompt: string) => Promise<void>) => Promise<void>) {
+  const driver = join(root, "pty-driver.py");
+  writeFileSync(driver, PTY_DRIVER);
+  const before = requests.length;
+  // COPILOT_ALLOW_ALL=true trusts the working folder, so no trust question takes the first keystrokes.
+  const child = spawn(PYTHON!, [driver, COPILOT!, "--no-color", "--no-auto-update", ...args], { cwd: join(root, "work"), env: { ...sessionEnv(), COPILOT_ALLOW_ALL: "true" }, stdio: ["pipe", "pipe", "ignore"] });
+  const closed = new Promise<void>((resolve) => child.on("close", () => resolve()));
+  try {
+    await new Promise<void>((resolve) => child.stdout!.on("data", (d) => String(d).includes("ready") && resolve()));
+    // The footer shows before the session takes input; give it a moment.
+    await new Promise((r) => setTimeout(r, 5_000));
+    const type = async (line: string) => {
+      child.stdin!.write(`${line}\n`);
+      await new Promise((r) => setTimeout(r, 500));
+      child.stdin!.write("<enter>\n");
+    };
+    const answered = async (prompt: string) => {
+      await expect.poll(() => requests.slice(before).some((r) => textOf(r[r.length - 1]!).trim().endsWith(prompt)), { timeout: 60_000, interval: 250 }).toBe(true);
+    };
+    await steps(type, answered);
+  } finally {
+    child.stdin!.end();
+    await closed;
+  }
+}
+
+/** The conversation Attache archived for a Copilot CLI session, or null. */
+const archived = (id: string) => {
+  const dir = join(svc.dataDir, "evidence/sessions/transcripts/copilot-cli");
+  const f = existsSync(dir) ? readdirSync(dir).find((x) => x.includes(id)) : undefined;
+  return f ? readFileSync(join(dir, f), "utf8") : null;
+};
+/** An archived conversation's turns, as "Speaker: text", in order. */
+const turnsOf = (doc: string) => [...doc.matchAll(/^### (Ada Lovelace|Copilot CLI)[^\n]*\n\n([^\n]*)/gm)].map((m) => `${m[1]}: ${m[2]}`);
+const summaryJobs = (id: string) =>
+  (svc.app.db.prepare("select id from jobs where kind = 'session-distill' and json_extract(input, '$.sessionId') = ?").all(id) as Array<{ id: string }>).map((r) => svc.app.jobs.get(r.id)!);
+const spoolSettled = () => expect.poll(() => listSpool(svc.stateDir).length, { timeout: 30_000, interval: 200 }).toBe(0);
+
 const PYTHON = process.platform === "win32" ? null : spawnSync("python3", ["--version"]).status === 0 ? "python3" : null;
 let root: string;
 let sessionId: string;
+let captured: string;
 let env: NodeJS.ProcessEnv;
 const mcp = mcpClients();
 const OWN = '{\n  // the owner\'s own\n  "mcpServers": { "playwright": { "type": "local", "command": "npx", "args": ["@playwright/mcp@latest"], "tools": ["*"] } },\n}\n';
@@ -172,6 +241,9 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     root = mkdtempSync(join(tmpdir(), "attache-copilot-smoke-"));
     for (const d of ["work", "copilot", "cache", "gh"]) mkdirSync(join(root, d));
     writeFileSync(join(root, "copilot", "mcp-config.json"), OWN);
+    // Copilot CLI's tools see the folder's real path (/private/var on macOS).
+    secretFile = join(realpathSync(join(root, "work")), "notes.env");
+    writeFileSync(secretFile, `# ${TOOL_OUTPUT}\nOPENAI_API_KEY=${SECRET}\n`);
     env = {
       ...process.env,
       // The npm package's loader is a Node script.
@@ -249,32 +321,15 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
   });
 
   it.skipIf(!PYTHON)("a session started by /clear in a running Copilot CLI gets today's memory", { timeout: 180_000 }, async () => {
-    const driver = join(root, "pty-driver.py");
-    writeFileSync(driver, PTY_DRIVER);
     const before = requests.length;
-    // COPILOT_ALLOW_ALL=true trusts the working folder, so no trust question takes the first keystrokes.
-    const child = spawn(PYTHON!, [driver, COPILOT!, "--no-color", "--no-auto-update"], { cwd: join(root, "work"), env: { ...sessionEnv(), COPILOT_ALLOW_ALL: "true" }, stdio: ["pipe", "pipe", "ignore"] });
-    const closed = new Promise<void>((resolve) => child.on("close", () => resolve()));
-    try {
-      await new Promise<void>((resolve) => child.stdout!.on("data", (d) => String(d).includes("ready") && resolve()));
-      // The footer shows before the session takes input; give it a moment.
-      await new Promise((r) => setTimeout(r, 5_000));
-      const type = async (line: string) => {
-        child.stdin!.write(`${line}\n`);
-        await new Promise((r) => setTimeout(r, 500));
-        child.stdin!.write("<enter>\n");
-      };
-      const answered = (prompt: string) => expect.poll(() => requests.slice(before).some((r) => textOf(r[r.length - 1]!).trim().endsWith(prompt)), { timeout: 60_000, interval: 250 }).toBe(true);
+    await interactive([], async (type, answered) => {
       await type("before clearing");
       await answered("before clearing");
       await type("/clear");
       await new Promise((r) => setTimeout(r, 3_000));
       await type("after clearing");
       await answered("after clearing");
-    } finally {
-      child.stdin!.end();
-      await closed;
-    }
+    });
     const after = requests.slice(before);
     const first = after.find((r) => textOf(r[r.length - 1]!).trim().endsWith("before clearing"));
     const cleared = after.find((r) => textOf(r[r.length - 1]!).trim().endsWith("after clearing"));
@@ -285,13 +340,65 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     expect(memoryIn(cleared!)[0]).toMatch(/Vega launch/);
   });
 
+  it("saves a session's conversation after the turn and at its end, from events.jsonl, without the tool output it read", { timeout: 120_000 }, async () => {
+    captured = await promptSession(`Look at the notes ${READ_SECRET}`);
+    // The stand-in really made Copilot CLI read the secret file with its view tool.
+    expect(sessionEvents(captured).some((e) => e.type === "tool.execution_complete" && JSON.stringify(e.data).includes(TOOL_OUTPUT))).toBe(true);
+    await expect.poll(() => archived(captured), { timeout: 30_000, interval: 200 }).toBeTruthy();
+    const doc = archived(captured)!;
+    expect(turnsOf(doc)).toEqual([`Ada Lovelace: Look at the notes ${READ_SECRET}`, "Copilot CLI: I read the file and left it alone."]);
+    const cache = readFileSync(join(svc.stateDir, "agents/sessions/copilot-cli", `${captured}.json`), "utf8");
+    for (const text of [doc, cache]) for (const marker of [TOOL_OUTPUT, SECRET, "attache-memory", "Orion migration", "Vega launch"]) expect(text).not.toContain(marker);
+  });
+
+  it("a resumed session's new turns join its conversation, each turn once", { timeout: 120_000 }, async () => {
+    await promptSession("capture follow-up", captured);
+    await expect.poll(() => archived(captured), { timeout: 30_000, interval: 200 }).toMatch(/capture follow-up[\s\S]*pong/);
+    expect(turnsOf(archived(captured)!)).toEqual([`Ada Lovelace: Look at the notes ${READ_SECRET}`, "Copilot CLI: I read the file and left it alone.", "Ada Lovelace: capture follow-up", "Copilot CLI: pong"]);
+  });
+
+  it.skipIf(!PYTHON)("saves the conversation before /compact compacts it, and the turns after it, when the terminal closes", { timeout: 180_000 }, async () => {
+    await spoolSettled();
+    // Every boundary so far was a turn end or a session end; record which summaries ran.
+    const ran = () => summaryJobs(captured).filter((j) => j.status === "succeeded").length;
+    const ranBefore = ran();
+    await interactive([`--resume=${captured}`], async (type, answered) => {
+      await type("before compacting");
+      await answered("before compacting");
+      await type("/compact");
+      await expect.poll(() => sessionEvents(captured).some((e) => e.type === "session.compaction_complete"), { timeout: 60_000, interval: 250 }).toBe(true);
+      // The compaction's spooled copy is summarised straight away, unlike a turn end's, which waits for quiet.
+      await expect.poll(ran, { timeout: 30_000, interval: 250 }).toBeGreaterThan(ranBefore);
+      expect(turnsOf(archived(captured)!).at(-1)).toBe("Copilot CLI: pong");
+      expect(archived(captured)).toContain("before compacting");
+      await type("after compacting");
+      await answered("after compacting");
+    });
+    await spoolSettled();
+    await expect.poll(() => archived(captured), { timeout: 30_000, interval: 200 }).toContain("after compacting");
+    expect(turnsOf(archived(captured)!)).toEqual([
+      `Ada Lovelace: Look at the notes ${READ_SECRET}`,
+      "Copilot CLI: I read the file and left it alone.",
+      "Ada Lovelace: capture follow-up",
+      "Copilot CLI: pong",
+      "Ada Lovelace: before compacting",
+      "Copilot CLI: pong",
+      "Ada Lovelace: after compacting",
+      "Copilot CLI: pong",
+    ]);
+    for (const marker of [TOOL_OUTPUT, SECRET, "attache-memory"]) expect(archived(captured)).not.toContain(marker);
+  });
+
   it("lists no Attache server, and still the owner's, after disconnecting, and a new session gets no memory", { timeout: 120_000 }, async () => {
     const d = await svc.post<{ harness: { failures: string[] } }>("/connections/copilot-cli/disconnect", { deleteData: false });
     expect(d.harness.failures).toEqual([]);
     expect(Object.keys(userServers())).toEqual(["playwright"]);
     expect(readFileSync(join(root, "copilot", "mcp-config.json"), "utf8")).not.toMatch(/attache/);
     expect(readdirSync(join(root, "copilot", "hooks"))).toEqual([]);
-    await promptSession("after disconnecting");
+    const after = await promptSession("after disconnecting");
     expect(memoryIn(requestFor("after disconnecting")!)).toEqual([]);
+    // Nor is it saved: no hook copies it.
+    expect(listSpool(svc.stateDir).filter((r) => r.sessionId === after)).toEqual([]);
+    expect(archived(after)).toBeNull();
   });
 });

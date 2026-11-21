@@ -60,12 +60,12 @@ afterAll(async () => {
 });
 
 describe("Copilot CLI as a Harness Connection", () => {
-  it("is its own Connection that reports MCP access and runtime-fresh memory, no capture, and that Copilot CLI must restart", async () => {
+  it("is its own Connection that reports MCP access, runtime-fresh memory, session capture with a final event, and that Copilot CLI must restart", async () => {
     const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; description: string; harness?: unknown; authMethods: Array<{ id: string }> }> }>("/capabilities")).definitions;
     const def = defs.find((d) => d.kind === "copilot-cli");
-    expect(def).toMatchObject({ label: "Copilot CLI", authMethods: [{ id: "hooks" }], harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" } } });
-    expect(def!.description).toMatch(/give each Copilot CLI session your current Attache memory/);
-    expect(def!.description).not.toMatch(/save your Copilot CLI sessions/);
+    expect(def).toMatchObject({ label: "Copilot CLI", authMethods: [{ id: "hooks" }], harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" } } });
+    expect(def!.description).toMatch(/give each new session your Attache memory/);
+    expect(def!.description).toMatch(/save your Copilot CLI sessions/);
     expect((await connection()).status).not.toBe("connected");
   });
 
