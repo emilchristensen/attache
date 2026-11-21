@@ -1,5 +1,6 @@
 import { integrationFor } from "./integrations.ts";
 import { parseOpenCode } from "./opencode-transcript.ts";
+import { parsePi } from "./pi-transcript.ts";
 import type { ParsedSession } from "./transcripts.ts";
 
 /**
@@ -12,14 +13,17 @@ export interface SessionSource {
   parse(raw: string): ParsedSession;
   /**
    * True when one snapshot may hold only part of a session (OpenCode 2 drops
-   * messages from what it hands a plugin once they are compacted): the service
-   * joins snapshots by the turns' message ids instead of taking the newest.
+   * messages from what it hands a plugin once they are compacted; Pi hands
+   * only the current branch, and a cloned session only what follows its
+   * parent): the service joins snapshots by the turns' message ids instead
+   * of taking the newest.
    */
   partial?: true;
 }
 
 const PLUGIN_SOURCES: Record<string, SessionSource> = {
   opencode: { label: "OpenCode", parse: parseOpenCode, partial: true },
+  pi: { label: "Pi", parse: parsePi, partial: true },
 };
 
 export function sessionSourceFor(kind: string): SessionSource | null {

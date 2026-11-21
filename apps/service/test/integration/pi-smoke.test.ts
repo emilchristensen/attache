@@ -8,14 +8,15 @@ import { startTestService, type TestService } from "./harness.ts";
 
 /**
  * Smoke test against the real Pi executable, in an isolated Pi agent folder: connecting Pi through
- * Attache makes the real Pi register and connect Attache's MCP server and send the Brain's current
- * memory with each model call, without saving it in the session, and disconnecting leaves Pi with no
- * Attache server and no memory. The model is a local stand-in that records what Pi sends it, so no
+ * Attache makes the real Pi register and connect Attache's MCP server, send the Brain's current
+ * memory with each model call without saving it in the session, and save the owner's and Pi's words
+ * (never tool output or memory) through the service; disconnecting leaves Pi with no Attache server,
+ * no memory and no saving. The model is a local stand-in that records what Pi sends it, so no
  * model account is needed. It runs only where `pi` is on PATH (or `ATTACHE_PI_EXECUTABLE` names it)
  * and is skipped otherwise.
  *
- * ADR 0006: Attache may call Pi's MCP access officially supported only while this passes; a failure
- * here withdraws that claim for Pi only.
+ * ADR 0006: Attache may call Pi's MCP access, memory and session capture officially supported only
+ * while this passes; a failure here withdraws those claims for Pi only.
  */
 
 function findPi(): string | null {
@@ -60,6 +61,9 @@ let agentDir: string;
 let model: Server;
 /** The messages of every request Pi sent the stand-in model, oldest first. */
 let requests: Array<Array<{ role: string; content: unknown }>> = [];
+/** A file the stand-in model has Pi read with its tool: its text is tool output. */
+let secretFile: string;
+const TOOL_OUTPUT = "TOOL-OUTPUT-7731";
 
 /** A local OpenAI-compatible model that answers every request with "pong" and records what it was sent. */
 async function startModel(): Promise<number> {
@@ -67,11 +71,20 @@ async function startModel(): Promise<number> {
     let body = "";
     req.on("data", (d) => (body += String(d)));
     req.on("end", () => {
-      requests.push((JSON.parse(body) as { messages: Array<{ role: string; content: unknown }> }).messages);
+      const sent = JSON.parse(body) as { messages: Array<{ role: string; content: unknown }>; tools?: Array<{ function?: { name?: string } }> };
+      requests.push(sent.messages);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const chunk = (choice: object, extra: object = {}) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "stand-in", choices: [{ index: 0, ...choice }], ...extra })}\n\n`);
-      chunk({ delta: { role: "assistant", content: "pong" }, finish_reason: null });
-      chunk({ delta: {}, finish_reason: "stop" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
+      const last = sent.messages[sent.messages.length - 1]!;
+      const usage = { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+      if (last.role === "user" && textOf(last).includes("read the secret file") && sent.tools?.some((t) => t.function?.name === "read")) {
+        // Ask Pi to run its read tool on a file whose text must never be saved.
+        chunk({ delta: { role: "assistant", tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "read", arguments: JSON.stringify({ path: secretFile }) } }] }, finish_reason: null });
+        chunk({ delta: {}, finish_reason: "tool_calls" }, usage);
+      } else {
+        chunk({ delta: { role: "assistant", content: last.role === "tool" ? "I read it and left it alone" : "pong" }, finish_reason: null });
+        chunk({ delta: {}, finish_reason: "stop" }, usage);
+      }
       res.end("data: [DONE]\n\n");
     });
   });
@@ -141,7 +154,10 @@ async function drivePi(steps: Array<{ prompt: string } | { compact: true } | { b
       }
     }
   } finally {
+    // SIGTERM: Pi closes the session (session_shutdown) before it exits.
+    const exited = new Promise((r) => child.once("exit", r));
     child.kill();
+    await exited;
   }
 }
 
@@ -182,6 +198,8 @@ describe.skipIf(!PI)("the real Pi executable", () => {
     agentDir = join(work, "agent");
     // Both Attache and Pi use this agent folder, so the owner's real ~/.pi is never touched.
     process.env.PI_CODING_AGENT_DIR = agentDir;
+    secretFile = join(work, "secret.txt");
+    writeFileSync(secretFile, `# ${TOOL_OUTPUT}\nOPENAI_API_KEY=sk-live-abcdef1234567890\n`);
     writeFileSync(join(work, "model.ts"), modelExtension(await startModel()));
     mkdirSync(join(work, "sessions"));
     // Keep almost nothing on compaction, so a two-prompt session can be compacted.
@@ -242,6 +260,32 @@ describe.skipIf(!PI)("the real Pi executable", () => {
     expect(saved).not.toContain("Orion migration is on track");
   });
 
+  it("saves the owner's and Pi's words as one session, at each prompt's end, before a compaction, on quitting and after a resume, never tool output, memory or summaries", { timeout: 180_000 }, async () => {
+    const before = new Set(readdirSync(join(work, "sessions")));
+    await drivePi([{ prompt: "Should the cutover wait for the audit?" }, { prompt: "please read the secret file" }, { compact: true }, { prompt: "Ship it on Saturday" }]);
+    const file = readdirSync(join(work, "sessions")).find((f) => !before.has(f))!;
+    const sessionId = JSON.parse(readFileSync(join(work, "sessions", file), "utf8").split("\n")[0]!).id as string;
+    // Pi itself kept the tool output in its session file; Attache must not.
+    expect(readFileSync(join(work, "sessions", file), "utf8")).toContain(TOOL_OUTPUT);
+    const archived = () => {
+      const dir = join(svc.dataDir, "evidence/sessions/transcripts/pi");
+      const f = existsSync(dir) ? readdirSync(dir).find((x) => x.includes(sessionId)) : undefined;
+      return f ? readFileSync(join(dir, f), "utf8") : "";
+    };
+    const turnsOf = (doc: string) => [...doc.matchAll(/^### (\S+)[^\n]*\n\n([^\n]*)/gm)].map((m) => `${m[1]}: ${m[2]}`);
+    const said = ["Ada: Should the cutover wait for the audit?", "Pi: pong", "Ada: please read the secret file", "Pi: I read it and left it alone", "Ada: Ship it on Saturday", "Pi: pong"];
+    await expect.poll(() => turnsOf(archived()), { timeout: 30_000 }).toEqual(said);
+    await drivePi([{ prompt: "Anything else after resuming?" }], { resume: true });
+    await expect.poll(() => turnsOf(archived()), { timeout: 30_000 }).toEqual([...said, "Ada: Anything else after resuming?", "Pi: pong"]);
+    const doc = archived();
+    for (const marker of [TOOL_OUTPUT, "attache-memory", "is on track", "<summary>", "read-files"]) expect(doc).not.toContain(marker);
+    const cache = readFileSync(join(svc.stateDir, "agents/sessions/pi", `${sessionId.replace(/[^A-Za-z0-9_-]/g, "")}.json`), "utf8");
+    for (const marker of [TOOL_OUTPUT, "attache-memory", "is on track"]) expect(cache).not.toContain(marker);
+    // Quitting the session queued its summary straight away (a prompt's end alone waits for quiet).
+    const jobs = svc.app.db.prepare("select status, run_after from jobs where kind = 'session-distill' and json_extract(input, '$.sessionId') = ?").all(sessionId) as Array<{ status: string; run_after: string | null }>;
+    expect(jobs.length).toBeGreaterThan(0);
+  });
+
   it("leaves Pi with no Attache server and no Attache memory after disconnecting", { timeout: 120_000 }, async () => {
     const d = await svc.post<{ harness: { failures: string[] } }>("/connections/pi/disconnect", { deleteData: false });
     expect(d.harness.failures).toEqual([]);
@@ -250,8 +294,12 @@ describe.skipIf(!PI)("the real Pi executable", () => {
     expect(r.servers.filter((s) => s.name.startsWith("attache"))).toEqual([]);
     expect(r.tools.filter((t) => t.namespace.startsWith("mcp__attache"))).toEqual([]);
     requests = [];
+    const spool = join(svc.stateDir, "agents", "spool");
     await drivePi([{ prompt: "after disconnecting" }]);
     expect(requests.length).toBeGreaterThan(0);
     for (const r of requests) expect(memoryIn(r)).toEqual([]);
+    // Nor are its sessions saved any more.
+    expect(readdirSync(spool).filter((f) => f.endsWith(".json"))).toEqual([]);
+    expect(svc.app.db.prepare("select count(*) as n from agent_sessions where title = 'after disconnecting'").get()).toEqual({ n: 0 });
   });
 });
