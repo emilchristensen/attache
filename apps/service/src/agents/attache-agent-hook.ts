@@ -64,7 +64,8 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (!agent || !profile || !stateDir || !HOOK_EVENTS.includes(event as HookEvent)) return "";
   // Sessions that tools start on their own (Attache's model calls, other Agent SDK scripts) are not the user's work.
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return "";
-  const input = profile.parse(readStdin());
+  const payload = readStdin();
+  const input = profile.parse(payload);
   if (event === "session-start") {
     // The session's own folder decides which project's context it gets; the hook never asks the service.
     const context = sessionContext(stateDir, input.cwd, env);
@@ -72,6 +73,7 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   }
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
     const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;
+    if (sourcePath) profile.awaitTranscript?.(sourcePath, event as HookEvent, payload);
     spoolCapture(stateDir, { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath });
   }
   return "";

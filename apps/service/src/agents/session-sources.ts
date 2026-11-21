@@ -1,3 +1,4 @@
+import { parseCopilotCli } from "./copilot-cli-transcript.ts";
 import { integrationFor } from "./integrations.ts";
 import { parseOpenCode } from "./opencode-transcript.ts";
 import { parsePi } from "./pi-transcript.ts";
@@ -5,8 +6,9 @@ import type { ParsedSession } from "./transcripts.ts";
 
 /**
  * Where the service learns how to read a Harness's spooled sessions: the
- * hook Harnesses' own transcript parsers, plus Harnesses whose plugin spools
- * snapshots itself.
+ * hook Harnesses' own transcript parsers, plus the Harnesses connected
+ * through their own adapters (ADR 0006): plugins that spool snapshots
+ * themselves, and Copilot CLI, whose hooks copy its transcript.
  */
 export interface SessionSource {
   label: string;
@@ -19,11 +21,19 @@ export interface SessionSource {
    * of taking the newest.
    */
   partial?: true;
+  /**
+   * True when the parser names a problem for anything it cannot read, so a
+   * transcript that gives no turns and no problem had nothing said in it
+   * (Copilot CLI writes its file before the first prompt): no failure.
+   */
+  strict?: true;
 }
 
 const PLUGIN_SOURCES: Record<string, SessionSource> = {
   opencode: { label: "OpenCode", parse: parseOpenCode, partial: true },
   pi: { label: "Pi", parse: parsePi, partial: true },
+  // Copilot CLI's hooks copy its whole events.jsonl, which it only appends to: each copy holds every earlier one.
+  "copilot-cli": { label: "Copilot CLI", parse: parseCopilotCli, strict: true },
 };
 
 export function sessionSourceFor(kind: string): SessionSource | null {
