@@ -4,7 +4,10 @@ import { dirname, join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { AgentHooks } from "../src/agents/install.ts";
 import { harnessAdapters } from "../src/agents/harness-adapters.ts";
-import { writeContextFiles } from "../src/agents/context-files.ts";
+import { removeContextFiles, writeContextFiles } from "../src/agents/context-files.ts";
+import { listSpool, spoolCopyPath } from "../src/agents/spool.ts";
+import { parsePi } from "../src/agents/pi-transcript.ts";
+import { HEADER, assistant, normal, text, user } from "./fixtures/agents/pi.ts";
 
 /**
  * Pi (earendil-works/pi) through its official extension API: Attache owns one
@@ -70,6 +73,10 @@ async function loadExtension(path: string) {
     registerMcpServer: (name: string, config: never) => registered.push({ name, config }),
     on: (event: string, handler: Handler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
   });
+  /** Run every handler of one Pi event, as Pi awaits them. */
+  const emit = async (event: string, payload: Record<string, unknown>, ctx: unknown) => {
+    for (const h of handlers.get(event) ?? []) await h({ type: event, ...payload }, ctx);
+  };
   /** What Pi sends the model on one call: the messages after every `context` handler, as Pi chains them. */
   const context = async (messages: PiMessage[], cwd: string): Promise<PiMessage[]> => {
     let current = messages;
@@ -79,7 +86,7 @@ async function loadExtension(path: string) {
     }
     return current;
   };
-  return { registered, handlers, context };
+  return { registered, handlers, context, emit };
 }
 const load = async (path: string) => (await loadExtension(path)).registered;
 
@@ -248,8 +255,8 @@ describe("finding Pi", () => {
     expect(pi().detect(home)).toBe(true);
   });
 
-  it("reports MCP access and runtime-fresh memory, no session capture, and that a running Pi must reload", () => {
-    expect({ ...pi().capabilities, restartRequired: pi().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "none", restartRequired: true });
+  it("reports MCP access, runtime-fresh memory, session capture with a final event, and that a running Pi must reload", () => {
+    expect({ ...pi().capabilities, restartRequired: pi().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "with-final-event", restartRequired: true });
   });
 });
 
@@ -308,5 +315,104 @@ describe("Attache memory in Pi sessions", () => {
     const files = readdirSync(EXTENSIONS()).map((f) => join(EXTENSIONS(), f));
     const sent = await Promise.all(files.map(async (f) => memoryOf(await (await loadExtension(f)).context([user("hi")], home))[0]!.content));
     expect(sent.sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
+  });
+});
+
+describe("saving Pi sessions", () => {
+  // Session capture follows the Agent sessions feature, as memory does: the service keeps these files only while it is on.
+  beforeEach(() => writeContextFiles(stateDir, "Memory\n", []));
+
+  const spooled = () => listSpool(stateDir).map((r) => ({ event: r.event, agent: r.agent, sessionId: r.sessionId, cwd: r.cwd, parsed: parsePi(readFileSync(spoolCopyPath(stateDir, r)!, "utf8")) }));
+
+  /** Pi's session manager as an extension's handlers see it: one session file, its header and its current branch. */
+  function piSession(branch: unknown[], opts: { file?: string | undefined; header?: Record<string, unknown> } = {}) {
+    const header = opts.header ?? HEADER;
+    const file = "file" in opts ? opts.file : at("sessions", "s.jsonl");
+    const sessionManager = { getSessionFile: () => file, getSessionId: () => header.id, getHeader: () => header, getBranch: () => structuredClone(branch), getCwd: () => header.cwd };
+    return { ctx: { cwd: at("work"), sessionManager }, branch };
+  }
+
+  it("spools the session's whole branch when Pi settles after a run, for the service to save", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const entries = normal();
+    await ext.emit("agent_settled", { aborted: false }, piSession(entries.slice(0, 5)).ctx);
+    await ext.emit("agent_settled", { aborted: false }, piSession(entries).ctx);
+    const [first, second] = spooled();
+    expect(first).toMatchObject({ event: "turn-end", agent: "pi", sessionId: HEADER.id, cwd: "/work/orion" });
+    expect(first!.parsed.turns.map((t) => t.text)).toEqual(["Should the cutover wait for the audit?", "Yes: we decided to wait, because the audit closes Friday."]);
+    expect(second!.parsed.turns).toHaveLength(4);
+    expect(second!.parsed.problem).toBeUndefined();
+  });
+
+  it("spools before a compaction, and once more when the session closes: a session end on quitting or leaving it, a turn's end on a reload", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const { ctx } = piSession(normal());
+    await ext.emit("session_before_compact", { reason: "manual", willRetry: false }, ctx);
+    await ext.emit("session_shutdown", { reason: "reload" }, ctx);
+    for (const reason of ["quit", "new", "resume", "fork"]) await ext.emit("session_shutdown", { reason }, ctx);
+    expect(spooled().map((r) => [r.event, r.parsed.turns.length])).toEqual([
+      ["pre-compact", 4],
+      ["turn-end", 4],
+      ["session-end", 4],
+      ["session-end", 4],
+      ["session-end", 4],
+      ["session-end", 4],
+    ]);
+  });
+
+  it("never spools a session Pi keeps no file for: --no-session runs, as Pi's subagent example starts its subagents", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const { ctx } = piSession(normal(), { file: undefined });
+    await ext.emit("agent_settled", { aborted: false }, ctx);
+    await ext.emit("session_shutdown", { reason: "quit" }, ctx);
+    expect(spooled()).toEqual([]);
+  });
+
+  it("a session cloned or forked from another names where it left its parent, so only its own turns are saved under it", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const parent = normal();
+    const parentFile = at("sessions", "parent.jsonl");
+    write(parentFile, [HEADER, ...parent].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    const child = [...parent, user("In the clone", 10), assistant([text("Cloned answer")], 11)];
+    const { ctx } = piSession(child, { header: { ...HEADER, id: "child-session", parentSession: parentFile } });
+    await ext.emit("agent_settled", { aborted: false }, ctx);
+    const [r] = spooled();
+    expect(r).toMatchObject({ sessionId: "child-session" });
+    expect(r!.parsed.turns.map((t) => t.text)).toEqual(["In the clone", "Cloned answer"]);
+  });
+
+  it("a clone whose parent session file is gone keeps all its turns: they are then the only copy", async () => {
+    pi().apply();
+    const ext = await loadExtension(ours());
+    const { ctx } = piSession(normal(), { header: { ...HEADER, id: "child-session", parentSession: at("sessions", "deleted.jsonl") } });
+    await ext.emit("agent_settled", { aborted: false }, ctx);
+    expect(spooled()[0]!.parsed.turns).toHaveLength(4);
+  });
+
+  it("spools nothing while the Agent sessions feature is off, and never breaks the session when Pi's session manager fails", async () => {
+    removeContextFiles(stateDir);
+    pi().apply();
+    const ext = await loadExtension(ours());
+    await ext.emit("agent_settled", { aborted: false }, piSession(normal()).ctx);
+    expect(spooled()).toEqual([]);
+    writeContextFiles(stateDir, "Memory\n", []);
+    const broken = { cwd: home, sessionManager: { getSessionFile: () => "/x.jsonl", getHeader: () => HEADER, getBranch: () => { throw new Error("stale ctx"); } } };
+    await expect(ext.emit("agent_settled", { aborted: false }, broken)).resolves.toBeUndefined();
+    await expect(ext.emit("session_shutdown", { reason: "quit" }, {})).resolves.toBeUndefined();
+    expect(spooled()).toEqual([]);
+  });
+
+  it("another Attache instance's extension spools into its own instance", async () => {
+    const other = tempDir("attache-pi-other-state-");
+    writeContextFiles(other, "Theirs\n", []);
+    pi().apply();
+    piFor(other).apply();
+    for (const f of readdirSync(EXTENSIONS())) await (await loadExtension(join(EXTENSIONS(), f))).emit("agent_settled", { aborted: false }, piSession(normal()).ctx);
+    expect(listSpool(stateDir)).toHaveLength(1);
+    expect(listSpool(other)).toHaveLength(1);
   });
 });

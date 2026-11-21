@@ -521,18 +521,24 @@ An adapter with `manualSetup` (Pi) can be connected even when `detect` finds not
 
 ### Pi
 
-Pi connects through its own extension API (`agents/pi-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
+Pi connects through its own extension API (`agents/pi-adapter.ts`), with MCP access, runtime-fresh memory and session capture with a final event.
 Attache writes one extension per instance, `<agent dir>/extensions/attache.ts` (`attache-<hash>.ts` for another instance), where the agent dir is `~/.pi/agent` or `PI_CODING_AGENT_DIR`.
 Pi loads it on its own and it calls `pi.registerMcpServer` with the same `attache mcp --state-dir <state>` command as every other Harness, `exposure: "direct"`, so the tools are declared to the model; Pi keeps that registration for the session only, so Pi's `mcp.json` and `settings.json` are never written.
 They are read only to refuse a setup the registration could not work in: a file that does not parse, `-builtin:mcp` in `settings.json`, or a same-name server in `mcp.json`, which Pi would use instead.
 The same extension handles Pi's `context` event, which runs before every model call: it imports this install's hook script, reads the session context the service keeps for the session's folder (`sessionContext`, the same choice of project or global file as the session-start hook), and puts it ahead of the conversation as a custom message of type `attache-memory`, its text wrapped in `<attache-memory>` tags.
 Pi does not save what a `context` handler adds, so a resumed or compacted session never carries old memory, and Pi's compaction summaries are written without it; the handler also drops any earlier `attache-memory` message before adding the current one.
 Transcript parsers strip `<attache-memory>` blocks with the other injected tags, and a Pi parser must drop `attache-memory` custom messages.
+The same extension saves sessions: on `agent_settled` (Pi is done with a prompt; spooled as `turn-end`), `session_before_compact` (`pre-compact`) and `session_shutdown` (`session-end`, or `turn-end` for a `/reload`, which goes on with the same session) it hands the hook script's `spoolSession` a snapshot `{attache: "pi-session", v: 1, header, forkedAt, entries}` of `ctx.sessionManager.getBranch()`.
+Pi keeps compacted messages on the branch, so each snapshot holds the branch's whole conversation; Pi runs `session_shutdown` on quitting, Ctrl+C, Ctrl+D, SIGHUP and SIGTERM and awaits the handler, so only a killed or crashed Pi can lose its newest turn.
+Sessions without a file (`--no-session`, which Pi's subagent example uses for its subagents) are never spooled.
+A clone or fork copies its parent's entries with their ids, so the extension reads the parent file named in `header.parentSession` and sets `forkedAt` to the last copied entry; only what follows is saved under the new session.
+`agents/pi-transcript.ts:parsePi` keeps `message` entries with role `user` or `assistant`, text blocks only, drops system, tool results, `!` commands, custom messages and summaries, strips `/skill:name` instructions and injected tags, and gives each turn its entry id; the service joins snapshots by id (`partial` session source), so turns saved from a branch the owner later leaves with `/tree` stay and the new branch's turns follow.
+An unknown session version, entry type or message role yields no turns and a `problem` naming the Pi format, which the service logs and puts on the Connection.
 The hook script is loaded only when a model call needs memory, so a missing script costs the memory and never the MCP registration.
 Memory follows the Agent sessions feature: while it is off the service removes the context files and the extension adds nothing.
 The file's first line starts with `// Managed by Attache: ` and its ownership line names its state folder; a file in its place without them is left alone, and a file an earlier version wrote is still recognised and upgraded.
 A running Pi needs `/reload` (or a new session) to load a change, so the adapter reports a restart.
-`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, that every model call carries the Brain's current memory after a Brain change, a compaction and a resume while the session file never contains it, and that both are gone after disconnecting.
+`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, that every model call carries the Brain's current memory after a Brain change, a compaction and a resume while the session file never contains it, that a session with a tool call, a compaction, a quit and a resume is archived as the owner's and Pi's words only, and that MCP, memory and saving are all gone after disconnecting.
 It answers model calls from a local stand-in model the test starts, so it needs no model account.
 
 ### OpenCode

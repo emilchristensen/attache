@@ -68,12 +68,12 @@ afterAll(async () => {
 });
 
 describe("Pi as a Harness Connection", () => {
-  it("is its own Connection that reports MCP access and memory, no session capture, and that a running Pi must reload", async () => {
+  it("is its own Connection that reports MCP access, memory and session capture, and that a running Pi must reload", async () => {
     const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; harness?: unknown; authMethods: Array<{ id: string }> }> }>("/capabilities")).definitions;
     const def = defs.find((d) => d.kind === "pi");
-    expect(def).toMatchObject({ label: "Pi", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" } } });
+    expect(def).toMatchObject({ label: "Pi", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" } } });
     expect((def as { description?: string }).description).toMatch(/memory/);
-    expect((def as { description?: string }).description).not.toMatch(/save your Pi sessions/);
+    expect((def as { description?: string }).description).toMatch(/save your Pi sessions/);
     expect((await connection()).status).not.toBe("connected");
   });
 

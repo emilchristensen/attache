@@ -25,6 +25,16 @@ import type { HarnessAdapter } from "./harness-adapters.ts";
  * conversation for that call only. Pi does not save what a `context` handler
  * adds, so a resumed or compacted session never carries old memory, and
  * session capture never reads it as the owner's words.
+ *
+ * And it saves sessions (session capture with a final event): when Pi
+ * settles after a run (`agent_settled`), before each compaction and when a
+ * session closes (`session_shutdown`, which Pi also runs on Ctrl+C, Ctrl+D,
+ * SIGHUP and SIGTERM), it hands the hook script's `spoolSession` the
+ * session's current branch, which the service normalises
+ * (agents/pi-transcript.ts) and joins by entry id. Sessions without a file
+ * (`--no-session`, which Pi's subagent example uses for its subagents) are
+ * never saved; a clone or fork names the last entry it copied from its
+ * parent, so the parent's turns are not saved twice.
  */
 
 /**
@@ -33,9 +43,9 @@ import type { HarnessAdapter } from "./harness-adapters.ts";
  * earlier version wrote is still recognised as this instance's.
  */
 const OWNER = "// Managed by Attache: ";
-const MARKER = `${OWNER}registers this Attache instance's MCP server and gives its memory to each Pi session.`;
+const MARKER = `${OWNER}registers this Attache instance's MCP server, gives its memory to each Pi session and saves Pi sessions in it.`;
 const INSTANCE = "// attache-instance: ";
-const PURPOSE = "Attache's Pi extension, which registers Attache's MCP server and gives your Attache memory to each Pi session";
+const PURPOSE = "Attache's Pi extension, which registers Attache's MCP server, gives your Attache memory to each Pi session and saves your Pi sessions";
 
 /**
  * How Attache's memory is marked in what Pi sends the model: a custom message
@@ -74,15 +84,61 @@ export function piExtensionText(stateDir: string, server: string, hook: string):
     "",
     "let hook;",
     "",
+    "/** This install's hook script, which reads memory and spools sessions; null when Attache moved or is gone (tried again next time). */",
+    "async function loadHook() {",
+    "  try {",
+    "    hook ??= import(HOOK);",
+    "    return await hook;",
+    "  } catch {",
+    "    hook = undefined;",
+    "    return null;",
+    "  }",
+    "}",
+    "",
     "/** The Brain's current memory for a session in `folder`, or null; read from the files Attache keeps up to date. */",
     "async function memory(folder) {",
     "  try {",
-    "    hook ??= import(HOOK);",
-    "    return (await hook).sessionContext(STATE_DIR, folder);",
+    "    return (await loadHook())?.sessionContext(STATE_DIR, folder) ?? null;",
     "  } catch {",
-    "    // Attache moved or is gone: try again on the next call, and never break the session.",
-    "    hook = undefined;",
+    "    // Never break the session.",
     "    return null;",
+    "  }",
+    "}",
+    "",
+    "/** Entry ids of a parent session's file, by path; null when it cannot be read. */",
+    "const parents = new Map();",
+    "async function parentIds(path) {",
+    "  if (!parents.has(path)) {",
+    "    let ids = null;",
+    "    try {",
+    "      const { readFileSync } = await import(\"node:fs\");",
+    "      ids = new Set(readFileSync(path, \"utf8\").split(\"\\n\").flatMap((l) => { try { const e = JSON.parse(l); return e && typeof e.id === \"string\" && e.type !== \"session\" ? [e.id] : []; } catch { return []; } }));",
+    "    } catch {",
+    "      // The parent is gone: this session's copy of its turns is then the only one.",
+    "    }",
+    "    parents.set(path, ids);",
+    "  }",
+    "  return parents.get(path);",
+    "}",
+    "",
+    "/**",
+    " * Hand the session's current branch to Attache, which saves the owner's and the assistant's words from it.",
+    " * A session Pi keeps no file for (--no-session, as subagents run) is never saved.",
+    " */",
+    "async function save(event, ctx) {",
+    "  try {",
+    "    const sm = ctx && ctx.sessionManager;",
+    "    if (!sm || !sm.getSessionFile()) return;",
+    "    const header = sm.getHeader();",
+    "    const entries = sm.getBranch();",
+    "    let forkedAt = null;",
+    "    // A clone or fork copies its parent's entries, ids and all; those were saved with the parent.",
+    "    const inherited = header && typeof header.parentSession === \"string\" ? await parentIds(header.parentSession) : null;",
+    "    if (inherited) for (const e of entries) if (inherited.has(e.id)) forkedAt = e.id;",
+    "    const snapshot = { attache: \"pi-session\", v: 1, header, forkedAt, entries };",
+    "    (await loadHook())?.spoolSession(STATE_DIR, { agent: \"pi\", event, sessionId: header.id, cwd: header.cwd ?? ctx.cwd ?? null }, JSON.stringify(snapshot));",
+    "  } catch {",
+    "    // Never break the session; the next run saves it again.",
     "  }",
     "}",
     "",
@@ -96,6 +152,11 @@ export function piExtensionText(stateDir: string, server: string, hook: string):
     `    const content = "<${ATTACHE_MEMORY_TAG}>\\n" + text.trim() + "\\n</${ATTACHE_MEMORY_TAG}>";`,
     "    return { messages: [{ role: \"custom\", customType: MEMORY, content, display: false, timestamp: 0 }, ...messages] };",
     "  });",
+    "  // When Pi is done with a prompt and will not go on by itself: the end of a turn.",
+    "  pi.on(\"agent_settled\", (_event, ctx) => save(\"turn-end\", ctx));",
+    "  pi.on(\"session_before_compact\", (_event, ctx) => save(\"pre-compact\", ctx));",
+    "  // Pi closes a session on quitting (Ctrl+C, Ctrl+D, SIGHUP, SIGTERM) and when switching, forking or reloading; a reload goes on with the same session.",
+    "  pi.on(\"session_shutdown\", (event, ctx) => save(event && event.reason === \"reload\" ? \"turn-end\" : \"session-end\", ctx));",
     "}",
     "",
   ].join("\n");
@@ -171,11 +232,11 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
   const adapter: HarnessAdapter = {
     kind: "pi",
     label: "Pi",
-    capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" },
+    capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" },
     restartRequired,
     manualSetup: true,
     setupNote:
-      "Attache adds one extension to Pi's extensions folder that registers Attache's MCP server each time Pi starts a session, for that session only, and sends your current Attache memory with every model call without saving it in the session, so resumed and compacted sessions always see today's memory; your Pi settings, mcp.json and other extensions are not changed. Memory needs the Agent sessions feature on. Needs Pi 0.99.0 or later with its built-in MCP support on. Run /reload in a Pi session that is already open, or start a new one. If Pi was not found, you can still connect: Attache uses ~/.pi/agent, or PI_CODING_AGENT_DIR when the Attache service has it set.",
+      "Attache adds one extension to Pi's extensions folder that registers Attache's MCP server each time Pi starts a session, for that session only, and sends your current Attache memory with every model call without saving it in the session, so resumed and compacted sessions always see today's memory; your Pi settings, mcp.json and other extensions are not changed. It also saves your Pi sessions as they go: each time Pi finishes a prompt, before each compaction and when a session closes, Attache keeps your words and Pi's answers, never tool output, Attache's memory, other extensions' messages or sessions run with --no-session, such as subagents. Pi reports closing on Ctrl+C, Ctrl+D and when it is stopped, so only the newest turn of a Pi that is killed or crashes can be missed. Memory and saving need the Agent sessions feature on. Needs Pi 0.99.0 or later with its built-in MCP support on. Run /reload in a Pi session that is already open, or start a new one. If Pi was not found, you can still connect: Attache uses ~/.pi/agent, or PI_CODING_AGENT_DIR when the Attache service has it set.",
     detect: (home) => (process.env.PI_CODING_AGENT_DIR ? true : piInstall(locationsForHome(home)).presence.some((p) => existsSync(p))),
     preview: () => ({ changes: plan(), restartRequired }),
     apply: () => {
@@ -197,7 +258,7 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
         const text = current();
         if (text === null) return { state: "missing", message: `Attache's Pi extension is not in ${path}. Set up again to fix it.`, files: [] };
         if (text !== expected()) return { state: "stale", message: `Attache's Pi extension ${path} is out of date. Set up again to fix it.`, files: [path] };
-        return { state: "current", message: `Attache's Pi extension ${path}, which registers Attache's MCP server in each Pi session`, files: [path] };
+        return { state: "current", message: `Attache's Pi extension ${path}, which registers Attache's MCP server, gives your memory to and saves each Pi session`, files: [path] };
       } catch (e) {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
