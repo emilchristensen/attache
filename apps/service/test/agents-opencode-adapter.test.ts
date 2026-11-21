@@ -4,7 +4,10 @@ import { dirname, join } from "node:path";
 import { tempDir } from "./helpers.ts";
 import { AgentHooks } from "../src/agents/install.ts";
 import { harnessAdapters } from "../src/agents/harness-adapters.ts";
-import { writeContextFiles } from "../src/agents/context-files.ts";
+import { removeContextFiles, writeContextFiles } from "../src/agents/context-files.ts";
+import { listSpool, spoolCopyPath } from "../src/agents/spool.ts";
+import { parseOpenCode } from "../src/agents/opencode-transcript.ts";
+import { v1Normal, v2Assistant, v2User } from "./fixtures/agents/opencode.ts";
 
 /**
  * OpenCode through its official plugin API: Attache owns one plugin file per
@@ -321,8 +324,10 @@ describe("OpenCode versions", () => {
     expect(openCode().detect(home)).toBe(true);
   });
 
-  it("reports MCP access and runtime-fresh memory, no session capture, and that a running OpenCode must restart", () => {
-    expect({ ...openCode().capabilities, restartRequired: openCode().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "none", restartRequired: true });
+  it("reports MCP access, runtime-fresh memory, session capture without a final event, and that a running OpenCode must restart", () => {
+    expect({ ...openCode().capabilities, restartRequired: openCode().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "without-final-event", restartRequired: true });
+    // OpenCode has no session end: the Connection must say what that costs.
+    expect(openCode().setupNote).toMatch(/no session-end event[^.]*\.[^.]*turn still running when OpenCode quits can be missed/);
   });
 });
 
@@ -381,8 +386,8 @@ describe("Attache memory in OpenCode sessions", () => {
     writeContextFiles(stateDir, "Orion is on track.\n", []);
     openCode().apply();
     const s = await v2Session(ours(), home);
-    // The context hook runs for the agent loop only; compaction and titles have hooks of their own, which Attache leaves alone.
-    expect(s.hooks).toEqual(["context"]);
+    // The context hook runs for the agent loop only; compaction and titles have hooks of their own, which never get memory.
+    expect(s.hooks).toContain("context");
     expect(await s.call()).toEqual(["You are OpenCode.", "<attache-memory>\nOrion is on track.\n</attache-memory>"]);
     writeContextFiles(stateDir, "Orion slipped a week.\n", []);
     expect(memoryIn(await s.call())).toEqual(["<attache-memory>\nOrion slipped a week.\n</attache-memory>"]);
@@ -438,5 +443,120 @@ describe("Attache memory in OpenCode sessions", () => {
     const files = readdirSync(PLUGINS()).map((f) => join(PLUGINS(), f));
     const sent = await Promise.all(files.map(async (f) => memoryIn(await (await v2Session(f, home)).call())[0]));
     expect(sent.sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
+  });
+});
+
+/** The session snapshots Attache's plugin spooled, parsed, oldest first. */
+function spooled() {
+  return listSpool(stateDir).map((r) => ({ event: r.event, agent: r.agent, sessionId: r.sessionId, cwd: r.cwd, parsed: parseOpenCode(readFileSync(spoolCopyPath(stateDir, r)!, "utf8")) }));
+}
+
+/** OpenCode 1 as the plugin sees it: a client that answers for one session, and the plugin's `event`, compaction and `dispose` hooks. */
+async function v1Host(path: string, directory: string, session: { messages: unknown[]; parentID?: string }) {
+  type V1Hooks = Record<string, (input: Record<string, unknown>, output?: Record<string, unknown>) => Promise<void>>;
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { server: (input: unknown) => Promise<V1Hooks> } };
+  const client = {
+    session: {
+      get: async ({ path: p }: { path: { id: string } }) => ({ data: { id: p.id, title: "Plan the Orion cutover", directory, ...(session.parentID ? { parentID: session.parentID } : {}) } }),
+      messages: async () => ({ data: session.messages }),
+    },
+  };
+  const hooks = await mod.default.server({ directory, client });
+  return {
+    idle: (sessionID = "ses_1") => hooks.event!({ event: { type: "session.status", properties: { sessionID, status: { type: "idle" } } } }),
+    busy: (sessionID = "ses_1") => hooks.event!({ event: { type: "session.status", properties: { sessionID, status: { type: "busy" } } } }),
+    compacting: (sessionID = "ses_1") => hooks["experimental.session.compacting"]!({ sessionID }, { context: [] }),
+    dispose: () => hooks.dispose!({}),
+  };
+}
+
+/** OpenCode 2 as the plugin sees it: `ctx.session.get`/`context` for one session, and the hooks and cleanup the plugin registered. */
+async function v2Host(path: string, directory: string, session: { context: unknown[]; parentID?: string }) {
+  const registered: Record<string, (e: Record<string, unknown>) => Promise<void> | void> = {};
+  const mod = (await import(`${path}?v=${Math.random()}`)) as { default: { setup: (ctx: unknown) => Promise<(() => Promise<void>) | void> } };
+  const cleanup = await mod.default.setup({
+    location: { directory },
+    mcp: { transform: async () => ({ dispose: async () => {} }) },
+    session: {
+      hook: async (name: string, cb: (typeof registered)[string]) => ((registered[name] = cb), { dispose: async () => {} }),
+      get: async ({ sessionID }: { sessionID: string }) => ({ id: sessionID, title: "Plan the Orion cutover", location: { directory }, ...(session.parentID ? { parentID: session.parentID } : {}) }),
+      context: async () => session.context,
+    },
+  });
+  return {
+    hooks: Object.keys(registered).sort(),
+    idle: (sessionID = "ses_1") => registered["experimental.idle"]!({ sessionID, background: [] }),
+    compaction: (messages: unknown[], sessionID = "ses_1") => registered.compaction!({ sessionID, messages }),
+    cleanup: () => cleanup?.(),
+  };
+}
+
+describe("saving OpenCode sessions", () => {
+  // Session capture follows the Agent sessions feature, as memory does: the service keeps these files only while it is on.
+  beforeEach(() => writeContextFiles(stateDir, "Memory\n", []));
+
+  it("OpenCode 1: spools the whole session each time a turn ends, for the service to save", async () => {
+    openCode().apply();
+    const session = { messages: v1Normal().slice(0, 2) };
+    const s = await v1Host(ours(), at("work"), session);
+    await s.busy();
+    expect(spooled()).toEqual([]);
+    await s.idle();
+    session.messages = v1Normal();
+    await s.idle();
+    const [first, second] = spooled();
+    expect(first).toMatchObject({ event: "turn-end", agent: "opencode", sessionId: "ses_1", cwd: at("work") });
+    expect(first!.parsed.turns.map((t) => t.text)).toEqual(["Should the cutover wait for the audit?", "Yes: we decided to wait, because the audit closes Friday."]);
+    expect(second!.parsed.turns).toHaveLength(4);
+    expect(second!.parsed.title).toBe("Plan the Orion cutover");
+  });
+
+  it("OpenCode 1: spools the session before a compaction, and once more when OpenCode unloads the plugin", async () => {
+    openCode().apply();
+    const s = await v1Host(ours(), at("work"), { messages: v1Normal() });
+    await s.compacting();
+    await s.dispose();
+    expect(spooled().map((r) => [r.event, r.parsed.turns.length])).toEqual([
+      ["pre-compact", 4],
+      ["turn-end", 4],
+    ]);
+  });
+
+  it("OpenCode 2: spools the session's context when a turn ends, and the messages it is about to compact before a compaction", async () => {
+    openCode().apply();
+    const s = await v2Host(ours(), at("work"), { context: [v2User("after compaction", 0), v2Assistant([{ type: "text", text: "pong" }], 1)] });
+    expect(s.hooks).toEqual(["compaction", "context", "experimental.idle"]);
+    await s.compaction([{ id: "msg_a", role: "user", content: [{ type: "text", text: "first question" }] }]);
+    await s.idle();
+    await s.cleanup();
+    expect(spooled().map((r) => [r.event, r.parsed.turns.map((t) => t.text)])).toEqual([
+      ["pre-compact", ["first question"]],
+      ["turn-end", ["after compaction", "pong"]],
+      ["turn-end", ["after compaction", "pong"]],
+    ]);
+    expect(spooled()[0]).toMatchObject({ agent: "opencode", sessionId: "ses_1", cwd: at("work") });
+  });
+
+  it("never spools a subagent's session, in either OpenCode", async () => {
+    openCode().apply();
+    await (await v1Host(ours(), home, { messages: v1Normal(), parentID: "ses_parent" })).idle();
+    await (await v2Host(ours(), home, { context: [v2User("hi", 0)], parentID: "ses_parent" })).idle();
+    expect(spooled()).toEqual([]);
+  });
+
+  it("spools nothing while the Agent sessions feature is off, and never breaks the session", async () => {
+    removeContextFiles(stateDir);
+    openCode().apply();
+    await (await v1Host(ours(), home, { messages: v1Normal() })).idle();
+    await (await v2Host(ours(), home, { context: [v2User("hi", 0)] })).idle();
+    expect(spooled()).toEqual([]);
+  });
+
+  it("keeps the session going when OpenCode cannot give the plugin the session's messages", async () => {
+    openCode().apply();
+    const s = await v1Host(ours(), home, { messages: v1Normal() });
+    const broken = await v2Host(ours(), home, { context: null as unknown as unknown[] });
+    await expect(s.compacting("ses_missing")).resolves.toBeUndefined();
+    await expect(broken.idle()).resolves.toBeUndefined();
   });
 });

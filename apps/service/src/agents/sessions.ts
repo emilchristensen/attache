@@ -6,7 +6,8 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { AGENT_INTEGRATIONS, integrationFor, type AgentIntegration } from "./integrations.ts";
+import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
+import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
@@ -135,39 +136,60 @@ export class AgentSessions {
   }
 
   private ingestOne(r: SpoolRecord): boolean {
-    const integration = integrationFor(r.agent);
+    const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
-    if (!integration?.hooks || !copy || !existsSync(copy)) {
-      const detail = { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") };
-      if (integration && this.hadNoConversation(r)) this.app.log.debug("agent session had no conversation; nothing to save", detail);
+    if (!source || !copy || !existsSync(copy)) {
+      const detail = { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (source ? "the transcript copy is missing" : "unknown agent") };
+      if (source && this.hadNoConversation(r)) this.app.log.debug("agent session had no conversation; nothing to save", detail);
       else this.app.log.warn("agent session not saved", detail);
       return false;
     }
     const raw = readFileSync(copy, "utf8");
-    const parsed = integration.hooks.parseTranscript(raw);
+    const parsed = source.parse(raw);
     if (!parsed.turns.length) {
-      if (raw.trim()) this.keepUnparsed(r, copy);
+      if (parsed.problem) this.reportUnreadable(r, copy, source.label, parsed.problem);
+      // A plugin's snapshot of a session with nothing said yet, or of a subagent's side-chain, is no failure.
+      else if (raw.trim() && !source.partial) this.keepUnparsed(r, copy);
       return false;
     }
     const existing = this.row(r.agent, r.sessionId);
     // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (existing && parsed.turns.length < existing.turns) return false;
+    if (!source.partial && existing && parsed.turns.length < existing.turns) return false;
+    // A plugin's snapshot may hold only part of the session: it joins what was saved before.
+    const turns = source.partial ? joinTurns(this.cachedTurns(r.agent, r.sessionId), parsed.turns) : parsed.turns;
     const cwd = parsed.cwd ?? r.cwd;
-    const startedAt = parsed.startedAt ?? r.at;
-    const title = parsed.title ?? firstLine(parsed.turns.find((t) => t.role === "user")?.text) ?? `${integration.label} session`;
+    const startedAt = (source.partial ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? parsed.startedAt ?? r.at;
+    const title = parsed.title ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
     const relPath = existing?.rel_path ?? `evidence/sessions/transcripts/${r.agent}/${localDate(startedAt)}-${r.sessionId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64)}.md`;
     // The cache feeds the summariser, which may be a remote model: it never holds unredacted secrets.
-    this.writeCache({ ...parsed, turns: parsed.turns.map((t) => ({ ...t, text: redact(t.text) })), agent: r.agent, sessionId: r.sessionId, cwd, title, startedAt });
-    this.app.memory.archiveAgentSession(relPath, { agent: r.agent, agentLabel: integration.label, sessionId: r.sessionId, title, cwd, startedAt }, parsed.turns, this.userName());
+    this.writeCache({ ...parsed, turns: turns.map((t) => ({ ...t, text: redact(t.text) })), agent: r.agent, sessionId: r.sessionId, cwd, title, startedAt });
+    this.app.memory.archiveAgentSession(relPath, { agent: r.agent, agentLabel: source.label, sessionId: r.sessionId, title, cwd, startedAt }, turns, this.userName());
     this.app.db
       .prepare(
         `insert into agent_sessions (agent, session_id, rel_path, title, cwd, started_at, updated_at, turns) values (?,?,?,?,?,?,?,?)
          on conflict (agent, session_id) do update set title = excluded.title, cwd = excluded.cwd, updated_at = excluded.updated_at, turns = excluded.turns`,
       )
-      .run(r.agent, r.sessionId, relPath, title, cwd, startedAt, nowIso(), parsed.turns.length);
+      .run(r.agent, r.sessionId, relPath, title, cwd, startedAt, nowIso(), turns.length);
     const row = this.row(r.agent, r.sessionId)!;
-    if (row.turns > row.distilled_turns) this.scheduleSummary(r, integration.label, title, row.turns);
+    if (row.turns > row.distilled_turns) this.scheduleSummary(r, source.label, title, row.turns);
     return true;
+  }
+
+  /** The turns saved so far of a session, as the summariser reads them; none before its first save. */
+  private cachedTurns(agent: string, sessionId: string): Turn[] {
+    const file = this.cachePath(agent, sessionId);
+    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as CachedSession).turns : [];
+  }
+
+  /**
+   * A transcript in a format Attache could not read: nothing of it is saved,
+   * a sample is kept for diagnosis, and the Connection names the format, so
+   * the owner sees that an upstream change stopped their sessions being saved.
+   */
+  private reportUnreadable(r: SpoolRecord, copy: string, label: string, problem: string) {
+    this.keepUnparsed(r, copy, problem);
+    const message = `Attache could not read a ${label} session (${problem}), so it saved nothing of it. Updating Attache may fix this; until then, use the wrap-up prompt to keep what a conversation decided.`;
+    this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status = 'connected'").run(message, nowIso(), r.agent);
   }
 
   /**
@@ -208,19 +230,20 @@ export class AgentSessions {
   }
 
   /** Keep a few transcripts no parser understood, so a changed agent format can be diagnosed. */
-  private keepUnparsed(r: SpoolRecord, copy: string) {
+  private keepUnparsed(r: SpoolRecord, copy: string, problem?: string) {
     const dir = join(agentsDir(this.stateDir), "unparsed");
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     copyFileSync(copy, join(dir, `${r.id}.transcript`));
     for (const old of readdirSync(dir).sort().reverse().slice(MAX_UNPARSED_SAMPLES)) rmSync(join(dir, old), { force: true });
-    this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, sample: join(dir, `${r.id}.transcript`) });
+    this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, sample: join(dir, `${r.id}.transcript`), ...(problem ? { problem } : {}) });
   }
 
   /** Drop summariser caches for sessions that are fully summarised and quiet for a week. */
   private pruneCaches() {
     const cutoff = new Date(Date.now() - CACHE_RETENTION_MS).toISOString();
     const done = this.app.db.prepare("select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ?").all(cutoff) as Array<{ agent: string; session_id: string }>;
-    for (const d of done) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
+    // A plugin's later snapshot joins the saved turns, so those caches stay while the session can still go on.
+    for (const d of done.filter((x) => !PARTIAL_SOURCE_KINDS.includes(x.agent))) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
   }
 
   private row(agent: string, sessionId: string): SessionRow | undefined {
@@ -267,7 +290,7 @@ export class AgentSessions {
   private async distillNow(ctx: JobContext) {
     const agent = String(ctx.input.agent ?? "");
     const sessionId = String(ctx.input.sessionId ?? "");
-    const integration = integrationFor(agent);
+    const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
     const cacheFile = this.cachePath(agent, sessionId);
     if (!integration || !row || !existsSync(cacheFile)) return { skipped: "session not found" };
@@ -309,7 +332,7 @@ export class AgentSessions {
 
   /** Turns `from` up to `to` of a session as the summariser read them (redacted), for Consolidation; null when the session is gone. */
   sessionPart(agent: string, sessionId: string, from: number, to: number): { turns: Turn[]; title: string; cwd: string | null; agentLabel: string; userName: string } | null {
-    const integration = integrationFor(agent);
+    const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
     const cacheFile = this.cachePath(agent, sessionId);
     if (!integration || !row || !existsSync(cacheFile)) return null;
@@ -381,6 +404,24 @@ export class AgentSessions {
     return searchCommand({ os: currentOs(), execPath: stablePath(process.execPath), entry: entry && stablePath(entry), stateDir: this.stateDir });
   }
 
+}
+
+/**
+ * Turns saved before joined with a newer snapshot's, by message id: a turn
+ * already saved keeps its place and takes the newer text, a new one follows,
+ * so the session stays in order and only grows.
+ */
+export function joinTurns(saved: Turn[], next: Turn[]): Turn[] {
+  const out = [...saved];
+  const at = new Map(out.flatMap((t, i) => (t.id ? [[t.id, i] as const] : [])));
+  for (const t of next) {
+    const i = t.id === undefined ? undefined : at.get(t.id);
+    if (i === undefined) {
+      if (t.id) at.set(t.id, out.length);
+      out.push(t);
+    } else out[i] = { ...t, at: t.at ?? out[i]!.at };
+  }
+  return out;
 }
 
 function firstLine(text: string | undefined): string | null {

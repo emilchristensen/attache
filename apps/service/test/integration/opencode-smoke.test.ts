@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -9,7 +9,8 @@ import { startTestService, type TestService } from "./harness.ts";
 /**
  * Smoke test against the real OpenCode executable, in an isolated home: connecting OpenCode through
  * Attache makes the real OpenCode load Attache's plugin, connect Attache's MCP server and send the
- * Brain's current memory with each model call without saving it, and disconnecting leaves OpenCode
+ * Brain's current memory with each model call without saving it, saves the conversation at each
+ * turn's end and before each compaction, and disconnecting leaves OpenCode
  * with no Attache server and no memory. The model is a local stand-in that records what OpenCode
  * sends it, so no model account is needed. It runs only where `opencode` is on PATH (or
  * `ATTACHE_OPENCODE_EXECUTABLE` names it) and is skipped otherwise.
@@ -17,7 +18,7 @@ import { startTestService, type TestService } from "./harness.ts";
  * OpenCode 1 lists its MCP servers itself (`opencode mcp list`). OpenCode 2 loads plugins in its
  * server, so the test starts a private one (`opencode serve`) and asks it.
  *
- * ADR 0006: Attache may call OpenCode's MCP access officially supported only while this passes,
+ * ADR 0006: Attache may call OpenCode's MCP access, memory and session capture officially supported only while this passes,
  * for the OpenCode versions it ran against; a failure here withdraws that claim for OpenCode only.
  */
 
@@ -105,17 +106,38 @@ interface ModelMessage {
 /** The messages of every request OpenCode sent the stand-in model, oldest first. */
 let requests: ModelMessage[][] = [];
 
-/** A local OpenAI-compatible model that answers every request with "pong" and records what it was sent. */
+/** A compaction summary in the template OpenCode 2 asks for; OpenCode retries a summary without its headings. */
+const SUMMARY = ["Objective", "Requirements", "Decisions", "Work State", "Next Move", "Relevant Files", "Important Context"].map((h) => `## ${h}\n- SUMMARY-TEXT-5150`).join("\n\n");
+/** What only the secret file the stand-in asks OpenCode to read holds: tool output, never conversation. */
+const TOOL_OUTPUT = "TOOL-OUTPUT-7731";
+const SECRET = "sk-live-abcdef1234567890";
+
+/**
+ * A local OpenAI-compatible model that records what it was sent. It answers "pong"; asked to "read
+ * the secret file" it calls OpenCode's read tool on one, then answers "I read it"; asked for a
+ * compaction summary it returns one.
+ */
 async function startModel(): Promise<number> {
   model = createServer((req, res) => {
     let body = "";
     req.on("data", (d) => (body += String(d)));
     req.on("end", () => {
-      if (body) requests.push((JSON.parse(body) as { messages?: ModelMessage[] }).messages ?? []);
+      const sent = body ? (JSON.parse(body) as { messages?: ModelMessage[]; tools?: Array<{ function: { name: string } }> }) : {};
+      if (body) requests.push(sent.messages ?? []);
+      const last = sent.messages?.at(-1);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const chunk = (choice: object, extra: object = {}) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "stand-in", choices: [{ index: 0, ...choice }], ...extra })}\n\n`);
-      chunk({ delta: { role: "assistant", content: "pong" }, finish_reason: null });
-      chunk({ delta: {}, finish_reason: "stop" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
+      const usage = { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+      const read = sent.tools?.find((t) => t.function.name === "read");
+      if (last?.role === "user" && read && /read the secret file/.test(textOf(last))) {
+        // The real path, as OpenCode sees its working folder: another spelling of it (macOS /var → /private/var) is outside and makes OpenCode ask first.
+        chunk({ delta: { role: "assistant", tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "read", arguments: JSON.stringify({ filePath: realpathSync(join(root, "work", "secret.txt")) }) } }] }, finish_reason: null });
+        chunk({ delta: {}, finish_reason: "tool_calls" }, usage);
+      } else {
+        const reply = last?.role === "tool" ? "I read it" : /summarize the conversation|summary template/i.test(last ? textOf(last) : "") ? SUMMARY : "pong";
+        chunk({ delta: { role: "assistant", content: reply }, finish_reason: null });
+        chunk({ delta: {}, finish_reason: "stop" }, usage);
+      }
       res.end("data: [DONE]\n\n");
     });
   });
@@ -210,7 +232,8 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     const port = await startModel();
     mkdirSync(join(root, "config", "opencode"), { recursive: true });
     const provider = { npm: "@ai-sdk/openai-compatible", name: "stand-in", options: { baseURL: `http://127.0.0.1:${port}/v1`, apiKey: "none" }, models: { "stand-in": { name: "stand-in" } } };
-    writeFileSync(join(root, "config", "opencode", "opencode.json"), JSON.stringify({ provider: { "stand-in": provider }, model: "stand-in/stand-in", small_model: "stand-in/stand-in" }));
+    writeFileSync(join(root, "config", "opencode", "opencode.json"), JSON.stringify({ provider: { "stand-in": provider }, model: "stand-in/stand-in", small_model: "stand-in/stand-in", permission: { read: "allow" } }));
+    writeFileSync(join(root, "work", "secret.txt"), `# ${TOOL_OUTPUT}\nOPENAI_API_KEY=${SECRET}\n`);
     const version = opencode(["--version"]).trim();
     major = Number(/(\d+)\.\d+\.\d+/.exec(version)?.[1]);
     expect([1, 2], `opencode --version printed "${version}"`).toContain(major);
@@ -280,6 +303,43 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     expect(saved).toContain("resumed question");
     expect(saved).not.toContain("attache-memory");
     expect(saved).not.toContain("Orion migration is on track");
+  });
+
+  it("saves the conversation at each turn's end, before and after a compaction and across a resume, without tool output, memory or the summary, and shuts down cleanly", { timeout: 300_000 }, async () => {
+    await remember("Altair review");
+    const prompts = ["capture one", "please read the secret file", "capture after compaction"];
+    let server = await serve();
+    try {
+      await prompt(server.url, prompts[0]!, true);
+      await prompt(server.url, prompts[1]!);
+      await compact(server.url);
+      await prompt(server.url, prompts[2]!);
+    } finally {
+      server.child.kill();
+    }
+    // OpenCode stops on its own when asked to, with the plugin's last save done.
+    await expect.poll(() => server.child.exitCode !== null || server.child.signalCode !== null, { timeout: 15_000 }).toBe(true);
+    server = await serve();
+    try {
+      await prompt(server.url, "capture resumed");
+    } finally {
+      server.child.kill();
+    }
+    await expect.poll(() => server.child.exitCode !== null || server.child.signalCode !== null, { timeout: 15_000 }).toBe(true);
+    const dir = join(svc.dataDir, "evidence", "sessions", "transcripts", "opencode");
+    const archive = () => (existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).find((d) => d.includes("capture one")) : undefined) ?? "";
+    await expect.poll(archive, { timeout: 30_000 }).toContain("capture resumed");
+    const doc = archive();
+    // Every owner turn once, in order (OpenCode 1's `run` sends a prompt wrapped in double quotes).
+    const owner = [...doc.matchAll(/^### Ada Lovelace[^\n]*\n\n"?([^"\n]*)"?$/gm)].map((m) => m[1]);
+    expect(owner).toEqual([...prompts, "capture resumed"]);
+    // The stand-in only answers "I read it" once OpenCode ran its read tool and sent back what it read.
+    expect(doc, JSON.stringify(requests.map((r) => r.map((m) => m.role).join(",")))).toContain("I read it");
+    for (const leaked of [TOOL_OUTPUT, SECRET, "attache-memory", "Altair review is on track", "SUMMARY-TEXT-5150"]) expect(doc).not.toContain(leaked);
+    // Nothing half-written is left in the spool, and the summariser's input is just as clean.
+    expect(readdirSync(join(svc.stateDir, "agents", "spool")).filter((f) => f.startsWith("."))).toEqual([]);
+    const cache = readdirSync(join(svc.stateDir, "agents", "sessions", "opencode")).map((f) => readFileSync(join(svc.stateDir, "agents", "sessions", "opencode", f), "utf8")).join("\n");
+    for (const leaked of [TOOL_OUTPUT, SECRET, "attache-memory", "SUMMARY-TEXT-5150"]) expect(cache).not.toContain(leaked);
   });
 
   it("leaves OpenCode with no Attache plugin or server after disconnecting", { timeout: 180_000 }, async () => {

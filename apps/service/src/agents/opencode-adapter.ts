@@ -31,7 +31,17 @@ import { ATTACHE_MEMORY_TAG } from "./pi-adapter.ts";
  * carries old memory and session capture never reads it as the owner's words.
  * OpenCode 1 also runs the transform for its compaction summary; the plugin
  * skips that one call so no summary restates memory that later goes stale.
- * OpenCode 2 summarises through a separate hook the plugin leaves alone.
+ * OpenCode 2 summarises through a separate hook that adds no memory.
+ *
+ * And it saves sessions (session capture without a final event: OpenCode has
+ * no session end). When a turn ends (OpenCode 1's idle `session.status`
+ * event, OpenCode 2's `experimental.idle` hook) and before each compaction,
+ * it hands the hook script's `spoolSession` a snapshot of the session's
+ * messages, which the service normalises (agents/opencode-transcript.ts).
+ * OpenCode 2 hands a plugin only the messages since the last compaction, so
+ * the compaction snapshot holds the ones about to leave it; the service joins
+ * snapshots by message id. Subagent sessions are never saved, and a last save
+ * runs when OpenCode unloads the plugin.
  */
 
 /**
@@ -40,9 +50,9 @@ import { ATTACHE_MEMORY_TAG } from "./pi-adapter.ts";
  * earlier version wrote is still recognised as this instance's.
  */
 const OWNER = "// Managed by Attache: ";
-const MARKER = `${OWNER}registers this Attache instance's MCP server and gives its memory to each OpenCode session.`;
+const MARKER = `${OWNER}registers this Attache instance's MCP server, gives its memory to each OpenCode session and saves OpenCode sessions in it.`;
 const INSTANCE = "// attache-instance: ";
-const PURPOSE = "Attache's OpenCode plugin, which registers Attache's MCP server and gives your Attache memory to each OpenCode session";
+const PURPOSE = "Attache's OpenCode plugin, which registers Attache's MCP server, gives your Attache memory to each OpenCode session and saves your OpenCode sessions";
 
 /**
  * OpenCode's global config folder: `OPENCODE_CONFIG_DIR` when it names one
@@ -78,48 +88,117 @@ export function openCodePluginText(stateDir: string, id: string, hook: string): 
     "",
     "let hook;",
     "",
+    "/** This install's hook script, which reads memory and spools sessions; null when Attache moved or is gone (tried again next time). */",
+    "async function attache() {",
+    "  try {",
+    "    hook ??= import(HOOK);",
+    "    return await hook;",
+    "  } catch {",
+    "    hook = undefined;",
+    "    return null;",
+    "  }",
+    "}",
+    "",
     "/** The Brain's current memory for a session in `folder`, wrapped in Attache's tag, or null; read from the files Attache keeps up to date. */",
     "async function memory(folder) {",
     "  let text;",
     "  try {",
-    "    hook ??= import(HOOK);",
-    "    text = (await hook).sessionContext(STATE_DIR, folder || process.cwd());",
+    "    text = (await attache())?.sessionContext(STATE_DIR, folder || process.cwd());",
     "  } catch {",
-    "    // Attache moved or is gone: try again on the next call, and never break the session.",
-    "    hook = undefined;",
+    "    // Never break the session.",
     "    return null;",
     "  }",
     `  return text && text.trim() ? "<${ATTACHE_MEMORY_TAG}>\\n" + text.trim() + "\\n</${ATTACHE_MEMORY_TAG}>" : null;`,
     "}",
     "",
+    "/** OpenCode's answers come as `{ data }` from its client and plain from plugin domains. */",
+    "const data = (r) => (r && typeof r === 'object' && !Array.isArray(r) && 'data' in r ? r.data : r);",
+    "",
+    "/**",
+    " * Hand one snapshot of a session to Attache, which saves the owner's and the assistant's words from it.",
+    " * `info` is OpenCode's session record: a subagent's session (it has a parent) is never saved.",
+    " */",
+    "async function save(event, info, opencode, shape, messages, folder) {",
+    "  if (!info || info.parentID || !Array.isArray(messages)) return false;",
+    "  const directory = (info.location && info.location.directory) || info.directory || folder || null;",
+    '  const snapshot = { attache: "opencode-session", v: 1, opencode, shape, sessionID: info.id, parentID: null, title: info.title ?? null, directory, messages };',
+    '  (await attache())?.spoolSession(STATE_DIR, { agent: "opencode", event, sessionId: info.id, cwd: directory }, JSON.stringify(snapshot));',
+    "  return true;",
+    "}",
+    "",
     "export default {",
     "  id: ID,",
     "  async setup(ctx) {",
+    "    const folder = ctx.location && ctx.location.directory;",
     "    // OpenCode 2: plugins manage MCP servers through transforms, which OpenCode drops when the plugin unloads.",
     '    await ctx.mcp.transform((mcp) => mcp.set(ID, { type: "local", command: COMMAND, codemode: false }));',
     "    // Before every agent-loop call of a session in this plugin's folder; OpenCode 2 does not save what it adds.",
     '    await ctx.session.hook("context", async (event) => {',
-    "      const text = await memory(ctx.location && ctx.location.directory);",
+    "      const text = await memory(folder);",
     '      if (text) event.system.push({ type: "text", text });',
     "    });",
+    "    // Sessions saved since the plugin loaded, saved once more when it unloads.",
+    "    const seen = new Set();",
+    "    const saveContext = async (sessionID) => {",
+    "      try {",
+    "        const info = data(await ctx.session.get({ sessionID }));",
+    "        // The context holds the messages since the last compaction; the compaction hook below saved the ones before.",
+    '        if (await save("turn-end", info && { ...info, id: info.id ?? sessionID }, 2, "v2-context", data(await ctx.session.context({ sessionID })), folder)) seen.add(sessionID);',
+    "      } catch {",
+    "        // Never break the session; the next turn saves it again.",
+    "      }",
+    "    };",
+    "    // When a session finishes its model work and goes idle: the end of a turn.",
+    '    await ctx.session.hook("experimental.idle", async (event) => saveContext(event.sessionID));',
+    "    // Before a compaction: the messages it summarises leave the session's context once it completes.",
+    '    await ctx.session.hook("compaction", async (event) => {',
+    "      try {",
+    "        const info = data(await ctx.session.get({ sessionID: event.sessionID }));",
+    '        await save("pre-compact", info && { ...info, id: info.id ?? event.sessionID }, 2, "v2-request", event.messages, folder);',
+    "      } catch {",
+    "        // Never break the compaction.",
+    "      }",
+    "    });",
+    "    return async () => {",
+    "      for (const sessionID of seen) await saveContext(sessionID);",
+    "    };",
     "  },",
     "  // OpenCode 1 (1.18.29 and later).",
     "  async server(input) {",
     "    // Sessions whose next call is OpenCode's compaction summary, which gets no memory.",
     "    const compacting = new Set();",
+    "    const seen = new Set();",
+    "    /** Save the whole session: OpenCode 1 keeps every message, compacted or not. */",
+    "    const saveSession = async (sessionID, event) => {",
+    "      try {",
+    "        const info = data(await input.client.session.get({ path: { id: sessionID } }));",
+    '        if (await save(event, info && { ...info, id: info.id ?? sessionID }, 1, "v1-messages", data(await input.client.session.messages({ path: { id: sessionID } })), input.directory)) seen.add(sessionID);',
+    "      } catch {",
+    "        // Never break the session; the next turn saves it again.",
+    "      }",
+    "    };",
     "    return {",
     "      // Edits the configuration OpenCode is about to use.",
     "      async config(config) {",
     '        config.mcp = { ...(config.mcp ?? {}), [ID]: { type: "local", command: COMMAND, enabled: true } };',
     "      },",
+    "      // A session going idle: the end of a turn.",
+    "      async event({ event }) {",
+    '        if (event && event.type === "session.status" && event.properties && event.properties.status && event.properties.status.type === "idle") await saveSession(event.properties.sessionID, "turn-end");',
+    "      },",
     '      async "experimental.session.compacting"(event) {',
     "        compacting.add(event.sessionID);",
+    '        await saveSession(event.sessionID, "pre-compact");',
     "      },",
     "      // Before every model call; OpenCode 1 does not save the system prompt.",
     '      async "experimental.chat.system.transform"(event, output) {',
     "        if (event.sessionID && compacting.delete(event.sessionID)) return;",
     "        const text = await memory(input && input.directory);",
     "        if (text) output.system.push(text);",
+    "      },",
+    "      // OpenCode unloading the plugin (an idle folder or a shutdown it finishes): a last save of what it saw.",
+    "      async dispose() {",
+    '        for (const sessionID of seen) await saveSession(sessionID, "turn-end");',
     "      },",
     "    };",
     "  },",
@@ -219,11 +298,11 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   const adapter: HarnessAdapter = {
     kind: "opencode",
     label: "OpenCode",
-    capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" },
+    capabilities: { mcp: true, memory: "runtime-fresh", capture: "without-final-event" },
     restartRequired,
     manualSetup: true,
     setupNote:
-      "Attache adds one plugin to OpenCode's global plugins folder that registers Attache's MCP server each time OpenCode loads it, and adds your current Attache memory to the system prompt of every model call without saving it in the session, so resumed and compacted sessions always see today's memory; your opencode.json(c), MCP servers and other plugins are not changed. Memory needs the Agent sessions feature on. Works with OpenCode 1 (1.18.29 or later) and OpenCode 2. Restart OpenCode after connecting (for OpenCode 2's background service, run opencode service restart). If OpenCode was not found, you can still connect: Attache uses ~/.config/opencode, or XDG_CONFIG_HOME or OPENCODE_CONFIG_DIR when the Attache service has them set.",
+      "Attache adds one plugin to OpenCode's global plugins folder that registers Attache's MCP server each time OpenCode loads it, and adds your current Attache memory to the system prompt of every model call without saving it in the session, so resumed and compacted sessions always see today's memory. The plugin also saves the conversation (your words and OpenCode's answers, never tool calls, tool output or Attache's memory) each time a turn ends and before each compaction. OpenCode has no session-end event, so the newest turn is saved only once it ends: a turn still running when OpenCode quits can be missed. Your opencode.json(c), MCP servers and other plugins are not changed. Memory and saving sessions need the Agent sessions feature on. Works with OpenCode 1 (1.18.29 or later) and OpenCode 2. Restart OpenCode after connecting (for OpenCode 2's background service, run opencode service restart). If OpenCode was not found, you can still connect: Attache uses ~/.config/opencode, or XDG_CONFIG_HOME or OPENCODE_CONFIG_DIR when the Attache service has them set.",
     detect: (home) => openCodeFound(home),
     preview: () => ({ changes: plan(), restartRequired }),
     apply: () => {
@@ -245,7 +324,7 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
         const text = current();
         if (text === null) return { state: "missing", message: `Attache's OpenCode plugin is not in ${path}. Set up again to fix it.`, files: [] };
         if (text !== expected()) return { state: "stale", message: `Attache's OpenCode plugin ${path} is out of date. Set up again to fix it.`, files: [path] };
-        return { state: "current", message: `Attache's OpenCode plugin ${path}, which registers Attache's MCP server and gives your Attache memory to each OpenCode session`, files: [path] };
+        return { state: "current", message: `Attache's OpenCode plugin ${path}, which registers Attache's MCP server, gives your Attache memory to each OpenCode session and saves your OpenCode sessions`, files: [path] };
       } catch (e) {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
