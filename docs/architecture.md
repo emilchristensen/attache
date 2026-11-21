@@ -556,7 +556,7 @@ It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
 
 ### Copilot CLI
 
-Copilot CLI connects through its personal MCP configuration (`agents/copilot-cli-adapter.ts`), with MCP access only.
+Copilot CLI connects through its personal MCP configuration and personal hooks (`agents/copilot-cli-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
 Attache adds one entry per instance to `<Copilot home>/mcp-config.json`, the file `copilot mcp add` writes, where the Copilot home is `COPILOT_HOME` when it is absolute, else `~/.copilot`; no repository file is touched.
 The entry is `{ type: "local", command, args, tools: ["*"] }` under the instance's owner key (`attache`, or `attache-<hash>`), and it is recognised as this instance's by its `--state-dir` argument, as in the other MCP configurations, so a stale entry under another name is replaced and other instances' entries are kept.
 Copilot CLI reads the file as JSON with comments (`agents/jsonc.ts`); Attache writes it back as plain JSON, as `copilot mcp add` does (seen with 1.0.114), backs it up first, and says in the preview when the file had comments that only the backup keeps.
@@ -566,7 +566,15 @@ A file that does not parse, a non-object `mcpServers` or a same-name server Atta
 A running session must start again, or run `/mcp reload`; a repository's own `.mcp.json` can replace a same-name server for sessions in that repository.
 `test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in (skipped where it is not on PATH or in `ATTACHE_COPILOT_EXECUTABLE`): `copilot mcp list --json` and `copilot mcp get --json` show Attache's server as a user server, enabled, next to the owner's; the server as Copilot CLI read it starts and answers from the Brain; after disconnecting only the owner's is listed.
 It passed against `@github/copilot` 1.0.114 on macOS.
-A Copilot CLI session needs a GitHub sign-in, so the smoke test does not show a session starting the server itself.
+Memory comes from one personal hooks file per instance, `<Copilot home>/hooks/<owner key>.json` (`{ version: 1, hooks: { sessionStart: [{ type: "command", bash, powershell, timeoutSec: 10 }] } }`), which runs `attache-agent-hook copilot-cli session-start`.
+The hook prints `{"additionalContext": "<attache-memory>…</attache-memory>"}` from the session's folder's context file (`hook-profiles.ts` `copilot-cli`), or nothing when there is no memory.
+Copilot CLI combines every file in its hooks folder, so the owner's own hooks files and other instances' are never opened; a file at Attache's path that is not this instance's (no hook command running `attache-agent-hook` with this state folder) is refused and left on disconnect.
+Connecting also refuses a personal `settings.json` with `disableAllHooks: true`, and a Copilot CLI older than 1.0.22 (`agents/copilot-cli-version.ts`; before 1.0.11 `additionalContext` was ignored, before 1.0.22 session-start hooks ran on every prompt); a version Attache cannot read does not stop it, since Copilot CLI updates itself.
+No instruction file is written: the hook path passed the smoke test.
+Seen with 1.0.114 against a stand-in model: the memory reaches the model as a user message of its own in a new (`source: "new"`), resumed (`"resume"`, fresh memory and no old copy) and `/clear`ed session; `events.jsonl` keeps it only in the `hook.end` event's `data.output.additionalContext`, never as a `user.message`; `/compact` drops it and session-start does not run again, so a compacted session has no memory until it is cleared, resumed or started anew.
+A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns the hook off for its sessions; Attache cannot see that.
+The smoke test also runs real sessions with no GitHub sign-in through Copilot CLI's offline mode with a custom provider (`COPILOT_OFFLINE`, `COPILOT_PROVIDER_BASE_URL`) and a local stand-in model, checking the memory in new, resumed and (with python3 driving the interactive terminal) `/clear`ed sessions, that `events.jsonl` holds it only on `hook.end`, and that none reaches a session after disconnecting.
+It does not show the name Copilot CLI's MCP client gives itself.
 
 ### MCP server in each Harness
 
