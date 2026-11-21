@@ -124,8 +124,12 @@ describe("Pi session capture", () => {
     // Quitting the session summarises it straight away.
     const job = await until(() => jobsFor(HEADER.id).find((j) => j.status === "succeeded"), 20_000);
     expect(job.result).toMatchObject({ summarised: true });
-    const sent = JSON.stringify(fx.requests.map((r) => r.body));
-    expect(sent).toContain("Welcome back.");
+    // An earlier boundary (the compaction) may already have summarised the session so far,
+    // so wait for the summary that reads the whole session, the resumed turns included.
+    const sent = await until(() => {
+      const s = JSON.stringify(fx.requests.map((r) => r.body));
+      return s.includes("Welcome back.") && s;
+    }, 20_000);
     for (const marker of [SECRET, TOOL_OUTPUT, MEMORY, SIDE]) expect(sent).not.toContain(marker);
   });
 
