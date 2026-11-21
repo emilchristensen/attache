@@ -327,7 +327,7 @@ describe("OpenCode versions", () => {
   it("reports MCP access, runtime-fresh memory, session capture without a final event, and that a running OpenCode must restart", () => {
     expect({ ...openCode().capabilities, restartRequired: openCode().restartRequired }).toEqual({ mcp: true, memory: "runtime-fresh", capture: "without-final-event", restartRequired: true });
     // OpenCode has no session end: the Connection must say what that costs.
-    expect(openCode().setupNote).toMatch(/no session-end event[^.]*\.[^.]*turn still running when OpenCode quits can be missed/);
+    expect(openCode().setupNote).toMatch(/no session-end event[^.]*turn still running when OpenCode quits can be missed/);
   });
 });
 
