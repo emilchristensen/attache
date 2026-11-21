@@ -30,6 +30,19 @@ function readStdin(): Record<string, unknown> {
   }
 }
 
+/**
+ * The session context for a session in `folder`, the way the session-start
+ * hook prints it: the project's when the folder is one of its repositories,
+ * otherwise the global one; null when there is none, or for sessions tools
+ * start on their own. Attache's Pi extension imports this to read memory
+ * fresh before each model call.
+ */
+export function sessionContext(stateDir: string, folder: string | null, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return null;
+  const file = contextFileFor(stateDir, folder ?? process.cwd());
+  return existsSync(file) ? readFileSync(file, "utf8") : null;
+}
+
 export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): string {
   const [agent, event] = argv;
   const i = argv.indexOf("--state-dir");
@@ -41,8 +54,8 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   const input = profile.parse(readStdin());
   if (event === "session-start") {
     // The session's own folder decides which project's context it gets; the hook never asks the service.
-    const file = contextFileFor(stateDir, input.cwd ?? process.cwd());
-    return existsSync(file) ? profile.sessionStartOutput(readFileSync(file, "utf8")) : "";
+    const context = sessionContext(stateDir, input.cwd, env);
+    return context === null ? "" : profile.sessionStartOutput(context);
   }
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
     const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;

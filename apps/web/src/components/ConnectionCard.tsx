@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { type ConnectionDefinition, type ConnectionStatus, type DisconnectEffects } from "@attache/contracts";
+import { useEffect, useState } from "react";
+import { type ConnectionDefinition, type ConnectionStatus, type DisconnectEffects, type HarnessConnectionPreview, type HarnessUninstallResult, uninstallProblem } from "@attache/contracts";
 import { api, post, put } from "../api.ts";
 import { MarkdownInline, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
@@ -69,6 +69,20 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
   const isOAuth = editing ? !!m?.browserSignIn : !!current?.browserSignIn;
   const signInWith = ((editing ? m : current)?.label ?? "Sign in").replace(/\s*\(.*\)$/, "");
   const builtin = status.settings.builtin === true;
+  // A Harness: what connecting would change, worked out by the service before anything is written.
+  const [harness, setHarness] = useState<{ preview: HarnessConnectionPreview | null; error: string | null } | undefined>(undefined);
+  useEffect(() => {
+    if (!editing || !definition.harness) return setHarness(undefined);
+    let live = true;
+    setHarness({ preview: null, error: null });
+    api<HarnessConnectionPreview>(`/connections/${status.kind}/harness-preview`).then(
+      (preview) => live && setHarness({ preview, error: null }),
+      (e: Error) => live && setHarness({ preview: null, error: e.message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [editing, definition.harness, status.kind]);
 
   const configure = () =>
     run(
@@ -129,6 +143,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
           onScopes={setScopes}
           submit={{ label: busy === "configure" ? "Connecting…" : configured ? "Save and test" : "Connect", disabled: busy !== null, run: configure }}
           onCancel={configured || compact ? () => setEditing(false) : null}
+          {...(harness ? { harness } : {})}
         />
       )}
 
@@ -205,7 +220,15 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
           status={status}
           preview={preview}
           disconnect={(deleteData) =>
-            run("disc", () => post(`/connections/${status.id}/disconnect`, { deleteData }).then(() => { setPreview(null); setTestMsg(null); onChanged(); }), deleteData ? "Disconnected; data deleted" : "Disconnected; data kept")
+            run("disc", async () => {
+              const r = await post<{ harness?: HarnessUninstallResult }>(`/connections/${status.id}/disconnect`, { deleteData });
+              setPreview(null);
+              setTestMsg(null);
+              onChanged();
+              // A Harness part that could not be removed is named, so the owner knows what remains.
+              const problem = r.harness ? uninstallProblem(r.harness) : null;
+              if (problem) throw new Error(problem);
+            }, deleteData ? "Disconnected; data deleted" : "Disconnected; data kept")
           }
           onCancel={() => setPreview(null)}
         />

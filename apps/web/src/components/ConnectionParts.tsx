@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects } from "@attache/contracts";
+import { plural, type ConnectionDefinition, type ConnectionStatus, type Coverage, type DisconnectEffects, type HarnessConnectionPreview } from "@attache/contracts";
+import { capabilityLines, changeLine, HARNESS_STATE_TEXT } from "../harness-connection.ts";
 import { put } from "../api.ts";
 import { MarkdownInline, Time, useAction } from "./ui.tsx";
 import { StateTag } from "./StateTag.tsx";
@@ -57,6 +58,14 @@ export function ConnectionFacts({ status, definition, inRow }: { status: Connect
       <dd>
         <Time iso={status.lastSuccessAt} standalone />
       </dd>
+      {status.harness && (
+        <>
+          <dt>In the Harness</dt>
+          <dd data-harness-state={status.harness.state}>
+            <StateTag state={status.harness.state === "current" ? "complete" : status.harness.state === "stale" ? "partial" : "error"} label={HARNESS_STATE_TEXT[status.harness.state]} /> <span className="small muted">{status.harness.message}</span>
+          </dd>
+        </>
+      )}
       {status.lastError && (
         <>
           <dt>Last error</dt>
@@ -105,10 +114,12 @@ interface SetupFormProps {
   submit: { label: string; disabled: boolean; run: () => void };
   /** Null when there is nothing to go back to: a Connection set up for the first time. */
   onCancel: (() => void) | null;
+  /** A Harness: what connecting would change, or why it cannot; undefined while it is worked out. */
+  harness?: { preview: HarnessConnectionPreview | null; error: string | null };
 }
 
 /** Setting a Connection up, or again: the steps outside Attache, the method, its fields and what Attache may read. */
-export function SetupForm({ definition, method, onMethod, fields, onFields, scopes, onScopes, submit, onCancel }: SetupFormProps) {
+export function SetupForm({ definition, method, onMethod, fields, onFields, scopes, onScopes, submit, onCancel, harness }: SetupFormProps) {
   return (
     <div className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
       {definition.unavoidableSteps.length > 0 && (
@@ -122,6 +133,8 @@ export function SetupForm({ definition, method, onMethod, fields, onFields, scop
         </div>
       )}
       <p className="small muted">{definition.setupHelp}</p>
+      {definition.harness && <HarnessCapabilities capabilities={definition.harness.capabilities} />}
+      {harness && <HarnessChanges {...harness} />}
       {definition.authMethods.length > 1 && (
         <label className="field">
           How to connect
@@ -234,5 +247,41 @@ export function WriteAuthority({ status, definition, onChanged, onSignIn, signIn
         </div>
       </div>
     </details>
+  );
+}
+
+/** What a connected Harness gets, each capability on its own line. */
+function HarnessCapabilities({ capabilities }: { capabilities: NonNullable<ConnectionDefinition["harness"]>["capabilities"] }) {
+  return (
+    <ul className="small" aria-label="What connecting gives the Harness" style={{ margin: 0, paddingLeft: 18 }}>
+      {capabilityLines(capabilities).map((l) => (
+        <li key={l}>{l}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** Every file connecting creates or changes, before anything is written, and whether the Harness must be restarted. */
+function HarnessChanges({ preview, error }: { preview: HarnessConnectionPreview | null; error: string | null }) {
+  if (error)
+    return (
+      <div className="state error small" role="alert" aria-label="Cannot connect">
+        <strong>Attache will not change this Harness</strong>
+        <span>{error}</span>
+      </div>
+    );
+  if (!preview) return <p className="small muted">Working out what connecting changes…</p>;
+  return (
+    <div className="stack-sm" aria-label="Files Attache will change">
+      <strong className="small">{preview.changes.length ? "Connecting changes these files" : "Nothing to change: Attache's entries are up to date"}</strong>
+      {preview.changes.length > 0 && (
+        <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+          {preview.changes.map((c) => (
+            <li key={c.path}>{changeLine(c)}</li>
+          ))}
+        </ul>
+      )}
+      {preview.restartRequired && <p className="small">Restart the Harness after connecting so it loads the change.</p>}
+    </div>
   );
 }

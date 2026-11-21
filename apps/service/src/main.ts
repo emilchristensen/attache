@@ -15,6 +15,9 @@ import { MeaningSearch } from "./meaning/service.ts";
 import { loadOnnxEmbedder } from "./meaning/onnx-embedder.ts";
 import { createLogger } from "./core/log.ts";
 import { AgentHooks } from "./agents/install.ts";
+import { copilotCliAdapter } from "./agents/copilot-cli-adapter.ts";
+import { openCodeAdapter } from "./agents/opencode-adapter.ts";
+import { piAdapter } from "./agents/pi-adapter.ts";
 import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { alive, readRuntime, type Runtime } from "./cli/client.ts";
 import { auditCommand, type CliIo } from "./cli/memory-commands.ts";
@@ -139,22 +142,32 @@ async function agentHooksCmd(argv: string[]) {
   const sub = argv[1] ?? "status";
   const only = arg("agent", argv);
   const picked = only ? integrationFor(only) : null;
-  if (only && !picked) throw new Error(`Unknown agent ${only}. Agents: ${AGENT_INTEGRATIONS.map((a) => a.kind).join(", ")}`);
-  const agents = picked ? [picked] : AGENT_INTEGRATIONS;
+  // Pi, OpenCode and Copilot CLI are connected through their own adapters (one extension or plugin file, or one MCP entry), not hooks and an MCP configuration.
+  const fileAdapters = [piAdapter(hooks), openCodeAdapter(hooks), copilotCliAdapter(hooks)];
+  const kinds = [...AGENT_INTEGRATIONS.map((a) => a.kind), ...fileAdapters.map((a) => a.kind)];
+  if (only && !kinds.includes(only)) throw new Error(`Unknown agent ${only}. Agents: ${kinds.join(", ")}`);
+  const agents = picked ? [picked] : only ? [] : AGENT_INTEGRATIONS;
+  const adapters = fileAdapters.filter((a) => !only || only === a.kind);
   if (sub === "status") {
-    return out(JSON.stringify(agents.map((a) => {
-      const s = hooks.status(a);
-      return { agent: a.kind, path: s.path, hooks: s.installed.length, mcp: s.mcp.registered ? s.mcp.path : null, current: s.current, rules: s.rules };
-    })));
+    return out(JSON.stringify([
+      ...agents.map((a) => {
+        const s = hooks.status(a);
+        return { agent: a.kind, path: s.path, hooks: s.installed.length, mcp: s.mcp.registered ? s.mcp.path : null, current: s.current, rules: s.rules };
+      }),
+      ...adapters.map((a) => (({ state, files }) => ({ agent: a.kind, path: files[0] ?? null, state, current: state === "current" }))(a.status())),
+    ]));
   }
   if (sub === "uninstall") {
-    const results = hooks.uninstallAll(agents);
+    const results = [
+      ...hooks.uninstallAll(agents),
+      ...adapters.map((a) => (({ removed, failures }) => ({ agent: a.kind, path: removed[0]?.path ?? null, removed: removed.length, mcp: null, ...(failures.length ? { error: failures.join(" ") } : {}) }))(a.uninstall())),
+    ];
     out(JSON.stringify(results));
     const failed = results.filter((r) => r.error);
     if (failed.length) throw new Error(`Could not remove the Attache hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention attache-agent-hook and the MCP server that runs \`attache mcp\` by hand.`);
     return;
   }
-  throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${AGENT_INTEGRATIONS.map((a) => a.kind).join("|")}]`);
+  throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${kinds.join("|")}]`);
 }
 
 function cliIo(): CliIo {

@@ -508,6 +508,74 @@ Antigravity has no session-start hook, so the same text is written to an always-
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Attache's own model calls run with `--setting-sources ""`, so neither recurses.
 Turning the feature off disconnects every Harness with hooks; `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
 
+### Harness adapters
+
+Every Harness Connection goes through one boundary, `HarnessAdapter` (`agents/harness-adapters.ts`, data types in `packages/contracts/src/harness.ts`, ADR 0006): detect, preview, apply, status, refresh and uninstall.
+Each adapter reports MCP access, memory (`none`, `runtime-fresh`, `managed-file`) and session capture (`none`, `with-final-event`, `without-final-event`) separately, and whether a running Harness must restart before a change takes effect.
+Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part it could not remove with its file.
+Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
+The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).
+`GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disconnecting returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
+`ConnectionDefinition.harness` gives the Dashboard each capability and the restart requirement.
+An adapter with `manualSetup` (Pi) can be connected even when `detect` finds nothing, since Attache cannot see every folder the Harness installs to.
+
+### Pi
+
+Pi connects through its own extension API (`agents/pi-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
+Attache writes one extension per instance, `<agent dir>/extensions/attache.ts` (`attache-<hash>.ts` for another instance), where the agent dir is `~/.pi/agent` or `PI_CODING_AGENT_DIR`.
+Pi loads it on its own and it calls `pi.registerMcpServer` with the same `attache mcp --state-dir <state>` command as every other Harness, `exposure: "direct"`, so the tools are declared to the model; Pi keeps that registration for the session only, so Pi's `mcp.json` and `settings.json` are never written.
+They are read only to refuse a setup the registration could not work in: a file that does not parse, `-builtin:mcp` in `settings.json`, or a same-name server in `mcp.json`, which Pi would use instead.
+The same extension handles Pi's `context` event, which runs before every model call: it imports this install's hook script, reads the session context the service keeps for the session's folder (`sessionContext`, the same choice of project or global file as the session-start hook), and puts it ahead of the conversation as a custom message of type `attache-memory`, its text wrapped in `<attache-memory>` tags.
+Pi does not save what a `context` handler adds, so a resumed or compacted session never carries old memory, and Pi's compaction summaries are written without it; the handler also drops any earlier `attache-memory` message before adding the current one.
+Transcript parsers strip `<attache-memory>` blocks with the other injected tags, and a Pi parser must drop `attache-memory` custom messages.
+The hook script is loaded only when a model call needs memory, so a missing script costs the memory and never the MCP registration.
+Memory follows the Agent sessions feature: while it is off the service removes the context files and the extension adds nothing.
+The file's first line starts with `// Managed by Attache: ` and its ownership line names its state folder; a file in its place without them is left alone, and a file an earlier version wrote is still recognised and upgraded.
+A running Pi needs `/reload` (or a new session) to load a change, so the adapter reports a restart.
+`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, that every model call carries the Brain's current memory after a Brain change, a compaction and a resume while the session file never contains it, and that both are gone after disconnecting.
+It answers model calls from a local stand-in model the test starts, so it needs no model account.
+
+### OpenCode
+
+OpenCode connects through its own plugin API (`agents/opencode-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
+OpenCode 1 (`opencode-ai`) and OpenCode 2 (`@opencode/cli`) both install an `opencode` command, read the same config folders and have incompatible plugin APIs, so Attache writes one plugin file that carries both entry points: OpenCode 1 (1.18.29 and later) calls its `server()` and runs the `config` hook, which adds this instance's server to the configuration it is about to use; OpenCode 2 reads its `id` and runs `setup(ctx)`, which adds the server with `ctx.mcp.transform` (`codemode: false`, so the tools stay on the native tool list).
+Both registrations live in memory only, so the owner's `opencode.json(c)` is never written.
+The same file gives every model call the Brain's current memory: OpenCode 1's `experimental.chat.system.transform` and OpenCode 2's `context` session hook run before each agent-loop call, import this install's hook script, read the session context the service keeps for the session's folder (`sessionContext`; OpenCode 1's plugin `directory`, OpenCode 2's `ctx.location.directory`, one plugin instance per folder) and add it to that call's system prompt wrapped in `<attache-memory>` tags.
+Neither OpenCode saves the system prompt, so a resumed or compacted session never carries old memory and session capture never sees it; a transcript parser that meets an `<attache-memory>` block anyway strips it like the other injected tags.
+OpenCode 1 also runs the transform for its compaction summary, so the plugin's `experimental.session.compacting` hook marks the session and the next transform for it (the summary) adds nothing; OpenCode 2 summarises through its separate `compaction` hook, which the plugin does not use.
+OpenCode 1 also runs the transform for its title request, which therefore gets memory too; OpenCode 2's title request does not.
+The hook script is loaded only when a model call needs memory, so a missing script costs the memory and never the MCP registration; memory follows the Agent sessions feature as for Pi.
+The file is `<config dir>/plugins/attache.js` (`attache-<hash>.js` for another instance, which is also its OpenCode 2 plugin id, since OpenCode 2 refuses two plugins with one id), where the config dir is `OPENCODE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`.
+Before writing, the adapter asks the installed `opencode --version` (`agents/opencode-version.ts`; `ATTACHE_OPENCODE_BIN` replaces the lookup in tests) and refuses an OpenCode 1 older than 1.18.29, a major version other than 1 or 2, or output it cannot read; no OpenCode found is a manual connection.
+It reads OpenCode's global `config.json`, `opencode.json`, `opencode.jsonc` and the file `OPENCODE_CONFIG` names (JSON with comments, `agents/jsonc.ts`) only to refuse a file that does not parse, a same-name MCP server (either OpenCode's shape) the plugin would replace, or an OpenCode 2 `plugins` list that turns the plugin off.
+Project-level configuration is not checked.
+The marker and ownership rules are Pi's (owner recognised by the `// Managed by Attache: ` prefix plus the instance line, so the MCP-only file an earlier version wrote is refreshed or removed); a running OpenCode (or OpenCode 2's background service) must restart to load a change.
+`test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disconnecting.
+It also drives a private `opencode serve` against a local stand-in model (no credentials) to check that every agent-loop call carries the Brain's current memory after a Brain change, a compaction and a resume (a new server continuing the session), that compaction requests carry none, that OpenCode's database and data folder never contain it, and that none is sent after disconnecting.
+It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
+
+### Copilot CLI
+
+Copilot CLI connects through its personal MCP configuration and personal hooks (`agents/copilot-cli-adapter.ts`), with MCP access and runtime-fresh memory, and no session capture yet.
+Attache adds one entry per instance to `<Copilot home>/mcp-config.json`, the file `copilot mcp add` writes, where the Copilot home is `COPILOT_HOME` when it is absolute, else `~/.copilot`; no repository file is touched.
+The entry is `{ type: "local", command, args, tools: ["*"] }` under the instance's owner key (`attache`, or `attache-<hash>`), and it is recognised as this instance's by its `--state-dir` argument, as in the other MCP configurations, so a stale entry under another name is replaced and other instances' entries are kept.
+Copilot CLI reads the file as JSON with comments (`agents/jsonc.ts`); Attache writes it back as plain JSON, as `copilot mcp add` does (seen with 1.0.114), backs it up first, and says in the preview when the file had comments that only the backup keeps.
+A file that does not parse, a non-object `mcpServers` or a same-name server Attache did not add is refused before anything is written.
+`settings.json` is read only to refuse a setup whose `disabledMcpServers` (where `copilot mcp disable` records it) lists this instance's server.
+`~/.copilot` alone is not a sign that Copilot CLI is installed (the GitHub Copilot app and SDK-hosted runtimes share it): detection looks for a `copilot` executable in the tool folders and for `gh copilot`'s download folder, and connecting stays possible without either.
+A running session must start again, or run `/mcp reload`; a repository's own `.mcp.json` can replace a same-name server for sessions in that repository.
+`test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in (skipped where it is not on PATH or in `ATTACHE_COPILOT_EXECUTABLE`): `copilot mcp list --json` and `copilot mcp get --json` show Attache's server as a user server, enabled, next to the owner's; the server as Copilot CLI read it starts and answers from the Brain; after disconnecting only the owner's is listed.
+It passed against `@github/copilot` 1.0.114 on macOS.
+Memory comes from one personal hooks file per instance, `<Copilot home>/hooks/<owner key>.json` (`{ version: 1, hooks: { sessionStart: [{ type: "command", bash, powershell, timeoutSec: 10 }] } }`), which runs `attache-agent-hook copilot-cli session-start`.
+The hook prints `{"additionalContext": "<attache-memory>…</attache-memory>"}` from the session's folder's context file (`hook-profiles.ts` `copilot-cli`), or nothing when there is no memory.
+Copilot CLI combines every file in its hooks folder, so the owner's own hooks files and other instances' are never opened; a file at Attache's path that is not this instance's (no hook command running `attache-agent-hook` with this state folder) is refused and left on disconnect.
+Connecting also refuses a personal `settings.json` with `disableAllHooks: true`, and a Copilot CLI older than 1.0.22 (`agents/copilot-cli-version.ts`; before 1.0.11 `additionalContext` was ignored, before 1.0.22 session-start hooks ran on every prompt); a version Attache cannot read does not stop it, since Copilot CLI updates itself.
+No instruction file is written: the hook path passed the smoke test.
+Seen with 1.0.114 against a stand-in model: the memory reaches the model as a user message of its own in a new (`source: "new"`), resumed (`"resume"`, fresh memory and no old copy) and `/clear`ed session; `events.jsonl` keeps it only in the `hook.end` event's `data.output.additionalContext`, never as a `user.message`; `/compact` drops it and session-start does not run again, so a compacted session has no memory until it is cleared, resumed or started anew.
+A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns the hook off for its sessions; Attache cannot see that.
+The smoke test also runs real sessions with no GitHub sign-in through Copilot CLI's offline mode with a custom provider (`COPILOT_OFFLINE`, `COPILOT_PROVIDER_BASE_URL`) and a local stand-in model, checking the memory in new, resumed and (with python3 driving the interactive terminal) `/clear`ed sessions, that `events.jsonl` holds it only on `hook.end`, and that none reaches a session after disconnecting.
+It does not show the name Copilot CLI's MCP client gives itself.
+
 ### MCP server in each Harness
 
 Connecting a Harness also registers Attache's MCP server in that Harness's MCP configuration (`agents/mcp-registration.ts`), in one step with the hooks: `~/.claude.json` (Claude Code's user-level servers), `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, and Claude Desktop's `claude_desktop_config.json`, whose folder differs per operating system (`platform/harness-locations.ts`).
