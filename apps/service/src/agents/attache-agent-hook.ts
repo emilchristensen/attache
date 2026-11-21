@@ -12,7 +12,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPTURE_EVENTS, spoolCapture, type HookEvent } from "./spool.ts";
+import { CAPTURE_EVENTS, contextFile, spoolCapture, spoolText, type HookEvent } from "./spool.ts";
 import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
 import { currentOs } from "../platform/os.ts";
@@ -41,6 +41,19 @@ export function sessionContext(stateDir: string, folder: string | null, env: Nod
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return null;
   const file = contextFileFor(stateDir, folder ?? process.cwd());
   return existsSync(file) ? readFileSync(file, "utf8") : null;
+}
+
+/**
+ * Spool a session snapshot a Harness plugin made (Attache's OpenCode plugin
+ * imports this), for the service to save. Nothing is spooled while the Agent
+ * sessions feature is off (the service then removes the session context), or
+ * for sessions tools start on their own. True when it spooled.
+ */
+export function spoolSession(stateDir: string, input: { agent: string; event: HookEvent; sessionId: string; cwd: string | null }, text: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return false;
+  if (!CAPTURE_EVENTS.includes(input.event) || !existsSync(contextFile(stateDir))) return false;
+  spoolText(stateDir, input, text);
+  return true;
 }
 
 export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): string {

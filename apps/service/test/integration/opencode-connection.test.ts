@@ -81,12 +81,12 @@ afterAll(async () => {
 });
 
 describe("OpenCode as a Harness Connection", () => {
-  it("is its own Connection that reports MCP access and memory, no session capture, and that a running OpenCode must restart", async () => {
+  it("is its own Connection that reports MCP access, memory and session capture without a final event, and that a running OpenCode must restart", async () => {
     const defs = (await svc.get<{ definitions: Array<{ kind: string; label: string; description?: string; harness?: unknown }> }>("/capabilities")).definitions;
     const def = defs.find((d) => d.kind === "opencode");
-    expect(def).toMatchObject({ label: "OpenCode", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "none" } } });
+    expect(def).toMatchObject({ label: "OpenCode", harness: { restartRequired: true, capabilities: { mcp: true, memory: "runtime-fresh", capture: "without-final-event" } } });
     expect(def!.description).toMatch(/memory/);
-    expect(def!.description).not.toMatch(/save your sessions/);
+    expect(def!.description).toMatch(/save your OpenCode sessions/);
     expect((await connection()).status).not.toBe("connected");
   });
 
