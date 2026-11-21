@@ -1,9 +1,53 @@
 /* Home: For you now, the Inbox and Recently added. */
 
+.page-inbox {
+  container: home / inline-size;
+}
+.home-areas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: start;
+  column-gap: var(--s-5);
+}
+.home-areas > .your-day {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  margin-bottom: 0;
+  padding-bottom: var(--s-5);
+}
+.home-areas > .for-you-now {
+  grid-column: 1;
+  grid-row: 2;
+  margin-bottom: 0;
+}
+.home-areas > .inbox {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 0;
+}
+.home-areas > * {
+  min-width: 0;
+}
+@container home (min-width: 541px) {
+  .home-areas .inbox-line { padding-block: 8px; }
+  .home-areas .inbox-row-actions { margin-top: 2px; }
+}
+@container home (max-width: 900px) {
+  .home-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container home (max-width: 540px) {
+  .home-areas { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .home-areas > .your-day { padding-bottom: 16px; margin-bottom: var(--s-5); }
+  .home-areas > .for-you-now { order: 1; }
+  .home-areas > .your-day { order: 2; }
+  .home-areas > .inbox { order: 3; }
+}
+
 /* ---- For you now --------------------------------------------------------------------------- */
 
 .for-you-now {
   margin-bottom: var(--s-5);
+  container-type: inline-size;
 }
 .for-you-now-head {
   display: flex;
@@ -32,6 +76,36 @@
 /* Lines without a lead: the title at the quiet line's size. */
 .for-you-now.compact .for-you-now-head {
   margin-bottom: var(--s-1);
+}
+@container (max-width: 540px) {
+  .for-you-now .inbox-rows { margin-top: var(--s-1); }
+  .for-you-now .inbox-line {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "kind actions"
+      "subject subject"
+      "source time";
+    row-gap: 1px;
+    padding: 4px 2px;
+  }
+  .for-you-now .inbox-kind { grid-area: kind; }
+  .for-you-now .inbox-time { grid-area: time; }
+  .for-you-now .inbox-source .tag { display: none; }
+  .for-you-now .inbox-subject { grid-area: subject; min-height: 24px; }
+  .for-you-now .inbox-source { grid-area: source; }
+  .for-you-now .inbox-row-actions {
+    grid-area: actions;
+    justify-self: end;
+    min-height: 28px;
+    margin-top: 0;
+  }
+  .for-you-now .inbox-row-actions button { min-height: 24px; }
+}
+@container home (max-width: 540px) {
+  .for-you-now .inbox-subject, .for-you-now .inbox-row-actions, .for-you-now .inbox-row-actions button { min-height: 44px; }
+}
+@container home (min-width: 901px) {
+  .daily-briefing-area { padding-block: 0; }
 }
 .for-you-now-quiet-title {
   font-family: var(--font);
@@ -387,7 +461,7 @@ button.count-chip {
   gap: var(--s-1);
 }
 
-@media (max-width: 720px) {
+@container home (max-width: 540px) {
   .heads-up-lead {
     padding: 16px;
   }
@@ -422,8 +496,8 @@ button.count-chip {
   display: grid;
   grid-template-columns: 185px minmax(0, 1fr);
   gap: var(--s-4);
-  padding: 16px 0;
-  margin-bottom: var(--s-5);
+  padding: 12px 0;
+  margin-bottom: var(--s-4);
   border-block: 1px solid var(--rule);
 }
 .your-day h2 {

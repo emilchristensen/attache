@@ -4,21 +4,13 @@
  */
 import { expect, type Page } from "@playwright/test";
 
-/**
- * The fold criterion, measured: at scroll position zero, with the Inbox heading on screen, how many Inbox rows end
- * (bottom edge, not top) inside the viewport, with their whole type word, subject, source line and time drawn: each
- * one rendered, cut off neither sideways nor below, and inside every ancestor that clips it. -1 when the Inbox
- * heading itself is below the fold.
- */
-export async function completeRows(page: Page): Promise<number> {
-  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
-  return page.evaluate(() => {
+function countComplete(page: Page, selector: string, parts: readonly string[], heading: string): Promise<number> {
+  return page.evaluate(({ selector, parts, heading }) => {
     const scroller = document.querySelector(".page")!;
     scroller.scrollTo(0, 0);
     const fold = window.innerHeight;
-    if (document.querySelector("#inbox h2")!.getBoundingClientRect().bottom > fold) return -1;
-    const rows = [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")];
-    const PARTS = [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"];
+    if (document.querySelector(heading)!.getBoundingClientRect().bottom > fold) return -1;
+    const rows = [...document.querySelectorAll<HTMLElement>(selector)];
     const insideClips = (el: Element) => {
       const box = el.getBoundingClientRect();
       for (let p = el.parentElement; p; p = p.parentElement) {
@@ -30,9 +22,20 @@ export async function completeRows(page: Page): Promise<number> {
     };
     const drawn = (el: HTMLElement | null) =>
       el !== null && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && el.getBoundingClientRect().bottom <= fold && insideClips(el);
-    const whole = (row: HTMLElement) => row.getBoundingClientRect().bottom <= fold && PARTS.every((s) => drawn(row.querySelector<HTMLElement>(s)));
-    return rows.filter(whole).length;
-  });
+    return rows.filter((row) => row.getBoundingClientRect().bottom <= fold && parts.every((part) => drawn(row.querySelector<HTMLElement>(part)))).length;
+  }, { selector, parts, heading });
+}
+
+/** The fold criterion for the two complete rows in the Inbox. */
+export async function completeRows(page: Page): Promise<number> {
+  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
+  return countComplete(page, "#inbox [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"], "#inbox h2");
+}
+
+/** The fold criterion for the two complete entries in For you now. */
+export async function completeForYouNow(page: Page): Promise<number> {
+  await expect(page.locator(".for-you-now [data-inbox-row]").first()).toBeVisible();
+  return countComplete(page, ".for-you-now [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"], ".for-you-now h2");
 }
 
 /** A sign-in problem on Home's Connections area: GitHub's answer says it needs a new sign-in. */

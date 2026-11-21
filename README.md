@@ -35,6 +35,8 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   For you now curates at most five open Inbox items by urgency: unread meeting prep within 15 minutes, replies nearly late, items due today and the Daily Briefing's picks, each with a short reason and the same row actions as the Inbox.
   Every open item stays in the Inbox, with a Suggested now tag when it is also curated.
   Your day shows today's calendar meetings in the browser's time zone, with the meeting in progress marked, ended meetings dimmed, unanswered invitations named, and Join from 15 minutes before a meeting through its scheduled end.
+  Home gives the search, briefing and day full rows; For you now sits beside the Inbox at one third and two thirds on desktop, half and half on tablet, or in the full-width phone reading order.
+  Every Home area responds to its own column width rather than the window, so the narrow view stays the same wherever the area is placed.
   A full-width Connection banner under the masthead names the issue that most needs you, what may be missing and the one thing to do; when everything works, Connections carries a green dot.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.

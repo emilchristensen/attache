@@ -72,7 +72,7 @@ export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolea
 
   const failed = openInbox.error;
   return (
-    <section className={`for-you-now${shown.entries.length ? "" : " quiet"}`} aria-labelledby={headingId} {...holdProps}>
+    <section className={`for-you-now${shown.entries.length ? "" : " quiet"}`} aria-labelledby={headingId} data-for-you-now={shown.entries.length ? "entries" : "quiet"} {...holdProps}>
       <div className="for-you-now-head">
         <h2 className="heading-section" id={headingId}>For you now</h2>
       </div>

@@ -400,7 +400,7 @@ a.source-chip {
 
 /* ---- narrow: stamp and kind first, the whole subject next, then source and time ------------------------- */
 
-@media (max-width: 720px) {
+@container (max-width: 540px) {
   .inbox-tools {
     margin-left: 0;
     flex: 1 1 100%;

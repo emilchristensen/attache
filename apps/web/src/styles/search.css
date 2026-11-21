@@ -182,7 +182,7 @@
 /* ---- Home: the compact heading, the date and Browse ----------------------------------- */
 
 .home-search {
-  margin-bottom: var(--s-5);
+  margin-bottom: var(--s-3);
 }
 .home-head {
   display: flex;

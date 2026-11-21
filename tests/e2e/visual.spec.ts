@@ -271,8 +271,9 @@ test("screens", async ({ browser }) => {
   await expect(pr).toBeVisible({ timeout: 20_000 });
   await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
-  await page.getByRole("button", { name: "Briefings" }).click();
-  await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
+  const dailyBriefing = page.getByRole("region", { name: "The Daily Briefing" });
+  await dailyBriefing.getByRole("button", { name: "Briefing options" }).click();
+  await dailyBriefing.getByRole("group", { name: "Briefing actions" }).getByRole("button", { name: /^Prepare a briefing/ }).click();
   await page.waitForTimeout(1500);
   // Nothing written without review yet: Recently added says so in one line. A fresh load clears the toasts above.
   for (const scheme of ["light", "dark"] as const) {

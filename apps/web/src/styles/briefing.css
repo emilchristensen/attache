@@ -1,14 +1,16 @@
-.daily-briefing-area { container-type: inline-size; border-top: 1px solid var(--line); padding: var(--s-5) 0; }
-.daily-briefing-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-3); }
+.daily-briefing-area { container-type: inline-size; border-top: 1px solid var(--line); padding: var(--s-2) 0; }
+.daily-briefing-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-2); }
 .daily-briefing-card { display: grid; grid-template-columns: minmax(0, 43fr) minmax(0, 57fr); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--paper); }
-.briefing-painting { position: relative; min-height: 210px; display: grid; align-items: end; background-size: cover; color: #fff; }
+.briefing-painting { position: relative; min-height: 160px; display: grid; align-items: end; background-size: cover; color: #fff; }
 .briefing-painting::before, .briefing-page-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent, rgba(0,0,0,.92)); }
 .briefing-painting > div, .briefing-page-hero > div { position: relative; z-index: 1; padding: var(--s-5); }
 .briefing-painting span { display: block; font-family: var(--serif); font-style: italic; font-size: 1.25rem; }
 .briefing-painting strong { display: block; max-width: 7em; font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 4rem); line-height: .9; }
 .briefing-painting p { margin: var(--s-3) 0 0; font-size: .75rem; }
-.briefing-lead { padding: clamp(var(--s-4), 5cqi, var(--s-7)); align-self: center; }
-.briefing-lead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3.5cqi, 2.5rem); line-height: 1.08; margin: var(--s-2) 0; }
+.briefing-lead { padding: var(--s-3); align-self: center; }
+.briefing-lead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 2.8cqi, 2rem); line-height: 1.04; margin: var(--s-1) 0; }
+.briefing-lead > p { margin-top: var(--s-1); margin-bottom: var(--s-1); }
+.briefing-lead .heads-up-actions { margin-top: var(--s-1); }
 .briefing-eyebrow { color: var(--rust); font-family: var(--serif); font-style: italic; margin: 0; }
 .briefing-time { color: var(--muted); font-size: .85rem; }
 .briefing-empty, .briefing-folded { padding: var(--s-4); border: 1px solid var(--line); border-radius: var(--r-lg); display: flex; align-items: center; gap: var(--s-3); }
