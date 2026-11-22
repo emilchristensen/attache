@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -290,6 +290,29 @@ describe("OpenCode session capture", () => {
       await until(() => jobsFor(sessionId).some((job) => job.status === "succeeded"), 5_000);
     } finally {
       svc.app.jobs.start();
+    }
+  });
+
+  it("keeps a completed snapshot queued in the same millisecond as disconnect", async () => {
+    const sessionId = "ses_disconnect_time_tie";
+    const oc = await openCode2(sessionId);
+    const at = Date.now();
+    vi.setSystemTime(at);
+    try {
+      oc.session.context = [
+        { ...v2User("A final question", 0), time: { created: at - 1 } },
+        { ...v2Assistant([{ type: "text", text: "Captured before disconnect" }], 1), time: { created: at - 1, completed: at } },
+      ];
+      await oc.turnEnds();
+      await svc.post("/connections/opencode/disconnect", { deleteData: false });
+    } finally {
+      vi.useRealTimers();
+    }
+    try {
+      await spoolEmpty();
+      expect(archived(sessionId)).toContain("Captured before disconnect");
+    } finally {
+      await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
     }
   });
 });

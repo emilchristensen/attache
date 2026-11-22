@@ -13,7 +13,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CAPTURE_EVENTS, spoolCapture, spoolText, type HookEvent } from "./spool.ts";
-import { harnessSessionActive, hasHarnessSessionState } from "./harness-session-state.ts";
+import { harnessCaptureGrant, harnessSessionActive, hasHarnessSessionState } from "./harness-session-state.ts";
 import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
 import { currentOs } from "../platform/os.ts";
@@ -56,8 +56,10 @@ export function harnessSessionContext(stateDir: string, agent: "pi" | "opencode"
  */
 export function spoolSession(stateDir: string, input: { agent: string; event: HookEvent; sessionId: string; cwd: string | null }, text: string, env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return false;
-  if (!CAPTURE_EVENTS.includes(input.event) || !hasHarnessSessionState(input.agent) || !harnessSessionActive(stateDir, input.agent)) return false;
-  spoolText(stateDir, input, text);
+  if (!CAPTURE_EVENTS.includes(input.event) || !hasHarnessSessionState(input.agent)) return false;
+  const captureGrant = harnessCaptureGrant(stateDir, input.agent);
+  if (!captureGrant) return false;
+  spoolText(stateDir, { ...input, captureGrant }, text);
   return true;
 }
 
@@ -80,8 +82,11 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
     const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;
     if (sourcePath) profile.awaitTranscript?.(sourcePath, event as HookEvent, payload);
-    if (hasHarnessSessionState(agent) && !harnessSessionActive(stateDir, agent)) return "";
-    spoolCapture(stateDir, { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath });
+    const record = { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath };
+    if (hasHarnessSessionState(agent)) {
+      const captureGrant = harnessCaptureGrant(stateDir, agent);
+      if (captureGrant) spoolCapture(stateDir, { ...record, captureGrant }, () => harnessCaptureGrant(stateDir, agent) === captureGrant);
+    } else spoolCapture(stateDir, record);
   }
   return "";
 }

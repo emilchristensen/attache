@@ -521,6 +521,7 @@ Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part
 Pi, OpenCode and Copilot CLI record their installed locations and names in this instance's local state.
 Disconnect revokes their memory and capture before removing their configuration, so a plugin or hook already loaded in a running Harness cannot keep saving.
 Attache keeps completed snapshots already in the spool and records each break in capture so a later resume cannot import turns written while the Connection was off.
+After a pause, an unrecognised format still appears on the Connection, and Attache discards the raw copy because it could include conversation from the pause.
 The command-line uninstaller uses those recorded locations even when its environment differs from the service's.
 Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
 The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).

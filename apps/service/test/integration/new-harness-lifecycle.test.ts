@@ -57,6 +57,7 @@ describe("Pi, OpenCode and Copilot CLI across an Attache upgrade", () => {
     await svc.stop();
     svc = await startTestService({ stateDir, dataDir });
     for (const kind of KINDS) expect((await connection(kind)).harness?.state, kind).toBe("current");
+    await until(async () => (await connection("opencode")).status === "connected");
   });
 });
 

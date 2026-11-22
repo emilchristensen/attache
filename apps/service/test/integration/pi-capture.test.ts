@@ -166,6 +166,34 @@ describe("Pi session capture", () => {
     const c = (await svc.get<Array<{ kind: string; lastError?: string | null }>>("/connections")).find((x) => x.kind === "pi")!;
     expect(c.lastError).toMatch(/Pi session format version 4/);
   });
+
+  it("keeps an answer streamed across a capture pause out of the Brain", async () => {
+    const id = "pi-pause";
+    const pi = await piSession({ ...HEADER, id });
+    const started = Date.now() - 1_000;
+    const question = { ...user("A question before the pause", 0), timestamp: new Date(started).toISOString() };
+    await svc.post("/connections/pi/disconnect", { deleteData: false });
+    await svc.post("/connections/pi/configure", { method: "hooks", fields: {} });
+    const finished = Date.now();
+    pi.session.branch = [
+      question,
+      { ...assistant([text("Answer streamed across pause")], 1, { timestamp: started }), timestamp: new Date(finished).toISOString() },
+      { ...user("A question after reconnect", 2), timestamp: new Date(finished).toISOString() },
+    ];
+    await pi.settles();
+    await spoolEmpty();
+    expect(turnsOf(archived(id)!)).toEqual(["Ada: A question before the pause", "Ada: A question after reconnect"]);
+  });
+
+  it("reports an unknown Pi format without retaining a raw snapshot after a capture pause", async () => {
+    const id = "pi-format-after-pause";
+    spoolText(svc.stateDir, { agent: "pi", event: "turn-end", sessionId: id, cwd: HOME }, JSON.stringify({ attache: "pi-session", v: 1, header: { ...HEADER, id, version: 4 }, entries: [user("Private while disconnected", 1)] }));
+    await spoolEmpty();
+    expect(archived(id)).toBeNull();
+    const c = (await svc.get<Array<{ kind: string; lastError?: string | null }>>("/connections")).find((x) => x.kind === "pi")!;
+    expect(c.lastError).toMatch(/Pi session format version 4/);
+    expect(readdirSync(join(svc.stateDir, "agents/unparsed")).some((f) => f.includes(id))).toBe(false);
+  });
 });
 
 describe("the summariser's copy of a Pi session", () => {

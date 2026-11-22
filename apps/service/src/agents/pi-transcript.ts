@@ -75,7 +75,11 @@ function turnsOf(entries: unknown[]): { turns: Turn[]; title: string | null } {
     if (m.role !== "user" && m.role !== "assistant") unreadable(`a message with role ${JSON.stringify(m.role)}`);
     const raw = textOf(m.content);
     const text = clean(m.role === "user" ? raw.replace(SKILL, "") : raw);
-    if (text) turns.push({ role: m.role, text, at: str(e.timestamp), id });
+    if (text) {
+      const at = str(e.timestamp);
+      const began = typeof m.timestamp === "number" && Math.abs(m.timestamp) <= 8.64e15 ? new Date(m.timestamp).toISOString() : null;
+      turns.push(m.role === "assistant" ? { role: m.role, text, at: began, completedAt: at, id } : { role: m.role, text, at, id });
+    }
   }
   return { turns, title };
 }

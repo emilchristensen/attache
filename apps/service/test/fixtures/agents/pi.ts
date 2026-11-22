@@ -29,7 +29,7 @@ const entry = (type: string, at: number, fields: Record<string, unknown>): Entry
 
 export const user = (text: string, at: number) => entry("message", at, { message: { role: "user", content: [{ type: "text", text }], timestamp: 1 } });
 export const assistant = (content: unknown[], at: number, extra: Record<string, unknown> = {}) =>
-  entry("message", at, { message: { role: "assistant", content, api: "openai-completions", provider: "stand-in", model: "stand-in", stopReason: "stop", timestamp: 1, ...extra } });
+  entry("message", at, { message: { role: "assistant", content, api: "openai-completions", provider: "stand-in", model: "stand-in", stopReason: "stop", timestamp: Date.parse(iso(at)) - 20, ...extra } });
 export const text = (t: string) => ({ type: "text", text: t });
 export const readCall = () => ({ type: "toolCall", id: "call_1", name: "read", arguments: { path: "/work/orion/.env" } });
 export const readResult = (at: number) =>

@@ -6,7 +6,7 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { canIngestHarnessSnapshot, harnessSessionState, hasHarnessSessionState, sessionMaySpanCapturePause, turnsWhileConnected } from "./harness-session-state.ts";
+import { captureStateForSnapshot, harnessSessionState, hasHarnessSessionState, sessionMaySpanCapturePause, turnsWhileConnected } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
@@ -138,11 +138,12 @@ export class AgentSessions {
 
   private ingestOne(r: SpoolRecord): boolean {
     const managed = hasHarnessSessionState(r.agent) ? r.agent : null;
-    const capture = managed ? harnessSessionState(this.stateDir, managed) : null;
+    const sessionState = managed ? harnessSessionState(this.stateDir, managed) : null;
+    const capture = sessionState ? captureStateForSnapshot(sessionState, r) : null;
     if (managed) {
       const connection = this.app.connections.record(managed);
       // Preserve copies made before disconnect, and fail closed if revocation could not update the on-disk grant.
-      if (!connection || !capture || (capture.active && connection.status === "disconnected") || !canIngestHarnessSnapshot(capture, r.at)) return false;
+      if (!connection || !capture || (capture.active && connection.status === "disconnected")) return false;
     }
     const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
@@ -155,7 +156,7 @@ export class AgentSessions {
     const raw = readFileSync(copy, "utf8");
     const parsed = source.parse(raw);
     if (!parsed.turns.length) {
-      if (parsed.problem) this.reportUnreadable(r, copy, source.label, parsed.problem);
+      if (parsed.problem) this.reportUnreadable(r, capture?.pauses.length ? null : copy, source.label, parsed.problem);
       // A plugin's snapshot of a session with nothing said yet, or of a subagent's side-chain, is no failure; nor is a strict parser's empty session.
       else if (raw.trim() && !source.partial && !source.strict) this.keepUnparsed(r, copy);
       return false;
@@ -219,11 +220,12 @@ export class AgentSessions {
 
   /**
    * A transcript in a format Attache could not read: nothing of it is saved,
-   * a sample is kept for diagnosis, and the Connection names the format, so
+   * a sample is kept only if capture has been continuous, and the Connection names the format, so
    * the owner sees that an upstream change stopped their sessions being saved.
    */
-  private reportUnreadable(r: SpoolRecord, copy: string, label: string, problem: string) {
-    this.keepUnparsed(r, copy, problem);
+  private reportUnreadable(r: SpoolRecord, copy: string | null, label: string, problem: string) {
+    if (copy) this.keepUnparsed(r, copy, problem);
+    else this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, problem });
     const repair = r.agent === "opencode" ? "Restart OpenCode to load the current plugin. Updating Attache may help if the problem persists." : "Updating Attache may fix this.";
     this.reportSessionProblem(r.agent, `Attache could not read a ${label} session (${problem}), so it saved nothing of it. ${repair} Use the wrap-up prompt to keep what the conversation decided.`);
   }
@@ -442,6 +444,9 @@ export class AgentSessions {
       try {
         const r = h.refresh();
         if (r.changes.length) this.app.log.info("brought Attache's files in a Harness up to date", { agent: h.kind, files: r.changes.map((c) => c.path), backups: r.backups });
+        if (connection.status !== "connected" && h.status().state === "current") {
+          void this.app.connections.test(connection.id).catch((e) => this.app.log.warn("could not verify a repaired Harness Connection", { agent: h.kind, error: (e as Error).message }));
+        }
       } catch (e) {
         this.app.log.warn("could not bring Attache's files in a Harness up to date", { agent: h.kind, error: (e as Error).message });
       }
