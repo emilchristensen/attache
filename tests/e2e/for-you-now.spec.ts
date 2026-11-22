@@ -67,13 +67,27 @@ test("daily: own all-day card, Got it fold, and briefing page", async () => {
   await expect(card.locator(".briefing-painting")).toHaveAttribute("style", /\/paintings\//);
   await card.getByRole("link", { name: "Read briefing" }).click();
   await expect(page).toHaveURL(/\/briefing\/[^/]+$/);
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Home/The Daily Briefing");
   for (const heading of ["First on your list", "Top to-dos", "New updates", "Your day"]) await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  // Your day is live from the agenda route, not a copy kept with the briefing.
+  await expect(page.getByRole("region", { name: "Your day" })).toBeVisible();
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/screens/${scheme}-briefing-page.png`, fullPage: true });
+  }
+  await page.emulateMedia({ colorScheme: null });
   await page.goto(stack.url);
   await card.getByRole("button", { name: "Got it" }).click();
   await expect(area(page).locator(".briefing-folded")).toBeVisible();
   await page.reload();
   await expect(area(page).locator(".briefing-folded")).toBeVisible();
   await expect(area(page).locator(".daily-briefing-card")).toHaveCount(0);
+  // The folded line opens it again, and that is remembered too.
+  await area(page).locator(".briefing-folded").getByRole("button").click();
+  await expect(area(page).locator(".daily-briefing-card")).toBeVisible();
+  await page.reload();
+  await expect(area(page).locator(".daily-briefing-card")).toBeVisible();
+  await expect(area(page).locator(".briefing-folded")).toHaveCount(0);
 });
 
 test("the Daily Briefing stays after noon", async () => {

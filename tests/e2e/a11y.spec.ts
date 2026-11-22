@@ -139,8 +139,9 @@ const OPENED: ReadonlyArray<readonly [where: string, path: string, h1: string, o
     await page.getByRole("combobox", { name: "Search the Brain" }).fill("Orion");
     await expect(page.getByRole("listbox", { name: "Results" }).getByRole("option").first()).toBeVisible();
   }],
-  ["Home with the briefing read", "/", "Home", async (page) => {
-    await page.getByRole("region", { name: "For you now" }).getByRole("button", { name: /Read briefing/ }).first().click();
+  ["The briefing page Read briefing opens", "/", "Home", async (page) => {
+    await page.getByRole("region", { name: "The Daily Briefing" }).getByRole("link", { name: "Read briefing" }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: /Daily Briefing/ })).toBeVisible();
     await expect(page.locator(".briefing-detail")).toBeVisible();
   }],
   [EVIDENCE, "/", "Home", async (page) => {
@@ -211,11 +212,20 @@ test("screen reader: Home's five areas are named in order, the navigation names 
   await expect(home.getByRole("region", { name: "For you now" })).toBeVisible();
   await expect(home.getByRole("region", { name: "Your day" })).toBeVisible();
   await expect(home.getByRole("region", { name: "Inbox" })).toBeVisible();
-  const order = await page.evaluate(() =>
-    [".home-search", ".daily-briefing-area", ".for-you-now", ".your-day", "#inbox"].map((s) => document.querySelector(s)!.getBoundingClientRect().top),
-  );
-  expect(order, "search, The Daily Briefing, For you now, Your day, Inbox from the top").toEqual([...order].sort((a, b) => a - b));
-  await expect(home.locator("> *")).toHaveCount(5);
+  const tops = (selectors: readonly string[]) => page.evaluate((all) => all.map((s) => document.querySelector(s)!.getBoundingClientRect().top), selectors);
+  // On a desktop window Your day spans the column above For you now and the Inbox, which share a row; the reading
+  // order follows it, so the keyboard never goes back up the page.
+  const wide = await tops([".home-search", ".daily-briefing-area", ".your-day", ".for-you-now", "#inbox"]);
+  expect(wide.slice(0, 4), "search, The Daily Briefing, Your day, For you now from the top").toEqual([...wide.slice(0, 4)].sort((a, b) => a - b));
+  expect(Math.abs(wide[3]! - wide[4]!), "For you now and the Inbox share a row").toBeLessThanOrEqual(1);
+  // On a phone For you now comes before Your day.
+  await page.setViewportSize(PHONE);
+  const narrow = await tops([".home-search", ".daily-briefing-area", ".for-you-now", ".your-day", "#inbox"]);
+  expect(narrow, "search, The Daily Briefing, For you now, Your day, Inbox from the top").toEqual([...narrow].sort((a, b) => a - b));
+  await page.setViewportSize({ width: 1360, height: 900 });
+  // Five areas and nothing else (the shared row holds Your day, For you now and the Inbox): Recently added closes the
+  // Inbox area rather than standing as a sixth.
+  await expect(home.locator(":scope > :not(.home-areas), :scope > .home-areas > *")).toHaveCount(5);
   for (const [viewport, bar] of [[{ width: 1360, height: 900 }, ".masthead-nav"], [PHONE, ".bottom-bar"]] as const) {
     await page.setViewportSize(viewport);
     const nav = page.locator(bar);
@@ -420,19 +430,6 @@ test("reduced motion: nothing animates, and a jump the Dashboard makes itself la
     const { most, what } = await longest();
     expect(most, `${path}: ${what}`).toBeLessThanOrEqual(0.001);
   }
-  // Read briefing's count chips jump to the Inbox: in the same moment, not over the next frames.
-  await page.setViewportSize({ width: 1280, height: 600 });
-  await arrive(page, "/", "Home");
-  await page.getByRole("region", { name: "For you now" }).getByRole("button", { name: /Read briefing/ }).first().click();
-  const chip = page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button").first();
-  await expect(chip).toBeVisible();
-  const jumped = await chip.evaluate((el) => {
-    const scroller = document.querySelector(".page")!;
-    const from = scroller.scrollTop;
-    (el as HTMLElement).click();
-    return scroller.scrollTop - from;
-  });
-  expect(jumped, "the page moved to the Inbox at once").toBeGreaterThan(0);
   await page.emulateMedia({ reducedMotion: null });
   await page.setViewportSize({ width: 1360, height: 900 });
 });

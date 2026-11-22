@@ -205,7 +205,10 @@ test("home: All results in Brain carries the query to the Brain screen's address
 
 test("home: only the answer to what the field says now can be opened; keys follow the chosen result and Esc works from the results", async () => {
   const page = await journeys.open("/");
-  await page.setViewportSize({ width: 1280, height: 420 });
+  // A short window, with room for the results under the field below the Connection banner this setup raises (its
+  // features are only partly set up).
+  await expect(page.locator("[data-connection-banner]")).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 480 });
   const search = field(page);
   await search.fill("Helios");
   const options = results(page).getByRole("option");
@@ -658,11 +661,13 @@ test("narrow: the prompt fits at 320 and 375 px and at 200% zoom, and the keycap
   await expect(page.locator('[data-subject="Decision"]')).toBeVisible();
   release();
   await expect(page.locator(".result-item").first()).toBeVisible();
-  // The note starts at the top of the window, or, when the page ends first, shows in full above the bottom bar.
+  // The note starts at the top of the page under the frame (the masthead and any Connection banner), or, when the
+  // page ends first, shows in full above the bottom bar.
   const noteInView = () =>
     page.locator(".split-detail").evaluate((note) => {
       const box = note.getBoundingClientRect();
-      return box.top <= 80 || box.bottom <= document.querySelector(".bottom-bar")!.getBoundingClientRect().top;
+      const pageTop = document.querySelector(".page")!.getBoundingClientRect().top;
+      return box.top <= pageTop + 24 || box.bottom <= document.querySelector(".bottom-bar")!.getBoundingClientRect().top;
     });
   await expect.poll(noteInView, "the opened note is in view").toBe(true);
   await page.goto(`${stack.url}/`);
