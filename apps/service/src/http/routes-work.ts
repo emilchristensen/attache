@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ActionRestoreInput, AttentionDraftInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, AgendaQuery, ActionEditInput, ActionExecuteInput, ActionRestoreInput, AttentionDraftInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -184,14 +184,9 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
   r.get("/connections", () => app.connections.statuses());
   r.get("/agenda", (c) => {
     requireFeature(app, "attention");
-    const from = c.query("from");
-    const to = c.query("to");
-    if (!from || !to) throw new HttpError(400, "invalid_request", "Agenda needs from and to timestamps");
-    try {
-      return agenda(app.db, app.connections, from, to);
-    } catch (e) {
-      throw new HttpError(400, "invalid_request", (e as Error).message);
-    }
+    const range = AgendaQuery.safeParse({ from: c.query("from"), to: c.query("to") });
+    if (!range.success) throw new HttpError(400, "invalid_request", `The agenda needs from and to as ISO instants, from before to: ${range.error.issues[0]?.message ?? "invalid range"}`);
+    return agenda(app.db, app.connections, range.data.from, range.data.to);
   });
   r.post("/connections/:kind/configure", async (c) => {
     const kind = ConnectionKind.parse(c.params.kind);
