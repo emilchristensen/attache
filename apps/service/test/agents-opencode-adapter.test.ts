@@ -237,6 +237,12 @@ describe("disconnecting OpenCode", () => {
 describe("OpenCode configuration Attache cannot safely work with", () => {
   const nothingWritten = () => expect(existsSync(PLUGINS())).toBe(false);
 
+  it("a configuration file that starts with a byte-order mark, as Windows editors write, is read like any other", () => {
+    write(join(CONFIG(), "opencode.json"), `\uFEFF${JSON.stringify({ mcp: { [new AgentHooks(stateDir, backups).ownerKey()]: { type: "local", command: ["x"] } } })}`);
+    // Read, not refused as unparseable: the name clash inside it is found.
+    expect(() => openCode().apply()).toThrow(/already defines an MCP server named/);
+  });
+
   it("comments and trailing commas are fine, as OpenCode allows them", () => {
     write(join(CONFIG(), "opencode.jsonc"), '{\n  // "mcp": {},\n  /* block */ "theme": "dark", "url": "http://x//y",\n}\n');
     expect(openCode().apply().changes).toHaveLength(1);
@@ -299,6 +305,33 @@ describe("OpenCode versions", () => {
     expect(() => openCode().apply()).toThrow(/too old/);
     expect(existsSync(PLUGINS())).toBe(false);
     expect(openCode().status()).toMatchObject({ state: "failed", message: expect.stringMatching(/too old/) });
+  });
+
+  it("finds the version in output that has more lines, such as an update notice", () => {
+    installOpenCode("1.19.6\nA new version of opencode is available: 1.20.0");
+    expect(openCode().apply().changes).toHaveLength(1);
+    expect(openCode().status().state).toBe("current");
+  });
+
+  it("asks an OpenCode whose --version fails only once, not on every status check", () => {
+    const runs = join(tempDir("attache-opencode-runs-"), "runs");
+    const bin = join(tempDir("attache-opencode-bin-"), "opencode.mjs");
+    writeFileSync(bin, `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(runs)}, "run\\n");\nprocess.stderr.write("broken\\n");\nprocess.exit(3);\n`);
+    process.env.ATTACHE_OPENCODE_BIN = bin;
+    expect(() => openCode().preview()).toThrow(/could not run .*--version \(broken\)/);
+    expect(() => openCode().apply()).toThrow(/could not run/);
+    expect(openCode().status()).toMatchObject({ state: "failed", message: expect.stringMatching(/could not run/) });
+    expect(readFileSync(runs, "utf8")).toBe("run\n");
+  });
+
+  it("a status check never waits for opencode --version", () => {
+    const bin = join(tempDir("attache-opencode-bin-"), "opencode.mjs");
+    writeFileSync(bin, `const end = Date.now() + 3000;\nwhile (Date.now() < end);\nprocess.stdout.write("1.19.6\\n");\n`);
+    process.env.ATTACHE_OPENCODE_BIN = bin;
+    const t0 = Date.now();
+    openCode().status();
+    openCode().refresh();
+    expect(Date.now() - t0).toBeLessThan(1500);
   });
 
   it("refuses a major version Attache does not know yet, naming it", () => {

@@ -392,7 +392,7 @@ export class AgentSessions {
       }
     }
     // Harnesses whose files carry this install's paths (a plugin, an extension, a hooks file) are refreshed through their adapter.
-    const legacy = new Set(AGENT_INTEGRATIONS.map((a) => a.kind));
+    const legacy = new Set<string>(AGENT_INTEGRATIONS.map((a) => a.kind));
     for (const h of this.app.harnesses().filter((x) => !legacy.has(x.kind) && this.app.connections.record(x.kind)?.status === "connected")) {
       try {
         const r = h.refresh();

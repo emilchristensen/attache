@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { runSync } from "../platform/run.ts";
+import { existsSync } from "node:fs";
+import { firstVersion, versionAnswer } from "./executable-version.ts";
 import { locationsForHome } from "../platform/locations.ts";
 import { openCodeInstall } from "../platform/harness-locations.ts";
 import { HooksFileError } from "./hooks-config.ts";
@@ -29,33 +29,21 @@ export function openCodeFound(home: string): boolean {
   return [...install.presence.filter((p) => !install.executables.includes(p)), ...openCodeExecutables(home)].some((p) => existsSync(p));
 }
 
-const versions = new Map<string, { stamp: string; version: string }>();
-
-/** What `opencode --version` prints, remembered until the executable changes. */
-function versionOutput(path: string): string {
-  const { mtimeMs, size } = statSync(path);
-  const stamp = `${mtimeMs}:${size}`;
-  const known = versions.get(path);
-  if (known?.stamp === stamp) return known.version;
-  const r = runSync(path, ["--version"], { timeoutMs: 15_000, env: { ...process.env, OPENCODE_DISABLE_AUTOUPDATE: "1" } });
-  if (r.code !== 0) throw new HooksFileError(`Attache could not run ${path} --version (${r.stderr.trim() || `exit ${r.code}`}), so it could not tell which OpenCode is installed. Attache changed nothing.`);
-  const version = r.stdout.trim();
-  versions.set(path, { stamp, version });
-  return version;
-}
-
 /**
- * The installed OpenCode's version, or null when none was found. Throws,
- * saying what to do, for a version Attache's plugin does not work with.
+ * The installed OpenCode's version, or null when none was found, or, without
+ * `wait`, while its answer is not known yet. Throws, saying what to do, for a
+ * version Attache's plugin does not work with.
  */
-export function checkOpenCodeVersion(home: string): string | null {
+export function checkOpenCodeVersion(home: string, opts: { wait: boolean } = { wait: true }): string | null {
   const path = openCodeExecutables(home).find((p) => existsSync(p));
   if (!path) return null;
-  const output = versionOutput(path);
-  const m = /^(?:opencode\s+)?v?(\d+)\.(\d+)\.(\d+)\S*$/i.exec(output);
-  if (!m) throw new HooksFileError(`Attache could not tell which OpenCode ${path} is (it printed "${output.slice(0, 80)}"). Attache changed nothing.`);
-  const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const version = `${major}.${minor}.${patch}`;
+  const answer = versionAnswer(path, { ...process.env, OPENCODE_DISABLE_AUTOUPDATE: "1" }, opts);
+  if (!answer) return null;
+  if (answer.output === null) throw new HooksFileError(`Attache could not run ${path} --version (${answer.failure}), so it could not tell which OpenCode is installed. Attache changed nothing.`);
+  const v = firstVersion(answer.output);
+  if (!v) throw new HooksFileError(`Attache could not tell which OpenCode ${path} is (it printed "${answer.output.slice(0, 80)}"). Attache changed nothing.`);
+  const [major, minor, patch] = v;
+  const version = v.join(".");
   if (major === 1) {
     const older = minor < OLDEST_V1[1] || (minor === OLDEST_V1[1] && patch < OLDEST_V1[2]);
     if (older) throw new HooksFileError(`OpenCode ${version} is too old for Attache's plugin: update to OpenCode ${OLDEST_V1.join(".")} or later, or OpenCode 2, then connect again. Attache changed nothing.`);
