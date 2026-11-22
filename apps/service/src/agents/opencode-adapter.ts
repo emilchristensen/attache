@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
+import type { HarnessApplyResult, HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
 import { OPENCODE_CONFIG_DIR } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
+import { readHarnessJson } from "./harness-json.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 import { parseJsonc } from "./jsonc.ts";
@@ -228,19 +229,7 @@ function configFiles(): string[] {
 }
 
 /** A configuration file of OpenCode's (JSON with comments), or undefined when absent; throws, naming the file, when it does not parse. */
-function readOpenCodeJson(path: string): Record<string, unknown> | undefined {
-  if (!existsSync(path)) return undefined;
-  const raw = readFileSync(path, "utf8");
-  if (!raw.trim()) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = parseJsonc(raw);
-  } catch (e) {
-    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); fix it so OpenCode can read it, then connect again. Attache changed nothing.`);
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; fix it, then connect again. Attache changed nothing.`);
-  return parsed as Record<string, unknown>;
-}
+const readOpenCodeJson = (path: string) => readHarnessJson(path, "OpenCode", parseJsonc)?.value;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -274,8 +263,8 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   /** Throws, naming the file, when OpenCode's configuration would turn off or replace this instance's registration. */
-  function checkOpenCodeSetup() {
-    checkOpenCodeVersion(agentHome());
+  function checkOpenCodeSetup(wait: boolean) {
+    checkOpenCodeVersion(agentHome(), { wait });
     for (const path of configFiles()) {
       const config = readOpenCodeJson(path);
       if (!config) continue;
@@ -287,11 +276,24 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
     }
   }
 
-  function plan(): HarnessFileChange[] {
-    checkOpenCodeSetup();
+  /** `wait`: whether this may wait for OpenCode's version; only connecting does, never a status check or refresh. */
+  function plan(wait: boolean): HarnessFileChange[] {
+    checkOpenCodeSetup(wait);
     const text = current();
     if (text === expected()) return [];
     return [{ path: plugin(), change: text === null ? "create" : "update", backup: text !== null, purpose: PURPOSE }];
+  }
+
+  function write(changes: HarnessFileChange[]): HarnessApplyResult {
+    const backups: string[] = [];
+    for (const c of changes) {
+      if (c.change === "create") replaceFile(c.path, expected());
+      else {
+        const { backup } = writeConfigText(c.path, expected(), hooks.backupDir);
+        if (backup) backups.push(backup);
+      }
+    }
+    return { changes, backups, restartRequired };
   }
 
   const restartRequired = true;
@@ -304,23 +306,12 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
     setupNote:
       "Attache adds one plugin to OpenCode's global plugins folder that registers Attache's MCP server each time OpenCode loads it, and adds your current Attache memory to the system prompt of every model call without saving it in the session, so resumed and compacted sessions always see today's memory. The plugin also saves the conversation (your words and OpenCode's answers, never tool calls, tool output or Attache's memory) each time a turn ends and before each compaction. OpenCode has no session-end event, so the newest turn is saved only once it ends: a turn still running when OpenCode quits can be missed. Your opencode.json(c), MCP servers and other plugins are not changed. Memory and saving sessions need the Agent sessions feature on. Works with OpenCode 1 (1.18.29 or later) and OpenCode 2. Restart OpenCode after connecting (for OpenCode 2's background service, run opencode service restart). If OpenCode was not found, you can still connect: Attache uses ~/.config/opencode, or XDG_CONFIG_HOME or OPENCODE_CONFIG_DIR when the Attache service has them set.",
     detect: (home) => openCodeFound(home),
-    preview: () => ({ changes: plan(), restartRequired }),
-    apply: () => {
-      const changes = plan();
-      const backups: string[] = [];
-      for (const c of changes) {
-        if (c.change === "create") replaceFile(c.path, expected());
-        else {
-          const { backup } = writeConfigText(c.path, expected(), hooks.backupDir);
-          if (backup) backups.push(backup);
-        }
-      }
-      return { changes, backups, restartRequired };
-    },
+    preview: () => ({ changes: plan(true), restartRequired }),
+    apply: () => write(plan(true)),
     status: (): HarnessStatusReport => {
       const path = plugin();
       try {
-        checkOpenCodeSetup();
+        checkOpenCodeSetup(false);
         const text = current();
         if (text === null) return { state: "missing", message: `Attache's OpenCode plugin is not in ${path}. Set up again to fix it.`, files: [] };
         if (text !== expected()) return { state: "stale", message: `Attache's OpenCode plugin ${path} is out of date. Set up again to fix it.`, files: [path] };
@@ -329,7 +320,8 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
     },
-    refresh: () => adapter.apply(),
+    // The version was checked when the owner connected; a refresh (on every start) never waits for OpenCode.
+    refresh: () => write(plan(false)),
     uninstall: () => {
       const path = plugin();
       try {

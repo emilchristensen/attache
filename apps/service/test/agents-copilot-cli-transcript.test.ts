@@ -119,6 +119,13 @@ describe("injected context and side-chains in Copilot CLI sessions", () => {
     ]);
   });
 
+  it("keeps an answer whose parentToolCallId is null: only a subagent's answer names a parent tool call", () => {
+    expect(said(events([start(), user("Go", 1), assistant("Done", 2, { parentToolCallId: null })]))).toEqual([
+      ["user", "Go"],
+      ["assistant", "Done"],
+    ]);
+  });
+
   it("never lets a plain marker in tool output, injected memory or a subagent's output reach the turns", () => {
     const list = [...normal(), ...readTool(6), ...subagent(7), user(`<attache-memory>${MEMORY}</attache-memory>Final?`, 8), assistant("All done.", 9)];
     const p = parseCopilotCli(events(list));

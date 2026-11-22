@@ -5,6 +5,7 @@ import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts"
 import { locationsForHome } from "../platform/locations.ts";
 import { PI_AGENT_DIR, piInstall } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
+import { readHarnessJson } from "./harness-json.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 
@@ -176,19 +177,7 @@ function instanceOf(text: string): string | null {
 }
 
 /** A JSON file of Pi's, or undefined when it is absent; throws, naming the file, when Pi's own file does not parse. */
-function readPiJson(path: string): Record<string, unknown> | undefined {
-  if (!existsSync(path)) return undefined;
-  const raw = readFileSync(path, "utf8");
-  if (!raw.trim()) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); fix it so Pi can read it, then connect again. Attache changed nothing.`);
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; fix it, then connect again. Attache changed nothing.`);
-  return parsed as Record<string, unknown>;
-}
+const readPiJson = (path: string) => readHarnessJson(path, "Pi")?.value;
 
 /** Pi treats server names that differ only in `-` and `_` as one server. */
 const sameServer = (a: string, b: string) => a.replace(/_/g, "-").toLowerCase() === b.replace(/_/g, "-").toLowerCase();

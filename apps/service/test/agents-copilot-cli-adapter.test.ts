@@ -133,6 +133,15 @@ describe("repairing a stale entry", () => {
     expect(read().mcpServers).toEqual({ [nameOf()]: expectedEntry() });
   });
 
+  it("an entry with fields Copilot CLI adds itself (empty env and headers, its own type) is current, and nothing is rewritten", () => {
+    copilot().apply();
+    write(CONFIG(), JSON.stringify({ mcpServers: { [nameOf()]: { ...expectedEntry(), type: "stdio", env: {}, headers: {} } } }));
+    const before = readFileSync(CONFIG(), "utf8");
+    expect(copilot().status().state).toBe("current");
+    expect(copilot().refresh()).toMatchObject({ changes: [], backups: [] });
+    expect(readFileSync(CONFIG(), "utf8")).toBe(before);
+  });
+
   it("reports missing, with no file named, when the entry and the hook were removed, and stale when only one was", () => {
     copilot().apply();
     write(CONFIG(), JSON.stringify({ mcpServers: { playwright: OTHER } }));
@@ -375,6 +384,17 @@ describe.skipIf(process.platform === "win32")("the installed Copilot CLI's versi
     expect(copilot().apply().changes).toHaveLength(2);
   });
 
+  it("a status check never waits for copilot --version", () => {
+    const bin = at("bin", "copilot");
+    write(bin, "#!/bin/sh\nsleep 3\necho 'GitHub Copilot CLI 1.0.114.'\n");
+    chmodSync(bin, 0o755);
+    process.env.ATTACHE_COPILOT_BIN = bin;
+    const t0 = Date.now();
+    copilot().status();
+    copilot().refresh();
+    expect(Date.now() - t0).toBeLessThan(1500);
+  });
+
   it("connects when the version cannot be read, since Copilot CLI updates itself", () => {
     fakeCopilot("garbled");
     expect(copilot().apply().changes).toHaveLength(2);
@@ -451,6 +471,13 @@ describe.skipIf(process.platform === "win32")("saving Copilot CLI sessions", () 
       ["session-end", null, 2],
       ["session-end", null, 2],
     ]);
+  });
+
+  it("a relative COPILOT_HOME is ignored by the session-end hook, as connecting ignores it, so both use ~/.copilot", async () => {
+    const input = { sessionId: ID, timestamp: 1795294310948, cwd: work(), reason: "user_exit" };
+    write(eventsPath(), session([...BEFORE, hookStart("sessionEnd", input)]));
+    expect((await runHookCommand("sessionEnd", input, { COPILOT_HOME: "relative-copilot" })).status).toBe(0);
+    expect(spooled().map((r) => [r.event, r.error, r.text ? parseCopilotCli(r.text).turns.length : null])).toEqual([["session-end", null, 2]]);
   });
 
   it("copies what is there when Copilot CLI never writes the hook's start (a session /clear ends), after a bounded wait", async () => {

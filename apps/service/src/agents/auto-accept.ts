@@ -1,10 +1,12 @@
 import type { HarnessSettingView } from "@attache/contracts";
 import { type Db, nowIso } from "../core/db.ts";
 import { HttpError } from "../http/router.ts";
-import { AGENT_INTEGRATIONS, integrationFor } from "./integrations.ts";
 
 /** Whether a Harness is connected on this Machine. */
 export type HarnessConnected = (kind: string) => boolean;
+
+/** Every Harness Attache can connect, in the order it lists them. */
+export type KnownHarnesses = () => Array<{ kind: string; label: string }>;
 
 /**
  * Which Harnesses may save without asking the owner, on this Machine. Kept in
@@ -16,14 +18,20 @@ export type HarnessConnected = (kind: string) => boolean;
 export class AutoAcceptStore {
   private readonly db: Db;
   private readonly connected: HarnessConnected;
+  private readonly harnesses: KnownHarnesses;
 
-  constructor(db: Db, connected: HarnessConnected) {
+  constructor(db: Db, connected: HarnessConnected, harnesses: KnownHarnesses) {
     this.db = db;
     this.connected = connected;
+    this.harnesses = harnesses;
+  }
+
+  private known(harness: string) {
+    return this.harnesses().find((h) => h.kind === harness);
   }
 
   isOn(harness: string): boolean {
-    if (!integrationFor(harness) || !this.connected(harness)) return false;
+    if (!this.known(harness) || !this.connected(harness)) return false;
     const row = this.db.prepare("select auto_accept from harness_settings where harness = ?").get(harness) as { auto_accept: number } | undefined;
     return row === undefined || row.auto_accept === 1;
   }
@@ -35,12 +43,14 @@ export class AutoAcceptStore {
 
   /** Every connected Harness with its setting, in the order Attache lists Harnesses. */
   list(): HarnessSettingView[] {
-    return AGENT_INTEGRATIONS.filter((a) => this.connected(a.kind)).map((a) => ({ id: a.kind, label: a.label, autoAccept: this.isOn(a.kind) }));
+    return this.harnesses()
+      .filter((a) => this.connected(a.kind))
+      .map((a) => ({ id: a.kind, label: a.label, autoAccept: this.isOn(a.kind) }));
   }
 
   /** Switch auto-accept for one connected Harness. A Harness that is not connected has nothing to switch. */
   change(harness: string, on: boolean): HarnessSettingView {
-    const integration = integrationFor(harness);
+    const integration = this.known(harness);
     if (!integration) throw new HttpError(404, "not_found", `Attache does not know a Harness called ${harness}.`);
     if (!this.connected(harness)) throw new HttpError(409, "not_connected", `Connect ${integration.label} first; auto-accept applies only to a connected Harness.`);
     this.db

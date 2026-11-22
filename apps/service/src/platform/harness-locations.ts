@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import { pathFor, toolCandidates, type PlatformLocations } from "./locations.ts";
 import type { Os } from "./os.ts";
 
@@ -76,11 +77,22 @@ function claudeDesktopApp(loc: PlatformLocations): string[] {
 }
 
 /**
+ * The locations to look for Harness executables in: only the folders
+ * `ATTACHE_HARNESS_TOOL_DIRS` lists (separated as in PATH) when it is set,
+ * so tests and the e2e stack never find the Machine's own Harnesses.
+ */
+function harnessLookup(loc: PlatformLocations): PlatformLocations {
+  const only = process.env.ATTACHE_HARNESS_TOOL_DIRS;
+  return only === undefined ? loc : { ...loc, toolDirs: only.split(delimiter).filter(Boolean) };
+}
+
+/**
  * Where each Harness is installed. Pass the locations for the home folder
  * whose Harness settings Attache edits (`locationsForHome`), which tests point
  * at a temporary folder.
  */
-export function harnessInstalls(loc: PlatformLocations): Record<HarnessKind, HarnessInstall> {
+export function harnessInstalls(location: PlatformLocations): Record<HarnessKind, HarnessInstall> {
+  const loc = harnessLookup(location);
   const { join } = pathFor(loc.os);
   const at = (relative: string) => join(loc.home, ...relative.split("/"));
   const [firstToolDir, ...otherToolDirs] = loc.toolDirs;
@@ -109,7 +121,8 @@ export const PI_AGENT_DIR = ".pi/agent";
  * folder Attache cannot always know (a Node version manager, a custom
  * prefix), so not finding it here is uncertain rather than final.
  */
-export function piInstall(loc: PlatformLocations): HarnessInstall {
+export function piInstall(location: PlatformLocations): HarnessInstall {
+  const loc = harnessLookup(location);
   const { join } = pathFor(loc.os);
   const executables = toolCandidates(loc, "pi");
   return { executables, presence: [join(loc.home, ".pi"), ...executables] };
@@ -128,7 +141,8 @@ export const OPENCODE_CONFIG_DIR = ".config/opencode";
  * Homebrew formula whose folder Attache cannot always know, so not finding it
  * here is uncertain rather than final.
  */
-export function openCodeInstall(loc: PlatformLocations): HarnessInstall {
+export function openCodeInstall(location: PlatformLocations): HarnessInstall {
+  const loc = harnessLookup(location);
   const { join } = pathFor(loc.os);
   const installer = executableNamesIn(loc, join(loc.home, ".opencode", "bin"), "opencode");
   const executables = [...installer, ...toolCandidates(loc, "opencode")];
@@ -146,13 +160,25 @@ const executableNamesIn = (loc: PlatformLocations, dir: string, name: string) =>
 export const COPILOT_HOME_DIR = ".copilot";
 
 /**
+ * Copilot CLI's home folder: `COPILOT_HOME` when it is an absolute path,
+ * otherwise `~/.copilot`. Connecting and the hooks use this one rule, so they
+ * always agree on where Copilot CLI's files are.
+ */
+export function copilotHomeFor(home: string, env: NodeJS.ProcessEnv, os: Os): string {
+  const path = pathFor(os);
+  const dir = env.COPILOT_HOME?.trim();
+  return dir && path.isAbsolute(dir) ? dir : path.join(home, COPILOT_HOME_DIR);
+}
+
+/**
  * Where Copilot CLI may be installed: the usual tool folders (its install
  * script uses `~/.local/bin` or `/usr/local/bin`, Homebrew its own), and the
  * folder `gh copilot` downloads it to. It is often an npm global package or a
  * WinGet install whose folder Attache cannot always know, so not finding it
  * here is uncertain rather than final.
  */
-export function copilotCliInstall(loc: PlatformLocations): HarnessInstall {
+export function copilotCliInstall(location: PlatformLocations): HarnessInstall {
+  const loc = harnessLookup(location);
   const { join } = pathFor(loc.os);
   const executables = toolCandidates(loc, "copilot");
   return { executables, presence: [...executables, join(loc.home, ".local", "share", "gh", "copilot")] };

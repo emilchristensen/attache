@@ -1,11 +1,13 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { isAbsolute, join } from "node:path";
-import type { HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
-import { COPILOT_HOME_DIR, copilotCliInstall } from "../platform/harness-locations.ts";
+import { join } from "node:path";
+import type { HarnessApplyResult, HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
+import { copilotCliInstall, copilotHomeFor } from "../platform/harness-locations.ts";
+import { currentOs } from "../platform/os.ts";
 import { locationsForHome } from "../platform/locations.ts";
 import { shellPath } from "../platform/shell-command.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
+import { readHarnessJson } from "./harness-json.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import { checkCopilotCliVersion } from "./copilot-cli-version.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
@@ -46,9 +48,7 @@ const PURPOSE_COMMENTS = `${PURPOSE}; the file is written back as plain JSON, as
 
 /** Copilot CLI's home folder: `COPILOT_HOME` when it names one, else `~/.copilot`. */
 export function copilotHome(): string {
-  const dir = process.env.COPILOT_HOME?.trim();
-  if (dir && isAbsolute(dir)) return dir;
-  return join(agentHome(), COPILOT_HOME_DIR);
+  return copilotHomeFor(agentHome(), process.env, currentOs());
 }
 
 /** Whether Copilot CLI looks installed: one of its executables, or the folder `gh copilot` downloads it to. */
@@ -57,19 +57,7 @@ export function copilotCliFound(home: string): boolean {
 }
 
 /** A file of Copilot CLI's (JSON with comments) as an object, or undefined when absent or empty; throws, naming the file, when it does not parse. */
-function readCopilotJson(path: string): { raw: string; value: Record<string, unknown> } | undefined {
-  if (!existsSync(path)) return undefined;
-  const raw = readFileSync(path, "utf8");
-  if (!raw.trim()) return undefined;
-  let parsed: unknown;
-  try {
-    parsed = parseJsonc(raw.replace(/^﻿/, ""));
-  } catch (e) {
-    throw new HooksFileError(`${path} is not valid JSON (${(e as Error).message}); fix it so Copilot CLI can read it, then connect again. Attache changed nothing.`);
-  }
-  if (!isPlainObject(parsed)) throw new HooksFileError(`${path} does not contain a JSON object; fix it, then connect again. Attache changed nothing.`);
-  return { raw, value: parsed };
-}
+const readCopilotJson = (path: string) => readHarnessJson(path, "Copilot CLI", parseJsonc);
 
 /** A path quoted for PowerShell, which Copilot CLI uses for hooks on Windows. */
 const powershellPath = (p: string) => `'${p.replace(/'/g, "''")}'`;
@@ -138,8 +126,8 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   /** Throws, naming the file, when the installed Copilot CLI is too old or its settings turn this instance's server, or all hooks, off. */
-  function checkSettings() {
-    checkCopilotCliVersion(agentHome());
+  function checkSettings(wait: boolean) {
+    checkCopilotCliVersion(agentHome(), { wait });
     const settings = readCopilotJson(settingsPath())?.value;
     const disabled = settings?.disabledMcpServers;
     if (Array.isArray(disabled) && disabled.includes(name())) {
@@ -157,12 +145,13 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
 
   const isCurrent = (json: string) => {
     const mine = ours(json);
-    return mine.length === 1 && mine[0]![0] === name() && isDeepStrictEqual(mine[0]![1], entry());
+    // Fields Copilot CLI adds on its own (its `type`, an empty `env` or `headers`) do not count; the command and the tools Attache offers do.
+    return mine.length === 1 && mine[0]![0] === name() && hooks.mcp.sameCommand(mine[0]![1]) && isDeepStrictEqual((mine[0]![1] as { tools?: unknown }).tools, entry().tools);
   };
 
   /** The changes connecting makes, each with the text it writes, worked out before anything is written. */
-  function plan(): Array<HarnessFileChange & { text: string }> {
-    checkSettings();
+  function plan(wait: boolean): Array<HarnessFileChange & { text: string }> {
+    checkSettings(wait);
     const { raw, json } = config();
     const hooksText = currentHooks();
     const changes: Array<HarnessFileChange & { text: string }> = [];
@@ -176,6 +165,18 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   }
   const withoutText = ({ text: _text, ...c }: HarnessFileChange & { text: string }): HarnessFileChange => c;
 
+  function write(changes: Array<HarnessFileChange & { text: string }>): HarnessApplyResult {
+    const backups: string[] = [];
+    for (const c of changes) {
+      if (c.change === "create") replaceFile(c.path, c.text);
+      else {
+        const { backup } = writeConfigText(c.path, c.text, hooks.backupDir);
+        if (backup) backups.push(backup);
+      }
+    }
+    return { changes: changes.map(withoutText), backups, restartRequired };
+  }
+
   const restartRequired = true;
   const adapter: HarnessAdapter = {
     kind: "copilot-cli",
@@ -186,24 +187,13 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
     setupNote:
       "Attache adds its MCP server to Copilot CLI's personal MCP configuration (mcp-config.json in ~/.copilot, or in COPILOT_HOME when the Attache service has it set) and one personal hooks file (hooks/attache.json there): its session-start hook gives each new, cleared or resumed session your current Attache memory, and its agentStop, preCompact and sessionEnd hooks save the conversation (your words and Copilot CLI's answers, never tool output or subagents) from the session's events.jsonl after each turn, before compaction and when the session ends; only a Copilot CLI that is killed or crashes mid-turn can lose that newest turn. Your other MCP servers, hooks and settings are not changed, and no repository is touched. Memory and saving need the Agent sessions feature on and Copilot CLI 1.0.22 or later. Copilot CLI reads hooks when it starts, so start a new copilot process after connecting. A session keeps the memory it started with: after /compact it has none until you /clear, resume or start a new one. A repository whose .github/copilot/settings.json sets disableAllHooks turns Attache's hooks off for sessions there, and a repository's own .mcp.json can replace a server of the same name. If Copilot CLI was not found, you can still connect.",
     detect: (home) => copilotCliFound(home),
-    preview: () => ({ changes: plan().map(withoutText), restartRequired }),
-    apply: () => {
-      const changes = plan();
-      const backups: string[] = [];
-      for (const c of changes) {
-        if (c.change === "create") replaceFile(c.path, c.text);
-        else {
-          const { backup } = writeConfigText(c.path, c.text, hooks.backupDir);
-          if (backup) backups.push(backup);
-        }
-      }
-      return { changes: changes.map(withoutText), backups, restartRequired };
-    },
+    preview: () => ({ changes: plan(true).map(withoutText), restartRequired }),
+    apply: () => write(plan(true)),
     status: (): HarnessStatusReport => {
       const path = configPath();
       const hooksFile = hooksPath();
       try {
-        checkSettings();
+        checkSettings(false);
         const { json } = config();
         const hooksText = currentHooks();
         const mcp = isCurrent(json) ? "current" : ours(json).length ? "stale" : "missing";
@@ -220,7 +210,8 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
     },
-    refresh: () => adapter.apply(),
+    // The version was checked when the owner connected; a refresh (on every start) never waits for Copilot CLI.
+    refresh: () => write(plan(false)),
     uninstall: () => {
       const removed: HarnessFileChange[] = [];
       const failures: string[] = [];

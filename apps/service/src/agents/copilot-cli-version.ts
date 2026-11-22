@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { runSync } from "../platform/run.ts";
+import { existsSync } from "node:fs";
+import { firstVersion, versionAnswer } from "./executable-version.ts";
 import { locationsForHome } from "../platform/locations.ts";
 import { copilotCliInstall } from "../platform/harness-locations.ts";
 import { HooksFileError } from "./hooks-config.ts";
@@ -22,33 +22,18 @@ export function copilotCliExecutables(home: string): string[] {
   return only ? [only] : copilotCliInstall(locationsForHome(home)).executables;
 }
 
-const versions = new Map<string, { stamp: string; output: string | null }>();
-
-/** What `copilot --version` prints, null when it could not run; remembered until the executable changes. */
-function versionOutput(path: string): string | null {
-  const { mtimeMs, size } = statSync(path);
-  const stamp = `${mtimeMs}:${size}`;
-  const known = versions.get(path);
-  if (known?.stamp === stamp) return known.output;
-  const r = runSync(path, ["--version"], { timeoutMs: 15_000, env: { ...process.env, COPILOT_AUTO_UPDATE: "false" } });
-  const output = r.code === 0 ? r.stdout.trim() : null;
-  versions.set(path, { stamp, output });
-  return output;
-}
-
 /**
- * The installed Copilot CLI's version, or null when none was found or its
- * version could not be read. Throws, saying what to do, for one too old for
- * Attache's memory hook.
+ * The installed Copilot CLI's version, or null when none was found, its
+ * version could not be read, or, without `wait`, while its answer is not
+ * known yet. Throws, saying what to do, for one too old for Attache's memory hook.
  */
-export function checkCopilotCliVersion(home: string): string | null {
+export function checkCopilotCliVersion(home: string, opts: { wait: boolean } = { wait: true }): string | null {
   const path = copilotCliExecutables(home).find((p) => existsSync(p));
   if (!path) return null;
-  const m = /(\d+)\.(\d+)\.(\d+)/.exec(versionOutput(path) ?? "");
-  if (!m) return null;
-  const v = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const v = firstVersion(versionAnswer(path, { ...process.env, COPILOT_AUTO_UPDATE: "false" }, opts)?.output ?? "");
+  if (!v) return null;
   const version = v.join(".");
-  const older = v[0]! - OLDEST_COPILOT_CLI[0] || v[1]! - OLDEST_COPILOT_CLI[1] || v[2]! - OLDEST_COPILOT_CLI[2];
+  const older = v[0] - OLDEST_COPILOT_CLI[0] || v[1] - OLDEST_COPILOT_CLI[1] || v[2] - OLDEST_COPILOT_CLI[2];
   if (older < 0) throw new HooksFileError(`Copilot CLI ${version} (${path}) is too old for Attache's memory hook: run copilot update to get ${OLDEST_COPILOT_CLI.join(".")} or later, then connect again. Attache changed nothing.`);
   return version;
 }

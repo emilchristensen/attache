@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -165,5 +165,55 @@ describe("Pi session capture", () => {
     expect(readdirSync(join(svc.stateDir, "agents/unparsed")).some((f) => f.includes("pi-new"))).toBe(true);
     const c = (await svc.get<Array<{ kind: string; lastError?: string | null }>>("/connections")).find((x) => x.kind === "pi")!;
     expect(c.lastError).toMatch(/Pi session format version 4/);
+  });
+});
+
+describe("the summariser's copy of a Pi session", () => {
+  const cacheFile = (id: string) => join(svc.stateDir, "agents/sessions/pi", `${id}.json`);
+
+  it("a copy that no longer parses is set aside once, and the session's next snapshot is still saved", async () => {
+    const pi = await piSession({ ...HEADER, id: "corrupt-1" });
+    const first = [user("Pick a region", 1), assistant([text("Frankfurt.")], 2)];
+    pi.session.branch = first;
+    await pi.settles();
+    await spoolEmpty();
+    writeFileSync(cacheFile("corrupt-1"), '{"turns": [');
+    pi.session.branch = [...first, user("And the backup?", 3), assistant([text("Dublin.")], 4)];
+    await pi.settles();
+    await spoolEmpty();
+    expect(turnsOf(await until(() => archived("corrupt-1")?.includes("Dublin.") && archived("corrupt-1")))).toEqual(["Ada: Pick a region", "Pi: Frankfurt.", "Ada: And the backup?", "Pi: Dublin."]);
+    expect(warnings().filter((e) => e.data?.sessionId === "corrupt-1" && /summariser's copy/.test(e.msg))).toHaveLength(1);
+    expect(JSON.parse(cacheOf("corrupt-1")).turns).toHaveLength(4);
+  });
+
+  it("is dropped once the session is summarised and no snapshot came for the retention period, and a later, longer snapshot is saved whole", async () => {
+    const pi = await piSession({ ...HEADER, id: "quiet-1" });
+    const first = [user("Pick a cache", 1), assistant([text("Redis.")], 2)];
+    pi.session.branch = first;
+    await pi.quits();
+    await spoolEmpty();
+    await until(() => jobsFor("quiet-1").find((j) => j.status === "succeeded"), 20_000);
+    expect(existsSync(cacheFile("quiet-1"))).toBe(true);
+    // The last snapshot came 31 days ago.
+    svc.app.db.prepare("update agent_sessions set updated_at = ? where session_id = 'quiet-1'").run(new Date(Date.now() - 31 * 86_400_000).toISOString());
+    svc.app.sessions.tick();
+    expect(existsSync(cacheFile("quiet-1"))).toBe(false);
+    const resumed = await piSession({ ...HEADER, id: "quiet-1" });
+    resumed.session.branch = [...first, user("Still Redis?", 3), assistant([text("Yes.")], 4)];
+    await resumed.settles();
+    await spoolEmpty();
+    expect(turnsOf(await until(() => archived("quiet-1")?.includes("Yes.") && archived("quiet-1")))).toEqual(["Ada: Pick a cache", "Pi: Redis.", "Ada: Still Redis?", "Pi: Yes."]);
+  });
+
+  it("after it was dropped, a snapshot shorter than what was saved never replaces the saved conversation", async () => {
+    svc.app.db.prepare("update agent_sessions set updated_at = ? where session_id = 'quiet-1'").run(new Date(Date.now() - 31 * 86_400_000).toISOString());
+    svc.app.db.prepare("update agent_sessions set distilled_turns = turns where session_id = 'quiet-1'").run();
+    svc.app.sessions.tick();
+    expect(existsSync(cacheFile("quiet-1"))).toBe(false);
+    const resumed = await piSession({ ...HEADER, id: "quiet-1" });
+    resumed.session.branch = [user("Only this", 5), assistant([text("Only that.")], 6)];
+    await resumed.settles();
+    await spoolEmpty();
+    expect(turnsOf(archived("quiet-1")!)).toEqual(["Ada: Pick a cache", "Pi: Redis.", "Ada: Still Redis?", "Pi: Yes."]);
   });
 });

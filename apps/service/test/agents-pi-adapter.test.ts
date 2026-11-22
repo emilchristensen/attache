@@ -216,6 +216,15 @@ describe("Pi configuration Attache cannot safely work with", () => {
     expect(pi().status()).toMatchObject({ state: "failed", message: expect.stringMatching(/settings\.json/) });
   });
 
+  it("an mcp.json or settings.json that starts with a byte-order mark is read like any other, as Pi reads it", () => {
+    write(at(".pi/agent/settings.json"), `\uFEFF${JSON.stringify({ extensions: ["-builtin:mcp"] })}`);
+    // Read, not refused as unparseable: the setting inside it is found.
+    expect(() => pi().apply()).toThrow(/settings\.json turns off Pi's built-in MCP support/);
+    write(at(".pi/agent/settings.json"), "\uFEFF{}");
+    write(at(".pi/agent/mcp.json"), `\uFEFF${JSON.stringify({ mcpServers: { files: { command: "npx" } } })}`);
+    expect(pi().apply().changes).toHaveLength(1);
+  });
+
   it("an mcp.json that does not parse stops the connection and names the file", () => {
     write(at(".pi/agent/mcp.json"), "{ nope");
     expect(() => pi().apply()).toThrow(/mcp\.json is not valid JSON/);
