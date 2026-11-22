@@ -43,6 +43,8 @@ const SCAN_EVERY_MS = 60_000;
 /** Agents that only report finished turns are summarised once the conversation has been quiet this long. */
 const TURN_END_QUIET_MS = 15 * 60_000;
 const CACHE_RETENTION_MS = 7 * 86_400_000;
+/** A plugin's session can go on (Pi and OpenCode resume it) and its next snapshot joins the cached turns, so its cache stays longer. */
+const PARTIAL_CACHE_RETENTION_MS = 30 * 86_400_000;
 const MAX_UNPARSED_SAMPLES = 5;
 const MAX_LOGGED_BULLETS = 12;
 
@@ -153,10 +155,12 @@ export class AgentSessions {
       return false;
     }
     const existing = this.row(r.agent, r.sessionId);
+    // A plugin's snapshot may hold only part of the session: it joins the turns saved before, while their copy is kept.
+    const saved = source.partial && existing ? this.readCache(r.agent, r.sessionId) : null;
+    const joins = source.partial && !(existing && !saved);
     // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (!source.partial && existing && parsed.turns.length < existing.turns) return false;
-    // A plugin's snapshot may hold only part of the session: it joins what was saved before.
-    const turns = source.partial ? joinTurns(this.cachedTurns(r.agent, r.sessionId), parsed.turns) : parsed.turns;
+    if (!joins && existing && parsed.turns.length < existing.turns) return false;
+    const turns = joins ? joinTurns(saved?.turns ?? [], parsed.turns) : parsed.turns;
     const cwd = parsed.cwd ?? r.cwd;
     const startedAt = (source.partial ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? parsed.startedAt ?? r.at;
     const title = parsed.title ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
@@ -175,10 +179,23 @@ export class AgentSessions {
     return true;
   }
 
-  /** The turns saved so far of a session, as the summariser reads them; none before its first save. */
-  private cachedTurns(agent: string, sessionId: string): Turn[] {
+  /**
+   * The summariser's copy of a session's saved turns; null when there is none.
+   * A copy that no longer parses (a disk or crash fault) is removed and logged,
+   * once, so the session's next snapshot is saved instead of failing forever.
+   */
+  private readCache(agent: string, sessionId: string): CachedSession | null {
     const file = this.cachePath(agent, sessionId);
-    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as CachedSession).turns : [];
+    if (!existsSync(file)) return null;
+    try {
+      const cached = JSON.parse(readFileSync(file, "utf8")) as CachedSession;
+      if (!Array.isArray(cached?.turns)) throw new Error("it holds no turns");
+      return cached;
+    } catch (e) {
+      rmSync(file, { force: true });
+      this.app.log.warn("the summariser's copy of an agent session was unreadable and was removed; the next copy of the session replaces it", { agent, sessionId, error: (e as Error).message });
+      return null;
+    }
   }
 
   /**
@@ -238,12 +255,18 @@ export class AgentSessions {
     this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, sample: join(dir, `${r.id}.transcript`), ...(problem ? { problem } : {}) });
   }
 
-  /** Drop summariser caches for sessions that are fully summarised and quiet for a week. */
+  /**
+   * Drop summariser caches for sessions that are fully summarised and quiet:
+   * a week since the last copy, or, for a plugin's sessions, whose later
+   * snapshots join the saved turns, a month since the last snapshot. After
+   * that a snapshot of such a session is taken whole, like a transcript: it
+   * replaces the saved conversation only when it is no shorter.
+   */
   private pruneCaches() {
-    const cutoff = new Date(Date.now() - CACHE_RETENTION_MS).toISOString();
-    const done = this.app.db.prepare("select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ?").all(cutoff) as Array<{ agent: string; session_id: string }>;
-    // A plugin's later snapshot joins the saved turns, so those caches stay while the session can still go on.
-    for (const d of done.filter((x) => !PARTIAL_SOURCE_KINDS.includes(x.agent))) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
+    const cutoff = (ms: number) => new Date(Date.now() - ms).toISOString();
+    const done = this.app.db.prepare("select agent, session_id, updated_at from agent_sessions where distilled_turns >= turns and updated_at < ?").all(cutoff(CACHE_RETENTION_MS)) as Array<{ agent: string; session_id: string; updated_at: string }>;
+    const partialCutoff = cutoff(PARTIAL_CACHE_RETENTION_MS);
+    for (const d of done.filter((x) => !PARTIAL_SOURCE_KINDS.includes(x.agent) || x.updated_at < partialCutoff)) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
   }
 
   private row(agent: string, sessionId: string): SessionRow | undefined {
@@ -292,9 +315,8 @@ export class AgentSessions {
     const sessionId = String(ctx.input.sessionId ?? "");
     const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
-    const cacheFile = this.cachePath(agent, sessionId);
-    if (!integration || !row || !existsSync(cacheFile)) return { skipped: "session not found" };
-    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const cached = integration && row ? this.readCache(agent, sessionId) : null;
+    if (!integration || !row || !cached) return { skipped: "session not found" };
     const from = row.distilled_turns;
     const to = cached.turns.length;
     if (to <= from) return { skipped: "already summarised" };
@@ -334,9 +356,8 @@ export class AgentSessions {
   sessionPart(agent: string, sessionId: string, from: number, to: number): { turns: Turn[]; title: string; cwd: string | null; agentLabel: string; userName: string } | null {
     const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
-    const cacheFile = this.cachePath(agent, sessionId);
-    if (!integration || !row || !existsSync(cacheFile)) return null;
-    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const cached = integration && row ? this.readCache(agent, sessionId) : null;
+    if (!integration || !row || !cached) return null;
     const turns = cached.turns.slice(from, to);
     return turns.length ? { turns, title: row.title ?? "Session", cwd: row.cwd, agentLabel: integration.label, userName: this.userName() } : null;
   }
