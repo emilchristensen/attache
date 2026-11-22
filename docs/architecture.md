@@ -580,7 +580,7 @@ It strips `<attache-memory>` and the other injected tags.
 An unknown envelope, shape, message type or role yields no turns and a `problem` naming the OpenCode format; the service keeps a sample, logs it and puts it on the Connection's last error.
 Each turn carries its OpenCode message id, and the service joins a partial source's snapshots by id (`joinTurns` in `agents/sessions.ts`, sources in `agents/session-sources.ts`).
 A saved turn keeps its place and a new one follows, so turns compacted out of OpenCode 2's context stay saved and the summary watermark stays positional.
-For partial sources, Attache keeps the redacted turns and message IDs in its state folder so it can resume joining snapshots after a long pause.
+For partial sources, Attache keeps the redacted turns and message IDs in its state folder indefinitely so it can resume joining snapshots after a long pause.
 If that state is lost, Attache preserves the archive and reports that it could not join the new turns.
 Fully summarised sessions from other sources lose their local cache after seven quiet days.
 A cache that no longer parses is removed and logged once.

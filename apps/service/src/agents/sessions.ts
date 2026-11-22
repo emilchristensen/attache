@@ -6,7 +6,7 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { hasHarnessSessionState } from "./harness-session-state.ts";
+import { harnessSessionConnected, hasHarnessSessionState } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
@@ -137,8 +137,11 @@ export class AgentSessions {
   }
 
   private ingestOne(r: SpoolRecord): boolean {
-    // An already loaded extension can still spool after its connection is removed.
-    if (hasHarnessSessionState(r.agent) && this.app.connections.record(r.agent)?.status !== "connected") return false;
+    if (hasHarnessSessionState(r.agent)) {
+      const connection = this.app.connections.record(r.agent);
+      // A failed configuration test says nothing about an installed hook's ability to capture.
+      if (!connection || connection.status === "disconnected" || !harnessSessionConnected(this.stateDir, r.agent)) return false;
+    }
     const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
     if (!source || !copy || !existsSync(copy)) {
@@ -214,7 +217,7 @@ export class AgentSessions {
   }
 
   private reportSessionProblem(agent: string, message: string) {
-    const updated = this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status = 'connected' and last_error is not ? returning id").get(message, nowIso(), agent, message) as { id: string } | undefined;
+    const updated = this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status <> 'disconnected' and last_error is not ? returning id").get(message, nowIso(), agent, message) as { id: string } | undefined;
     if (updated) this.app.bus.emit("event", { type: "connections.changed", id: updated.id });
   }
 
@@ -420,8 +423,10 @@ export class AgentSessions {
       }
     }
     // Harnesses whose files carry this install's paths (a plugin, an extension, a hooks file) are refreshed through their adapter.
-    const legacy = new Set<string>(AGENT_INTEGRATIONS.map((a) => a.kind));
-    for (const h of this.app.harnesses().filter((x) => !legacy.has(x.kind) && this.app.connections.record(x.kind)?.status === "connected")) {
+    for (const h of this.app.harnesses()) {
+      if (!hasHarnessSessionState(h.kind)) continue;
+      const connection = this.app.connections.record(h.kind);
+      if (!connection || connection.status === "disconnected" || !connection.settings.authMethod) continue;
       try {
         const r = h.refresh();
         if (r.changes.length) this.app.log.info("brought Attache's files in a Harness up to date", { agent: h.kind, files: r.changes.map((c) => c.path), backups: r.backups });

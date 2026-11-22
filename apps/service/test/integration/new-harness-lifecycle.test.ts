@@ -50,6 +50,9 @@ describe("Pi, OpenCode and Copilot CLI across an Attache upgrade", () => {
     // What an earlier version wrote differs from what this version writes, as after an upgrade that moved the install.
     for (const kind of KINDS) for (const file of (await connection(kind)).harness!.files) appendFileSync(file, "\n");
     for (const kind of KINDS) expect((await connection(kind)).harness?.state, kind).toBe("stale");
+    // The owner can learn the plugin is stale by clicking Test before the next service restart.
+    expect((await svc.post<{ test: { ok: boolean } }>("/connections/opencode/test", {})).test.ok).toBe(false);
+    expect((await connection("opencode")).status).toBe("error");
     const { stateDir, dataDir } = svc;
     await svc.stop();
     svc = await startTestService({ stateDir, dataDir });

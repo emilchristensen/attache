@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -219,6 +219,23 @@ describe("OpenCode session capture", () => {
       spoolText(svc.stateDir, { agent: "opencode", event: "turn-end", sessionId, cwd: WORK }, snapshot("v2-context", messages));
       await spoolEmpty();
       expect(archived(sessionId)).toBeNull();
+    } finally {
+      await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
+    }
+  });
+
+  it("still saves a session when a Connection test reports stale configuration", async () => {
+    const sessionId = "ses_while_stale";
+    const oc = await openCode2(sessionId);
+    oc.session.context = [v2User("A turn while stale", 0)];
+    const [file] = readdirSync(PLUGINS).filter((f) => f.startsWith("attache"));
+    appendFileSync(join(PLUGINS, file!), "\n");
+    try {
+      const result = await svc.post<{ test: { ok: boolean } }>("/connections/opencode/test", {});
+      expect(result.test.ok).toBe(false);
+      await oc.turnEnds();
+      await spoolEmpty();
+      expect(archived(sessionId)).toContain("A turn while stale");
     } finally {
       await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
     }

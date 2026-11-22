@@ -31,7 +31,12 @@ function readState(file: string): SessionState | null {
 
 /** Hooks run outside the service and can outlive their configuration files. */
 export function harnessSessionActive(stateDir: string, kind: SessionHarness): boolean {
-  return readState(marker(stateDir, kind))?.active === true && existsSync(contextFile(stateDir));
+  return harnessSessionConnected(stateDir, kind) && existsSync(contextFile(stateDir));
+}
+
+/** A Configuration test can report an error while an installed hook is still running. */
+export function harnessSessionConnected(stateDir: string, kind: SessionHarness): boolean {
+  return readState(marker(stateDir, kind))?.active === true;
 }
 
 export type RootedHarnessAdapter = Omit<HarnessAdapter, "uninstall"> & { uninstall(location: HarnessLocation): HarnessUninstallResult };
