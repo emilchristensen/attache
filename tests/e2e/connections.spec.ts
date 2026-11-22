@@ -318,8 +318,8 @@ test("a Harness shows its capabilities and every file it will change before conn
   const codex = await openConnection(page, "codex");
   await expect(codex.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: read fresh from your Brain when a session starts",
-    "Session capture: at compaction and when the session ends",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
   ]);
   const files = codex.getByLabel("Files Attache will change");
   await expect(files.getByRole("listitem")).toHaveText([`Create ${join(stack.agentHome, ".codex", "hooks.json")}: Attache's hooks for Codex`, `Create ${join(stack.agentHome, ".codex", "config.toml")}: Attache's MCP server`]);
@@ -349,8 +349,8 @@ test("Pi is its own Harness: MCP access, memory and session capture, its one ext
   const pi = await openConnection(page, "pi");
   await expect(pi.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: read fresh from your Brain when a session starts",
-    "Session capture: at compaction and when the session ends",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
   ]);
   const files = pi.getByLabel("Files Attache will change");
   await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${extensions.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.ts: Attache's Pi extension, which registers Attache's MCP server, gives your Attache memory to each Pi session and saves your Pi sessions$`)]);
@@ -373,7 +373,7 @@ test("OpenCode is its own Harness: MCP access, memory and session capture at eac
   const opencode = await openConnection(page, "opencode");
   await expect(opencode.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: read fresh from your Brain when a session starts",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
     "Session capture: at each turn, with no session end, so the newest in-flight turn can be missed",
   ]);
   const files = opencode.getByLabel("Files Attache will change");
@@ -404,8 +404,8 @@ test("Copilot CLI is its own Harness: MCP access, runtime-fresh memory and sessi
   const copilot = await openConnection(page, "copilot-cli");
   await expect(copilot.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
     "MCP access: search, read and save to your Brain",
-    "Memory: read fresh from your Brain when a session starts",
-    "Session capture: at compaction and when the session ends",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
   ]);
   const files = copilot.getByLabel("Files Attache will change");
   await expect(files.getByRole("listitem")).toHaveText([
