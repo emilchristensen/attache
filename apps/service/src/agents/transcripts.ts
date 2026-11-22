@@ -8,6 +8,8 @@ export interface Turn {
   role: "user" | "assistant";
   text: string;
   at: string | null;
+  /** When a streamed answer finished, when the Harness records it separately. */
+  completedAt?: string | null;
   /**
    * The Harness's own id for the message this turn came from, for Harnesses
    * whose snapshots each hold only part of a session (OpenCode): the service

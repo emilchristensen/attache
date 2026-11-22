@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
@@ -128,6 +128,19 @@ describe("OpenCode as a Harness Connection", () => {
     const r = await callTool<{ passages: Array<{ title: string }> }>(client, "search", { query: "Orion cutover" });
     expect(r.isError).toBe(false);
     expect(r.data.passages[0]!.title).toBe("Orion migration");
+  });
+
+  it("testing a manual Connection reports its missing plugin and how to repair it", async () => {
+    const file = readdirSync(PLUGINS).find((name) => name.startsWith("attache"));
+    rmSync(join(PLUGINS, file!));
+    try {
+      const { test } = await svc.post<{ test: { ok: boolean; message: string } }>("/connections/opencode/test", {});
+      expect(test.ok).toBe(false);
+      expect(test.message).toContain(`plugin is not in ${join(PLUGINS, file!)}`);
+      expect(test.message).toContain("Set up again");
+    } finally {
+      await svc.post("/connections/opencode/configure", { method: "mcp", fields: {} });
+    }
   });
 
   it("disconnecting removes Attache's plugin only, and says what it removed", async () => {

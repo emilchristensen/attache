@@ -43,8 +43,8 @@ export function agentAdapter(h: HarnessAdapter): ConnectorAdapter {
     },
     async test() {
       const s = h.status();
-      if (!h.detect(agentHome()) && !(h.manualSetup && s.state !== "missing")) {
-        return { ok: false, state: "not_configured", account: null, message: h.manualSetup ? `${notFound} If it is installed somewhere Attache does not look, connect it here anyway.` : notFound };
+      if (!h.manualSetup && !h.detect(agentHome())) {
+        return { ok: false, state: "not_configured", account: null, message: notFound };
       }
       return { ok: s.state === "current", state: s.state === "current" ? "complete" : "error", account: s.state === "failed" ? null : (s.files[0] ?? null), message: s.message };
     },

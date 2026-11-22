@@ -187,7 +187,7 @@ describe("OpenCode session capture", () => {
     expect(w.data).toMatchObject({ agent: "opencode", problem: expect.stringContaining('"OpenCode 3 v3-stream"') });
     expect(readdirSync(join(svc.stateDir, "agents/unparsed")).some((f) => f.includes("ses_new"))).toBe(true);
     const c = (await svc.get<Array<{ kind: string; lastError?: string | null }>>("/connections")).find((x) => x.kind === "opencode")!;
-    expect(c.lastError).toMatch(/OpenCode 3 v3-stream/);
+    expect(c.lastError).toMatch(/OpenCode 3 v3-stream.*Restart OpenCode/);
   });
 
   it("keeps earlier archived turns when a compacted session resumes after a long time", async () => {
@@ -238,6 +238,51 @@ describe("OpenCode session capture", () => {
       expect(archived(sessionId)).toContain("A turn while stale");
     } finally {
       await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
+    }
+  });
+
+  it("saves an already spooled turn after disconnect and skips turns written while disconnected", async () => {
+    const sessionId = "ses_capture_paused";
+    const oc = await openCode2(sessionId);
+    const before = { ...v2User("Before disconnect", 0), time: { created: Date.now() - 1_000 } };
+    oc.session.context = [before];
+    await oc.turnEnds();
+    await svc.post("/connections/opencode/disconnect", { deleteData: false });
+    try {
+      await spoolEmpty();
+      expect(archived(sessionId)).toContain("Before disconnect");
+    } finally {
+      // The spool drained while disconnected, so this timestamp falls inside the gap.
+      oc.session.context = [before, { ...v2User("Private while disconnected", 0), time: { created: Date.now() - 1 } }];
+      await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
+    }
+    const after = Date.now();
+    oc.session.context.push(
+      { ...v2Assistant([{ type: "text", text: "Reply to the private prompt" }], 0), time: { created: after, completed: after } },
+      { ...v2User("After reconnect", 0), time: { created: after } },
+    );
+    await oc.turnEnds();
+    await spoolEmpty();
+    expect(turnsOf(archived(sessionId)!)).toEqual(["Ada: Before disconnect", "Ada: After reconnect"]);
+  });
+
+  it("does not postpone a due summary when the plugin submits the same turn again", async () => {
+    const sessionId = "ses_replayed_idle";
+    const oc = await openCode2(sessionId);
+    oc.session.context = [v2User("One completed prompt", 0)];
+    await svc.app.jobs.stop();
+    try {
+      await oc.turnEnds();
+      await spoolEmpty();
+      const [queued] = jobsFor(sessionId);
+      const dueAt = new Date(Date.now() - 1_000).toISOString();
+      svc.app.jobs.reschedule(queued!.id, dueAt);
+      await oc.turnEnds();
+      await spoolEmpty();
+      svc.app.jobs.start();
+      await until(() => jobsFor(sessionId).some((job) => job.status === "succeeded"), 5_000);
+    } finally {
+      svc.app.jobs.start();
     }
   });
 });

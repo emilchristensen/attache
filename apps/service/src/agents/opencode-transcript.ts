@@ -86,7 +86,7 @@ function v1Turns(messages: unknown[]): Turn[] {
     // A compaction summary, or an answer OpenCode is still writing.
     if (info.summary === true || time.completed === undefined) continue;
     const text = clean(textParts(parts));
-    if (text) turns.push({ role, text, at: iso(time.created), id });
+    if (text) turns.push({ role, text, at: iso(time.created), completedAt: iso(time.completed), id });
   }
   return turns;
 }
@@ -112,7 +112,7 @@ function v2ContextTurns(messages: unknown[]): Turn[] {
     if (!Array.isArray(msg.content)) unreadable("an assistant message without content");
     if (time.completed === undefined) continue;
     const text = clean(textParts(msg.content as unknown[]));
-    if (text) turns.push({ role: "assistant", text, at: iso(time.created), id });
+    if (text) turns.push({ role: "assistant", text, at: iso(time.created), completedAt: iso(time.completed), id });
   }
   return turns;
 }

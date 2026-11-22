@@ -6,7 +6,7 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { harnessSessionConnected, hasHarnessSessionState } from "./harness-session-state.ts";
+import { canIngestHarnessSnapshot, harnessSessionState, hasHarnessSessionState, turnsWhileConnected } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
@@ -137,10 +137,12 @@ export class AgentSessions {
   }
 
   private ingestOne(r: SpoolRecord): boolean {
-    if (hasHarnessSessionState(r.agent)) {
-      const connection = this.app.connections.record(r.agent);
-      // A failed configuration test says nothing about an installed hook's ability to capture.
-      if (!connection || connection.status === "disconnected" || !harnessSessionConnected(this.stateDir, r.agent)) return false;
+    const managed = hasHarnessSessionState(r.agent) ? r.agent : null;
+    const capture = managed ? harnessSessionState(this.stateDir, managed) : null;
+    if (managed) {
+      const connection = this.app.connections.record(managed);
+      // Preserve copies made before disconnect, and fail closed if revocation could not update the on-disk grant.
+      if (!connection || !capture || (capture.active && connection.status === "disconnected") || !canIngestHarnessSnapshot(capture, r.at)) return false;
     }
     const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
@@ -158,6 +160,8 @@ export class AgentSessions {
       else if (raw.trim() && !source.partial && !source.strict) this.keepUnparsed(r, copy);
       return false;
     }
+    const available = capture ? turnsWhileConnected(parsed.turns, capture) : parsed.turns;
+    if (!available.length) return false;
     const existing = this.row(r.agent, r.sessionId);
     // A plugin snapshot may hold only part of the session. Keep its archived turns if the merge state was lost.
     const saved = source.partial && existing ? this.readCache(r.agent, r.sessionId) : null;
@@ -167,11 +171,13 @@ export class AgentSessions {
       return false;
     }
     // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (!source.partial && existing && parsed.turns.length < existing.turns) return false;
-    const turns = source.partial ? joinTurns(saved?.turns ?? [], parsed.turns) : parsed.turns;
+    if (!source.partial && existing && available.length < existing.turns) return false;
+    const turns = source.partial ? joinTurns(saved?.turns ?? [], available) : available;
     const cwd = parsed.cwd ?? r.cwd;
-    const startedAt = (source.partial ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? parsed.startedAt ?? r.at;
-    const title = parsed.title ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
+    const paused = !!capture?.pauses.length;
+    const startedAt = (source.partial || paused ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? (paused ? null : parsed.startedAt) ?? r.at;
+    // A Harness's generated title may describe prompts that Attache skipped.
+    const title = (paused ? existing?.title : parsed.title) ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
     const relPath = existing?.rel_path ?? `evidence/sessions/transcripts/${r.agent}/${localDate(startedAt)}-${r.sessionId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64)}.md`;
     // The cache feeds the summariser, which may be a remote model: it never holds unredacted secrets.
     this.writeCache({ ...parsed, turns: turns.map((t) => ({ ...t, text: redact(t.text) })), agent: r.agent, sessionId: r.sessionId, cwd, title, startedAt });
@@ -183,7 +189,7 @@ export class AgentSessions {
       )
       .run(r.agent, r.sessionId, relPath, title, cwd, startedAt, nowIso(), turns.length);
     const row = this.row(r.agent, r.sessionId)!;
-    if (row.turns > row.distilled_turns) this.scheduleSummary(r, source.label, title, row.turns);
+    if (row.turns > row.distilled_turns) this.scheduleSummary(r, source.label, title, row.turns, row.turns > (existing?.turns ?? 0));
     return true;
   }
 
@@ -213,7 +219,8 @@ export class AgentSessions {
    */
   private reportUnreadable(r: SpoolRecord, copy: string, label: string, problem: string) {
     this.keepUnparsed(r, copy, problem);
-    this.reportSessionProblem(r.agent, `Attache could not read a ${label} session (${problem}), so it saved nothing of it. Updating Attache may fix this; until then, use the wrap-up prompt to keep what a conversation decided.`);
+    const repair = r.agent === "opencode" ? "Restart OpenCode to load the current plugin. Updating Attache may help if the problem persists." : "Updating Attache may fix this.";
+    this.reportSessionProblem(r.agent, `Attache could not read a ${label} session (${problem}), so it saved nothing of it. ${repair} Use the wrap-up prompt to keep what the conversation decided.`);
   }
 
   private reportSessionProblem(agent: string, message: string) {
@@ -238,15 +245,15 @@ export class AgentSessions {
    * turn; a session end or compaction runs it straight away. A summary that is
    * already running is followed by a new one (see `distill` for ordering).
    */
-  private scheduleSummary(r: SpoolRecord, label: string, title: string, turns: number) {
+  private scheduleSummary(r: SpoolRecord, label: string, title: string, turns: number, addedTurns: boolean) {
     const pending = this.app.db
       .prepare("select id, run_after from jobs where kind = 'session-distill' and status = 'queued' and json_extract(input, '$.agent') = ? and json_extract(input, '$.sessionId') = ?")
       .get(r.agent, r.sessionId) as { id: string; run_after: string | null } | undefined;
-    const now = r.event !== "turn-end";
+    const immediate = r.event !== "turn-end";
     const quietUntil = new Date(Date.now() + TURN_END_QUIET_MS).toISOString();
     if (pending) {
-      // An idle snapshot can add turns to a due summary without making it wait again.
-      if (pending.run_after !== null) this.app.jobs.reschedule(pending.id, now ? null : quietUntil);
+      // Keep due work eligible. Only new turns extend an ongoing quiet period.
+      if (pending.run_after !== null && (immediate || (addedTurns && pending.run_after > nowIso()))) this.app.jobs.reschedule(pending.id, immediate ? null : quietUntil);
       return;
     }
     this.app.jobs.create({
@@ -255,7 +262,7 @@ export class AgentSessions {
       input: { agent: r.agent, sessionId: r.sessionId },
       capability: "sessions",
       idempotencyKey: `session-distill:${r.agent}:${r.sessionId}:${turns}`,
-      ...(now ? {} : { runAfter: quietUntil }),
+      ...(immediate ? {} : { runAfter: quietUntil }),
     });
   }
 
