@@ -121,7 +121,11 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
-    this.autoAccept = new AutoAcceptStore(this.db, (kind) => this.connections.record(kind)?.status === "connected");
+    this.autoAccept = new AutoAcceptStore(
+      this.db,
+      (kind) => this.connections.record(kind)?.status === "connected",
+      () => this.harnesses(),
+    );
     this.clock = opts.clock ?? systemClock;
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
     this.replication = new Replication({

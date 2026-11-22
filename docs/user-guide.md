@@ -469,7 +469,7 @@ What they have in common:
   When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
   Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
 - **Saves through MCP.**
-  These three have no auto-accept switch in Settings yet: a save from them asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
+  Like every connected Harness, each saves without asking while its auto-accept switch in Settings is on, which it is when you connect it; with the switch off, a save asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
 - **What is saved.**
   Only your words and the Harness's answers are kept, never tool calls, tool output, Attache's memory, other injected context or subagent conversations.
   A session in a format Attache does not recognise is not saved at all; the Connection shows the problem, naming the Harness and the format.
@@ -514,7 +514,6 @@ What they have in common:
 - **Limits:** after `/compact` a session has no Attache memory until you `/clear`, resume or start a new one.
   Only a Copilot CLI that is killed or crashes mid-turn can lose that newest turn.
   A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns Attache's hooks off there, and a repository's own `.mcp.json` can replace a server of the same name.
-  Attache's tests ran Copilot CLI without a GitHub sign-in, so saves from Copilot CLI are labelled as coming from an unknown Harness until its name is verified.
 
 ## Meeting captures
 

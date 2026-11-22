@@ -85,9 +85,6 @@ Linux and Windows are not verified for any of the three: their paths and hook co
 - Personal `hooks/*.json` command hooks run; `sessionStart` `additionalContext` reaches the model as its own user message and is stored only inside the `hook.end` event of `events.jsonl`.
 - `/compact` drops the memory message and `sessionStart` does not run again.
 - `events.jsonl` is written in batches of about 100 ms, after `agentStop` starts.
-- Real sessions ran offline with a bring-your-own-key stand-in model; no GitHub sign-in was used, so Copilot CLI's MCP client name is not verified and Copilot CLI shows as an unknown Harness in saves.
+- Real sessions ran offline with a bring-your-own-key stand-in model; no GitHub sign-in was used.
+  In such a session Copilot CLI 1.0.114 started a personal MCP server and named its MCP client `copilot-cli` (`initialize` `clientInfo`), so saves are attributed to Copilot CLI.
 - Not verified by a run: SIGTERM or SIGKILL mid-turn, `session.truncation` and rewind, a repository's `disableAllHooks`, sandbox mode.
-
-## Gaps that do not change these claims
-
-- Saves through MCP from Pi, OpenCode and Copilot CLI have no auto-accept switch: they ask you first where the Harness can show the request, and otherwise wait as Proposals.
