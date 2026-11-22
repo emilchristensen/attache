@@ -6,6 +6,7 @@
 /* ---- the heading and the view controls ---------------------------------------------------------- */
 
 .inbox {
+  container-type: inline-size;
   margin-top: var(--s-6);
 }
 .inbox-head {

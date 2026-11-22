@@ -1,13 +1,20 @@
-/* Home: For you now, the Inbox and Recently added. */
+/*
+ * Home's arrangement: Search the Brain, The Daily Briefing and Your day across the full width, then For you now and
+ * the Inbox side by side. This is the one part of Home that follows the window (spec #82): desktop from 960 px, tablet
+ * from 600 px, a phone below. Each area answers the width it is given with its own container queries
+ * (`for-you-now.css`, `your-day.css`, `briefing.css`, `inbox.css`), so it shows the same view in a narrow space as on
+ * a phone. The two areas in the shared row align at the top and take their natural height; neither scrolls itself.
+ */
 
-.page-inbox {
-  container: home / inline-size;
-}
+/* Desktop (960 px and wider): Your day across the top of the grid, then For you now at a third and the Inbox at two. */
 .home-areas {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   align-items: start;
   column-gap: var(--s-5);
+}
+.home-areas > * {
+  min-width: 0;
 }
 .home-areas > .your-day {
   grid-column: 1 / -1;
@@ -25,528 +32,48 @@
   grid-row: 2;
   margin-top: 0;
 }
-.home-areas > * {
-  min-width: 0;
-}
-@container home (min-width: 541px) {
-  .home-areas .inbox-line { padding-block: 8px; }
-  .home-areas .inbox-row-actions { margin-top: 2px; }
-}
-@container home (max-width: 900px) {
-  .home-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@container home (max-width: 540px) {
-  .home-areas { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
-  .home-areas > .your-day { padding-bottom: 16px; margin-bottom: var(--s-5); }
-  .home-areas > .for-you-now { order: 1; }
-  .home-areas > .your-day { order: 2; }
-  .home-areas > .inbox { order: 3; }
-}
-
-/* ---- For you now --------------------------------------------------------------------------- */
-
-.for-you-now {
-  margin-bottom: var(--s-5);
-  container-type: inline-size;
-}
-.for-you-now-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-1) var(--s-3);
-  margin-bottom: var(--s-3);
-}
-.for-you-now h2:focus {
-  outline: none;
-}
-.for-you-now h2:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 3px;
-}
-
-/* Nothing timely: one quiet line between rules, so the page does not jump when a Heads-up arrives or leaves. */
-.for-you-now.quiet {
-  padding: 7px 0;
-  border-block: 1px solid var(--rule);
-}
-.for-you-now.quiet .for-you-now-head {
-  gap: var(--s-1) var(--s-2);
-  margin-bottom: 0;
-}
-/* Lines without a lead: the title at the quiet line's size. */
-.for-you-now.compact .for-you-now-head {
-  margin-bottom: var(--s-1);
-}
-@container (max-width: 540px) {
-  .for-you-now .inbox-rows { margin-top: var(--s-1); }
-  .for-you-now .inbox-line {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "kind actions"
-      "subject subject"
-      "source time";
-    row-gap: 1px;
-    padding: 4px 2px;
+/* The briefing sits flush between the search field and Your day. */
+@media (min-width: 960px) {
+  .page-inbox > .daily-briefing-area {
+    padding-block: 0;
   }
-  .for-you-now .inbox-kind { grid-area: kind; }
-  .for-you-now .inbox-time { grid-area: time; }
-  .for-you-now .inbox-source .tag { display: none; }
-  .for-you-now .inbox-subject { grid-area: subject; min-height: 24px; }
-  .for-you-now .inbox-source { grid-area: source; }
-  .for-you-now .inbox-row-actions {
-    grid-area: actions;
-    justify-self: end;
-    min-height: 28px;
-    margin-top: 0;
+}
+/* Beside another area the rows sit a little closer, so the first rows of both lists show without scrolling. */
+@media (min-width: 600px) {
+  .home-areas .inbox-line {
+    padding-block: 8px;
   }
-  .for-you-now .inbox-row-actions button { min-height: 24px; }
-}
-@container home (max-width: 540px) {
-  .for-you-now .inbox-subject, .for-you-now .inbox-row-actions, .for-you-now .inbox-row-actions button { min-height: 44px; }
-}
-@container home (min-width: 901px) {
-  .daily-briefing-area { padding-block: 0; }
-}
-.for-you-now-quiet-title {
-  font-family: var(--font);
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--ink);
-}
-.for-you-now-quiet-text {
-  margin: 0;
-  flex: 1 1 16em;
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  color: var(--ink-2);
-}
-.for-you-now-failed {
-  margin: var(--s-2) 0 0;
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-}
-
-/* The lead: one Heads-up shown whole. */
-.heads-up-lead {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-lg);
-  padding: 18px 24px;
-}
-/* Only a lead morning briefing is the amber spread, with a low sun etched into its outer margin. */
-.heads-up-lead.feature {
-  background: var(--feature);
-  border-color: transparent;
-}
-.heads-up-lead.feature::after {
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  right: -26px;
-  bottom: -125px;
-  width: 300px;
-  height: 280px;
-  border-radius: 50%;
-  z-index: -1;
-  background: repeating-radial-gradient(ellipse at center, transparent 0 12px, currentColor 13px 14px, transparent 15px 22px);
-  color: var(--rust);
-  opacity: 0.28;
-}
-/* The words stay clear of the sun. */
-.heads-up-lead.feature > :not(.briefing-detail) {
-  max-width: 76%;
-}
-/* The plain control outline is under 3:1 on amber, so controls on the spread take the field's stronger edge. */
-.heads-up-lead.feature button:not(.ghost):not(.primary) {
-  border-color: var(--key);
-}
-.heads-up-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.heads-up-lead.feature .heads-up-eyebrow {
-  color: var(--rust);
-}
-.heads-up-title {
-  margin: 4px 0 0;
-  font-family: var(--serif);
-  font-weight: 500;
-  font-size: 28px;
-  line-height: 34px;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  text-wrap: balance;
-}
-.heads-up-explanation {
-  margin: 4px 0 0;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--ink-2);
-}
-.heads-up-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-4);
-  margin-top: var(--s-3);
-}
-.heads-up-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2);
-}
-.heads-up-why {
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  color: var(--ink-2);
-}
-.heads-up-foot .heads-up-why {
-  flex: 1 1 18em;
-}
-
-/* Followers: compact lines under the lead, each with its why. */
-.heads-up-lines {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.heads-up-lead + .heads-up-lines {
-  margin-top: var(--s-2);
-}
-.heads-up-line {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--s-3);
-  padding: 9px 0;
-  border-bottom: 1px solid var(--rule);
-}
-.heads-ups > .heads-up-lines:first-child .heads-up-line:first-child {
-  border-top: 1px solid var(--rule);
-}
-.heads-up-line-icon {
-  display: grid;
-  place-items: center;
-  color: var(--rust);
-}
-.heads-up-line-text {
-  min-width: 0;
-}
-.heads-up-line-head {
-  margin: 0;
-  font-size: var(--fs-control);
-  line-height: 20px;
-  color: var(--ink);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.heads-up-line-head strong {
-  font-weight: 600;
-}
-.heads-up-line-timing,
-.heads-up-line-title {
-  color: var(--ink-2);
-}
-.heads-up-line .progress {
-  margin-top: 6px;
-  max-width: 24em;
-}
-.heads-up-line .briefing-detail {
-  grid-column: 2 / -1;
-}
-.heads-up-more {
-  margin-top: var(--s-1);
-}
-
-/* A held meeting that ended: the same box at the same size, with only "Meeting ended" and its subject in it. */
-.heads-up-ended {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  color: var(--ink-2);
-}
-.heads-up-ended .heads-up-line-icon {
-  color: var(--ink-2);
-}
-.heads-up-ended-text {
-  min-width: 0;
-  margin: 0;
-  font-size: var(--fs-control);
-  line-height: 20px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.heads-up-ended-text strong {
-  font-weight: 600;
-  color: var(--ink);
-}
-
-/* Meeting prep: the calendar-and-notes glyph in the meeting hue; Open prep opens below the line or the card. */
-.heads-up-lead.meeting .heads-up-eyebrow svg,
-.heads-up-line.meeting .heads-up-line-icon {
-  color: var(--c);
-}
-/* A follower meeting's subject and interval wrap rather than lose words on a narrow screen. */
-.heads-up-eyebrow-parts > span {
-  white-space: nowrap;
-}
-.heads-up-line.meeting .heads-up-line-head {
-  white-space: normal;
-}
-.meeting-prep-detail {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-2);
-  margin-top: var(--s-3);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--rule);
-}
-.heads-up-line .meeting-prep-detail {
-  grid-column: 2 / -1;
-}
-.meeting-prep-who,
-.meeting-prep-notes-none {
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  color: var(--ink-2);
-}
-.meeting-prep-label {
-  margin: 0;
-  font-size: var(--fs-meta);
-  line-height: var(--lh-meta);
-  font-weight: 600;
-  color: var(--ink);
-}
-.meeting-prep-notes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-}
-
-/* The briefing actions: one button and the three things it opens. */
-.briefing-actions {
-  position: relative;
-  flex: none;
-  margin-left: auto;
-}
-.briefing-actions-chevron {
-  transform: rotate(90deg);
-  color: var(--ink-3);
-}
-/* What Read briefing opens: every point, the linked counts and the file. */
-.briefing-detail {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-3);
-  margin-top: var(--s-4);
-  padding-top: var(--s-4);
-  border-top: 1px solid var(--rule);
-}
-.briefing-counts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.briefing-fresh {
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-}
-button.count-chip {
-  font-size: var(--fs-meta);
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--ink-2);
-  gap: 6px;
-}
-.count-chip b {
-  color: var(--ink);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.briefing-lines {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-width: 72ch;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.briefing-lines li {
-  position: relative;
-  padding-left: 16px;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--ink);
-  text-wrap: pretty;
-}
-.briefing-lines li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 0.62em;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--rust);
-}
-.briefing-lines li:only-child {
-  padding-left: 0;
-}
-.briefing-lines li:only-child::before {
-  display: none;
-}
-.briefing-lines li.caveat {
-  color: var(--ink-2);
-  font-size: var(--fs-meta);
-}
-.briefing-lines li.caveat::before {
-  background: var(--amber);
-}
-
-/* Meeting context: the notes the latest briefing found for each meeting. */
-.meeting-context {
-  margin-top: var(--s-3);
-  padding: var(--s-4);
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: var(--r);
-}
-.meeting-context-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s-1) var(--s-2);
-}
-.meeting-context-head button {
-  margin-left: auto;
-}
-.meeting-context-when,
-.meeting-context-empty {
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-}
-.meeting-context-list {
-  list-style: none;
-  margin: var(--s-3) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-}
-.meeting-context-list li {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-}
-
-@container home (max-width: 540px) {
-  .heads-up-lead {
-    padding: 16px;
-  }
-  .heads-up-lead.feature::after {
-    width: 120px;
-    right: -65px;
-  }
-  .heads-up-lead.feature > :not(.briefing-detail) {
-    max-width: 86%;
-  }
-  .heads-up-title {
-    font-size: 22px;
-    line-height: 28px;
-  }
-  /* On a phone a line wraps rather than cut its words off; its actions move under it. */
-  .heads-up-line {
-    grid-template-columns: 24px minmax(0, 1fr);
-    row-gap: var(--s-2);
-  }
-  .heads-up-line-head {
-    white-space: normal;
-  }
-  .heads-up-line > .heads-up-actions {
-    grid-column: 2;
+  .home-areas .inbox-row-actions {
+    margin-top: 2px;
   }
 }
 
-/* ---- Your day ------------------------------------------------------------------------------ */
+/* Tablet (600 to 959 px): the same rows, For you now and the Inbox at half each. */
+@media (max-width: 959px) {
+  .home-areas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 
-.your-day {
-  container-type: inline-size;
-  display: grid;
-  grid-template-columns: 185px minmax(0, 1fr);
-  gap: var(--s-4);
-  padding: 12px 0;
-  margin-bottom: var(--s-4);
-  border-block: 1px solid var(--rule);
-}
-.your-day h2 {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 500;
-}
-.your-day-body { min-width: 0; }
-.your-day-message { margin: 4px 0 0; color: var(--ink-2); }
-.your-day-events {
-  display: flex;
-  gap: 0;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.your-day-event {
-  min-width: 0;
-  flex: 1 1 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px var(--s-2);
-  padding-left: var(--s-3);
-  border-left: 2px solid var(--rule);
-}
-.your-day-time {
-  grid-column: 1 / -1;
-  font-family: var(--mono);
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-}
-.your-day-title { min-width: 0; font-weight: 600; }
-.your-day-response { display: block; font-size: var(--fs-meta); font-weight: 400; color: var(--ink-2); }
-.your-day-event.ended { opacity: 0.6; }
-.your-day-event.in-progress .your-day-time { color: var(--rust); font-weight: 700; }
-.your-day-all-day { margin: 0 0 var(--s-2); color: var(--ink-2); }
-.your-day-more { display: inline-block; margin-top: var(--s-2); font-size: var(--fs-meta); color: var(--ink-2); }
-.your-day-narrow { display: none; }
-@container (max-width: 540px) {
-  .your-day { grid-template-columns: minmax(0, 1fr); gap: var(--s-2); }
-  .your-day-events { display: grid; gap: var(--s-2); }
-  .your-day-event { grid-template-columns: minmax(0, 1fr); padding: 8px 0 8px var(--s-3); }
-  .your-day-time { grid-column: 1; }
-  .your-day-title a { display: inline-flex; align-items: center; min-height: 44px; }
-  .your-day-event .button { grid-column: 1; justify-self: start; min-width: 44px; min-height: 44px; }
-  .your-day-wide, .your-day-more { display: none; }
-  .your-day-narrow { display: grid; }
+/* Phone (below 600 px): every area at full width, For you now before Your day. */
+@media (max-width: 599px) {
+  .home-areas {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .home-areas > .for-you-now {
+    order: 1;
+  }
+  .home-areas > .your-day {
+    order: 2;
+    padding-bottom: var(--s-4);
+    margin-bottom: var(--s-5);
+  }
+  .home-areas > .inbox {
+    order: 3;
+  }
 }
 
 /* ---- Recently added: one ruled line closing the Inbox area that opens in place ------------------------------------ */
@@ -571,4 +98,3 @@ button.count-chip {
 .recently-added .collapse-toggle {
   align-self: flex-start;
 }
-
