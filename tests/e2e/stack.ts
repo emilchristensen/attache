@@ -86,6 +86,8 @@ export async function startStack(): Promise<Stack> {
   // OpenCode's config folder is under the test home, and the Machine's own OpenCode is never asked for its version.
   for (const key of ["XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG"]) delete env[key];
   env.ATTACHE_OPENCODE_BIN = join(base, "no-opencode");
+  // Harness executables are looked for only in the test home's own tool folder, never in the Machine's (/opt/homebrew/bin may have Codex).
+  env.ATTACHE_HARNESS_TOOL_DIRS = join(agentHome, ".local", "bin");
   // Copilot CLI's home folder is under the test home too, and the Machine's own Copilot CLI is never asked for its version.
   delete env.COPILOT_HOME;
   env.ATTACHE_COPILOT_BIN = join(base, "no-copilot");
