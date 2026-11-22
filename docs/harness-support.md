@@ -44,14 +44,14 @@ Without the executable on `PATH` or named, a smoke test is skipped, and a skippe
 
 ## Last verified
 
-All runs on macOS 26.6 (Darwin 25.6.0, Apple silicon), 2026-11-22, branch `spec-98-110-support-contracts`.
+All runs on macOS 26.6.2 (Darwin 25.6.0, Apple silicon) on 2026-11-22, at commit `414549d`.
 
 | Harness | Version | Smoke test result |
 |---|---|---|
 | Pi | `@earendil-works/pi-coding-agent` 1.6.0 | 5 of 5 passed |
 | OpenCode 1 | `opencode-ai` 1.19.6 | 5 of 5 passed |
 | OpenCode 2 | `@opencode/cli` 2.3.2 | 5 of 5 passed |
-| Copilot CLI | `@github/copilot` 1.0.114 | 9 of 9 passed (on `spec-98` after the #110 merge) |
+| Copilot CLI | `@github/copilot` 1.0.114 | 9 of 9 passed |
 
 Linux and Windows are not verified for any of the three: their paths and hook commands are fixture-tested only.
 
