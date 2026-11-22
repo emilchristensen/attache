@@ -146,6 +146,17 @@ const executableNamesIn = (loc: PlatformLocations, dir: string, name: string) =>
 export const COPILOT_HOME_DIR = ".copilot";
 
 /**
+ * Copilot CLI's home folder: `COPILOT_HOME` when it is an absolute path,
+ * otherwise `~/.copilot`. Connecting and the hooks use this one rule, so they
+ * always agree on where Copilot CLI's files are.
+ */
+export function copilotHomeFor(home: string, env: NodeJS.ProcessEnv, os: Os): string {
+  const path = pathFor(os);
+  const dir = env.COPILOT_HOME?.trim();
+  return dir && path.isAbsolute(dir) ? dir : path.join(home, COPILOT_HOME_DIR);
+}
+
+/**
  * Where Copilot CLI may be installed: the usual tool folders (its install
  * script uses `~/.local/bin` or `/usr/local/bin`, Homebrew its own), and the
  * folder `gh copilot` downloads it to. It is often an npm global package or a

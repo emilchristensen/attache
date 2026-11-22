@@ -69,7 +69,7 @@ function turnOf(e: Record<string, unknown>): Turn | null {
   if (typeof d.content !== "string") unreadable(`a ${String(e.type)} event whose content is not text`);
   if (role === "user" && (d.source !== undefined || d.isAutopilotContinuation === true)) return null;
   if (role === "assistant") {
-    if (d.parentToolCallId !== undefined) return null;
+    if (d.parentToolCallId != null) return null;
     if (!PHASES.has(d.phase)) unreadable(`an assistant message in phase ${JSON.stringify(d.phase)}`);
     if (!PHASES.get(d.phase)) return null;
   }

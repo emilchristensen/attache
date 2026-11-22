@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HookEvent } from "./spool.ts";
+import { copilotHomeFor } from "../platform/harness-locations.ts";
+import { currentOs } from "../platform/os.ts";
 
 /**
  * What the hook script needs to know about each agent: how to read its hook
@@ -77,10 +79,10 @@ export const COPILOT_HOOK_EVENTS: Record<string, HookEvent> = { sessionStart: "s
 const COPILOT_WAIT_MS = 3_000;
 const COPILOT_POLL_MS = 50;
 
-/** `session-state/<session id>/events.jsonl` in Copilot CLI's home folder: `COPILOT_HOME`, else `~/.copilot`. */
+/** `session-state/<session id>/events.jsonl` in Copilot CLI's home folder (`copilotHomeFor`: an absolute `COPILOT_HOME`, else `~/.copilot`). */
 function locateCopilotEvents(sessionId: string, home: string): string | null {
   if (!/^[A-Za-z0-9-]+$/.test(sessionId)) return null;
-  const root = process.env.COPILOT_HOME?.trim() || join(home, ".copilot");
+  const root = copilotHomeFor(home, process.env, currentOs());
   return join(root, "session-state", sessionId, "events.jsonl");
 }
 

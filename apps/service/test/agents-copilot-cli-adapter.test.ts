@@ -473,6 +473,13 @@ describe.skipIf(process.platform === "win32")("saving Copilot CLI sessions", () 
     ]);
   });
 
+  it("a relative COPILOT_HOME is ignored by the session-end hook, as connecting ignores it, so both use ~/.copilot", async () => {
+    const input = { sessionId: ID, timestamp: 1795294310948, cwd: work(), reason: "user_exit" };
+    write(eventsPath(), session([...BEFORE, hookStart("sessionEnd", input)]));
+    expect((await runHookCommand("sessionEnd", input, { COPILOT_HOME: "relative-copilot" })).status).toBe(0);
+    expect(spooled().map((r) => [r.event, r.error, r.text ? parseCopilotCli(r.text).turns.length : null])).toEqual([["session-end", null, 2]]);
+  });
+
   it("copies what is there when Copilot CLI never writes the hook's start (a session /clear ends), after a bounded wait", async () => {
     const input = { sessionId: ID, timestamp: 1, cwd: work(), reason: "user_exit" };
     write(eventsPath(), session(BEFORE));

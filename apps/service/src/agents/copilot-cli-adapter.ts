@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import type { HarnessApplyResult, HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
-import { COPILOT_HOME_DIR, copilotCliInstall } from "../platform/harness-locations.ts";
+import { copilotCliInstall, copilotHomeFor } from "../platform/harness-locations.ts";
+import { currentOs } from "../platform/os.ts";
 import { locationsForHome } from "../platform/locations.ts";
 import { shellPath } from "../platform/shell-command.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
@@ -47,9 +48,7 @@ const PURPOSE_COMMENTS = `${PURPOSE}; the file is written back as plain JSON, as
 
 /** Copilot CLI's home folder: `COPILOT_HOME` when it names one, else `~/.copilot`. */
 export function copilotHome(): string {
-  const dir = process.env.COPILOT_HOME?.trim();
-  if (dir && isAbsolute(dir)) return dir;
-  return join(agentHome(), COPILOT_HOME_DIR);
+  return copilotHomeFor(agentHome(), process.env, currentOs());
 }
 
 /** Whether Copilot CLI looks installed: one of its executables, or the folder `gh copilot` downloads it to. */
