@@ -73,19 +73,11 @@ type MeetingItem = Pick<AttentionItemView, "id"> & { meeting?: AttentionItemView
 const meetingOver = (item: MeetingItem, now: number) => !!item.meeting && Date.parse(item.meeting.end) <= now;
 
 /**
- * The open items the Inbox lists: not the meeting prep shown above as a Heads-up (`above`, its item ids), which is a
- * view of the same item, and not meeting prep whose meeting has ended, which the service resolves at that moment.
+ * The open items the Inbox lists at `now`: every one, For you now's included, except meeting prep whose meeting has
+ * ended, which the service resolves at that moment, so it leaves the Inbox and For you now at the same instant.
  */
-export function listedBelow<T extends MeetingItem>(items: readonly T[], above: ReadonlySet<string>, now: number): T[] {
-  return items.filter((i) => !above.has(i.id) && !meetingOver(i, now));
-}
-
-/**
- * The items that left For you now and are still open with a meeting to come (Not now, here or in another tab): they
- * come back into their place in the Inbox instead of waiting behind Show new items.
- */
-export function backFromAbove(before: ReadonlySet<string>, above: ReadonlySet<string>, items: readonly MeetingItem[], now: number): string[] {
-  return items.filter((i) => before.has(i.id) && !above.has(i.id) && !meetingOver(i, now)).map((i) => i.id);
+export function listedNow<T extends MeetingItem>(items: readonly T[], now: number): T[] {
+  return items.filter((i) => !meetingOver(i, now));
 }
 
 export interface TypeOption {

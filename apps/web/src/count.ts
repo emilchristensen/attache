@@ -152,25 +152,18 @@ export function tabTitle(total: Tally): string {
 }
 
 /**
- * The line under Home's Inbox heading when its rows and its decisions differ: "1 meeting above · 3 items below need
- * you · 1 Draft in Approvals". `promoted` holds the ids of items shown above as Heads-ups instead of in the list;
- * `home` is the heading's count. While the list holds every open item the line counts its rows; when the list is
- * full (more items than it asked for), the decisions below come from the count and the Drafts are a lower bound.
- * Null when every row below is a decision on Home, or when the Inbox has not answered.
+ * The line under Home's Inbox heading when its rows and its decisions differ: "3 items below need you · 1 Draft in
+ * Approvals". Every open item is a row, For you now's included, so the line only explains the Drafts that wait in
+ * Approvals. `home` is the heading's count. While the list holds every open item the line counts its rows; when the
+ * list is full (more items than it asked for), the decisions below come from the count and the Drafts are a lower
+ * bound. Null when every row below is a decision on Home, or when the Inbox has not answered.
  */
-export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, promoted: ReadonlySet<string>, home: Tally): string | null {
+export function homeLine(inbox: Answer<{ id: string; actionStatus: ActionStatus | null }>, home: Tally): string | null {
   if (inbox.kind !== "rows") return null;
-  void promoted;
-  const below = inbox.rows;
-  const inApprovals = below.filter(draftWaits).length;
+  const inApprovals = inbox.rows.filter(draftWaits).length;
   if (inApprovals === 0) return null;
   const full = inbox.limit !== null && inbox.rows.length >= inbox.limit;
-  const decisions = full ? home.count : below.length - inApprovals;
+  const decisions = full && home.exact ? home.count : inbox.rows.length - inApprovals;
   const atLeast = full && !home.exact ? "At least " : "";
-  return [
-    `${atLeast}${plural(decisions, "item")} ${decisions === 1 && !atLeast ? "needs" : "need"} you here`,
-    inApprovals > 0 && `${full ? "at least " : ""}${plural(inApprovals, "Draft")} in Approvals`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  return [`${atLeast}${plural(decisions, "item")} below ${decisions === 1 && !atLeast ? "needs" : "need"} you`, `${full ? "at least " : ""}${plural(inApprovals, "Draft")} in Approvals`].join(" · ");
 }

@@ -1,15 +1,15 @@
 import { useEffect, type RefObject } from "react";
 
 /**
- * Keep the reader's place on Home when something above it grows or shrinks, as when a meeting prep Heads-up arrives
- * in For you now (and the Inbox's count line with it) while the owner reads the Inbox. Chrome and Firefox do this
+ * Keep the reader's place on Home when something above it grows or shrinks, as when an entry arrives in For you now
+ * or The Daily Briefing folds while the owner reads the Inbox. Chrome and Firefox do this
  * themselves (scroll anchoring, `overflow-anchor`). Where the browser does not (Safari), this does the same for
- * Home's scroller: it remembers what is in view (areas, or headings, Heads-ups and rows) and where each was, and when
+ * Home's scroller: it remembers what is in view (areas, or headings, entries and rows) and where each was, and when
  * anything in the page changes size, moves the scroller by as much as the first of them still on the page moved. At
  * the top of the page nothing moves.
  */
-/** The parts of an area that can hold the place: For you now's heading and Heads-ups, the Inbox's heading and rows. */
-const PARTS = ".for-you-now-head, [data-heads-up-key], .inbox-head, [data-inbox-row]";
+/** The parts of an area that can hold the place: For you now's heading, the Inbox's heading, and both lists' rows. */
+const PARTS = ".for-you-now-head, .inbox-head, [data-inbox-row]";
 
 export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): void {
   useEffect(() => {

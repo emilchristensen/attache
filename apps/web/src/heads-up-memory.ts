@@ -1,9 +1,10 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 /**
- * What the owner settled in For you now (Got it, Not now), per occurrence key, in this browser only: it is not stored
- * in the service and does not replicate (the proactive roadmap moves it there). Keys are occurrences such as
- * `briefing:<id>`, never clock times, so a settled Heads-up stays settled after a time zone change.
+ * What the owner settled with Got it on The Daily Briefing area, per occurrence key, in this browser only: it is not
+ * stored in the service and does not replicate (#15 moves it there). Keys are occurrences such as `briefing:<id>`,
+ * never clock times, so a settled briefing stays settled after a time zone change. Opening a folded briefing again
+ * takes its key back out.
  */
 const STORAGE_KEY = "attache.heads-ups.settled";
 /** Occurrences are forgotten after a week; none of today's kinds can apply again by then. */
@@ -70,9 +71,22 @@ export function settleHeadsUp(key: string, now = Date.now()): void {
   notify();
 }
 
-/** The settled occurrence keys, and a way to settle one. */
-export function useSettledHeadsUps(): { settled: ReadonlySet<string>; settle: (key: string) => void } {
+/** Forget that one occurrence was settled: the owner opened it again. */
+export function unsettleHeadsUp(key: string): void {
+  const kept = Object.fromEntries(Object.entries(parse(readRaw())).filter(([k]) => k !== key));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage blocked or full: opening it again still applies for this page, through the fallback below.
+    cache = { raw: cache.raw, keys: new Set([...cache.keys].filter((k) => k !== key)) };
+  }
+  notify();
+}
+
+/** The settled occurrence keys, and ways to settle one and to open it again. */
+export function useSettledHeadsUps(): { settled: ReadonlySet<string>; settle: (key: string) => void; unsettle: (key: string) => void } {
   const settled = useSyncExternalStore(subscribe, snapshot);
   const settle = useCallback((key: string) => settleHeadsUp(key), []);
-  return { settled, settle };
+  const unsettle = useCallback((key: string) => unsettleHeadsUp(key), []);
+  return { settled, settle, unsettle };
 }

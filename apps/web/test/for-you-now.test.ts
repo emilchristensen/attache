@@ -45,11 +45,15 @@ function prep(id: string, start = "2026-11-18T09:12:00Z", over: Partial<Attentio
   });
 }
 
-function briefing(topPicks: string[] = []): BriefingView {
+function briefing(topPicks: string[] = [], over: Partial<BriefingView> = {}): BriefingView {
+  return { ...dailyBriefing(topPicks), ...over };
+}
+
+function dailyBriefing(topPicks: string[]): BriefingView {
   return { id: "b1", kind: "daily", createdAt: "2026-11-18T07:00:00Z", since: null, summary: "", sections: [], lead: null, topPicks, updates: [], coverage: [], counts: { open: 0, new: 0, changed: 0, drafts: 0, proposals: 0, failedSources: 0 }, deliverablePath: null };
 }
 
-const decide = (items: AttentionItemView[], over: Partial<Parameters<typeof curateForYouNow>[0]> = {}) => curateForYouNow({ items, agenda: [], briefing: null, now: Date.parse(NOW), timeZone: CPH, ...over });
+const decide = (items: AttentionItemView[], over: Partial<Parameters<typeof curateForYouNow>[0]> = {}) => curateForYouNow({ items, briefing: null, now: Date.parse(NOW), timeZone: CPH, ...over });
 
 describe("For you now reasons", () => {
   it("applies and ends meeting prep at the named 15-minute window, unless prep was started", () => {
@@ -89,6 +93,42 @@ describe("For you now reasons", () => {
     expect(decide([picked], { briefing: briefing([]) }).entries).toEqual([]);
     expect(decide([{ ...picked, state: "snoozed" }], { briefing: briefing([picked.id]) }).entries).toEqual([]);
   });
+
+  it.each<[string, Partial<BriefingView>]>([
+    ["an away summary", { kind: "away" }],
+    ["a briefing the owner asked for", { kind: "manual" }],
+    ["yesterday's Daily Briefing", { createdAt: "2026-11-17T07:00:00Z" }],
+  ])("never picks from %s", (_, over) => {
+    const picked = item("picked");
+    expect(decide([picked], { briefing: briefing([picked.id], over) }).entries).toEqual([]);
+  });
+
+  it.each<[string, Partial<AttentionItemView>, string]>([
+    ["a review request", { kind: "review_request", title: "Review checkout retry" }, "Due in 45 min"],
+    ["a deadline", { kind: "deadline", title: "Send the invoice" }, "Due in 45 min"],
+    ["a reply", {}, "Due in 45 min"],
+  ])("lists %s within 2 hours of its due time as nearly late", (_, over, text) => {
+    const entry = decide([item("soon", { ...over, dueAt: "2026-11-18T09:45:00Z" })]).entries[0];
+    expect([entry?.reason, entry?.reasonText]).toEqual(["reply-nearly-late", text]);
+  });
+
+  it("says how many hours are left when more than one", () => {
+    expect(decide([item("soon", { dueAt: "2026-11-18T10:30:00Z" })]).entries[0]?.reasonText).toBe("Due in 2 hours");
+  });
+
+  it.each<[string, Partial<AttentionItemView>, string]>([
+    ["names who has waited", { title: "Reply to Nora Lind: Pilot scope" }, "Nora Lind has waited since Tuesday"],
+    ["says it has waited when no one is named", { title: "Reply to the pilot thread" }, "Waiting since Tuesday"],
+  ])("%s since the day the reply came", (_, over, text) => {
+    expect(decide([item("waited", { ...over, firstSeenAt: "2026-11-17T08:00:00Z" })]).entries[0]?.reasonText).toBe(text);
+  });
+
+  it.each<[string, string, string]>([
+    ["2026-11-18T09:12:00Z", "Starts in 12 min, prep not read", "before"],
+    ["2026-11-18T08:50:00Z", "Meeting started, prep not read", "during"],
+  ])("says when a meeting at %s starts: %s (%s)", (start, text) => {
+    expect(decide([prep("handover", start)]).entries[0]?.reasonText).toBe(text);
+  });
 });
 
 describe("For you now curation", () => {
@@ -117,5 +157,10 @@ describe("For you now curation", () => {
   it("says what comes next when no reason applies", () => {
     expect(decide([], { now: Date.parse("2026-11-18T08:00:00Z") }).quiet).toBe("Nothing right now.");
     expect(decide([prep("next", "2026-11-18T09:20:00Z")], { now: Date.parse("2026-11-18T09:00:00Z") }).quiet).toBe("Nothing right now. Next: prep for next at 10:20");
+  });
+
+  it("says tomorrow when the next prep is not today", () => {
+    const tomorrow = prep("standup", "2026-11-19T08:00:00Z", { meeting: { start: "2026-11-19T08:00:00Z", end: "2026-11-19T08:30:00Z", meetLink: null, attendees: [] } });
+    expect(decide([tomorrow]).quiet).toBe("Nothing right now. Next: prep for standup tomorrow at 09:00");
   });
 });

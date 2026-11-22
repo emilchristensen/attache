@@ -5,7 +5,7 @@ import { Link, Loading, navigate, useLocation } from "./components/ui.tsx";
 import { EvidenceProvider } from "./components/Evidence.tsx";
 import { CompactScreen } from "./components/CompactScreen.tsx";
 import { Shell } from "./components/Shell.tsx";
-import { screenAt, type ScreenId } from "./routes.ts";
+import { briefingAt, screenAt, type ScreenId } from "./routes.ts";
 import { Pair } from "./views/Pair.tsx";
 import { ServiceUnreachable } from "./views/ServiceUnreachable.tsx";
 import { Setup } from "./views/Setup.tsx";
@@ -25,7 +25,6 @@ interface Session {
 /** Each screen's view; the shell around it comes from `components/Shell.tsx`. */
 const VIEWS: Record<ScreenId, () => ReactNode> = {
   home: () => <Home />,
-  briefing: () => <BriefingPage />,
   approvals: () => <ApprovalsView />,
   brain: () => <BrainView />,
   connections: () => <ConnectionsView />,
@@ -73,9 +72,10 @@ export function App() {
   if (!cfg.data.config.setupCompleted || loc.path === "/setup") return <EvidenceProvider><Setup onDone={() => { cfg.reload(); navigate("/"); }} /></EvidenceProvider>;
 
   const id = screenAt(loc.path);
+  const briefing = briefingAt(loc.path);
   return (
     <EvidenceProvider>
-      <Shell path={loc.path}>{id ? VIEWS[id]() : <NotFound />}</Shell>
+      <Shell path={loc.path}>{briefing !== null ? <BriefingPage id={briefing} /> : id ? VIEWS[id]() : <NotFound />}</Shell>
     </EvidenceProvider>
   );
 }

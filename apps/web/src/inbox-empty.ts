@@ -5,13 +5,13 @@ import { spokenTime } from "./zoned-time.ts";
 
 /**
  * What an empty Inbox says (pure, table tests in `apps/web/test/inbox-empty.test.ts`). It claims no more than is
- * known: what was read comes from Home's Connections area, what still waits elsewhere from the decision count.
+ * known: what was read comes from the Connections status (`connection-status.ts`), what still waits elsewhere from the decision count.
  * "Nothing needs you." is said only from an exact zero with every source read; a source not read, notes only, or a
  * part of the count that could not be counted each change the words. The rules are in
  * `docs/design/dashboard-redesign/fable/spec-dot-and-drafts.md`, part 1.6.
  */
 
-/** What the Inbox's sources reached, as Home's Connections area says. */
+/** What the Inbox's sources reached, as the Connections status says. */
 export type InboxReach =
   /** Every source that can raise an Inbox item was read. `sources`: how many (null when not known). */
   | { kind: "all"; sources: number | null; lastReadAt: string | null }
@@ -72,12 +72,10 @@ const sourcesRead = (n: number) => (n === 1 ? "the one source that was read" : `
  * The title claims what was found only where something is known to have been read; otherwise it speaks of the list
  * alone. With meeting prep above, "Nothing else needs your attention." also needs nothing waiting anywhere else.
  */
-function title(reach: InboxReach, clear: boolean, above: boolean, elsewhere: boolean): string {
+function title(reach: InboxReach, clear: boolean): string {
   if (clear) return "Nothing needs you.";
-  const found = above ? "Nothing else found" : "Nothing found";
-  if (reach.kind === "partial" && reach.sources) return `${found} in ${sourcesRead(reach.sources)}.`;
-  if (reach.kind === "notes") return `${found} in your notes.`;
-  if (above) return reach.kind === "all" && !elsewhere ? "Nothing else needs your attention." : "No other open Inbox items.";
+  if (reach.kind === "partial" && reach.sources) return `Nothing found in ${sourcesRead(reach.sources)}.`;
+  if (reach.kind === "notes") return "Nothing found in your notes.";
   return "No open Inbox items.";
 }
 
@@ -127,15 +125,12 @@ export function emptyInbox({ count, reach, failed, now, timeZone }: EmptyInboxIn
   const asking = PARTS.some((p) => !tally[p.key].exact && tally[p.key].count === 0 && !failed[p.key]);
   if (asking || (!count.home.exact && count.home.count === 0)) return null;
   const clear = count.total.exact && count.total.count === 0 && reach.kind === "all";
-  const elsewhere = [count.approvals, count.connections].some((t) => t.count > 0 || !t.exact);
-  const lines: EmptyLine[] = [];
-  lines.push(line(readLine(reach, now, timeZone)));
-  lines.push(...waitLines(count));
+  const lines: EmptyLine[] = [line(readLine(reach, now, timeZone)), ...waitLines(count)];
   const lost = PARTS.filter((p) => failed[p.key] && !tally[p.key].exact);
   const none = lost.filter((p) => tally[p.key].count === 0).map((p) => p.name);
   const some = lost.filter((p) => tally[p.key].count > 0).map((p) => p.name);
   if (none.length) lines.push(line(`${capital(nameList(none))} could not be counted, so Attache cannot say that nothing needs you.`));
   if (some.length) lines.push(line(`${capital(nameList(some))} could not all be counted.`));
   const retry = lost.length > 0;
-  return { title: title(reach, clear, false, elsewhere), clear, lines, retry };
+  return { title: title(reach, clear), clear, lines, retry };
 }

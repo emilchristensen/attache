@@ -43,8 +43,6 @@ export interface InboxList {
   /** Take the arrivals in, re-sorting the whole list; decided lines go. */
   showNew: () => void;
   decided: (item: AttentionItemView, decision: RowDecision, until: string | null) => void;
-  /** Bring these items straight into their places, as the owner put them back here (Not now on meeting prep). */
-  welcomeBack: (ids: readonly string[]) => void;
 }
 
 const NONE: ReadonlyMap<string, DecidedEntry> = new Map();
@@ -59,7 +57,7 @@ export function useInboxList(live: readonly AttentionItemView[] | null, askedAt:
   const setDecisions = (change: (prev: ReadonlyMap<string, DecidedEntry>) => ReadonlyMap<string, DecidedEntry>) =>
     setDecidedIn((prev) => ({ key: listKey, map: change(prev.key === listKey ? prev.map : NONE) }));
 
-  // Items the owner reopened from Hidden, or put back from For you now, in this tab: they come straight back instead of waiting as arrivals.
+  // Items the owner reopened from Hidden in this tab: they come straight back instead of waiting as arrivals.
   const [welcome, setWelcome] = useState<ReadonlySet<string>>(new Set());
 
   const held = snap?.key === listKey ? snap.ids : null;
@@ -104,9 +102,6 @@ export function useInboxList(live: readonly AttentionItemView[] | null, askedAt:
       const decidedAt = orderMark();
       setDecisions((prev) => new Map(prev).set(item.id, { item, decision, until, decidedAt }));
       if (decision === "reopen") setWelcome((prev) => new Set([...prev, item.id]));
-    },
-    welcomeBack: (back) => {
-      if (back.length) setWelcome((prev) => new Set([...prev, ...back]));
     },
   };
 }

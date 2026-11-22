@@ -1,92 +1,130 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { AttentionDraftBody, AttentionItemView, BriefingView, JobView } from "@attache/contracts";
-import { post } from "../api.ts";
-import { useResource } from "../live.ts";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { AttentionItemView } from "@attache/contracts";
 import { useSignals } from "../nav-signals.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
-import { curateForYouNow, type ForYouNowResult } from "../for-you-now.ts";
+import { curateForYouNow, type ForYouNowEntry, type ForYouNowResult } from "../for-you-now.ts";
 import { useHold } from "../hold.ts";
-import { navigate } from "../components/ui.tsx";
-import { draftHref } from "../routes.ts";
-import { InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
+import { DecidedRow, InboxRow, type RowDecision } from "./InboxRow.tsx";
+import { useBriefings } from "./briefings.ts";
+import { useRowActions } from "./row-actions.ts";
 
-function useLatestBriefing(enabled: boolean) {
-  const r = useResource<{ briefing: BriefingView | null }>(enabled ? "/briefings/latest" : null, ["briefing.created"]);
-  return { briefing: r.data?.briefing ?? null, failed: !!r.error, retry: r.reload };
+/** A decision made from an entry: it stays in its place as one line with Undo until Undo or the next decision. */
+interface Decided {
+  item: AttentionItemView;
+  decision: RowDecision;
+  until: string | null;
+  /** Its place in the list when it was decided. */
+  at: number;
 }
 
-function useFrozenResult(live: ForYouNowResult, held: boolean) {
+/** The list as shown: while the pointer or focus is inside it, the list it showed when the hold began. */
+function useFrozenResult(live: ForYouNowResult, held: boolean): ForYouNowResult {
   const frozen = useRef(live);
   if (!held) frozen.current = live;
   return frozen.current;
 }
 
-export function ForYouNow({ attentionOn, clock, onAbove }: { attentionOn: boolean; clock: HeadsUpClock; onAbove: (ids: ReadonlySet<string>) => void }) {
+type Shown = { entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
+
+/** The entries with each decided line back in the place it was decided in, unless its item is back in the list. */
+function withDecided(entries: readonly ForYouNowEntry[], decided: readonly Decided[]): Shown[] {
+  const listed = new Set(entries.map((e) => e.item.id));
+  return decided
+    .filter((d) => !listed.has(d.item.id))
+    .toSorted((a, b) => a.at - b.at)
+    .reduce<Shown[]>((rows, d) => [...rows.slice(0, d.at), { entry: null, decided: d }, ...rows.slice(d.at)], entries.map((entry) => ({ entry, decided: null })));
+}
+
+/**
+ * For you now: the short list of Inbox items to act on now, each with its reason (`for-you-now.ts`), as Inbox rows in
+ * their narrow form with Start working, Snooze and Done, opening in place. Worked out again on Home's clock, when the
+ * page becomes visible and when the Inbox changes; nothing moves or leaves while the pointer or focus is inside it.
+ * `onShown` hears which items it shows, so their Inbox rows carry "Suggested now".
+ */
+export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attentionOn: boolean; draftsOn: boolean; clock: HeadsUpClock; onShown: (ids: readonly string[]) => void }) {
   const headingId = useId();
   const openInbox = useSignals().openInbox;
-  const latest = useLatestBriefing(attentionOn);
+  const briefings = useBriefings(attentionOn);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState("");
-  const result = useMemo(() => {
-    const items = openInbox.data?.items ?? [];
-    return curateForYouNow({ items, briefing: latest.briefing, now: clock.now, timeZone: clock.timeZone });
-  }, [openInbox.data, latest.briefing, clock.now, clock.timeZone]);
+  const [decided, setDecided] = useState<readonly Decided[]>([]);
+  const live = useMemo(
+    () => curateForYouNow({ items: openInbox.data?.items ?? [], briefing: briefings.data?.daily ?? null, now: clock.now, timeZone: clock.timeZone }),
+    [openInbox.data, briefings.data, clock.now, clock.timeZone],
+  );
   const { held, holdProps } = useHold("data-item-key");
-  const shown = useFrozenResult(result, held);
-  const idsKey = shown.entries.map((entry) => entry.item.id).sort().join(" ");
-  useEffect(() => onAbove(new Set(idsKey ? idsKey.split(" ") : [])), [idsKey, onAbove]);
+  const shown = useFrozenResult(live, held);
+  useEffect(() => onShown(shown.entries.map((e) => e.item.id)), [shown, onShown]);
+  const rows = withDecided(shown.entries, decided);
 
-  const decide = async (item: AttentionItemView, decision: RowDecision, until?: string) => {
-    setBusy(true);
-    try {
-      await post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) });
-      setSaid(decision === "start" ? `${item.title} is in progress.` : `${item.title} updated.`);
-      if (decision === "done" || decision === "dismiss" || decision === "snooze") setOpenId(null);
-      openInbox.reload();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const prepare = (item: AttentionItemView, body: AttentionDraftBody) => {
-    void (async () => {
-      setBusy(true);
-      try {
-        await post<{ job: JobView }>(`/attention/${item.id}/draft`, body);
-        openInbox.reload();
-      } finally {
-        setBusy(false);
-      }
-    })();
-  };
-  const actions: RowActions = {
-    decide,
-    busy,
-    prepareDraft: (item) => prepare(item, {}),
-    prepareReplacement: (item, draftId) => prepare(item, { replaceUnconfirmed: draftId }),
-    viewDraft: (draftId) => navigate(draftHref(draftId)),
-  };
+  const onDecided = useCallback(
+    (item: AttentionItemView, decision: RowDecision, until: string | null) => {
+      setOpenId(null);
+      // One line with Undo at a time: the newest decision's.
+      setDecided([{ item, decision, until, at: Math.max(0, shown.entries.findIndex((e) => e.item.id === item.id)) }]);
+    },
+    [shown],
+  );
+  const { actions, undo } = useRowActions({ reload: openInbox.reload, onDecided, onUndone: (item) => setDecided((d) => d.filter((x) => x.item.id !== item.id)) });
 
   if (!attentionOn)
-    return <section className="for-you-now quiet" aria-labelledby={headingId}><h2 id={headingId}>For you now</h2><p>Attention and briefings is switched off.</p></section>;
+    return (
+      <section className="for-you-now quiet" aria-labelledby={headingId}>
+        <h2 className="heading-section" id={headingId}>
+          For you now
+        </h2>
+        <p className="for-you-now-quiet-text">Attention and briefings is switched off.</p>
+      </section>
+    );
 
-  const failed = openInbox.error;
+  const failed = !!openInbox.error;
+  const listed = rows.length > 0;
   return (
-    <section className={`for-you-now${shown.entries.length ? "" : " quiet"}`} aria-labelledby={headingId} data-for-you-now={shown.entries.length ? "entries" : "quiet"} {...holdProps}>
+    <section className={`for-you-now${listed ? "" : " quiet"}`} aria-labelledby={headingId} data-for-you-now={listed ? "entries" : "quiet"} {...holdProps}>
       <div className="for-you-now-head">
-        <h2 className="heading-section" id={headingId}>For you now</h2>
+        <h2 className="heading-section" id={headingId}>
+          For you now
+        </h2>
       </div>
       {failed ? (
-        <p className="for-you-now-failed" role="alert">Could not read the Inbox. <button className="small" onClick={openInbox.reload}>Retry</button></p>
-      ) : shown.entries.length ? (
+        <p className="for-you-now-failed" role="alert">
+          Could not read the Inbox.{" "}
+          <button className="small" onClick={openInbox.reload}>
+            Retry
+          </button>
+        </p>
+      ) : listed ? (
         <>
           <ul className="inbox-rows for-you-now-rows">
-            {shown.entries.map(({ item, reasonText }) => <InboxRow key={item.id} item={item} open={openId === item.id} onToggle={() => setOpenId(openId === item.id ? null : item.id)} actions={actions} draftsOn clock={clock} reason={reasonText} />)}
+            {rows.map((row) =>
+              row.decided ? (
+                <DecidedRow key={row.decided.item.id} item={row.decided.item} decision={row.decided.decision} until={row.decided.until} onUndo={() => undo(row.decided.item)} busy={actions.busy} clock={clock} />
+              ) : (
+                <InboxRow key={row.entry.item.id} item={row.entry.item} open={openId === row.entry.item.id} onToggle={() => setOpenId(openId === row.entry.item.id ? null : row.entry.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} reason={row.entry.reasonText} />
+              ),
+            )}
           </ul>
-          {shown.moreInInbox > 0 && <p className="for-you-now-more"><a href="#inbox">{shown.moreInInbox} more in the Inbox</a></p>}
+          {shown.moreInInbox > 0 && (
+            <p className="for-you-now-more">
+              <a href="#inbox">{shown.moreInInbox} more in the Inbox</a>
+            </p>
+          )}
         </>
-      ) : <p className="for-you-now-quiet-text" role="status">{latest.failed ? <>Could not read the Daily Briefing. <button className="small" onClick={latest.retry}>Retry</button></> : shown.quiet ?? "Checking For you now…"}</p>}
-      <span className="sr-only" role="status">{said}</span>
+      ) : (
+        <p className="for-you-now-quiet-text" role="status">
+          {briefings.error && !briefings.data ? (
+            <>
+              Could not read the Daily Briefing, so its picks are missing.{" "}
+              <button className="small" onClick={briefings.reload}>
+                Retry
+              </button>
+            </>
+          ) : openInbox.data ? (
+            shown.quiet
+          ) : (
+            "Checking For you now…"
+          )}
+        </p>
+      )}
     </section>
   );
 }

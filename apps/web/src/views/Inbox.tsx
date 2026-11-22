@@ -1,9 +1,7 @@
-import { draftHref } from "../routes.ts";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
-import { post } from "../api.ts";
+import { plural, type AttentionItemView } from "@attache/contracts";
 import { useResource } from "../live.ts";
-import { Empty, Link, Loading, navigate, TurnOnInSettings, useAction } from "../components/ui.tsx";
+import { Empty, Link, Loading, TurnOnInSettings } from "../components/ui.tsx";
 import { GroupFailure } from "../components/GroupFailure.tsx";
 import { Logo } from "../components/Logo.tsx";
 import type { ConnectionsStatus } from "../connection-status.ts";
@@ -14,12 +12,13 @@ import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
-import { ALL_TYPES, groupRows, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
+import { ALL_TYPES, groupRows, listedNow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
 import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { moveAmongRows, useRowKeys, type RowKey } from "../shortcuts.ts";
 import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
+import { useRowActions } from "./row-actions.ts";
 
 /**
  * The empty open list: exactly what is known (`inbox-empty.ts`), with the logo without its dot only beside "Nothing
@@ -54,12 +53,12 @@ const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { start: "s
  * number out, the line that relates the rows to the decisions when they differ, and the view controls. Neither the
  * number nor the line shows while the open list failed (`failed`).
  */
-function InboxHeading({ id, children, open, failed = false, above }: { id: string; children?: ReactNode; open: boolean; failed?: boolean; above: ReadonlySet<string> }) {
+function InboxHeading({ id, children, open, failed = false }: { id: string; children?: ReactNode; open: boolean; failed?: boolean }) {
   const signals = useSignals();
   const home = signals.count.home;
   // While the open list itself failed the heading makes no claim beside it; the total stays in the shell.
   const needYou = home.count > 0 && !failed ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = open && !failed ? homeLine(signals.inbox, above, home) : null;
+  const line = open && !failed ? homeLine(signals.inbox, home) : null;
   return (
     <>
       <div className="inbox-head">
@@ -177,11 +176,7 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
       const decision = KEY_DECISION[key];
       const item = live?.find((i) => i.id === row?.dataset.itemId);
       if (!decision || !item || item.state !== "open" || busy) return false;
-      if (decision === "start") {
-        decide(item, decision);
-        return true;
-      }
-      decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
+      void decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
       return true;
     },
     [live, busy, decide],
@@ -190,15 +185,16 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
 }
 
 /**
- * The Inbox list. `attentionOn` is null until the feature switches are known. `connections` is Home's Connections area: an empty list says nothing needs the owner only when the
- * count is exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed
- * request shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the
- * rows it keeps and their time. `above` holds the items For you now shows as
- * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
- * `clock` is Home's, shared with For you now, so a meeting leaves both at the same instant. `after` closes the area
- * (Home's Recently added), whatever state the list is in.
+ * The Inbox list: every open item, For you now's included. `attentionOn` is null until the feature switches are known.
+ * `connections` is the shell's Connections status: an empty list says nothing needs the owner only when the count is
+ * exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed request
+ * shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the rows it
+ * keeps and their time. `suggested` holds the items For you now shows: their rows carry "Suggested now". Meeting prep
+ * whose meeting has ended leaves at that instant, until the service resolves it. `clock` is Home's, shared with For
+ * you now, so a meeting leaves both at the same instant. `after` closes the area (Home's Recently added), whatever
+ * state the list is in.
  */
-export function Inbox({ attentionOn, draftsOn, connections, above, clock, after }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; above: ReadonlySet<string>; clock: HeadsUpClock; after?: ReactNode }) {
+export function Inbox({ attentionOn, draftsOn, connections, suggested, clock, after }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; suggested: ReadonlySet<string>; clock: HeadsUpClock; after?: ReactNode }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
@@ -213,12 +209,8 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   // A switched-off feature is not a failure: Home says the Inbox is off instead.
   const failure = source.error && source.error.code !== "feature_disabled" ? source.error : null;
   const answered = source.data?.items ?? null;
-  const live = answered;
+  const live = useMemo(() => (answered && !hiddenView ? listedNow(answered, clock.now) : answered), [answered, hiddenView, clock.now]);
   const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
-  useEffect(() => {
-    if (!hiddenView && above.size) list.welcomeBack([...above]);
-  }, [above, hiddenView, list]);
-  const { busy, run } = useAction();
   const focusAfter = useFocusAfter();
 
   const typed = useMemo(() => list.entries.filter((e) => withType([e.item], place.type).length > 0), [list.entries, place.type]);
@@ -237,48 +229,21 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
     if (hiddenView) reloadHidden();
   }, [reloadOpen, reloadHidden, hiddenView]);
   const { decided } = list;
-  const decide = useCallback(
-    (item: AttentionItemView, decision: RowDecision, until?: string) =>
-      run(`decide:${item.id}`, async () => {
-        await post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) });
-        if (decision !== "start") {
-          decided(item, decision, until ?? null);
-          focusAfter(item.id, "undo");
-        }
-        reload();
-        return true;
-      }).then((ok) => {
-        if (!ok) throw new Error("Could not record the decision");
-      }),
-    [run, decided, focusAfter, reload],
-  );
-  const undo = (e: ListEntry) =>
-    void run(`undo:${e.item.id}`, async () => {
-      await post(`/attention/${e.item.id}/decision`, { decision: "reopen" });
-      focusAfter(e.item.id, "row");
-      reload();
-    });
-  const prepare = (item: AttentionItemView, body: AttentionDraftBody) =>
-    void run(
-      "draft",
-      async () => {
-        await post<{ job: JobView }>(`/attention/${item.id}/draft`, body);
-        reload();
-      },
-      body.replaceUnconfirmed ? "Preparing a replacement Draft in the background" : "Preparing a draft in the background",
-    );
-  const actions: RowActions = {
-    decide,
-    busy: busy !== null,
-    prepareDraft: (item) => prepare(item, {}),
-    prepareReplacement: (item, draftId) => prepare(item, { replaceUnconfirmed: draftId }),
-    viewDraft: (draftId) => {
-      // Coming back from the Draft finds the open row where it stood.
-      setPlace({ anchor: place.openId ? anchorOf(place.openId) : null });
-      navigate(draftHref(draftId));
+  const onDecided = useCallback(
+    (item: AttentionItemView, decision: RowDecision, until: string | null) => {
+      decided(item, decision, until);
+      focusAfter(item.id, "undo");
     },
-  };
-  useInboxKeys(live, decide, busy !== null);
+    [decided, focusAfter],
+  );
+  const { actions, undo } = useRowActions({
+    reload,
+    onDecided,
+    onUndone: (item) => focusAfter(item.id, "row"),
+    // Coming back from the Draft finds the open row where it stood.
+    beforeViewDraft: () => setPlace({ anchor: place.openId ? anchorOf(place.openId) : null }),
+  });
+  useInboxKeys(live, actions.decide, actions.busy);
 
   const showNew = () => {
     const first = arrivals[0]?.id;
@@ -298,12 +263,12 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
     live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
       ? emptyInbox({ count: signals.count, reach: inboxReach(connections), failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
       : null;
-  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo, suggested: above };
+  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: (e: ListEntry) => undo(e.item), suggested };
 
   if (attentionOn === null)
     return (
       <section id="inbox" className="inbox" aria-labelledby={heading}>
-        <InboxHeading id={heading} open={false} above={above} />
+        <InboxHeading id={heading} open={false} />
         <Loading label="Loading the Inbox" />
         {after}
       </section>
@@ -311,7 +276,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   if (!attentionOn)
     return (
       <section id="inbox" className="inbox" aria-labelledby={heading}>
-        <InboxHeading id={heading} open={false} above={above} />
+        <InboxHeading id={heading} open={false} />
         <div className="inbox-empty" data-inbox-empty="off" role="status">
           <div className="inbox-empty-words">
             <p className="inbox-empty-title">Attention and briefings is off.</p>
@@ -325,7 +290,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
 
   return (
     <section ref={section} id="inbox" className="inbox" aria-labelledby={heading}>
-      <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null} above={above}>
+      <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null}>
         <InboxTools
           items={live}
           type={place.type}

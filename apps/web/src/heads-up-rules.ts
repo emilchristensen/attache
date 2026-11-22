@@ -1,30 +1,16 @@
-import type { HeadsUp } from "./heads-ups.ts";
-
 /**
- * For you now's fixed rules, as named constants: when each Heads-up kind applies and leaves, how often the slot is
- * computed again, how many followers show and each kind's urgency. `heads-ups.ts` re-exports them.
+ * Home's fixed time rules, as named constants, shared by For you now (`for-you-now.ts`), Your day (`your-day.ts`),
+ * The Daily Briefing and Home's clock (`heads-up-clock.ts`), so one rule has one value everywhere.
  */
 
 export const MINUTE_MS = 60_000;
 export const HOUR_MS = 60 * MINUTE_MS;
-/** The daily briefing leads until this time of day, in the current zone on the briefing's day. */
-export const DAILY_BRIEFING_UNTIL = "12:00";
-/** How long an away summary or a briefing the owner asked for stays, from when it was made. */
+/** How long an away summary or a briefing the owner asked for stays above the Daily Briefing, from when it was made. */
 export const REQUESTED_BRIEFING_STAYS_MS = 4 * HOUR_MS;
-/** How often the slot is computed again; it is also computed again when the page becomes visible. */
+/** How often Home's clock reads the time again; it is also read again when the page becomes visible. */
 export const HEADS_UP_TICK_MS = MINUTE_MS;
-/** Followers shown under the lead; any further ones open from a disclosure, in order. */
-export const VISIBLE_FOLLOWERS = 2;
-/** Meeting prep shows from this long before the meeting starts until its scheduled end. */
-export const MEETING_LEAD_MS = 15 * MINUTE_MS;
-
 /**
- * Urgency, most urgent first: a kind's place in the order. Within one rank, Heads-ups go by their time, then key.
- * Meeting prep (#26 of spec #14) takes `meeting`, so a meeting in progress, then the next one, come before briefings.
+ * Meeting prep is in For you now, and Join shows in Your day, from this long before a meeting starts until its
+ * scheduled end.
  */
-export const RANK = { meeting: 10, briefing: 20, progress: 30, earlier: 40 } as const;
-
-/** The order of Heads-ups: by rank, then the instant each is about, then its key. */
-export function byUrgency(a: HeadsUp, b: HeadsUp): number {
-  return a.rank - b.rank || a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-}
+export const MEETING_LEAD_MS = 15 * MINUTE_MS;

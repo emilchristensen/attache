@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atTimeOfDay, spokenTime, startOfDay } from "../src/zoned-time.ts";
+import { atTimeOfDay, dayKey, isWeekend, spokenTime, startOfDay } from "../src/zoned-time.ts";
 
 describe("zoned time", () => {
   it("finds the start of a day whose midnight a daylight-saving jump skips", () => {
@@ -18,5 +18,22 @@ describe("zoned time", () => {
     expect(spokenTime(Date.parse("2026-11-18T07:02:00Z"), now, "Europe/Copenhagen")).toBe("at 08:02");
     expect(spokenTime(Date.parse("2026-11-17T22:10:00Z"), now, "Europe/Copenhagen")).toBe("yesterday at 23:10");
     expect(spokenTime(Date.parse("2026-11-16T08:00:00Z"), now, "Europe/Copenhagen")).toBe("on 16 November at 09:00");
+  });
+
+  it.each([
+    ["2026-11-18T22:30:00Z", "Europe/Copenhagen", "2026-11-18T23:30 in Copenhagen", "2026-11-18"],
+    ["2026-11-18T23:30:00Z", "Europe/Copenhagen", "00:30 the next day in Copenhagen", "2026-11-19"],
+    ["2026-11-19T03:00:00Z", "America/New_York", "22:00 the evening before in New York", "2026-11-18"],
+  ])("names the local day of %s in %s (%s) as %s", (at, zone, _, key) => {
+    expect(dayKey(Date.parse(at), zone)).toBe(key);
+  });
+
+  it.each([
+    ["2026-11-20T22:59:00Z", false, "Friday 23:59 in Copenhagen"],
+    ["2026-11-20T23:00:00Z", true, "Saturday 00:00 in Copenhagen"],
+    ["2026-11-22T22:59:00Z", true, "Sunday 23:59 in Copenhagen"],
+    ["2026-11-22T23:00:00Z", false, "Monday 00:00 in Copenhagen"],
+  ])("tells whether %s falls on a weekend: %s (%s)", (at, weekend) => {
+    expect(isWeekend(Date.parse(at), "Europe/Copenhagen")).toBe(weekend);
   });
 });
