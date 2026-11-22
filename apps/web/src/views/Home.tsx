@@ -16,8 +16,9 @@ const NOTHING_SUGGESTED: ReadonlySet<string> = new Set();
 const sameItems = (a: ReadonlySet<string>, b: readonly string[]) => a.size === b.length && b.every((id) => a.has(id));
 
 /**
- * Home's areas, in the order a phone stacks them: Search the Brain, The Daily Briefing, For you now, Your day and the
- * Inbox (`styles/home.css` arranges them on wider windows), with one clock for their time-dependent views.
+ * Home's areas, in the order a desktop window reads them: Search the Brain, The Daily Briefing, Your day, then For you
+ * now beside the Inbox (`styles/home.css` arranges them, and puts For you now before Your day on a phone), with one
+ * clock for their time-dependent views.
  */
 export function Home() {
   const cfg = useResource<{ features: Record<string, boolean> }>("/config", ["config.changed"]);
@@ -34,8 +35,8 @@ export function Home() {
       <HomeSearch recall={f.recall} />
       {cfg.data && <DailyBriefing attentionOn={attentionOn} clock={clock} />}
       <div className="home-areas">
-        {cfg.data && <ForYouNow attentionOn={attentionOn} draftsOn={f.drafts ?? false} clock={clock} onShown={onShown} />}
         {cfg.data && <YourDay clock={clock} enabled={attentionOn} />}
+        {cfg.data && <ForYouNow attentionOn={attentionOn} draftsOn={f.drafts ?? false} clock={clock} onShown={onShown} />}
         <Inbox attentionOn={cfg.data ? attentionOn : null} draftsOn={f.drafts ?? false} connections={connections.status} suggested={suggested} clock={clock} after={f.capture && <RecentlyAdded />} />
       </div>
     </section>

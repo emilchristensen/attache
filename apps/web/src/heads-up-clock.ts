@@ -19,8 +19,8 @@ export function meetingBoundaries(items: readonly { meeting?: { start: string; e
 /**
  * The instant and the browser's zone For you now is computed for: read again on every minute boundary, at each of
  * `boundaries` (instants that fall between minutes, such as a meeting that ends at 10:30:20), and when the page
- * becomes visible or the window gets focus, so a laptop that wakes or lands in another zone shows the right Heads-ups
- * straight away, and no Join outlasts its meeting.
+ * becomes visible or the window gets focus, so a laptop that wakes or lands in another zone shows For you now and
+ * Your day right straight away, and no Join outlasts its meeting.
  */
 export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpClock {
   const [clock, setClock] = useState(() => read());

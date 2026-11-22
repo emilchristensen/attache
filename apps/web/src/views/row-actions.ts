@@ -8,7 +8,7 @@ import type { RowActions, RowDecision } from "./InboxRow.tsx";
 interface Options {
   /** Ask the list again after a change. */
   reload: () => void;
-  /** A decision other than Start working succeeded: the row stays in its place as one line with Undo. */
+  /** A decision that takes the item out of the list succeeded: the row stays in its place as one line with Undo. */
   onDecided: (item: AttentionItemView, decision: RowDecision, until: string | null) => void;
   /** Undo succeeded: the item is open again. */
   onUndone?: (item: AttentionItemView) => void;
@@ -27,8 +27,9 @@ export function useRowActions({ reload, onDecided, onUndone, beforeViewDraft }: 
     async (item: AttentionItemView, decision: RowDecision, until?: string): Promise<boolean> => {
       const done = await run(`decide:${item.id}`, async () => {
         await post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) });
-        // Marked before the list is asked again, so only a later answer can retire the line.
-        if (decision !== "start") onDecided(item, decision, until ?? null);
+        // Marked before the list is asked again, so only a later answer can retire the line. Start working and Not
+        // started (a reopen of an open item) only change its tag: the row stays a row.
+        if (decision !== "start" && !(decision === "reopen" && item.state === "open")) onDecided(item, decision, until ?? null);
         reload();
         return true;
       });

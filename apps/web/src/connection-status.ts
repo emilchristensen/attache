@@ -542,8 +542,11 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
 /** States that describe how the owner set things up rather than a problem: they never raise the banner. */
 const QUIET_STATES: ReadonlySet<StatusState> = new Set(["checking", "notes_only", "switched_off"]);
 
-/** The buttons that fix an issue in place: Reconnect, and Retry or Refresh now. Others lead elsewhere, as Go to Connections does. */
-const FIXES: ReadonlySet<StatusAction["kind"]> = new Set(["reconnect", "refresh", "test", "refresh_all", "retry_check"]);
+/**
+ * The buttons that fix an issue: Reconnect, Retry or Refresh now, and Machines and Replication, where a silent Reader
+ * is taken over. The rest lead to the Connections page or Settings, as Go to Connections already does.
+ */
+const FIXES: ReadonlySet<StatusAction["kind"]> = new Set(["reconnect", "refresh", "test", "refresh_all", "retry_check", "machines"]);
 
 export interface ConnectionBannerView {
   /** The issue that most needs the owner: the first in the order. */

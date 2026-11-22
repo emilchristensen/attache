@@ -28,7 +28,7 @@ function Entry({ briefing, itemId, headline, text, url }: { briefing: BriefingVi
     navigate(href);
   };
   return (
-    <li className="briefing-item" data-briefing-entry={target.kind}>
+    <li className="briefing-item" data-briefing-entry={target.kind} data-item-id={itemId}>
       <a className="briefing-item-title" href={href} onClick={open}>
         <strong>{headline}</strong>
       </a>

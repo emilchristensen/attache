@@ -26,13 +26,21 @@ function useFrozenResult(live: ForYouNowResult, held: boolean): ForYouNowResult 
 
 type Shown = { entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
 
-/** The entries with each decided line back in the place it was decided in, unless its item is back in the list. */
+/**
+ * The entries with each decided line in its place: over its entry while the list still holds the item (an answer
+ * not yet back, or the list held under the pointer), else back where it was decided.
+ */
 function withDecided(entries: readonly ForYouNowEntry[], decided: readonly Decided[]): Shown[] {
+  const byItem = new Map(decided.map((d) => [d.item.id, d]));
+  const rows = entries.map((entry): Shown => {
+    const line = byItem.get(entry.item.id);
+    return line ? { entry: null, decided: line } : { entry, decided: null };
+  });
   const listed = new Set(entries.map((e) => e.item.id));
   return decided
     .filter((d) => !listed.has(d.item.id))
     .toSorted((a, b) => a.at - b.at)
-    .reduce<Shown[]>((rows, d) => [...rows.slice(0, d.at), { entry: null, decided: d }, ...rows.slice(d.at)], entries.map((entry) => ({ entry, decided: null })));
+    .reduce<Shown[]>((all, d) => [...all.slice(0, d.at), { entry: null, decided: d }, ...all.slice(d.at)], rows);
 }
 
 /**

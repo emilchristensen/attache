@@ -136,7 +136,7 @@ describe("connectionBanner: the one issue shown under the masthead", () => {
     ["a source that is down: Retry and Disable", withConnections(conn("gmail", { status: "error" })), { state: "down", fix: "test", disable: "gmail" }],
     ["one source not reached: Retry and Disable", withConnections(conn("gmail", { coverage: unreached("gmail.googleapis.com") })), { state: "offline", fix: "refresh", disable: "gmail" }],
     ["a partly read source: Disable, and its detail on Connections", withConnections(conn("gmail", { coverage: coverage("partial") })), { state: "partial", fix: null, disable: "gmail" }],
-    ["a silent Reader: no single Connection to disable", inputs({ reader: ok({ ...THIS_READER, silent: true }) }), { state: "not_reading", fix: null, disable: null }],
+    ["a silent Reader: Machines and Replication, and no single Connection to disable", inputs({ reader: ok({ ...THIS_READER, silent: true }) }), { state: "not_reading", fix: "machines", disable: null }],
     ["answers that could not be read: Retry", inputs({ reader: { state: "failed", message: "HTTP 500" } }), { state: "could_not_check", fix: "retry_check", disable: null }],
   ])("%s", (_, given, expected) => {
     const banner = connectionBanner(connectionsStatus(given));

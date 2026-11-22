@@ -29,13 +29,23 @@ export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): voi
       const inView = scroller.scrollTop > 0 ? candidates.filter((c) => c.getBoundingClientRect().bottom > view.top && c.getBoundingClientRect().top < view.bottom) : [];
       anchors = inView.map((el) => ({ el, top: el.getBoundingClientRect().top }));
     };
+    // The scroll event of a move made here arrives a frame later, possibly after the next change has already moved
+    // the page: it must not take that moved page as the place to keep, so it is skipped (`keep` remembered already).
+    let ownScroll = false;
     const keep = () => {
       const anchor = anchors.find((a) => a.el.isConnected);
       if (anchor) {
         const moved = anchor.el.getBoundingClientRect().top - anchor.top;
-        if (moved !== 0) scroller.scrollTop += moved;
+        if (moved !== 0) {
+          ownScroll = true;
+          scroller.scrollTop += moved;
+        }
       }
       remember();
+    };
+    const onScroll = () => {
+      if (ownScroll) ownScroll = false;
+      else remember();
     };
     const sizes = new ResizeObserver(keep);
     const watch = () => {
@@ -47,11 +57,11 @@ export function useReadingPlace(scrollerRef: RefObject<HTMLElement | null>): voi
     watch();
     children.observe(scroller, { childList: true });
     remember();
-    scroller.addEventListener("scroll", remember, { passive: true });
+    scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       sizes.disconnect();
       children.disconnect();
-      scroller.removeEventListener("scroll", remember);
+      scroller.removeEventListener("scroll", onScroll);
     };
   }, [scrollerRef]);
 }

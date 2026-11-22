@@ -4,13 +4,14 @@ import { api, post } from "../api.ts";
 import { connectionBanner, type StatusAction } from "../connection-status.ts";
 import type { ConnectionsView } from "../connections-view.ts";
 import { connectionHref, reconnectMethod, reconfigureSignIn, retestConnection, startBrowserSignIn, testSignIn } from "../reconnect.ts";
+import { settingsHref } from "../routes.ts";
 import { DisconnectConfirm } from "./ConnectionParts.tsx";
 import { Icon } from "./icons.tsx";
 import { Link, navigate, useAction } from "./ui.tsx";
 
 const CONNECTIONS = "/connections";
 
-/** The state's fixing button: Reconnect, or Retry (Refresh now while nothing was read yet). */
+/** The state's fixing button: Reconnect, Retry (Refresh now while nothing was read yet), or Machines and Replication. */
 function FixButton({ action, describedBy, view }: { action: StatusAction; describedBy: string; view: ConnectionsView }) {
   const { busy, run } = useAction();
   const caps = view.caps;
@@ -53,6 +54,12 @@ function FixButton({ action, describedBy, view }: { action: StatusAction; descri
         <button className="small" aria-describedby={describedBy} onClick={view.reload}>
           Retry
         </button>
+      );
+    case "machines":
+      return (
+        <Link to={settingsHref("machines")} className="btn small">
+          Machines and Replication
+        </Link>
       );
     default:
       return null;
