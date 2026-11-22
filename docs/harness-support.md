@@ -51,7 +51,7 @@ All runs on macOS 26.6 (Darwin 25.6.0, Apple silicon), 2026-11-22, branch `spec-
 | Pi | `@earendil-works/pi-coding-agent` 1.6.0 | 5 of 5 passed |
 | OpenCode 1 | `opencode-ai` 1.19.6 | 5 of 5 passed |
 | OpenCode 2 | `@opencode/cli` 2.3.2 | 5 of 5 passed |
-| Copilot CLI | `@github/copilot` 1.0.114 | every case passed, but not all in one run: the computer slept during each full run, and the case it slept in timed out |
+| Copilot CLI | `@github/copilot` 1.0.114 | 9 of 9 passed (on `spec-98` after the #110 merge) |
 
 Linux and Windows are not verified for any of the three: their paths and hook commands are fixture-tested only.
 
