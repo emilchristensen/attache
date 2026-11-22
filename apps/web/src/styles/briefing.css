@@ -188,8 +188,9 @@
 
 /* ---- the briefing page ------------------------------------------------------------------------------- */
 
-.briefing-page {
-  max-width: 960px;
+/* The page keeps the reading column's width but holds its words to a readable measure. */
+.briefing-page > * {
+  max-width: 824px;
 }
 .breadcrumbs {
   display: flex;
@@ -202,9 +203,10 @@
   overflow: hidden;
 }
 .briefing-page-hero h1 {
-  margin: 0;
+  margin: var(--s-1) 0 0;
   font-family: var(--serif);
   font-size: clamp(2.5rem, 8vw, 5rem);
+  line-height: 1;
 }
 .briefing-page-hero .briefing-painting-the {
   display: inline;
@@ -212,6 +214,7 @@
 }
 .briefing-page-written {
   margin: 0;
+  font-size: var(--fs-meta);
 }
 .briefing-page-section {
   padding: var(--s-6) 0;
