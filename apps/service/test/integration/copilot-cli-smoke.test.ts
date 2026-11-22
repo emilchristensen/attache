@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { checkHarnessContract } from "./harness-smoke-contract.ts";
 import { callTool, mcpClients } from "./mcp-client.ts";
 import { contextFile, listSpool } from "../../src/agents/spool.ts";
 
@@ -400,5 +401,21 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     // Nor is it saved: no hook copies it.
     expect(listSpool(svc.stateDir).filter((r) => r.sessionId === after)).toEqual([]);
     expect(archived(after)).toBeNull();
+  });
+
+  it("detects Copilot CLI, previews, connects, reports current, refreshes a stale hooks file that Copilot CLI then runs, and disconnects cleanly", { timeout: 120_000 }, async () => {
+    await checkHarnessContract(svc, {
+      kind: "copilot-cli",
+      command: "copilot",
+      executable: COPILOT!,
+      capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" },
+      loaded: async () => {
+        const servers = userServers();
+        const name = Object.keys(servers).find((n) => n.startsWith("attache"));
+        expect(servers[name!]).toMatchObject({ source: "user", enabled: true });
+        await promptSession("after refreshing");
+        expect(memoryIn(requestFor("after refreshing")!)).toHaveLength(1);
+      },
+    });
   });
 });

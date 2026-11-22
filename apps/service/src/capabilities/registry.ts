@@ -1,6 +1,9 @@
 import type { ConnectionKind, FeatureId, FeatureStatus, ReadinessState } from "@attache/contracts";
 import { HOOK_AGENT_KINDS } from "../agents/integrations.ts";
 
+/** Every Harness whose Connection saves its sessions: the hook-file Harnesses, and Pi, OpenCode and Copilot CLI through their own adapters (ADR 0006). */
+const SESSION_HARNESS_KINDS: ConnectionKind[] = [...HOOK_AGENT_KINDS, "pi", "opencode", "copilot-cli"];
+
 /**
  * The single server-side definition of what Attache can do. The setup
  * checklist, dependency validation, API access checks and the scheduler all
@@ -85,12 +88,12 @@ export const FEATURES: FeatureDefinition[] = [
   {
     id: "sessions",
     label: "Agent sessions",
-    description: "Save your Harness sessions (Claude Code, Codex, Antigravity) in your data folder with a summary of what was decided, write what they change in the Brain (Proposals for you to review when the Consolidation switch is off), and give each new session your Attache memory.",
+    description: "Save your Harness sessions (Claude Code, Codex, Antigravity, Pi, OpenCode, Copilot CLI) in your data folder with a summary of what was decided, write what they change in the Brain (Proposals for you to review when the Consolidation switch is off), and give each new session your Attache memory.",
     core: false,
     defaultEnabled: true,
     requiresFeatures: ["capture", "jobs"],
     connections: [
-      { kinds: HOOK_AGENT_KINDS, label: "A Harness with hooks (Claude Code, Codex or Antigravity)", required: true, missingEffect: "There are no agent sessions to save." },
+      { kinds: SESSION_HARNESS_KINDS, label: "A Harness that saves sessions (Claude Code, Codex, Antigravity, Pi, OpenCode or Copilot CLI)", required: true, missingEffect: "There are no agent sessions to save." },
       { kinds: ["model"], label: "A model to summarise and consolidate sessions", required: false, missingEffect: "Sessions are saved without a summary and are not consolidated." },
     ],
     schedules: [],

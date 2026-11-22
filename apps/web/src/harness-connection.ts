@@ -7,13 +7,13 @@ import type { HarnessCapabilities, HarnessCapture, HarnessFileChange, HarnessMem
 
 const MEMORY: Record<HarnessMemory, string> = {
   none: "not given to new sessions",
-  "runtime-fresh": "read fresh from your Brain when a session starts",
+  "runtime-fresh": "read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
   "managed-file": "kept in a file the Harness always loads, rewritten when it changes",
 };
 
 const CAPTURE: Record<HarnessCapture, string> = {
   none: "none; use the wrap-up prompt to keep what a conversation decided",
-  "with-final-event": "at compaction and when the session ends",
+  "with-final-event": "as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
   "without-final-event": "at each turn, with no session end, so the newest in-flight turn can be missed",
 };
 

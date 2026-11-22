@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { checkHarnessContract } from "./harness-smoke-contract.ts";
 
 /**
  * Smoke test against the real OpenCode executable, in an isolated home: connecting OpenCode through
@@ -357,5 +358,21 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     }
     expect(requests.length).toBeGreaterThan(0);
     for (const r of requests) expect(memoryIn(r)).toEqual([]);
+  });
+
+  it("detects OpenCode, previews, connects, reports current, refreshes a stale plugin that OpenCode then loads, and disconnects cleanly", { timeout: 180_000 }, async () => {
+    await checkHarnessContract(svc, {
+      kind: "opencode",
+      command: "opencode",
+      executable: OPENCODE!,
+      capabilities: { mcp: true, memory: "runtime-fresh", capture: "without-final-event" },
+      detectionEnv: ["ATTACHE_OPENCODE_BIN"],
+      loaded: async () => {
+        const [file] = readdirSync(plugins());
+        const server = file!.replace(/\.js$/, "");
+        const servers = await mcpServers(server);
+        expect(servers[server], JSON.stringify(servers)).toMatch(/connected/);
+      },
+    });
   });
 });

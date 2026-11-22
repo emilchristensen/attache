@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
+import { checkHarnessContract } from "./harness-smoke-contract.ts";
 
 /**
  * Smoke test against the real Pi executable, in an isolated Pi agent folder: connecting Pi through
@@ -301,5 +302,21 @@ describe.skipIf(!PI)("the real Pi executable", () => {
     // Nor are its sessions saved any more.
     expect(readdirSync(spool).filter((f) => f.endsWith(".json"))).toEqual([]);
     expect(svc.app.db.prepare("select count(*) as n from agent_sessions where title = 'after disconnecting'").get()).toEqual({ n: 0 });
+  });
+
+  it("detects Pi, previews, connects, reports current, refreshes a stale extension that Pi then loads, and disconnects cleanly", { timeout: 120_000 }, async () => {
+    await checkHarnessContract(svc, {
+      kind: "pi",
+      command: "pi",
+      executable: PI!,
+      capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" },
+      detectionEnv: ["PI_CODING_AGENT_DIR"],
+      loaded: async () => {
+        const [file] = readdirSync(join(agentDir, "extensions"));
+        const server = file!.replace(/\.ts$/, "");
+        const r = await runPi(server);
+        expect(r.servers).toEqual([{ name: server, extensionPath: join(agentDir, "extensions", file!) }]);
+      },
+    });
   });
 });

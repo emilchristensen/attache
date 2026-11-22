@@ -21,7 +21,7 @@ describe("capabilityLines", () => {
     ]);
   });
   it("describes runtime-fresh memory and capture reconciled at session end", () => {
-    expect(capabilityLines({ mcp: true, memory: "runtime-fresh", capture: "with-final-event" }).slice(1)).toEqual(["Memory: read fresh from your Brain when a session starts", "Session capture: at compaction and when the session ends"]);
+    expect(capabilityLines({ mcp: true, memory: "runtime-fresh", capture: "with-final-event" }).slice(1)).toEqual(["Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it", "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends"]);
   });
 });
 
