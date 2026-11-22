@@ -91,6 +91,8 @@ test("arrangement: desktop thirds, tablet halves, and phone reading order", asyn
   await expect(page.getByRole("region", { name: "The Daily Briefing" })).toBeVisible();
   for (const [viewport, arrangement] of [[DESKTOP, "desktop"], [TABLET, "tablet"], [PHONE, "phone"]] as const) {
     await page.setViewportSize(viewport);
+    // Home puts its areas in the window's order on the render after a resize.
+    await expect.poll(() => page.locator(".home-areas > *").first().getAttribute("class")).toContain(arrangement === "phone" ? "for-you-now" : "your-day");
     const boxes = await page.evaluate(() => Object.fromEntries(["daily", "for-you", "day", "inbox"].map((name) => {
       const selector = name === "daily" ? ".daily-briefing-area" : name === "for-you" ? ".for-you-now" : name === "day" ? ".your-day" : "#inbox";
       const box = document.querySelector(selector)!.getBoundingClientRect();

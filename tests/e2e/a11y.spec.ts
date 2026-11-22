@@ -218,10 +218,13 @@ test("screen reader: Home's five areas are named in order, the navigation names 
   const wide = await tops([".home-search", ".daily-briefing-area", ".your-day", ".for-you-now", "#inbox"]);
   expect(wide.slice(0, 4), "search, The Daily Briefing, Your day, For you now from the top").toEqual([...wide.slice(0, 4)].sort((a, b) => a - b));
   expect(Math.abs(wide[3]! - wide[4]!), "For you now and the Inbox share a row").toBeLessThanOrEqual(1);
-  // On a phone For you now comes before Your day.
+  // On a phone For you now comes before Your day, once Home has put the areas in the phone's order.
   await page.setViewportSize(PHONE);
-  const narrow = await tops([".home-search", ".daily-briefing-area", ".for-you-now", ".your-day", "#inbox"]);
-  expect(narrow, "search, The Daily Briefing, For you now, Your day, Inbox from the top").toEqual([...narrow].sort((a, b) => a - b));
+  const phoneOrder = [".home-search", ".daily-briefing-area", ".for-you-now", ".your-day", "#inbox"];
+  await expect.poll(async () => {
+    const narrow = await tops(phoneOrder);
+    return narrow.every((top, i) => i === 0 || narrow[i - 1]! <= top);
+  }, { message: "search, The Daily Briefing, For you now, Your day, Inbox from the top" }).toBe(true);
   await page.setViewportSize({ width: 1360, height: 900 });
   // Five areas and nothing else (the shared row holds Your day, For you now and the Inbox): Recently added closes the
   // Inbox area rather than standing as a sixth.
