@@ -55,7 +55,10 @@
   }
 }
 
-/* Phone (below 600 px): every area at full width, For you now before Your day. */
+/*
+ * Phone (below 600 px): every area at full width, For you now before Your day. Home puts them in the document in that
+ * order (`home-arrangement.ts`), so the keyboard follows what is drawn; this only stacks them.
+ */
 @media (max-width: 599px) {
   .home-areas {
     display: flex;
@@ -63,16 +66,9 @@
     align-items: stretch;
     gap: 0;
   }
-  .home-areas > .for-you-now {
-    order: 1;
-  }
   .home-areas > .your-day {
-    order: 2;
     padding-bottom: var(--s-4);
     margin-bottom: var(--s-5);
-  }
-  .home-areas > .inbox {
-    order: 3;
   }
 }
 

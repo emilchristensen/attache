@@ -96,6 +96,10 @@ test("arrangement: desktop thirds, tablet halves, and phone reading order", asyn
       const box = document.querySelector(selector)!.getBoundingClientRect();
       return [name, { top: box.top, left: box.left, width: box.width, bottom: box.bottom }];
     })));
+    // A keyboard and a screen reader meet the areas in the order they are drawn: top to bottom, then left to right.
+    const documentOrder = await page.evaluate(() => [...document.querySelectorAll(".your-day, .for-you-now, #inbox")].map((el) => (el.classList.contains("your-day") ? "day" : el.id === "inbox" ? "inbox" : "for-you")));
+    const drawnOrder = (["for-you", "day", "inbox"] as const).toSorted((a, b) => boxes[a]!.top - boxes[b]!.top || boxes[a]!.left - boxes[b]!.left);
+    expect(documentOrder, `${arrangement}: document order`).toEqual(drawnOrder);
     if (arrangement === "phone") {
       expect(boxes["daily"]!.bottom).toBeLessThanOrEqual(boxes["for-you"]!.top + 1);
       expect(boxes["for-you"]!.bottom).toBeLessThanOrEqual(boxes["day"]!.top + 1);

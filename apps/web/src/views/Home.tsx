@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState, type ReactNode } from "react";
 import { useReadingPlace } from "../reading-place.ts";
 import { useHomeClock } from "../heads-up-clock.ts";
 import { useResource } from "../live.ts";
@@ -9,6 +9,7 @@ import { DailyBriefing } from "./DailyBriefing.tsx";
 import { Inbox } from "./Inbox.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";
 import { YourDay } from "./YourDay.tsx";
+import { homeAreaOrder, usePhoneWindow, type HomeArea } from "../home-arrangement.ts";
 
 const NOTHING_SUGGESTED: ReadonlySet<string> = new Set();
 
@@ -16,9 +17,8 @@ const NOTHING_SUGGESTED: ReadonlySet<string> = new Set();
 const sameItems = (a: ReadonlySet<string>, b: readonly string[]) => a.size === b.length && b.every((id) => a.has(id));
 
 /**
- * Home's areas, in the order a desktop window reads them: Search the Brain, The Daily Briefing, Your day, then For you
- * now beside the Inbox (`styles/home.css` arranges them, and puts For you now before Your day on a phone), with one
- * clock for their time-dependent views.
+ * Home's areas: Search the Brain, The Daily Briefing, then Your day, For you now and the Inbox in the order the window
+ * draws them (`home-arrangement.ts`; `styles/home.css` places them), with one clock for their time-dependent views.
  */
 export function Home() {
   const cfg = useResource<{ features: Record<string, boolean> }>("/config", ["config.changed"]);
@@ -30,14 +30,18 @@ export function Home() {
   const clock = useHomeClock();
   useReadingPlace(page);
   const attentionOn = f.attention ?? false;
+  const order = homeAreaOrder(usePhoneWindow());
+  const areas: Record<HomeArea, ReactNode> = {
+    "your-day": cfg.data && <YourDay clock={clock} enabled={attentionOn} />,
+    "for-you-now": cfg.data && <ForYouNow attentionOn={attentionOn} draftsOn={f.drafts ?? false} clock={clock} onShown={onShown} />,
+    inbox: <Inbox attentionOn={cfg.data ? attentionOn : null} draftsOn={f.drafts ?? false} connections={connections.status} suggested={suggested} clock={clock} after={f.capture && <RecentlyAdded />} />,
+  };
   return (
     <section ref={page} className="page page-inbox" aria-label="Home">
       <HomeSearch recall={f.recall} />
       {cfg.data && <DailyBriefing attentionOn={attentionOn} clock={clock} />}
       <div className="home-areas">
-        {cfg.data && <YourDay clock={clock} enabled={attentionOn} />}
-        {cfg.data && <ForYouNow attentionOn={attentionOn} draftsOn={f.drafts ?? false} clock={clock} onShown={onShown} />}
-        <Inbox attentionOn={cfg.data ? attentionOn : null} draftsOn={f.drafts ?? false} connections={connections.status} suggested={suggested} clock={clock} after={f.capture && <RecentlyAdded />} />
+        {order.map((area) => <Fragment key={area}>{areas[area]}</Fragment>)}
       </div>
     </section>
   );
