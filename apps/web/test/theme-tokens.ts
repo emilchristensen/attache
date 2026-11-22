@@ -10,7 +10,7 @@ export type Tokens = ReadonlyMap<string, string>;
 
 const TOKENS_CSS = join(import.meta.dirname, "../src/styles/tokens.css");
 
-interface Rgba {
+export interface Rgba {
   r: number;
   g: number;
   b: number;
@@ -58,7 +58,7 @@ export function readTokens(theme: Theme, source = readFileSync(TOKENS_CSS, "utf8
   return new Map([...raw].map(([k, v]) => [k, resolve(v, [k])]));
 }
 
-function parseColour(value: string): Rgba {
+export function parseColour(value: string): Rgba {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value);
   if (hex) {
     const h = hex[1]!.length === 3 ? [...hex[1]!].map((c) => c + c).join("") : hex[1]!;
@@ -70,17 +70,22 @@ function parseColour(value: string): Rgba {
 }
 
 /** A translucent colour painted over an opaque one. */
-function over(top: Rgba, below: Rgba): Rgba {
+export function over(top: Rgba, below: Rgba): Rgba {
   const mix = (t: number, b: number) => t * top.a + b * (1 - top.a);
   return { r: mix(top.r, below.r), g: mix(top.g, below.g), b: mix(top.b, below.b), a: 1 };
 }
 
-function luminance({ r, g, b }: Rgba): number {
-  const lin = (c: number) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+/** How much each channel weighs in relative luminance (WCAG 2). */
+export const LUMA = { r: 0.2126, g: 0.7152, b: 0.0722 } as const;
+
+/** A channel value (0 to 255) as linear light. */
+export function linear(c: number): number {
+  const s = c / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+
+export function luminance({ r, g, b }: Rgba): number {
+  return LUMA.r * linear(r) + LUMA.g * linear(g) + LUMA.b * linear(b);
 }
 
 /** WCAG 2 contrast ratio of two CSS colours (hex or rgb/rgba); translucent colours are painted over `--paper`'s colour first. */
