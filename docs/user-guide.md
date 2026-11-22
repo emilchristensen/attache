@@ -442,10 +442,8 @@ This section describes Claude Code, Codex and Antigravity; Pi, OpenCode and Copi
   Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Attache's again; reconnecting updates Attache's hooks in place and leaves yours where they are.
 - **If Attache is not running,** sessions are queued on your computer and saved the next time it starts.
 
-Turning *Agent sessions* off in Settings disconnects Claude Code, Codex and Antigravity and removes their hooks and Attache's MCP server; Claude Desktop stays connected.
-Pi, OpenCode and Copilot CLI stay connected, with their MCP access, and get no memory while the feature is off.
-Pi and OpenCode save nothing while it is off; Copilot CLI's hooks still queue its sessions on this computer, and they are saved when you turn the feature on again.
-Disconnect them under Connections to remove Attache's files.
+Turning *Agent sessions* off in Settings disconnects Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI and removes Attache's hooks, extension, plugin and MCP server from them; Claude Desktop stays connected.
+Connect them again after you turn the feature back on.
 Uninstalling Attache removes them all.
 
 ## Pi, OpenCode and Copilot CLI
@@ -468,7 +466,8 @@ What they have in common:
   Before Attache changes a file that already exists, it copies it to the `backups/` folder in Attache's state folder, named after the file's path and the time, so you can copy it back.
   A file Attache creates has no earlier version to back up; disconnecting removes it.
 - **Out of date.**
-  When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after an upgrade; connect again to repair it, with a backup, and restart the Harness.
+  When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
+  Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
 - **Saves through MCP.**
   These three have no auto-accept switch in Settings yet: a save from them asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
 - **What is saved.**

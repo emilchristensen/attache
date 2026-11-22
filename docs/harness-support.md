@@ -91,5 +91,3 @@ Linux and Windows are not verified for any of the three: their paths and hook co
 ## Gaps that do not change these claims
 
 - Saves through MCP from Pi, OpenCode and Copilot CLI have no auto-accept switch: they ask you first where the Harness can show the request, and otherwise wait as Proposals.
-- An Attache upgrade does not refresh their files: the Connection shows **Out of date** until you connect it again.
-- Turning Agent sessions off disconnects Claude Code, Codex and Antigravity only; Pi, OpenCode and Copilot CLI stay connected with no memory, Pi and OpenCode save nothing, and Copilot CLI's hooks still queue sessions that are saved once the feature is on again.

@@ -375,8 +375,9 @@ export class AgentSessions {
   /**
    * Bring connected Harnesses up to this version once per start: an upgrade
    * may move the install's paths, so the MCP server entry is rewritten when it
-   * no longer matches, and the save and audit skills earlier versions
-   * installed are removed, since the MCP prompts replace them.
+   * no longer matches, the files of adapter-driven Harnesses (Pi, OpenCode,
+   * Copilot CLI) are refreshed, and the save and audit skills earlier
+   * versions installed are removed, since the MCP prompts replace them.
    */
   private upgradeHarnesses() {
     const skills = removeLegacySkills(agentHome(), this.stateDir);
@@ -388,6 +389,16 @@ export class AgentSessions {
         if (r.changed) this.app.log.info("registered Attache's MCP server", { agent: a.kind, path: r.path });
       } catch (e) {
         this.app.log.warn("could not register Attache's MCP server", { agent: a.kind, error: (e as Error).message });
+      }
+    }
+    // Harnesses whose files carry this install's paths (a plugin, an extension, a hooks file) are refreshed through their adapter.
+    const legacy = new Set(AGENT_INTEGRATIONS.map((a) => a.kind));
+    for (const h of this.app.harnesses().filter((x) => !legacy.has(x.kind) && this.app.connections.record(x.kind)?.status === "connected")) {
+      try {
+        const r = h.refresh();
+        if (r.changes.length) this.app.log.info("brought Attache's files in a Harness up to date", { agent: h.kind, files: r.changes.map((c) => c.path), backups: r.backups });
+      } catch (e) {
+        this.app.log.warn("could not bring Attache's files in a Harness up to date", { agent: h.kind, error: (e as Error).message });
       }
     }
   }

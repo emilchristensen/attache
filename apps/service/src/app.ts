@@ -28,9 +28,8 @@ import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
-import { AGENT_INTEGRATIONS } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
-import { harnessAdapters } from "./agents/harness-adapters.ts";
+import { harnessAdapters, type HarnessAdapter } from "./agents/harness-adapters.ts";
 import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
@@ -312,7 +311,11 @@ export class App {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
       // No hooks may keep spooling or injecting memory for a feature that is off.
-      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (a.hooks && this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
+      if (f.id === "sessions") {
+        // Every Harness whose memory or session capture needs the feature, whatever it uses (hooks, a plugin or an extension).
+        const lifecycle = this.harnesses().filter((h) => h.capabilities.memory !== "none" || h.capabilities.capture !== "none");
+        for (const h of lifecycle) if (this.connections.record(h.kind)?.status === "connected") void this.connections.disconnect(h.kind as ConnectionKind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: h.kind, error: (e as Error).message }));
+      }
     }
     this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
@@ -524,5 +527,10 @@ export class App {
 
   connectionKinds(): ConnectionKind[] {
     return [...this.adapters.keys()];
+  }
+
+  /** Every Harness Attache can connect, through its adapter (ADR 0006). */
+  harnesses(): HarnessAdapter[] {
+    return [...this.adapters.values()].flatMap((a) => (a.harness ? [a.harness] : []));
   }
 }

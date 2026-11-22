@@ -506,7 +506,8 @@ The hook reads the remotes of the session's folder from the repository's own git
 A save or a Proposal that sets a project's `Repositories` fact to anything that is not a list of repositories is refused (`memory/save-items.ts`, the validation both share).
 Antigravity has no session-start hook, so the same text is written to an always-on rule file in `~/.gemini/config/rules/`.
 Hooks skip sessions started with `CLAUDE_INVOKED_BY` set, and Attache's own model calls run with `--setting-sources ""`, so neither recurses.
-Turning the feature off disconnects Claude Code, Codex and Antigravity (`AGENT_INTEGRATIONS` with hooks); Pi, OpenCode and Copilot CLI stay connected and lose memory because the context files are removed, and Pi and OpenCode stop spooling for the same reason, while Copilot CLI's capture hooks still spool (ingest waits until the feature is on).
+Turning the feature off disconnects every connected Harness whose memory or capture is not `none` (`App.harnesses()`): Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI.
+On start, `AgentSessions.upgradeHarnesses` re-registers the MCP server of the hook Harnesses and calls `refresh()` on every other connected Harness adapter, so a plugin, extension or hooks file that carries an earlier install's paths is rewritten (with a backup).
 `attache-uninstall` runs `attache agent-hooks uninstall` first, which also removes the MCP server.
 
 ### Harness adapters
