@@ -127,6 +127,11 @@ export function rowText(item: RowItem): RowText {
   return { subject: split.subject, source: split.context ? `${source} · ${split.context}` : source };
 }
 
+/** Who or where the item names beside its source, such as the sender of a reply ("Nora Lind"); null when none. */
+export function rowContext(item: RowItem): string | null {
+  return own(RULES, item.kind)?.(item)?.context ?? null;
+}
+
 export interface RowTime {
   /** The instant behind the time, for `<time dateTime>`. */
   iso: string;

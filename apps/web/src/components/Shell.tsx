@@ -5,7 +5,8 @@ import { screenAt } from "../routes.ts";
 import { focusHomeSearch } from "../search-launch.ts";
 import { useShortcuts } from "../shortcuts.ts";
 import { useTabSignal } from "../tab-signal.ts";
-import { ConnectionBanner, useConnectionsStatus } from "../views/HomeConnections.tsx";
+import { ConnectionsContext, useConnectionsStatus } from "../connections-view.ts";
+import { ConnectionBanner } from "./ConnectionBanner.tsx";
 import { BottomBar } from "./BottomBar.tsx";
 import { Masthead } from "./Masthead.tsx";
 import { MoreSheet } from "./MoreSheet.tsx";
@@ -20,9 +21,10 @@ function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
 }
 
 /**
- * The frame around every screen: the masthead (desktop) or the bottom bar (narrow), the silent-Reader warning that
- * stays in view, the page in a centred reading column, the More and shortcut sheets and the search palette. It asks for the count once
- * and shares it with the screens (`useSignals()`), and the browser tab's title and favicon follow it.
+ * The frame around every screen: the masthead (desktop) or the bottom bar (narrow), the Connection banner under it on
+ * every screen but Connections, the page in a centred reading column, the More and shortcut sheets and the search
+ * palette. It asks for the count and the Connections status once and shares them with the screens (`useSignals()`,
+ * `useConnections()`), and the browser tab's title and favicon follow the count.
  */
 export function Shell({ children, path }: { children: ReactNode; path: string }) {
   const current = screenAt(path);
@@ -35,11 +37,12 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
   const closeShortcuts = useCallback(() => setSheet((s) => (s === "shortcuts" ? null : s)), []);
   const closeSearch = useCallback(() => setSheet((s) => (s === "search" ? null : s)), []);
   const openShortcuts = useCallback(() => setSheet("shortcuts"), []);
-  // Home's field when it is on screen, the search palette everywhere else.
+  // Home's field when it is on screen (Home itself, not a briefing's page under it), the search palette everywhere else.
+  const onHome = path === "/";
   const search = useCallback(() => {
-    if (current === "home") focusHomeSearch();
+    if (onHome) focusHomeSearch();
     else setSheet("search");
-  }, [current]);
+  }, [onHome]);
   const reopenSearch = useCallback(() => setSheet("search"), []);
   useShortcuts(openShortcuts, search);
   // Browser Back or Forward under the open palette takes the owner somewhere else: the palette closes.
@@ -52,6 +55,7 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
   const announcement = useRefreshAnnouncement(signals.count.total, signals.countAskedAt);
   return (
     <SignalsContext.Provider value={signals}>
+    <ConnectionsContext.Provider value={connections}>
     <div className="shell">
       <a className="skip-link" href="#main" onClick={skipToContent}>
         Skip to content
@@ -70,6 +74,7 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <ShortcutSheet open={sheet === "shortcuts"} onClose={closeShortcuts} />
       <SearchPalette open={sheet === "search"} onClose={closeSearch} onReopen={reopenSearch} />
     </div>
+    </ConnectionsContext.Provider>
     </SignalsContext.Provider>
   );
 }

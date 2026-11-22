@@ -1,29 +1,371 @@
-.daily-briefing-area { container-type: inline-size; border-top: 1px solid var(--line); padding: var(--s-2) 0; }
-.daily-briefing-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-2); }
-.daily-briefing-card { display: grid; grid-template-columns: minmax(0, 43fr) minmax(0, 57fr); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--paper); }
-.briefing-painting { position: relative; min-height: 160px; display: grid; align-items: end; background-size: cover; color: #fff; }
-.briefing-painting::before, .briefing-page-hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent, rgba(0,0,0,.92)); }
-.briefing-painting > div, .briefing-page-hero > div { position: relative; z-index: 1; padding: var(--s-5); }
-.briefing-painting span { display: block; font-family: var(--serif); font-style: italic; font-size: 1.25rem; }
-.briefing-painting strong { display: block; max-width: 7em; font-family: var(--serif); font-size: clamp(2.2rem, 4vw, 4rem); line-height: .9; }
-.briefing-painting p { margin: var(--s-3) 0 0; font-size: .75rem; }
-.briefing-lead { padding: var(--s-3); align-self: center; }
-.briefing-lead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 2.8cqi, 2rem); line-height: 1.04; margin: var(--s-1) 0; }
-.briefing-lead > p { margin-top: var(--s-1); margin-bottom: var(--s-1); }
-.briefing-lead .heads-up-actions { margin-top: var(--s-1); }
-.briefing-eyebrow { color: var(--rust); font-family: var(--serif); font-style: italic; margin: 0; }
-.briefing-time { color: var(--muted); font-size: .85rem; }
-.briefing-empty, .briefing-folded { padding: var(--s-4); border: 1px solid var(--line); border-radius: var(--r-lg); display: flex; align-items: center; gap: var(--s-3); }
-.briefing-empty strong + * { margin-left: auto; }
-.briefing-folded { justify-content: space-between; }
-.requested-briefing { margin-bottom: var(--s-3); display: flex; justify-content: space-between; gap: var(--s-4); padding: var(--s-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--paper); }
-.requested-briefing h3, .requested-briefing p { margin: var(--s-1) 0 0; }
-.briefing-page { max-width: 960px; }
-.breadcrumbs { display: flex; gap: var(--s-2); margin-bottom: var(--s-4); }
-.briefing-page-hero { min-height: 320px; position: relative; display: grid; align-items: end; background-size: cover; color: #fff; border-radius: var(--r-lg); overflow: hidden; }
-.briefing-page-hero h1 { font-family: var(--serif); font-size: clamp(2.5rem, 8vw, 5rem); margin: 0; }
-.briefing-page section { padding: var(--s-6) 0; border-bottom: 1px solid var(--line); }
-.briefing-item { display: grid; gap: var(--s-1); padding: var(--s-3) 0; color: inherit; text-decoration: none; }
-.briefing-item + .briefing-item { border-top: 1px solid var(--rule); }
-@container (max-width: 600px) { .daily-briefing-card { grid-template-columns: 1fr; } .briefing-painting { min-height: 160px; } .briefing-painting strong { font-size: 2.4rem; } .briefing-lead { padding: var(--s-4); } }
-@container (max-width: 300px) { .briefing-painting { display: none; } .daily-briefing-head { align-items: flex-start; } .briefing-empty { align-items: stretch; flex-direction: column; } .briefing-empty strong + * { margin-left: 0; } .briefing-empty button { width: 100%; } .requested-briefing { display: block; } }
+/*
+ * The Daily Briefing: Home's area (the two-part card with its painting, the folded line, the empty and writing states,
+ * a briefing asked for above it, the Briefing options), the briefing page Read briefing opens, and what both show of a
+ * briefing (its summary lines, Meeting context, a meeting's prep). Words over a painting sit on `--painting-scrim`,
+ * which `apps/web/test/paintings.test.ts` measures against every shipped painting.
+ */
+
+/* ---- the area ------------------------------------------------------------------------------------ */
+
+.daily-briefing-area {
+  container-type: inline-size;
+  border-top: 1px solid var(--line);
+  padding: var(--s-2) 0;
+}
+.daily-briefing-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+.daily-briefing-card {
+  display: grid;
+  grid-template-columns: minmax(0, 43fr) minmax(0, 57fr);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+}
+.briefing-lead {
+  padding: var(--s-3);
+  align-self: center;
+}
+.briefing-lead h3 {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 2.8cqi, 2rem);
+  line-height: 1.04;
+  margin: var(--s-1) 0;
+}
+.briefing-lead > p {
+  margin-block: var(--s-1);
+}
+.briefing-eyebrow {
+  color: var(--rust);
+  font-family: var(--serif);
+  font-style: italic;
+  margin: 0;
+}
+.briefing-time {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+.briefing-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+}
+.briefing-empty,
+.briefing-folded {
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.briefing-empty > p {
+  margin: 0;
+}
+.briefing-empty strong + * {
+  margin-left: auto;
+}
+.briefing-folded {
+  justify-content: space-between;
+}
+.briefing-folded span {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+.briefing-failed {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.requested-briefing {
+  margin-bottom: var(--s-3);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--paper);
+}
+.requested-briefing h3,
+.requested-briefing p {
+  margin: var(--s-1) 0 0;
+}
+
+/* ---- a painting with words over it ----------------------------------------------------------------- */
+
+.briefing-painting {
+  position: relative;
+  display: grid;
+  align-items: end;
+  min-height: 160px;
+  background-size: cover;
+  color: var(--painting-text);
+}
+/* The words sit on the scrim, which fades out above them so the painting shows clear over the rest. */
+.briefing-painting-words {
+  position: relative;
+  padding: var(--s-4) var(--s-5) var(--s-5);
+  background: var(--painting-scrim);
+}
+.briefing-painting-words::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: var(--s-7);
+  background: linear-gradient(var(--painting-scrim-fade), var(--painting-scrim));
+}
+.briefing-painting-the {
+  display: block;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.25rem;
+}
+.briefing-painting-name {
+  display: block;
+  max-width: 7em;
+  font-family: var(--serif);
+  font-size: clamp(2.2rem, 4vw, 4rem);
+  line-height: 0.9;
+}
+.briefing-painting-credit {
+  margin: var(--s-3) 0 0;
+  font-size: 0.75rem;
+}
+
+/* A narrow space: the painting is a band above the words; the narrowest, a title line with no painting. */
+@container (max-width: 600px) {
+  .daily-briefing-card {
+    grid-template-columns: 1fr;
+  }
+  .briefing-painting-name {
+    font-size: 2.4rem;
+  }
+  .briefing-lead {
+    padding: var(--s-4);
+  }
+}
+@container (max-width: 300px) {
+  .briefing-card-painting {
+    display: none;
+  }
+  .daily-briefing-head {
+    align-items: flex-start;
+  }
+  .briefing-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .briefing-empty strong + * {
+    margin-left: 0;
+  }
+  .briefing-empty button {
+    width: 100%;
+  }
+  .requested-briefing {
+    display: block;
+  }
+}
+
+/* ---- the Briefing options: one button and the three things it opens ------------------------------------------- */
+
+.briefing-actions {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+.briefing-actions-chevron {
+  transform: rotate(90deg);
+  color: var(--ink-3);
+}
+
+/* ---- the briefing page ------------------------------------------------------------------------------- */
+
+/* The page keeps the reading column's width but holds its words to a readable measure. */
+.briefing-page > * {
+  max-width: 824px;
+}
+.breadcrumbs {
+  display: flex;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+.briefing-page-hero {
+  min-height: 320px;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.briefing-page-hero h1 {
+  margin: var(--s-1) 0 0;
+  font-family: var(--serif);
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  line-height: 1;
+}
+.briefing-page-hero .briefing-painting-the {
+  display: inline;
+  font-size: inherit;
+}
+.briefing-page-written {
+  margin: 0;
+  font-size: var(--fs-meta);
+}
+.briefing-page-section {
+  padding: var(--s-6) 0;
+  border-bottom: 1px solid var(--line);
+}
+.briefing-page-section h2 {
+  margin-top: 0;
+}
+.briefing-page > .your-day {
+  margin-top: var(--s-6);
+}
+.briefing-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.briefing-item {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-3) 0;
+}
+.briefing-item + .briefing-item {
+  border-top: 1px solid var(--rule);
+}
+.briefing-item-title {
+  color: inherit;
+}
+.briefing-item-source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  justify-self: start;
+  font-size: var(--fs-meta);
+}
+
+/* ---- a briefing's summary: every point, and its file in the Brain ------------------------------------------- */
+
+.briefing-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--rule);
+}
+.briefing-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 72ch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.briefing-lines li {
+  position: relative;
+  padding-left: 16px;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.briefing-lines li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rust);
+}
+.briefing-lines li:only-child {
+  padding-left: 0;
+}
+.briefing-lines li:only-child::before {
+  display: none;
+}
+.briefing-lines li.caveat {
+  color: var(--ink-2);
+  font-size: var(--fs-meta);
+}
+.briefing-lines li.caveat::before {
+  background: var(--amber);
+}
+
+/* ---- Meeting context: the notes the latest briefing found for each meeting ------------------------------------ */
+
+.meeting-context {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+}
+.meeting-context-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+}
+.meeting-context-head button {
+  margin-left: auto;
+}
+.meeting-context-when,
+.meeting-context-empty {
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.meeting-context-list {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.meeting-context-list li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* ---- Open prep: a meeting prep row opened in place ----------------------------------------------------------- */
+
+.meeting-prep-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--rule);
+}
+.meeting-prep-who,
+.meeting-prep-notes-none {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.meeting-prep-label {
+  margin: 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  font-weight: 600;
+  color: var(--ink);
+}
+.meeting-prep-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}

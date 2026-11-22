@@ -60,6 +60,19 @@ export function atTimeOfDay(at: number, timeZone: string, hhmm: string): number 
   return instantOf({ ...wallTime(startOfDay(at, timeZone), timeZone), hour, minute }, timeZone);
 }
 
+/** "2026-11-18": the local day of an instant in `timeZone`, as a key that sorts and compares like the day. */
+export function dayKey(at: number, timeZone: string): string {
+  const w = wallTime(at, timeZone);
+  return `${w.year}-${String(w.month).padStart(2, "0")}-${String(w.day).padStart(2, "0")}`;
+}
+
+/** Whether an instant falls on a Saturday or Sunday in `timeZone`. */
+export function isWeekend(at: number, timeZone: string): boolean {
+  const w = wallTime(at, timeZone);
+  const weekday = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
 /** Whether two instants fall on the same local day. */
 export function sameDay(a: number, b: number, timeZone: string): boolean {
   return startOfDay(a, timeZone) === startOfDay(b, timeZone);

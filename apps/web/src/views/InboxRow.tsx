@@ -11,12 +11,14 @@ import { openDraftId } from "../linked-draft.ts";
 import { firstStepFor } from "../inbox-first-step.ts";
 import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
 import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
+import { MeetingPrepDetail } from "./MeetingPrepDetail.tsx";
 
 /** What the owner decided in a row; Undo reopens the item. */
 export type RowDecision = "start" | "done" | "dismiss" | "snooze" | "reopen";
 
 export interface RowActions {
-  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => Promise<void>;
+  /** Records a decision; answers whether it was recorded (a failure is already said in a notification). */
+  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => Promise<boolean>;
   prepareDraft: (item: AttentionItemView) => void;
   /** The owner's explicit choice to replace `draftId`, the item's Draft whose send has an unknown outcome. */
   prepareReplacement: (item: AttentionItemView, draftId: string) => void;
@@ -75,6 +77,20 @@ function Evidence({ item }: { item: AttentionItemView }) {
   );
 }
 
+/** The snooze times, the same choice wherever Snooze opens them. */
+function SnoozeTimes({ item, actions, id, role }: { item: AttentionItemView; actions: RowActions; id: string; role: "menu" | "group" }) {
+  const choiceRole = role === "menu" ? "menuitem" : undefined;
+  return (
+    <div className="inbox-snooze" id={id} role={role} aria-label={role === "menu" ? `Snooze: ${rowText(item).subject}` : "Snooze until"}>
+      {snoozeChoices(new Date()).map((t) => (
+        <button key={t.label} role={choiceRole} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The decisions under an open row: Snooze opens its times in place. */
 function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; actions: RowActions; primaryDone: boolean }) {
   const [snoozing, setSnoozing] = useState(false);
@@ -99,15 +115,7 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
       <button aria-label={`Dismiss: ${subject}`} onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
         Dismiss
       </button>
-      {snoozing && (
-        <div className="inbox-snooze" id={times} role="group" aria-label="Snooze until">
-          {snoozeChoices(new Date()).map((t) => (
-            <button key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} role="group" />}
     </>
   );
 }
@@ -143,6 +151,7 @@ function Detail({ item, id, actions, draftsOn, clock }: { item: AttentionItemVie
   return (
     <div className="inbox-detail" id={id}>
       {context}
+      <MeetingPrepDetail item={item} clock={clock} />
       <MainActions item={item} canDraft={canDraft} actions={actions} />
     </div>
   );
@@ -182,21 +191,23 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
   );
 }
 
-async function startWorking(item: AttentionItemView, actions: RowActions, onToggle: () => void, draftsOn: boolean): Promise<void> {
+/**
+ * Start working: marks the item in progress and takes the first step for its kind (`inbox-first-step.ts`). A waiting
+ * Draft opens first; the source or the event opens in a new tab at once, while the click still allows it; Open prep
+ * and every other kind open the row in place.
+ */
+async function startWorking(item: AttentionItemView, actions: RowActions, onOpen: () => void, draftsOn: boolean): Promise<void> {
   const draftId = openDraftId(item);
-  await actions.decide(item, "start");
-  if (draftId) {
-    actions.viewDraft(draftId);
-    return;
-  }
   const step = firstStepFor(item);
-  if (step === "draft" && draftsOn && item.draftable) actions.prepareDraft(item);
-  else if (step === "source" && item.url) window.open(item.url, "_blank", "noopener,noreferrer");
-  else if (step === "calendar" && item.url) window.open(item.url, "_blank", "noopener,noreferrer");
-  else onToggle();
+  const elsewhere = !draftId && (step === "source" || step === "calendar") && item.url ? item.url : null;
+  if (elsewhere) window.open(elsewhere, "_blank", "noopener,noreferrer");
+  if (!(await actions.decide(item, "start")) || elsewhere) return;
+  if (draftId) actions.viewDraft(draftId);
+  else if (step === "draft" && draftsOn && item.draftable) actions.prepareDraft(item);
+  else onOpen();
 }
 
-function RowQuickActions({ item, actions, onToggle, draftsOn }: { item: AttentionItemView; actions: RowActions; onToggle: () => void; draftsOn: boolean }) {
+function RowQuickActions({ item, actions, onOpen, draftsOn }: { item: AttentionItemView; actions: RowActions; onOpen: () => void; draftsOn: boolean }) {
   const [snoozing, setSnoozing] = useState(false);
   const [compactMenu, setCompactMenu] = useState(false);
   const subject = rowText(item).subject;
@@ -205,7 +216,7 @@ function RowQuickActions({ item, actions, onToggle, draftsOn }: { item: Attentio
   if (item.state !== "open") return null;
   return (
     <div className="inbox-row-actions">
-      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => startWorking(item, actions, onToggle, draftsOn)}>
+      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => void startWorking(item, actions, onOpen, draftsOn)}>
         {item.startedAt ? "Continue" : "Start working"}
       </button>
       <button className="inbox-actions-menu" aria-label={`Actions: ${subject}`} aria-expanded={compactMenu} aria-controls={menu} onClick={() => setCompactMenu(!compactMenu)}>
@@ -221,15 +232,7 @@ function RowQuickActions({ item, actions, onToggle, draftsOn }: { item: Attentio
           <span>Done</span>
         </button>
       </div>
-      {snoozing && (
-        <div className="inbox-snooze" id={times} role="menu" aria-label={`Snooze: ${subject}`}>
-          {snoozeChoices(new Date()).map((t) => (
-            <button role="menuitem" key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} role="menu" />}
     </div>
   );
 }
@@ -251,7 +254,8 @@ function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
 
 /**
  * One Inbox row: kind (stamp and word), the subject with its source line, and the time. The subject is the button
- * that opens the row in place; the whole line is its click target.
+ * that opens the row in place; the whole line is its click target. In For you now the entry's `reason` takes the
+ * source line's place; in the Inbox a row whose item is also in For you now carries "Suggested now" (`suggested`).
  */
 export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reason, suggested = false }: { item: AttentionItemView; open: boolean; onToggle: () => void; actions: RowActions; draftsOn: boolean; clock: Clock; reason?: string; suggested?: boolean }) {
   const detail = useId();
@@ -270,7 +274,7 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reaso
           <p className="inbox-source" id={described}>
             <span className="sr-only">{type.word}, </span>
             <span>{reason ?? text.source}</span>
-            {(reason || suggested) && <Tag tone="outline">Suggested now</Tag>}
+            {suggested && <Tag tone="outline">Suggested now</Tag>}
             <Labels item={item} clock={clock} />
             <span className="sr-only">, {time.label}</span>
           </p>
@@ -278,7 +282,7 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reaso
         <time className="inbox-time" dateTime={time.iso} title={time.label}>
           {time.text}
         </time>
-        <RowQuickActions item={item} actions={actions} onToggle={onToggle} draftsOn={draftsOn} />
+        <RowQuickActions item={item} actions={actions} onOpen={() => !open && onToggle()} draftsOn={draftsOn} />
       </div>
       {open && (
         <>

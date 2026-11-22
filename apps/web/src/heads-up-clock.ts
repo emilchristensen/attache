@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSignals } from "./nav-signals.ts";
-import { HEADS_UP_TICK_MS, MEETING_LEAD_MS } from "./heads-ups.ts";
+import { HEADS_UP_TICK_MS, MEETING_LEAD_MS } from "./heads-up-rules.ts";
 
 export interface HeadsUpClock {
   now: number;
@@ -19,8 +19,8 @@ export function meetingBoundaries(items: readonly { meeting?: { start: string; e
 /**
  * The instant and the browser's zone For you now is computed for: read again on every minute boundary, at each of
  * `boundaries` (instants that fall between minutes, such as a meeting that ends at 10:30:20), and when the page
- * becomes visible or the window gets focus, so a laptop that wakes or lands in another zone shows the right Heads-ups
- * straight away, and no Join outlasts its meeting.
+ * becomes visible or the window gets focus, so a laptop that wakes or lands in another zone shows For you now and
+ * Your day right straight away, and no Join outlasts its meeting.
  */
 export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpClock {
   const [clock, setClock] = useState(() => read());
@@ -29,7 +29,7 @@ export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpCloc
     const tick = () => {
       setClock(read());
       window.clearTimeout(timer);
-      // On the minute, so noon arrives at 12:00 and not up to a minute later.
+      // On the minute, so a meeting that starts at 14:00 shows as started at 14:00 and not up to a minute later.
       timer = window.setTimeout(tick, HEADS_UP_TICK_MS - (Date.now() % HEADS_UP_TICK_MS) + 50);
     };
     const visible = () => {
@@ -55,7 +55,7 @@ export function useHeadsUpClock(boundaries: readonly number[] = []): HeadsUpCloc
 }
 
 /**
- * Home's one clock, shared by For you now and the Inbox so a meeting leaves one and the other at the same instant.
+ * Home's one clock, shared by its areas (For you now, Your day, the Inbox) so a meeting leaves them at the same instant.
  * It reads the time at the boundaries of every meeting the open Inbox has listed while Home is open, also one that a
  * later answer no longer lists while For you now still holds it, so no Join outlasts its meeting.
  */

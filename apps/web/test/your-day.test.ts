@@ -37,6 +37,13 @@ describe("Your day", () => {
     expect(yourDay({ ...base, now: Date.parse("2026-11-21T11:00:00Z"), timeZone: "Pacific/Honolulu", events: [instant] }).events.map((e) => e.id)).toEqual([]);
   });
 
+  it("names tomorrow's first meeting once today's have ended, and not an all-day event", () => {
+    const ended = event("ended", "2026-11-20T07:00:00Z", "2026-11-20T08:00:00Z");
+    const holiday = event("holiday", "2026-11-21", "2026-11-22", { allDay: true });
+    const standup = event("standup", "2026-11-21T08:00:00Z", "2026-11-21T08:15:00Z");
+    expect(yourDay({ ...base, events: [ended, holiday, standup] })).toMatchObject({ state: "nothing-more", tomorrow: { id: "standup" } });
+  });
+
   it("returns honest empty, stale, disconnected and switched-off states and limits the wide row", () => {
     const ended = event("ended", "2026-11-20T07:00:00Z", "2026-11-20T08:00:00Z");
     expect(yourDay({ ...base, events: [ended] }).state).toBe("nothing-more");

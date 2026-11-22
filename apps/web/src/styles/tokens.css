@@ -105,6 +105,12 @@
   --red-soft: #f4e4de;
   --slate: #4d5e66;
   --slate-soft: #eaebe6;
+
+  /* Words over a painting, the same in both themes: light text on a dark scrim behind the words, strong enough over
+     the lightest pixel of every shipped painting (`apps/web/test/paintings.test.ts`), fading out above them. */
+  --painting-text: #fffef8;
+  --painting-scrim: rgba(9, 18, 20, 0.6);
+  --painting-scrim-fade: rgba(9, 18, 20, 0);
 }
 
 /* ---- dark ------------------------------------------------------------------ */

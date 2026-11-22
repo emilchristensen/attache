@@ -128,8 +128,15 @@ Off Home, **Search** in the masthead opens the search palette; on Home the searc
 At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When live updates to the service drop, the button itself says **Reconnecting** or **Offline** until they are back; work in progress carries on in the service meanwhile.
 A full-width Connection banner sits directly under the masthead on every screen except **Connections**.
-It names the issue that most needs you with its source, state and what may be missing, counts any others as more connection issues, and offers the fixing action, **Disable** for a problem owned by one Connection, and **Go to Connections**.
+It names the issue that most needs you with its source, state and what may be missing, for example "Gmail · Sign-in needed · Replies may be missing", counts any others as more connection issues, and offers the fixing action (**Reconnect**, **Retry now**, **Refresh now**, or **Machines and Replication** for a silent Reader), **Disable** for a problem owned by one Connection, and **Go to Connections**.
+**Disable** asks first and shows what disabling affects.
+Only a Connection that needs you to sign in again counts toward the dot, and a disabled Connection leaves the count.
+Each issue has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet** and **Could not check**; amber means you can act or part was read, red means nothing was read or it cannot run.
+Sources that could not reach the network at all share one issue, whatever words each one recorded.
 When the Reader has gone silent, the banner says **Not reading** until a Reader is back.
+Having only your notes connected, or Attention and briefings switched off, is how you set Attache up, not a problem, so neither raises the banner.
+The banner has no close button: it stays while the Inbox may be incomplete, and a screen reader hears a new issue once, not on every refresh.
+On a narrow window it wraps to two lines with the fixing action in view and the other choices behind one menu.
 A healthy setup has no banner, and Connections in the masthead carries a green dot.
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
@@ -163,7 +170,7 @@ Every screen works in a window 320 px wide and at 200% zoom without scrolling si
 On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
 With reduced motion switched on in your system, nothing glides or turns: the Dashboard jumps straight to where a link takes you.
 Type is never told by colour alone, so the stamps stay apart in grayscale and with colour blindness, and a failure keeps its warning triangle.
-A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a Heads-up put away.
+A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a new Connection issue, once.
 When a Source refresh changes how many decisions wait, it hears the new total once, such as "4 need you now."; opening the Dashboard, your own decisions and other live updates stay quiet.
 
 ### Home
@@ -185,7 +192,9 @@ Each area responds to the space it is given, so an area in a narrow column looks
 - **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
 - **The Daily Briefing** is its own Home area for the whole day.
   It shows the latest briefing written today, its time, a locally shipped public-domain painting, credit, and **First on your list**.
-  **Read briefing** opens the briefing page; **Got it** folds the card to one line that opens again.
+  **Read briefing** opens the briefing page, under "Home / The Daily Briefing": First on your list with the briefing's points, Top to-dos as they were when it was written, New updates, and Your day as it stands now; every entry opens the Inbox item, Draft or Proposal it comes from, and its source.
+  **Got it** folds the card to one line; select the line to open it again.
+  The painting changes each day and is the same on every Machine that day; Attache ships the paintings and never fetches them.
   **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**.
@@ -195,8 +204,9 @@ Each area responds to the space it is given, so an area in a narrow column looks
   At most five items show, followed by the count of the rest in the Inbox.
   Every row has **Start working**, **Snooze** and **Done**, and opens with the same detail as its Inbox row.
   Starting an item keeps it in progress when its reason still applies.
-  Meeting prep leaves the list when **Start working** opens it, but the row stays in the complete Inbox with **Suggested now** until then.
-  An entry never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
+  Meeting prep leaves the list when **Start working** opens its prep (the meeting's time, the other attendees and the notes the newest briefing related to it); its row stays in the complete Inbox throughout, with **Suggested now** while it is listed here.
+  **Done** or **Snooze** on an entry leaves one line with **Undo** in its place.
+  An entry never moves or leaves while your pointer or keyboard focus is in the list; it changes when you move away.
   With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
   With Attention and briefings switched off, the area says so with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
@@ -210,19 +220,6 @@ Each area responds to the space it is given, so an area in a narrow column looks
   The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
   On a wide window extra meetings sit behind **N more**; in a narrow space every meeting is a list.
   Your day is a schedule and never adds to the Attention dot's count.
-- **Connections** says whether you can trust the list below it.
-  When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
-  Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
-  Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
-  Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
-  Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
-  Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
-  Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
-  Sources that could not reach the network at all (offline: no connection, no name lookup, refused), whatever words each one recorded, share one row; a source whose service answered with an error or did not answer in time has its own row, unless another failed with the same message.
-  At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
-  Only a Connection that needs you to sign in again counts toward the dot.
-  An item list is never shown as "nothing to do" while this area shows a problem.
-
 - **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
   Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.

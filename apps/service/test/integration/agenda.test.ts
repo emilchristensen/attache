@@ -27,6 +27,16 @@ describe("agenda route", () => {
     expect(agenda.events[0]).toMatchObject({ allDay: true, response: "accepted" });
   });
 
+  it.each([
+    ["no range", ""],
+    ["a range that ends before it starts", "?from=2026-11-21T00:00:00Z&to=2026-11-20T00:00:00Z"],
+    ["a range whose start is not an instant", "?from=tomorrow&to=2026-11-21T00:00:00Z"],
+  ])("answers %s as an invalid request", async (_, query) => {
+    calendarEvents();
+    const result = await service.call("GET", `/agenda${query}`);
+    expect([result.status, (result.body as { error: { code: string } }).error.code]).toEqual([400, "invalid_request"]);
+  });
+
   it("refuses the route when Attention and briefings is switched off", async () => {
     calendarEvents();
     await service.put("/features", { changes: { attention: false }, cascade: true });

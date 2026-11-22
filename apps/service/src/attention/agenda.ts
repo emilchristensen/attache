@@ -10,10 +10,19 @@ interface AgendaRow {
   removed_at: string | null;
 }
 
+/**
+ * An all-day event is a date with no zone, so which instants it covers depends on the owner's zone: it is kept when it
+ * overlaps the range widened by the largest offset any zone has from UTC, and the Dashboard decides its day.
+ */
+const WIDEST_ZONE_OFFSET_MS = 14 * 60 * 60_000;
+
+/**
+ * The calendar events that overlap `from` to `to` (ISO instants, validated by the route), from what the calendar
+ * Connection last read, without those the owner declined, all-day events first, then by start.
+ */
 export function agenda(db: Db, connections: ConnectionManager, from: string, to: string): AgendaResponse {
   const rangeStart = Date.parse(from);
   const rangeEnd = Date.parse(to);
-  if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) throw new Error("Agenda range must have a valid start before its end");
   const rec = connections.record("gcal");
   if (!rec) return { connection: null, events: [], readAt: null, coverage: null };
   const status = connections.status(rec);
@@ -26,7 +35,7 @@ export function agenda(db: Db, connections: ConnectionManager, from: string, to:
     const allDay = data.allDay === true;
     const startMs = eventTime(start);
     const endMs = eventTime(end);
-    const pad = allDay ? 14 * 3_600_000 : 0;
+    const pad = allDay ? WIDEST_ZONE_OFFSET_MS : 0;
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= rangeEnd + pad || endMs <= rangeStart - pad) return [];
     if (data.selfResponseStatus === "declined") return [];
     return [{

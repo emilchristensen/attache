@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { setCalendar as setFixtureCalendar, type Meeting } from "./meetings.ts";
+import { rowAction } from "./inbox.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
@@ -35,32 +36,47 @@ test.afterAll(async () => { await journeys?.close(); await stack?.stop(); });
 test("meeting prep appears at 15 minutes, stays in the Inbox, and Open prep removes its suggestion everywhere", async () => {
   const page = await journeys.open("/");
   await setCalendar(page, [{ id: "handover", summary: "Pilot handover", start: 10, end: 40, meetLink: "https://meet.google.com/pilot" }]);
+  // Loaded afresh, so the new item is an Inbox row rather than waiting behind Show new items.
+  await page.reload();
   const suggested = forYou(page).locator("[data-inbox-row]").filter({ hasText: "Pilot handover" });
   await expect(suggested).toContainText("Starts in 10 min, prep not read");
-  await expect(suggested.getByRole("button", { name: /Start working/ })).toBeVisible();
-  await expect(suggested.getByRole("button", { name: /Snooze/ })).toBeVisible();
-  await expect(suggested.getByRole("button", { name: /Done/ })).toBeVisible();
+  // The entry is the Inbox row in its narrow form: Start working, Snooze and Done behind its Actions button.
+  for (const name of ["Start working", "Snooze", "Done"] as const) await expect(await rowAction(suggested, name)).toBeVisible();
+  // Suggested now is on the Inbox row only, not on the entry that is the suggestion.
   await expect(itemRow(page, "Pilot handover")).toContainText("Suggested now");
-  await suggested.getByRole("button", { name: /Start working/ }).click();
-  await expect(suggested).toBeVisible();
+  await expect(suggested).not.toContainText("Suggested now");
+  // Open prep: the meeting's prep opens in place, and the entry holds still while the pointer is on it.
+  await (await rowAction(suggested, "Start working")).click();
+  await expect(suggested.locator("[data-meeting-detail]")).toBeVisible();
   await forYou(page).getByRole("heading", { name: "For you now" }).focus();
   await page.mouse.move(2, 2);
   await expect(suggested).toHaveCount(0);
   await expect(itemRow(page, "Pilot handover")).toContainText("In progress");
 });
 
-test("started entry remains with actions and the list holds while focus is inside it", async () => {
+test("Done from an entry leaves one line with Undo in its place; the list holds while focus is inside it", async () => {
   const page = await journeys.open("/");
-  const first = forYou(page).locator("[data-inbox-row]").first();
+  await setCalendar(page, [{ id: "crit", summary: "Design crit", start: 10, end: 40 }]);
+  const first = forYou(page).locator("[data-inbox-row]", { hasText: "Design crit" });
   await expect(first).toBeVisible();
   const before = await first.getAttribute("data-item-id");
   await first.getByRole("button").first().focus();
   await page.waitForTimeout(250);
   await expect(first).toHaveAttribute("data-item-id", before!);
-  await first.getByRole("button", { name: /Done/ }).click();
-  await expect(forYou(page).locator(`[data-item-id="${before}"]`)).toHaveCount(1);
+  await (await rowAction(first, "Done")).click();
+  const line = forYou(page).locator(`[data-item-id="${before}"][data-decided="done"]`);
+  await expect(line).toHaveCount(1);
+  await expect(line.getByRole("button", { name: "Undo" })).toBeVisible();
+  // The line stays once the keyboard and pointer leave, so a mistake costs one click.
   await forYou(page).getByRole("heading", { name: "For you now" }).focus();
   await page.mouse.move(2, 2);
+  await expect(line).toHaveCount(1);
+  await line.getByRole("button", { name: "Undo" }).click();
+  await expect(forYou(page).locator(`[data-item-id="${before}"]:not([data-decided])`)).toHaveCount(1);
+  // Done for good: after a reload only the live list shows, without the item.
+  await (await rowAction(forYou(page).locator(`[data-item-id="${before}"]`), "Done")).click();
+  await expect(line).toHaveCount(1);
+  await page.reload();
   await expect(forYou(page).locator(`[data-item-id="${before}"]`)).toHaveCount(0);
 });
 

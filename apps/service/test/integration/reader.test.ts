@@ -84,6 +84,26 @@ describe("the Reader's Source refresh", () => {
     expect(onMac).toMatchObject({ lead: null, topPicks: expect.any(Array), updates: expect.any(Array) });
   });
 
+  it("shows the Reader's Daily Briefing and a briefing asked for later side by side on every Machine", async () => {
+    world = await startMachines(["Work Mac", "Home PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await waitUntilIdle(mac);
+    const daily = tickAllDue(mac).find((r) => r.id === "attention:briefing")!;
+    await waitForJobs(mac, [daily.jobId!]);
+    // Later, the owner asks for one on the Reader too.
+    await mac.clock.advance(1000);
+    const manual = await mac.post<{ job: { id: string } }>("/briefings", { kind: "manual" });
+    await waitForJobs(mac, [manual.job.id]);
+    const onMac = await mac.get<{ daily: { id: string; kind: string } | null; requested: { id: string; kind: string } | null }>("/briefings");
+    expect([onMac.daily?.kind, onMac.requested?.kind]).toEqual(["daily", "manual"]);
+
+    await mac.clock.advance(AFTER_WRITE);
+    await pc.clock.advance(CHECK);
+    await waitUntilIdle(pc);
+    const onPc = await pc.get<typeof onMac>("/briefings");
+    expect([onPc.daily?.id, onPc.requested?.id]).toEqual([onMac.daily?.id, onMac.requested?.id]);
+  });
+
   it("rejects malformed briefing fields read from another Machine", async () => {
     world = await startMachines(["Work Mac", "Home PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];

@@ -1,5 +1,5 @@
 /*
- * The frame around every screen: the masthead, the silent-Reader banner, the page in its centred reading column,
+ * The frame around every screen: the masthead, the Connection banner, the page in its centred reading column,
  * the narrow bottom bar, and the More and shortcut sheets.
  *
  * The masthead, the banner and the page share one column: 1072 px at most inside 36 px gutters (16 px on a phone).
@@ -268,7 +268,7 @@
   font-size: var(--fs-control);
 }
 
-/* A notice under the masthead that stays in view on every screen (the silent Reader). */
+/* A notice under the masthead that stays in view on every screen (the Connection banner). */
 .banner {
   flex: none;
   overflow: hidden;
@@ -289,7 +289,7 @@
   flex: none;
   margin-top: 2px;
 }
-.banner a {
+.banner a:not(.btn) {
   color: inherit;
   text-decoration: underline;
 }
@@ -332,9 +332,13 @@
 }
 .connection-banner .btn,
 .connection-banner button {
+  min-height: 44px;
+}
+/* The banner's own buttons take its colour; the solid fixing button keeps its ink and paper. */
+.connection-banner .btn:not(.primary),
+.connection-banner button:not(.primary) {
   color: inherit;
   border-color: currentColor;
-  min-height: 44px;
 }
 .connection-banner > .state {
   flex: 1 0 100%;
@@ -359,19 +363,33 @@
   box-shadow: var(--shadow);
   z-index: 5;
 }
+/*
+ * A narrow window: the issue's words take the whole first line and wrap there; the fixing button and the one menu
+ * of other choices sit on the line under them, then "N more connection issues".
+ */
 @media (max-width: 720px) {
   .connection-banner {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .connection-banner > .icon {
+    grid-area: 1 / 1;
   }
   .connection-banner-copy {
     display: block;
+    grid-area: 1 / 2 / 2 / -1;
   }
   .connection-banner-line span {
     display: block;
   }
+  .connection-banner-primary {
+    grid-area: 2 / 2;
+  }
+  .connection-banner-menu {
+    grid-area: 2 / 3;
+  }
   .connection-banner-more {
-    grid-column: 2 / -1;
+    grid-area: 3 / 2 / 4 / -1;
   }
   .connection-banner-secondary {
     display: none;

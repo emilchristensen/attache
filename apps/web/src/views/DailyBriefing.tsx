@@ -1,47 +1,143 @@
 import { useId, useState } from "react";
 import type { BriefingView } from "@attache/contracts";
-import { useResource } from "../live.ts";
-import { paintingForDate } from "../paintings.ts";
+import { areaState, leadWords, requestedShown, settledKey, todaysDaily } from "../briefing-area.ts";
+import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
-import { clockTime } from "../zoned-time.ts";
-import { Link, TurnOnInSettings } from "../components/ui.tsx";
+import { paintingForDate } from "../paintings.ts";
+import { briefingHref } from "../routes.ts";
+import { clockTime, dayKey } from "../zoned-time.ts";
+import { Link, TurnOnInSettings, useAction } from "../components/ui.tsx";
 import { BriefingActions } from "./BriefingActions.tsx";
-import { useBriefingJob } from "./briefing-job.ts";
+import { BriefingPainting } from "./BriefingPainting.tsx";
 import { MeetingContext } from "./BriefingParts.tsx";
+import { useBriefingJob, type BriefingJob } from "./briefing-job.ts";
+import { useBriefings } from "./briefings.ts";
 
-function sameDay(at: string, now: number, zone: string) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(at)) === new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+const REQUESTED_NAME: Readonly<Record<BriefingView["kind"], string>> = { away: "Away summary", manual: "Briefing you asked for", daily: "The Daily Briefing" };
+
+/** An away summary or a briefing the owner asked for: a plain card above the Daily Briefing, named for what it is. */
+function RequestedBriefing({ briefing, onGotIt }: { briefing: BriefingView; onGotIt: () => void }) {
+  const words = leadWords(briefing);
+  return (
+    <article className="requested-briefing" aria-label={REQUESTED_NAME[briefing.kind]}>
+      <div>
+        <strong>{REQUESTED_NAME[briefing.kind]}</strong>
+        <h3>{words.headline}</h3>
+        <p>{words.explanation}</p>
+      </div>
+      <div className="briefing-buttons">
+        <Link className="btn small" to={briefingHref(briefing.id)}>
+          Read briefing
+        </Link>
+        <button className="small ghost" onClick={onGotIt}>
+          Got it
+        </button>
+      </div>
+    </article>
+  );
 }
 
-function RequestedBriefing({ briefing, clock, onRead, onGotIt }: { briefing: BriefingView; clock: { now: number; timeZone: string }; onRead: () => void; onGotIt: () => void }) {
-  if (!sameDay(briefing.createdAt, clock.now, clock.timeZone) || clock.now >= Date.parse(briefing.createdAt) + 4 * 60 * 60_000) return null;
-  const lead = briefing.lead;
-  return <article className="requested-briefing"><div><strong>{briefing.kind === "away" ? "Away summary" : "Briefing you asked for"}</strong><h3>{lead?.headline ?? briefing.sections[0]?.items[0]?.title ?? "Your briefing is ready"}</h3><p>{lead?.explanation ?? briefing.summary}</p></div><div className="heads-up-actions"><button className="small" onClick={onRead}>Read briefing</button><button className="small ghost" onClick={onGotIt}>Got it</button></div></article>;
+/** The two-part card: the painting with the area's name and credit, then "First on your list" and its actions. */
+function DailyCard({ briefing, timeZone, onGotIt }: { briefing: BriefingView; timeZone: string; onGotIt: () => void }) {
+  const words = leadWords(briefing);
+  const painting = paintingForDate(dayKey(Date.parse(briefing.createdAt), timeZone));
+  return (
+    <article className="daily-briefing-card">
+      <BriefingPainting painting={painting} className="briefing-card-painting">
+        <span className="briefing-painting-the">The</span>
+        <strong className="briefing-painting-name">Daily Briefing</strong>
+      </BriefingPainting>
+      <div className="briefing-lead">
+        <p className="briefing-eyebrow">First on your list</p>
+        <h3>{words.headline}</h3>
+        <p>{words.explanation}</p>
+        <p className="briefing-time">Written {clockTime(Date.parse(briefing.createdAt), timeZone)}</p>
+        <div className="briefing-buttons">
+          <Link className="btn primary" to={briefingHref(briefing.id)}>
+            Read briefing
+          </Link>
+          <button className="ghost" onClick={onGotIt}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </article>
+  );
 }
 
-export function DailyBriefing({ attentionOn, clock, onRead }: { attentionOn: boolean; clock: { now: number; timeZone: string }; onRead: (id: string) => void }) {
+/** Got it folded the card to one line; the line opens it again. */
+function FoldedBriefing({ briefing, timeZone, onOpen }: { briefing: BriefingView; timeZone: string; onOpen: () => void }) {
+  return (
+    <div className="briefing-folded">
+      <button className="ghost" onClick={onOpen}>
+        {leadWords(briefing).headline}
+      </button>
+      <span>Written {clockTime(Date.parse(briefing.createdAt), timeZone)}</span>
+    </div>
+  );
+}
+
+function Writing({ job }: { job: BriefingJob }) {
+  const percent = Math.round(job.progress * 100);
+  return (
+    <div className="briefing-empty">
+      <strong>Preparing your briefing</strong>
+      <p>{job.note ?? "Queued"}</p>
+      <div className="progress" role="progressbar" aria-label="Briefing progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+        <span style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Daily Briefing area on Home: today's Daily Briefing as the painting card all day, folded to one line by Got it
+ * (remembered per briefing in this browser), an away summary or a briefing asked for above it, and the Briefing
+ * options. Never an unexplained blank: no briefing yet, one being written, switched off and a failed answer each say so.
+ */
+export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; clock: HeadsUpClock }) {
   const headingId = useId();
-  const latest = useResource<{ daily: BriefingView | null; requested: BriefingView | null }>(attentionOn ? "/briefings" : null, ["briefing.created", "job"]);
+  const briefings = useBriefings(attentionOn);
   const { job, start } = useBriefingJob(attentionOn);
-  const { settled, settle } = useSettledHeadsUps();
+  const { settled, settle, unsettle } = useSettledHeadsUps();
   const [context, setContext] = useState(false);
-  const briefing = latest.data?.daily ?? latest.data?.requested ?? null;
-  const daily = latest.data?.daily && sameDay(latest.data.daily.createdAt, clock.now, clock.timeZone) ? latest.data.daily : null;
-  const requested = latest.data?.requested && !settled.has(`briefing:${latest.data.requested.id}`) ? latest.data.requested : null;
-  const folded = !!daily && settled.has(`briefing:${daily.id}`);
-  const painting = daily ? paintingForDate(new Date(daily.createdAt).toLocaleDateString("en-CA", { timeZone: clock.timeZone })) : null;
-  const options = <BriefingActions running={!!job} hasBriefing={!!briefing} start={start} onMeetingContext={() => setContext(true)} />;
-  const leadItem = daily?.sections.flatMap((section) => section.items).at(0);
-  const leadTitle = daily?.lead?.headline ?? leadItem?.title ?? "Your briefing is ready";
-  const leadText = daily?.lead?.explanation ?? leadItem?.summary ?? daily?.summary;
-  return <section className="daily-briefing-area" aria-labelledby={headingId}>
-    <div className="daily-briefing-head"><h2 id={headingId}>The Daily Briefing</h2>{options}</div>
-    {requested && <RequestedBriefing briefing={requested} clock={clock} onRead={() => onRead(requested.id)} onGotIt={() => settle(`briefing:${requested.id}`)} />}
-    {!attentionOn ? <div className="briefing-empty">Briefings are switched off. <TurnOnInSettings /></div> : job ? <div className="briefing-empty"><strong>Preparing your briefing</strong><p>{job.note ?? "Queued"}</p><div className="progress" role="progressbar" aria-label="Briefing progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(job.progress * 100)}><span style={{ width: `${Math.round(job.progress * 100)}%` }} /></div></div> : !daily ? <div className="briefing-empty"><strong>No briefing yet today</strong><button className="primary" onClick={() => void start("manual")}>Prepare a briefing</button></div> : folded ? <div className="briefing-folded"><button className="ghost" onClick={() => settle(`open:${daily.id}`)}>{leadTitle}</button><span>Written {clockTime(Date.parse(daily.createdAt), clock.timeZone)}</span></div> : <article className="daily-briefing-card">
-      {painting && <div className="briefing-painting" style={{ backgroundImage: `url(${painting.src})`, backgroundPosition: painting.focal }}><div><span>The</span><strong>Daily Briefing</strong><p>{painting.title} · {painting.painter}</p></div></div>}
-      <div className="briefing-lead"><p className="briefing-eyebrow">First on your list</p><h3>{leadTitle}</h3><p>{leadText}</p><p className="briefing-time">Written {clockTime(Date.parse(daily.createdAt), clock.timeZone)}</p><div className="heads-up-actions"><Link className="primary" to={`/briefing/${daily.id}`}>Read briefing</Link><button className="ghost" onClick={() => settle(`briefing:${daily.id}`)}>Got it</button></div></div>
-    </article>}
-    {latest.error && <p className="for-you-now-failed">Could not check for a briefing. <button className="small" onClick={latest.reload}>Try again</button></p>}
-    {context && briefing && <MeetingContext briefing={briefing} now={clock.now} timeZone={clock.timeZone} onClose={() => setContext(false)} />}
-  </section>;
+  const { busy, run } = useAction();
+  const daily = todaysDaily(briefings.data?.daily ?? null, clock.now, clock.timeZone);
+  const requested = requestedShown(briefings.data?.requested ?? null, settled, clock.now);
+  const latest = briefings.data?.daily ?? briefings.data?.requested ?? null;
+  const state = areaState({ attentionOn, writing: !!job, failed: !!briefings.error, answered: !!briefings.data, daily, folded: !!daily && settled.has(settledKey(daily)) });
+  return (
+    <section className="daily-briefing-area" aria-labelledby={headingId}>
+      <div className="daily-briefing-head">
+        <h2 id={headingId}>The Daily Briefing</h2>
+        <BriefingActions running={!!job} hasBriefing={!!latest} start={start} onMeetingContext={() => setContext(true)} />
+      </div>
+      {requested && <RequestedBriefing briefing={requested} onGotIt={() => settle(settledKey(requested))} />}
+      {state === "off" && (
+        <div className="briefing-empty">
+          Briefings are switched off. <TurnOnInSettings />
+        </div>
+      )}
+      {state === "writing" && job && <Writing job={job} />}
+      {state === "failed" && (
+        <p className="briefing-failed" role="alert">
+          Could not check for a briefing.{" "}
+          <button className="small" onClick={briefings.reload}>
+            Try again
+          </button>
+        </p>
+      )}
+      {state === "none" && (
+        <div className="briefing-empty">
+          <strong>No briefing yet today</strong>
+          <button className="primary" disabled={busy !== null} onClick={() => void run("prepare", () => start("manual"), "Preparing a briefing in the background")}>
+            Prepare a briefing
+          </button>
+        </div>
+      )}
+      {state === "folded" && daily && <FoldedBriefing briefing={daily} timeZone={clock.timeZone} onOpen={() => unsettle(settledKey(daily))} />}
+      {state === "card" && daily && <DailyCard briefing={daily} timeZone={clock.timeZone} onGotIt={() => settle(settledKey(daily))} />}
+      {context && latest && <MeetingContext briefing={latest} now={clock.now} timeZone={clock.timeZone} onClose={() => setContext(false)} />}
+    </section>
+  );
 }

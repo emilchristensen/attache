@@ -377,13 +377,12 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
     // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
     const first = page.locator("#inbox [data-inbox-row]").first();
     if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
     const onCard = first.locator(".inbox-row-actions").getByRole("button", { name: "Snooze" });
     const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
-    const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
+    const onQuiet = page.getByRole("region", { name: "The Daily Briefing" }).getByRole("button", { name: "Briefing options" });
     // Control edges: a secondary button on a card and on the canvas.
     for (const control of [onCard, onQuiet, onCanvas]) {
       const edge = await measure(control, "border");
@@ -443,15 +442,21 @@ test("attention: a decided row stays in place with Undo; dismiss and snooze pers
   await cutover.locator(".inbox-detail").getByRole("button", { name: "Snooze" }).click();
   await cutover.locator(".inbox-detail").getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
   await expect(cutover).toHaveAttribute("data-decided", "snooze");
-  const forYou = page.getByRole("region", { name: "For you now" });
-  await forYou.getByRole("button", { name: "Briefings" }).click();
-  await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
-  // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
-  // leading); Read briefing opens its points and linked counts, which jump to the Inbox.
-  await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
+  const briefing = page.getByRole("region", { name: "The Daily Briefing" });
+  await briefing.getByRole("button", { name: "Briefing options" }).click();
+  await briefing.getByRole("group", { name: "Briefing actions" }).getByRole("button", { name: /^Prepare a briefing/ }).click();
+  // The briefing asked for shows above the Daily Briefing; Read briefing opens it as a page with its points, and a
+  // Top to-do there opens its Inbox item in place on Home.
+  await briefing.locator(".requested-briefing").getByRole("link", { name: "Read briefing" }).click({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/briefing\/[^/]+$/);
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
-  await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeInViewport();
+  const todo = page.locator(".briefing-page-section", { has: page.getByRole("heading", { name: "Top to-dos" }) }).locator("[data-briefing-entry=inbox]").first();
+  const todoId = await todo.getAttribute("data-item-id");
+  await todo.locator(".briefing-item-title").click();
+  await expect(page).toHaveURL(`${stack.url}/`);
+  const opened = page.locator(`#inbox [data-inbox-row][data-item-id="${todoId}"]`);
+  await expect(opened.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(opened).toBeInViewport();
   await page.reload();
   await expect(inboxRow(page, "Add checkout retry")).toBeVisible();
   // The logo's dot says something needs attention.

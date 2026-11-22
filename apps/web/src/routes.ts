@@ -1,7 +1,7 @@
 import type { IconName } from "./components/icons.tsx";
 
 /** The Dashboard's screens behind the shell (Setup and pairing have no shell). */
-export type ScreenId = "home" | "briefing" | "approvals" | "brain" | "connections" | "jobs" | "settings";
+export type ScreenId = "home" | "approvals" | "brain" | "connections" | "jobs" | "settings";
 
 export interface Screen {
   id: ScreenId;
@@ -24,13 +24,24 @@ export const SCREENS: readonly Screen[] = [
 ];
 
 export function screen(id: ScreenId): Screen {
-  return id === "briefing" ? SCREENS[0]! : SCREENS.find((s) => s.id === id)!;
+  return SCREENS.find((s) => s.id === id)!;
 }
 
-/** The screen at `path`: Home at `/` only, every other screen at its address or below it; null for anything else. */
+/** A briefing's own page, under Home (Home stays selected in the navigation). */
+export const briefingHref = (id: string) => `/briefing/${encodeURIComponent(id)}`;
+
+/** The briefing whose own page `path` is, or null: `/briefing/<id>`. */
+export function briefingAt(path: string): string | null {
+  const m = /^\/briefing\/([^/]+)$/.exec(path);
+  return m ? decodeURIComponent(m[1]!) : null;
+}
+
+/**
+ * The screen at `path`: Home at `/` and a briefing's page under it, every other screen at its address or below it;
+ * null for anything else.
+ */
 export function screenAt(path: string): ScreenId | null {
-  if (path === "/") return "home";
-  if (/^\/briefing\/[^/]+$/.test(path)) return "briefing";
+  if (path === "/" || briefingAt(path) !== null) return "home";
   return SCREENS.find((s) => s.to !== "/" && (path === s.to || path.startsWith(`${s.to}/`)))?.id ?? null;
 }
 

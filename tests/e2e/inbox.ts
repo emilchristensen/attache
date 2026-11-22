@@ -14,6 +14,16 @@ export async function openRow(row: Locator): Promise<void> {
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
 }
 
+/**
+ * One of a row's own actions (Start working, Snooze, Done), by the start of its accessible name. In a half or narrower
+ * space they sit behind the row's Actions button, which this opens first when the action is not in view.
+ */
+export async function rowAction(row: Locator, name: "Start working" | "Continue" | "Snooze" | "Done"): Promise<Locator> {
+  const action = row.locator(".inbox-row-actions").getByRole("button", { name: new RegExp(`^${name}:`) });
+  if (!(await action.isVisible())) await row.locator(".inbox-row-actions").getByRole("button", { name: /^Actions:/ }).click();
+  return action;
+}
+
 /** Opens Home's Recently added line into its changes and waits until it has opened; does nothing when it is already open. */
 export async function openRecentlyAdded(page: Page): Promise<void> {
   const details = page.getByRole("region", { name: "Recently added" }).locator("details");

@@ -1,9 +1,9 @@
 import { plural, type ConnectionKind, type ConnectionStatus, type CoverageState, type FeatureStatus, type ReaderView } from "@attache/contracts";
 
 /**
- * The Connections area on Home: one pure decision from the three answers the Dashboard already asks for
- * (`/connections`, the features in `/capabilities` and `/reader`) to either the green "All good" line or one row
- * per problem. It claims no more than those answers establish: green only when all three arrived and everything is
+ * The Connections status: one pure decision from the three answers the Dashboard already asks for (`/connections`,
+ * the features in `/capabilities` and `/reader`) to either all good or one row per problem. It feeds the Connection
+ * banner under the masthead (`connectionBanner`), the masthead's dot and what an empty Inbox may claim. It claims no more than those answers establish: green only when all three arrived and everything is
  * healthy, last-read times only from stored success times, and a retry time only when one is really scheduled.
  */
 
@@ -73,14 +73,13 @@ export interface StatusRow {
   inbox: boolean;
   /** Switched-on features that are not ready only because of this Connection, folded into its row: one cause, one row. */
   alsoAffected: string[];
+  /** The one Connection this row is about, which Disable would take away; null when it is about several or none. */
+  connectionId: string | null;
 }
 
 export type ConnectionsStatus =
   | { kind: "all_good"; sources: number; others: number; lastReadAt: string | null; reader: string }
   | { kind: "problems"; rows: StatusRow[]; working: { sources: number; others: number } | null };
-
-/** How many problem rows show before the rest go behind "N more". */
-export const MAX_ROWS = 3;
 
 /** The sources a Source refresh reads, as the service's capability registry lists them. */
 const READABLE: readonly ConnectionKind[] = ["vault", "github", "jira", "confluence", "slack", "gmail", "gcal"];
@@ -192,7 +191,7 @@ function lastReadOf(cs: ConnectionStatus[]): StatusRow["lastRead"] {
   return cs.filter(isReadable).map((c) => ({ name: c.label, at: c.lastReadAt }));
 }
 
-const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox" | "alsoAffected"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true, alsoAffected: [] };
+const BASE: Pick<StatusRow, "failure" | "lastRead" | "retry" | "counted" | "inbox" | "alsoAffected" | "connectionId"> = { failure: null, lastRead: [], retry: null, counted: false, inbox: true, alsoAffected: [], connectionId: null };
 
 function signInRow(c: ConnectionStatus): StatusRow {
   const source = isReadable(c);
@@ -205,6 +204,7 @@ function signInRow(c: ConnectionStatus): StatusRow {
   return {
     ...BASE,
     key: `sign_in:${c.id}`,
+    connectionId: c.id,
     state: "sign_in",
     ...CONNECTION_LOOK.sign_in,
     subject: c.label,
@@ -223,6 +223,7 @@ function downRow(c: ConnectionStatus, ctx: Context): StatusRow {
   return {
     ...BASE,
     key: `down:${c.id}`,
+    connectionId: c.id,
     state: "down",
     ...CONNECTION_LOOK.down,
     subject: c.label,
@@ -248,6 +249,7 @@ function offlineRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
   return {
     ...BASE,
     key: `offline:${cs.map((c) => c.id).join(",")}`,
+    connectionId: one?.id ?? null,
     state: "offline",
     ...CONNECTION_LOOK.offline,
     subject: nameList(cs.map((c) => c.label)),
@@ -314,6 +316,7 @@ function coverageRow(c: ConnectionStatus, state: "denied" | "partial"): StatusRo
   return {
     ...BASE,
     key: `${state}:${c.id}`,
+    connectionId: c.id,
     state,
     ...CONNECTION_LOOK[state],
     subject: c.label,
@@ -330,6 +333,7 @@ function notReadYetRow(cs: ConnectionStatus[], ctx: Context): StatusRow {
   return {
     ...BASE,
     key: `not_read_yet:${cs.map((c) => c.id).join(",")}`,
+    connectionId: one?.id ?? null,
     state: "not_read_yet",
     ...CONNECTION_LOOK.not_read_yet,
     subject: nameList(cs.map((c) => c.label)),
@@ -535,34 +539,35 @@ export function connectionsStatus(i: StatusInputs): ConnectionsStatus {
   return { kind: "problems", rows: sorted, working: ctx.reading ? { sources, others } : null };
 }
 
-/** One issue for the shell banner; checking and non-problem states occupy no space. */
-export function connectionBanner(status: ConnectionsStatus): { issue: StatusRow; more: number; fix: StatusAction | null; disableConnectionId: string | null } | null {
-  if (status.kind !== "problems") return null;
-  const issue = status.rows[0];
-  if (!issue || issue.state === "checking") return null;
-  const singleConnection =
-    issue.action?.kind === "reconnect" || issue.action?.kind === "test" || issue.action?.kind === "open_connections"
-      ? issue.action.connectionId ?? null
-      : issue.action?.kind === "refresh" && issue.action.connectionIds.length === 1
-        ? issue.action.connectionIds[0]!
-        : null;
-  return {
-    issue,
-    more: status.rows.length - 1,
-    fix: issue.action,
-    disableConnectionId: singleConnection && !singleConnection.includes(",") ? singleConnection : null,
-  };
-}
+/** States that describe how the owner set things up rather than a problem: they never raise the banner. */
+const QUIET_STATES: ReadonlySet<StatusState> = new Set(["checking", "notes_only", "switched_off"]);
 
-/** The rows that show, and the rest behind one "N more" disclosure. */
-export function splitRows(rows: StatusRow[]): { shown: StatusRow[]; more: StatusRow[] } {
-  return { shown: rows.slice(0, MAX_ROWS), more: rows.slice(MAX_ROWS) };
+/**
+ * The buttons that fix an issue: Reconnect, Retry or Refresh now, and Machines and Replication, where a silent Reader
+ * is taken over. The rest lead to the Connections page or Settings, as Go to Connections already does.
+ */
+const FIXES: ReadonlySet<StatusAction["kind"]> = new Set(["reconnect", "refresh", "test", "refresh_all", "retry_check", "machines"]);
+
+export interface ConnectionBannerView {
+  /** The issue that most needs the owner: the first in the order. */
+  issue: StatusRow;
+  /** How many more issues there are ("2 more connection issues"). */
+  more: number;
+  /** The state's fixing button, or null when it has none. */
+  fix: StatusAction | null;
+  /** The Connection Disable takes away, or null when the issue belongs to no single Connection. */
+  disableConnectionId: string | null;
 }
 
 /**
- * The closed "N more" line names every source it holds with its state, so no affected source is hidden while the area
- * is collapsed: "1 more: Jira (not read yet)", "2 more: GitHub (partly read); Confluence and Jira (not read yet)".
+ * What the banner under the masthead shows: one issue at a time and the count of the rest, or null when nothing
+ * raises it (a healthy setup, still checking, notes only, or Attention and briefings switched off). One cause is one
+ * row already, so one issue.
  */
-export function moreLabel(more: StatusRow[]): string {
-  return `${more.length} more: ${more.map((r) => `${r.subject} (${r.word.toLowerCase()})`).join("; ")}`;
+export function connectionBanner(status: ConnectionsStatus): ConnectionBannerView | null {
+  if (status.kind !== "problems") return null;
+  const issues = status.rows.filter((r) => !QUIET_STATES.has(r.state));
+  const issue = issues[0];
+  if (!issue) return null;
+  return { issue, more: issues.length - 1, fix: issue.action && FIXES.has(issue.action.kind) ? issue.action : null, disableConnectionId: issue.connectionId };
 }

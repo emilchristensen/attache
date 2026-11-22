@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { inboxReach } from "../src/inbox-empty.ts";
 import type { ConnectionStatus, Coverage, CoverageState, FeatureStatus, ReaderView } from "@attache/contracts";
-import { connectionBanner, connectionsStatus, moreLabel, splitRows, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
+import { connectionBanner, connectionsStatus, type Reply, type StatusInputs, type StatusRow } from "../src/connection-status.ts";
 
 // Fixtures of the three answers the Dashboard already asks for: /connections, /capabilities (features) and /reader.
 
@@ -117,6 +117,30 @@ describe("connectionBanner: the one issue shown under the masthead", () => {
   it("does not raise a banner for Checking or a healthy setup", () => {
     expect(connectionBanner(connectionsStatus(inputs({ reader: { state: "waiting" } })))).toBeNull();
     expect(connectionBanner(connectionsStatus(inputs()))).toBeNull();
+  });
+
+  it.each<[string, StatusInputs]>([
+    ["Notes only", inputs({ connections: ok([conn("vault"), conn("model")]) })],
+    ["Switched off", inputs({ features: ok([feature("recall"), feature("attention", { enabled: false, readiness: "disabled" }), feature("drafts"), feature("jobs")]) })],
+  ])("does not raise a banner for %s", (_, given) => {
+    expect(connectionBanner(connectionsStatus(given))).toBeNull();
+  });
+
+  it("leaves Notes only out of the count of the rest", () => {
+    const signedOut = inputs({ connections: ok([conn("vault"), conn("model", { status: "needs_auth" })]) });
+    expect(connectionBanner(connectionsStatus(signedOut))).toMatchObject({ issue: { state: "sign_in", subject: "Model" }, more: 0 });
+  });
+
+  it.each<[string, StatusInputs, { state: string; fix: string | null; disable: string | null }]>([
+    ["a signed-out source: Reconnect and Disable", withConnections(conn("gmail", { status: "needs_auth" })), { state: "sign_in", fix: "reconnect", disable: "gmail" }],
+    ["a source that is down: Retry and Disable", withConnections(conn("gmail", { status: "error" })), { state: "down", fix: "test", disable: "gmail" }],
+    ["one source not reached: Retry and Disable", withConnections(conn("gmail", { coverage: unreached("gmail.googleapis.com") })), { state: "offline", fix: "refresh", disable: "gmail" }],
+    ["a partly read source: Disable, and its detail on Connections", withConnections(conn("gmail", { coverage: coverage("partial") })), { state: "partial", fix: null, disable: "gmail" }],
+    ["a silent Reader: Machines and Replication, and no single Connection to disable", inputs({ reader: ok({ ...THIS_READER, silent: true }) }), { state: "not_reading", fix: "machines", disable: null }],
+    ["answers that could not be read: Retry", inputs({ reader: { state: "failed", message: "HTTP 500" } }), { state: "could_not_check", fix: "retry_check", disable: null }],
+  ])("%s", (_, given, expected) => {
+    const banner = connectionBanner(connectionsStatus(given));
+    expect({ state: banner?.issue.state, fix: banner?.fix?.kind ?? null, disable: banner?.disableConnectionId ?? null }).toEqual(expected);
   });
 });
 
@@ -270,14 +294,6 @@ describe("connectionsStatus: rules for every row", () => {
   it("orders by what the owner can do: sign-in, not reading, down, offline, denied, partly read, features, cannot run, not read yet", () => {
     const i = { ...MIXED, reader: ok({ ...THIS_READER, silent: true }), features: ok([feature("attention"), feature("drafts", { readiness: "partial", reason: "x" }), feature("recall", { readiness: "unavailable", reason: "y" })]) };
     expect(rowsOf(i).map((r) => r.state)).toEqual(["sign_in", "not_reading", "down", "offline", "denied", "partial", "partly_working", "cannot_run", "not_read_yet"]);
-  });
-
-  it("shows at most three rows, the rest behind one disclosure", () => {
-    const rows = rowsOf(MIXED);
-    const { shown, more } = splitRows(rows);
-    expect(shown).toHaveLength(3);
-    expect(more).toHaveLength(rows.length - 3);
-    expect(splitRows(rows.slice(0, 3)).more).toEqual([]);
   });
 
   it("says how many others work, counting only what passed", () => {
@@ -539,25 +555,22 @@ describe("mixed problems stay compact (#38)", () => {
     conn("gcal", { coverage: coverage("offline") }),
   );
 
-  it("keeps the source, the state word and the impact on each collapsed line, and Reconnect on the sign-in row", () => {
-    const { shown } = splitRows(rowsOf(MIXED));
-    expect(shown.map((r) => [r.subject, r.word, r.impact, r.icon])).toEqual([
+  it("keeps the source, the state word and the impact on each line, and Reconnect on the sign-in row", () => {
+    const rows = rowsOf(MIXED);
+    expect(rows.map((r) => [r.subject, r.word, r.impact, r.icon])).toEqual([
       ["Slack", "Sign-in needed", "Replies and mentions may be missing", "key"],
       ["Gmail", "Down", "Replies may be missing", "warning"],
       ["Google Calendar", "Offline", "Meetings may be missing", "warning"],
+      ["GitHub", "Partly read", "Reviews may be missing", "warning"],
+      ["Jira", "Not read yet", "Work items may be missing", "question"],
     ]);
-    expect(shown[0]!.action).toEqual({ kind: "reconnect", connectionId: "slack" });
-  });
-
-  it("names every source behind \"N more\" with its state, so none is hidden from the collapsed area", () => {
-    const { more } = splitRows(rowsOf(MIXED));
-    expect(moreLabel(more)).toBe("2 more: GitHub (partly read); Jira (not read yet)");
-    expect(moreLabel(more.slice(1))).toBe("1 more: Jira (not read yet)");
+    expect(rows[0]!.action).toEqual({ kind: "reconnect", connectionId: "slack" });
+    expect(connectionBanner(connectionsStatus(MIXED))).toMatchObject({ issue: { subject: "Slack" }, more: 4 });
   });
 
   it("names a grouped row by all of its sources", () => {
     const rows = rowsOf(withConnections(conn("slack", { status: "needs_auth" }), conn("gmail", { status: "needs_auth" }), conn("github", { status: "needs_auth" }), conn("jira", { coverage: null }), conn("confluence", { coverage: null })));
-    expect(moreLabel(splitRows(rows).more)).toBe("1 more: Jira and Confluence (not read yet)");
+    expect(rows.at(-1)).toMatchObject({ subject: "Jira and Confluence", word: "Not read yet", connectionId: null });
   });
 
   it("tells unavailable, stale and unchecked data apart by word, colour and icon", () => {

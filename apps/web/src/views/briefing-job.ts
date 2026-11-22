@@ -3,9 +3,15 @@ import type { JobView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { useLiveEvent, useResource } from "../live.ts";
 import { useToast } from "../components/ui.tsx";
-import type { BriefingJob } from "../heads-ups.ts";
 
 const ENDED = new Set(["succeeded", "failed", "cancelled", "blocked"]);
+
+/** A briefing job queued or running on this Machine. */
+export interface BriefingJob {
+  id: string;
+  progress: number;
+  note: string | null;
+}
 
 /**
  * The briefing being written on this Machine, scheduled or asked for, and a way to ask for one. A briefing asked for

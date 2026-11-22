@@ -31,12 +31,12 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
   Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, offers Start working, Snooze and Done without opening the row, keeps started work marked In progress across Machines, and keeps still while new items wait behind "Show new items".
   It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
-  Home keeps The Daily Briefing in its own area all day.
-  For you now curates at most five open Inbox items by urgency: unread meeting prep within 15 minutes, replies nearly late, items due today and the Daily Briefing's picks, each with a short reason and the same row actions as the Inbox.
+  Home keeps The Daily Briefing in its own area all day, over a public-domain painting Attache ships itself, and Read briefing opens it as a page whose entries lead to what they come from.
+  For you now curates at most five open Inbox items by urgency: unread meeting prep from 15 minutes before a meeting until it ends, replies or items nearly late, items due today and the Daily Briefing's picks, each with a short reason and the same row actions as the Inbox, Undo included.
   Every open item stays in the Inbox, with a Suggested now tag when it is also curated.
   Your day shows today's calendar meetings in the browser's time zone, with the meeting in progress marked, ended meetings dimmed, unanswered invitations named, and Join from 15 minutes before a meeting through its scheduled end.
   Home gives the search, briefing and day full rows; For you now sits beside the Inbox at one third and two thirds on desktop, half and half on tablet, or in the full-width phone reading order.
-  Every Home area responds to its own column width rather than the window, so the narrow view stays the same wherever the area is placed.
+  Only that arrangement follows the window; every Home area responds to its own column width, so the narrow view stays the same wherever the area is placed.
   A full-width Connection banner under the masthead names the issue that most needs you, what may be missing and the one thing to do; when everything works, Connections carries a green dot.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
