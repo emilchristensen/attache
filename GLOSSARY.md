@@ -185,7 +185,8 @@ A Heads-up is a view of that Inbox item, never a second decision.
 
 **Meeting prep**:
 An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
-From 15 minutes before the start until the meeting starts, unread prep can show in For you now and remains in the Inbox throughout.
+From 15 minutes before the start until the meeting ends, prep the owner has not opened shows in For you now, and it remains in the Inbox throughout.
+Open prep, the first step Start working takes for it, shows the meeting's time, the other attendees and the notes the newest briefing related to it, and takes it off For you now.
 _Avoid_: Occupant, nudge
 
 **For you now**:
