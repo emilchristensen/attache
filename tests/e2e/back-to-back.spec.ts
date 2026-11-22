@@ -165,6 +165,11 @@ test("back to back: each prep comes 15 minutes before its meeting, the next one 
   await page.clock.resume();
   await expect(first).toHaveCount(0);
   await expect(rowFor(page, "handover")).toHaveCount(0);
+  // The service ends the item on its own clock: at the meeting's end, and at the latest at its next housekeeping,
+  // 30 seconds on. Once it has, the Dashboard hears of it and the count drops.
+  await expect
+    .poll(async () => (await api<{ items: Array<{ key: string }> }>(page, "GET", "/attention?state=open")).items.some((i) => i.key === "gcal:handover"), { timeout: 45_000 })
+    .toBe(false);
   await expectCount(page, base, -1);
   await expect(rowFor(page, "triage")).toBeVisible();
   expect(own.consoleErrors).toEqual([]);
