@@ -40,6 +40,23 @@ describe("OpenCode 1 sessions", () => {
 });
 
 describe("OpenCode 1 compaction", () => {
+  it("keeps a repeated prompt after a manual compaction", () => {
+    const messages = [
+      v1User("Again", 0),
+      v1Assistant([v1Text("First response")], 1),
+      v1User("", 2, [{ type: "compaction", auto: false }]),
+      v1Assistant([v1Text("Summary")], 3, { summary: true }),
+      v1User("Again", 4),
+      v1Assistant([v1Text("Second response")], 5),
+    ];
+    expect(said(snapshot("v1-messages", messages))).toEqual([
+      ["user", "Again"],
+      ["assistant", "First response"],
+      ["user", "Again"],
+      ["assistant", "Second response"],
+    ]);
+  });
+
   it("drops the compaction request, its summary, the replayed copy of the owner's message and OpenCode's synthetic continue message", () => {
     const messages = [
       ...v1Normal(),
@@ -92,22 +109,11 @@ describe("OpenCode 2 sessions", () => {
     expect(said(snapshot("v2-context", [v2User("Go", 0), v2Assistant([{ type: "text", text: "Half" }], 1, false)]))).toEqual([["user", "Go"]]);
   });
 
-  it("reads the messages OpenCode 2 is about to compact, with the ids the session's own messages have, and no tool traffic", () => {
-    const messages = [
-      { id: "msg_a", role: "user", content: [{ type: "text", text: "first question" }] },
-      { id: "msg_b", role: "assistant", content: [{ type: "tool-call", id: "call_1", name: "read", input: { filePath: "/work/.env" } }] },
-      { role: "tool", content: [{ type: "tool-result", id: "call_1", name: "read", result: { type: "text", value: `${TOOL_OUTPUT} ${SECRET}` } }] },
-      { id: "msg_c", role: "assistant", content: [{ type: "text", text: "I read it" }] },
-      // An earlier compaction's summary reaches the model as text OpenCode built, without a message id of its own.
-      { role: "user", content: [{ type: "text", text: "## Objective\n- earlier summary" }] },
-    ];
-    const p = parseOpenCode(snapshot("v2-request", messages));
-    expect(p.turns.map((t) => [t.role, t.text, t.id])).toEqual([
-      ["user", "first question", "msg_a"],
-      ["assistant", "I read it", "msg_c"],
-    ]);
-    expect(JSON.stringify(p)).not.toContain(SECRET);
-    expect(JSON.stringify(p)).not.toContain(TOOL_OUTPUT);
+  it("refuses model-request snapshots since they may use the user role for injected text", () => {
+    const messages = [{ id: "msg_a", role: "user", content: [{ type: "text", text: SECRET }] }];
+    const p = parseOpenCode(snapshot("v2-context", messages, { shape: "v2-request" }));
+    expect(p.turns).toEqual([]);
+    expect(p.problem).toContain("OpenCode 2 v2-request");
   });
 });
 

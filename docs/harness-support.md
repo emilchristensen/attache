@@ -33,7 +33,7 @@ Each smoke test (`apps/service/test/integration/<harness>-smoke.test.ts`) instal
 | Detect | real executable in the owner's tool folder | real executable in the owner's tool folder | real executable in the owner's tool folder |
 | Preview | capabilities, restart, every file | capabilities, restart, every file | capabilities, restart, every file |
 | Apply and current status | extension written, Connection current | plugin written, Connection current | MCP entry and hooks file written, Connection current |
-| MCP access | Pi registers and connects the server, its tools listed | OpenCode lists the server as connected | Copilot CLI lists the server, enabled, beside the owner's; the server it starts answers from the Brain |
+| MCP access | Pi registers and connects the server, its tools listed | OpenCode lists the server as connected | Copilot CLI lists the server, enabled, beside the owner's; a real Copilot session starts Attache's server and saves a fixture note attributed to Copilot CLI |
 | Memory | every model call, fresh after a Brain change, a compaction and a resume; never saved in the session | every model call, fresh after a Brain change, a compaction and a resume; none in compaction requests; never saved | new, resumed and `/clear` sessions, one block as its own message; not stored as a conversation message |
 | Capture | each prompt, compaction, quit and resume, without tool output, memory or summaries | each turn, compaction and resume, without tool output, memory or the summary | each turn, resume, `/compact` and terminal close, without tool output |
 | Refresh | a stale extension is repaired with a backup and Pi loads it | a stale plugin is repaired with a backup and OpenCode loads it | a stale hooks file is repaired with a backup and Copilot CLI runs it |
@@ -75,6 +75,8 @@ Linux and Windows are not verified for any of the three: their paths and hook co
 - Memory added to the system prompt is never written to `opencode.db` or the data folder.
 - OpenCode 1 runs the system transform for compaction and title requests too; Attache skips the compaction request.
 - OpenCode 2's `context` hook does not run for compaction or title requests.
+- Capture uses experimental OpenCode hooks, including OpenCode 2's `experimental.idle`; an OpenCode update can change these boundaries.
+- OpenCode 2 capture reads typed session context before compaction because the model request may assign the user role to injected text.
 - OpenCode 1's `dispose` did not run on SIGTERM; OpenCode 2's cleanup did.
 - Not verified by a run: OpenCode 1 overflow auto-compaction replay, a second OpenCode 2 compaction, hot reload of a changed plugin, `--pure`, project-level overrides.
 
@@ -85,6 +87,8 @@ Linux and Windows are not verified for any of the three: their paths and hook co
 - Personal `hooks/*.json` command hooks run; `sessionStart` `additionalContext` reaches the model as its own user message and is stored only inside the `hook.end` event of `events.jsonl`.
 - `/compact` drops the memory message and `sessionStart` does not run again.
 - `events.jsonl` is written in batches of about 100 ms, after `agentStop` starts.
+- The `events.jsonl` format is internal to Copilot CLI.
+  Attache stops capture when the format is unrecognised and reports the failure on the Connection.
 - Real sessions ran offline with a bring-your-own-key stand-in model; no GitHub sign-in was used.
-  In such a session Copilot CLI 1.0.114 started a personal MCP server and named its MCP client `copilot-cli` (`initialize` `clientInfo`), so saves are attributed to Copilot CLI.
+  The smoke test checks that an auto-accepted save made through the real MCP client is attributed to Copilot CLI.
 - Not verified by a run: SIGTERM or SIGKILL mid-turn, `session.truncation` and rewind, a repository's `disableAllHooks`, sandbox mode.

@@ -8,6 +8,7 @@ import { locationsForHome } from "../platform/locations.ts";
 import { shellPath } from "../platform/shell-command.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
 import { readHarnessJson } from "./harness-json.ts";
+import { withHarnessSessionState, type RootedHarnessAdapter } from "./harness-session-state.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import { checkCopilotCliVersion } from "./copilot-cli-version.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
@@ -92,11 +93,11 @@ function plainJson(raw: string): boolean {
 
 export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   const name = () => hooks.ownerKey();
-  const configPath = () => join(copilotHome(), "mcp-config.json");
+  const configPath = (root = copilotHome()) => join(root, "mcp-config.json");
   const settingsPath = () => join(copilotHome(), "settings.json");
   const entry = () => ({ type: "local", ...mcpServerEntry(hooks.stateDir), tools: ["*"] });
   const isOurs = hooks.mcp.isOurs;
-  const hooksPath = () => join(copilotHome(), "hooks", `${name()}.json`);
+  const hooksPath = (root = copilotHome(), owner = name()) => join(root, "hooks", `${owner}.json`);
   const expectedHooks = () => copilotHooksText(hooks.stateDir, stablePath(hookScript()), stablePath(process.execPath));
 
   /** The hooks file's text when it is this instance's, null when absent; throws when another file is in its place. */
@@ -120,8 +121,8 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   /** The configuration as plain JSON text ("" when absent), with the raw text it came from. Throws on a file Attache must not change. */
-  function config(): { raw: string; json: string } {
-    const read = readCopilotJson(configPath());
+  function config(path = configPath()): { raw: string; json: string } {
+    const read = readCopilotJson(path);
     return { raw: read?.raw ?? "", json: read ? JSON.stringify(read.value) : "" };
   }
 
@@ -139,8 +140,8 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   /** This instance's entries in the configuration, by name. */
-  function ours(json: string): Array<[string, unknown]> {
-    return Object.entries(jsonMcpConfig.servers(json, configPath())).filter(([, e]) => isOurs(e));
+  function ours(json: string, path = configPath()): Array<[string, unknown]> {
+    return Object.entries(jsonMcpConfig.servers(json, path)).filter(([, e]) => isOurs(e));
   }
 
   const isCurrent = (json: string) => {
@@ -178,7 +179,7 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   const restartRequired = true;
-  const adapter: HarnessAdapter = {
+  const adapter: RootedHarnessAdapter = {
     kind: "copilot-cli",
     label: "Copilot CLI",
     capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" },
@@ -205,27 +206,27 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
           ...(mcp === "stale" ? [`Attache's MCP server in ${path} is out of date`] : mcp === "missing" ? [`Attache's MCP server is not in ${path}`] : []),
           ...(memory === "stale" ? [`Attache's hooks file ${hooksFile} is out of date`] : memory === "missing" ? [`Attache's hooks file ${hooksFile} is missing`] : []),
         ];
-        return { state: "stale", message: `${problems.join("; ")}. Set up again to fix it.`, files };
+        return { state: mcp === "missing" || memory === "missing" ? "missing" : "stale", message: `${problems.join("; ")}. Set up again to fix it.`, files };
       } catch (e) {
         return { state: "failed", message: (e as Error).message, files: [] };
       }
     },
     // The version was checked when the owner connected; a refresh (on every start) never waits for Copilot CLI.
     refresh: () => write(plan(false)),
-    uninstall: () => {
+    uninstall: ({ root, owner }) => {
       const removed: HarnessFileChange[] = [];
       const failures: string[] = [];
-      const path = configPath();
+      const path = configPath(root);
       try {
-        const { json } = config();
-        if (ours(json).length) {
+        const { json } = config(path);
+        if (ours(json, path).length) {
           writeConfigText(path, jsonMcpConfig.withoutServers(json, path, isOurs), hooks.backupDir);
           removed.push({ path, change: "update", backup: true, purpose: PURPOSE });
         }
       } catch (e) {
         failures.push(`Could not remove Attache's MCP server from ${path}: ${(e as Error).message}`);
       }
-      const hooksFile = hooksPath();
+      const hooksFile = hooksPath(root, owner);
       try {
         // Another file in its place is the owner's: it stays.
         if (existsSync(hooksFile) && hooksFileIsOurs(readFileSync(hooksFile, "utf8"))) {
@@ -238,5 +239,5 @@ export function copilotCliAdapter(hooks: AgentHooks): HarnessAdapter {
       return { removed, failures };
     },
   };
-  return adapter;
+  return withHarnessSessionState("copilot-cli", adapter, hooks.stateDir, () => ({ root: copilotHome(), owner: name() }));
 }

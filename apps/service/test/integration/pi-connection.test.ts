@@ -49,7 +49,7 @@ async function memoryForModelCall(): Promise<string | null> {
   const { context } = await loadExtension();
   expect(context).toHaveLength(1);
   const r = await context[0]!({ messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }, { cwd: HOME });
-  const memory = r?.messages?.find((m) => m.role === "custom" && m.customType === "attache-memory");
+  const memory = r?.messages?.find((m) => m.role === "custom" && m.customType?.startsWith("attache-memory:"));
   return typeof memory?.content === "string" ? memory.content : null;
 }
 

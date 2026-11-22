@@ -6,14 +6,15 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { checkHarnessContract } from "./harness-smoke-contract.ts";
-import { callTool, mcpClients } from "./mcp-client.ts";
+import type { RecentChangesResult } from "@attache/contracts";
 import { contextFile, listSpool } from "../../src/agents/spool.ts";
 
 /**
  * Smoke test against the real Copilot CLI executable, in an isolated home: after Attache connects
  * Copilot CLI, the real `copilot mcp list` / `copilot mcp get` load Attache's server from the
- * personal MCP configuration (source "user", enabled) next to the owner's own server, and the
- * server Copilot CLI reports starts and reaches the Brain; after disconnecting, Copilot CLI lists
+ * personal MCP configuration (source "user", enabled) next to the owner's own server.
+ * A real session starts Attache's server and writes a fixture note via its save tool, with
+ * auto-accept attributed to Copilot CLI. After disconnecting, Copilot CLI lists
  * no Attache server and still lists the owner's. It runs only where `copilot` is on PATH (or
  * `ATTACHE_COPILOT_EXECUTABLE` names it) and is skipped otherwise.
  *
@@ -32,7 +33,7 @@ import { contextFile, listSpool } from "../../src/agents/spool.ts";
  * before compacting and summarises it straight away; after disconnecting nothing is copied.
  *
  * It needs no GitHub sign-in, and runs with none: every token variable is removed and `gh` gets an
- * empty config folder. It does not show the name Copilot CLI's MCP client gives itself.
+ * empty config folder.
  *
  * ADR 0006: Attache may call Copilot CLI's MCP access, memory and session capture officially
  * supported only while this passes, for the Copilot CLI versions it ran against; a failure here
@@ -57,6 +58,7 @@ interface ModelMessage {
 }
 /** The messages of every request Copilot CLI sent the stand-in model, oldest first. */
 const requests: ModelMessage[][] = [];
+const saveToolNames = new Set<string>();
 
 /** A local OpenAI-compatible model that answers every request with "pong" and records what it was sent. */
 async function startModel(): Promise<string> {
@@ -73,11 +75,20 @@ async function startModel(): Promise<string> {
       if (body) requests.push(messages);
       res.writeHead(200, { "content-type": "text/event-stream" });
       const chunk = (choice: object, extra: object = {}) => res.write(`data: ${JSON.stringify({ id: "r", object: "chat.completion.chunk", created: 1, model: "stand-in", choices: [{ index: 0, ...choice }], ...extra })}\n\n`);
-      // Asked to read the secret file, it first reads it with Copilot CLI's view tool, then answers without repeating it.
       const last = messages[messages.length - 1];
-      if (last?.role === "user" && textOf(last).includes(READ_SECRET) && request.tools?.some((t) => t.function?.name === "view")) {
-        chunk({ delta: { role: "assistant", tool_calls: [{ index: 0, id: `call_${requests.length}`, type: "function", function: { name: "view", arguments: "" } }] }, finish_reason: null });
-        chunk({ delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ path: secretFile }) } }] }, finish_reason: null });
+      const prompt = last?.role === "user" ? textOf(last) : "";
+      const toolNames = request.tools?.flatMap((t) => t.function?.name ? [t.function.name] : []) ?? [];
+      if (prompt.includes(SAVE_FIXTURE)) for (const name of toolNames) saveToolNames.add(name);
+      const tool = prompt.includes(READ_SECRET) && toolNames.includes("view")
+        ? { name: "view", input: { path: secretFile } }
+        : prompt.includes(SAVE_FIXTURE) ? toolNames.find((n) => /attache.*save$/i.test(n)) : undefined;
+      if (tool) {
+        const invocation = typeof tool === "string" ? {
+          name: tool,
+          input: { items: [{ action: "create", type: "project", title: MCP_FIXTURE_TITLE, facts: [{ subject: "Status", value: "Saved by Copilot CLI" }] }] },
+        } : tool;
+        chunk({ delta: { role: "assistant", tool_calls: [{ index: 0, id: `call_${requests.length}`, type: "function", function: { name: invocation.name, arguments: "" } }] }, finish_reason: null });
+        chunk({ delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify(invocation.input) } }] }, finish_reason: null });
         chunk({ delta: {}, finish_reason: "tool_calls" }, { usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } });
         return res.end("data: [DONE]\n\n");
       }
@@ -92,6 +103,8 @@ async function startModel(): Promise<string> {
 
 /** What a prompt says to make the stand-in read the secret file with a tool. */
 const READ_SECRET = "READ-THE-NOTES";
+const SAVE_FIXTURE = "SAVE-COPILOT-FIXTURE";
+const MCP_FIXTURE_TITLE = "Copilot smoke project";
 /** Plain text only the secret file holds, which redaction never rewrites. */
 const TOOL_OUTPUT = "TOOL-OUTPUT-5521";
 const SECRET = "sk-live-abcdef1234567890";
@@ -213,7 +226,6 @@ let root: string;
 let sessionId: string;
 let captured: string;
 let env: NodeJS.ProcessEnv;
-const mcp = mcpClients();
 const OWN = '{\n  // the owner\'s own\n  "mcpServers": { "playwright": { "type": "local", "command": "npx", "args": ["@playwright/mcp@latest"], "tools": ["*"] } },\n}\n';
 
 interface Listed {
@@ -258,6 +270,8 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
       NO_COLOR: "1",
     };
     for (const key of ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]) delete env[key];
+    // Attache prefers a parent Harness's session environment to the MCP client's name.
+    for (const key of ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "ANTIGRAVITY_CONVERSATION_ID"]) delete env[key];
     // Attache writes to the same isolated Copilot CLI home.
     process.env.COPILOT_HOME = env.COPILOT_HOME;
     // Attache's version check asks this executable.
@@ -272,7 +286,6 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
   afterAll(async () => {
     delete process.env.COPILOT_HOME;
     delete process.env.ATTACHE_COPILOT_BIN;
-    await mcp.closeAll();
     await svc?.stop();
     await new Promise((r) => (model ? model.close(r) : r(null)));
     if (root) rmSync(root, { recursive: true, force: true });
@@ -288,12 +301,14 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     expect(servers[name!]).toMatchObject({ source: "user", enabled: true });
     const got = copilot(["mcp", "get", name!, "--json"]);
     expect(got.status, got.out).toBe(0);
-    const server = (JSON.parse(got.out) as Record<string, Listed>)[name!]!;
-    // The server exactly as Copilot CLI read it starts and answers from the Brain.
-    const client = await mcp.connectRegistered({ command: server.command!, args: server.args! }, { name: "copilot-cli-smoke" });
-    const found = await callTool<{ passages: Array<{ title: string }> }>(client, "search", { query: "Orion cutover" });
-    expect(found.isError).toBe(false);
-    expect(found.data.passages[0]!.title).toBe("Orion migration");
+    expect((JSON.parse(got.out) as Record<string, Listed>)[name!]).toMatchObject({ source: "user", enabled: true });
+    const id = await promptSession(SAVE_FIXTURE);
+    const { changes } = await svc.get<RecentChangesResult>("/memory/recent-changes?unreviewed=1");
+    const toolEvents = sessionEvents(id).filter((e) => e.type.startsWith("tool.execution"));
+    expect(changes, JSON.stringify({ offeredTools: [...saveToolNames], toolEvents })).toEqual(expect.arrayContaining([expect.objectContaining({
+      title: MCP_FIXTURE_TITLE,
+      source: expect.objectContaining({ harness: "copilot-cli", autoAccepted: true }),
+    })]));
   });
 
   it("a new session starts with the current memory, once, as a message of its own", { timeout: 120_000 }, async () => {

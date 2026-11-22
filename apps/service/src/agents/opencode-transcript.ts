@@ -13,9 +13,6 @@ import { clean, type ParsedSession, type Turn } from "./transcripts.ts";
  *   the whole session.
  * - `v2-context`: OpenCode 2 `ctx.session.context`, typed messages since the
  *   last compaction only.
- * - `v2-request`: the messages OpenCode 2's `compaction` hook is about to
- *   summarise, `[{ id, role, content }]`: the part a `v2-context` snapshot
- *   loses once the compaction completes.
  *
  * Each turn carries its OpenCode message id, so the service joins snapshots
  * that each hold part of a session. Anything not recognisably one of these
@@ -69,8 +66,9 @@ function v1Turns(messages: unknown[]): Turn[] {
     if (role !== "user" && role !== "assistant") unreadable(`a message with role ${JSON.stringify(role)}`);
     const time = isObject(info.time) ? info.time : {};
     if (role === "user") {
-      if (parts.some((p) => isObject(p) && p.type === "compaction")) {
-        afterCompaction = true;
+      const compaction = parts.find((p): p is Record<string, unknown> => isObject(p) && p.type === "compaction");
+      if (compaction) {
+        afterCompaction = compaction.auto === true && compaction.overflow === true;
         continue;
       }
       const text = clean(textParts(parts));
@@ -119,25 +117,7 @@ function v2ContextTurns(messages: unknown[]): Turn[] {
   return turns;
 }
 
-/** OpenCode 2's compaction input: model-request messages, tool calls and results as their own blocks and messages. */
-function v2RequestTurns(messages: unknown[]): Turn[] {
-  const turns: Turn[] = [];
-  for (const m of messages) {
-    if (!isObject(m) || typeof m.role !== "string") unreadable("a message without a role");
-    const msg = m as Record<string, unknown>;
-    if (msg.role === "tool" || msg.role === "system") continue;
-    if (msg.role !== "user" && msg.role !== "assistant") unreadable(`a message with role ${JSON.stringify(msg.role)}`);
-    const id = str(msg.id);
-    // Without an id the message cannot be matched with the session's own copy: an earlier summary or text OpenCode built.
-    if (!id) continue;
-    const content = typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : Array.isArray(msg.content) ? msg.content : unreadable("a message without content");
-    const text = clean(textParts(content));
-    if (text) turns.push({ role: msg.role, text, at: null, id });
-  }
-  return turns;
-}
-
-const SHAPES: Record<string, (messages: unknown[]) => Turn[]> = { "v1-messages": v1Turns, "v2-context": v2ContextTurns, "v2-request": v2RequestTurns };
+const SHAPES = new Map([["v1-messages", v1Turns], ["v2-context", v2ContextTurns]]);
 
 const empty = (problem?: string): ParsedSession => ({ turns: [], title: null, cwd: null, startedAt: null, ...(problem ? { problem } : {}) });
 
@@ -151,7 +131,7 @@ export function parseOpenCode(raw: string): ParsedSession {
   if (!isObject(s) || s.attache !== "opencode-session" || s.v !== 1) return empty("OpenCode session snapshot in an unknown envelope");
   const snap = s as unknown as OpenCodeSnapshot;
   const format = `OpenCode ${String(snap.opencode)} ${String(snap.shape)}`;
-  const shape = SHAPES[snap.shape];
+  const shape = SHAPES.get(snap.shape);
   if (!shape) return empty(`unknown OpenCode format ${JSON.stringify(format)}`);
   // A subagent's session: a side-chain, not the owner's conversation.
   if (snap.parentID) return empty();

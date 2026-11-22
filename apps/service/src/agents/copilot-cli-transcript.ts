@@ -56,7 +56,7 @@ function eventsOf(raw: string): unknown[] {
       return [JSON.parse(l) as unknown];
     } catch {
       // Only a last line without its newline is still being written.
-      if (i === last) return [];
+      if (i === last && i > 0) return [];
       unreadable("a line that is not JSON");
     }
   });
@@ -67,7 +67,7 @@ function turnOf(e: Record<string, unknown>): Turn | null {
   const d = isObject(e.data) ? e.data : unreadable(`a ${String(e.type)} event without data`);
   const role = e.type === "user.message" ? "user" : "assistant";
   if (typeof d.content !== "string") unreadable(`a ${String(e.type)} event whose content is not text`);
-  if (role === "user" && (d.source !== undefined || d.isAutopilotContinuation === true)) return null;
+  if (role === "user" && (d.source != null || d.isAutopilotContinuation === true)) return null;
   if (role === "assistant") {
     if (d.parentToolCallId != null) return null;
     if (!PHASES.has(d.phase)) unreadable(`an assistant message in phase ${JSON.stringify(d.phase)}`);

@@ -126,6 +126,7 @@ describe("repairing a stale entry", () => {
   });
 
   it("repairs an entry under its own name whose command or tools are out of date", () => {
+    copilot().apply();
     const { tools: _tools, ...withoutTools } = expectedEntry();
     write(CONFIG(), JSON.stringify({ mcpServers: { [nameOf()]: withoutTools } }));
     expect(copilot().status().state).toBe("stale");
@@ -142,10 +143,10 @@ describe("repairing a stale entry", () => {
     expect(readFileSync(CONFIG(), "utf8")).toBe(before);
   });
 
-  it("reports missing, with no file named, when the entry and the hook were removed, and stale when only one was", () => {
+  it("reports missing when either the MCP entry or the hooks file is absent", () => {
     copilot().apply();
     write(CONFIG(), JSON.stringify({ mcpServers: { playwright: OTHER } }));
-    expect(copilot().status()).toMatchObject({ state: "stale", message: expect.stringMatching(/MCP server is not in/), files: [HOOKS()] });
+    expect(copilot().status()).toMatchObject({ state: "missing", message: expect.stringMatching(/MCP server is not in/), files: [HOOKS()] });
     rmSync(HOOKS());
     expect(copilot().status()).toMatchObject({ state: "missing", files: [] });
   });

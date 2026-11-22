@@ -271,7 +271,7 @@ describe("finding Pi", () => {
 
 describe("Attache memory in Pi sessions", () => {
   const user = (text: string): PiMessage => ({ role: "user", content: [{ type: "text", text }] });
-  const memoryOf = (messages: PiMessage[]) => messages.filter((m) => m.role === "custom" && m.customType === "attache-memory");
+  const memoryOf = (messages: PiMessage[]) => messages.filter((m) => m.role === "custom" && m.customType?.startsWith("attache-memory:"));
   const project = (dir: string, remote: string) => write(join(dir, ".git", "config"), `[remote "origin"]\n\turl = ${remote}\n`);
 
   it("puts the Brain's current memory ahead of the conversation on every model call, read fresh each time", async () => {
@@ -280,7 +280,7 @@ describe("Attache memory in Pi sessions", () => {
     const ext = await loadExtension(ours());
     const first = await ext.context([user("hello")], home);
     expect(first).toHaveLength(2);
-    expect(first[0]).toMatchObject({ role: "custom", customType: "attache-memory", display: false });
+    expect(first[0]).toMatchObject({ role: "custom", customType: `attache-memory:${ext.registered[0]!.name}`, display: false });
     expect(first[0]!.content).toBe("<attache-memory>\n## Attache memory\n\nOrion cutover is planned for December.\n</attache-memory>");
     expect(first[1]).toEqual(user("hello"));
 
@@ -293,7 +293,7 @@ describe("Attache memory in Pi sessions", () => {
     writeContextFiles(stateDir, "Current memory\n", []);
     pi().apply();
     const ext = await loadExtension(ours());
-    const stale: PiMessage = { role: "custom", customType: "attache-memory", content: "<attache-memory>\nOld memory\n</attache-memory>", display: false };
+    const stale: PiMessage = { role: "custom", customType: `attache-memory:${ext.registered[0]!.name}`, content: "<attache-memory>\nOld memory\n</attache-memory>", display: false };
     const sent = await ext.context([stale, user("hello"), stale], home);
     expect(memoryOf(sent).map((m) => m.content)).toEqual(["<attache-memory>\nCurrent memory\n</attache-memory>"]);
     expect(sent.filter((m) => m.role === "user")).toEqual([user("hello")]);
@@ -315,15 +315,16 @@ describe("Attache memory in Pi sessions", () => {
     expect(await ext.context([user("hello")], home)).toEqual([user("hello")]);
   });
 
-  it("another Attache instance's extension gives its own instance's memory", async () => {
+  it("keeps both Brains' memory when Pi runs two Attache extensions in the same session", async () => {
     const other = tempDir("attache-pi-other-state-");
     writeContextFiles(stateDir, "Mine\n", []);
     writeContextFiles(other, "Theirs\n", []);
     pi().apply();
     piFor(other).apply();
     const files = readdirSync(EXTENSIONS()).map((f) => join(EXTENSIONS(), f));
-    const sent = await Promise.all(files.map(async (f) => memoryOf(await (await loadExtension(f)).context([user("hi")], home))[0]!.content));
-    expect(sent.sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
+    let messages = [user("hi")];
+    for (const file of files) messages = await (await loadExtension(file)).context(messages, home);
+    expect(memoryOf(messages).map((m) => m.content).sort()).toEqual(["<attache-memory>\nMine\n</attache-memory>", "<attache-memory>\nTheirs\n</attache-memory>"]);
   });
 });
 

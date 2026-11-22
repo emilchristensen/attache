@@ -284,7 +284,7 @@ export class App {
 
   featureStatuses() {
     const cfg = this.config.get();
-    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status }));
+    const conns = this.connections.records();
     return computeStatus(cfg.features, conns, { dataFolder: cfg.dataFolder });
   }
 

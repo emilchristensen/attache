@@ -142,7 +142,7 @@ async function agentHooksCmd(argv: string[]) {
   const sub = argv[1] ?? "status";
   const only = arg("agent", argv);
   const picked = only ? integrationFor(only) : null;
-  // Pi, OpenCode and Copilot CLI are connected through their own adapters (one extension or plugin file, or one MCP entry), not hooks and an MCP configuration.
+  // Pi, OpenCode and Copilot CLI own their configuration through their adapters.
   const fileAdapters = [piAdapter(hooks), openCodeAdapter(hooks), copilotCliAdapter(hooks)];
   const kinds = [...AGENT_INTEGRATIONS.map((a) => a.kind), ...fileAdapters.map((a) => a.kind)];
   if (only && !kinds.includes(only)) throw new Error(`Unknown agent ${only}. Agents: ${kinds.join(", ")}`);
@@ -164,7 +164,7 @@ async function agentHooksCmd(argv: string[]) {
     ];
     out(JSON.stringify(results));
     const failed = results.filter((r) => r.error);
-    if (failed.length) throw new Error(`Could not remove the Attache hooks from ${failed.map((f) => `${f.path} (${f.error})`).join("; ")}. Remove the hooks that mention attache-agent-hook and the MCP server that runs \`attache mcp\` by hand.`);
+    if (failed.length) throw new Error(`Could not remove every Attache entry. ${failed.map((f) => `${f.agent}${f.path ? ` (${f.path})` : ""}: ${f.error}`).join("; ")}. Check the paths above and remove only this Attache instance's entries.`);
     return;
   }
   throw new Error(`Usage: attache agent-hooks status|uninstall [--agent ${kinds.join("|")}]`);

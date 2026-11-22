@@ -518,6 +518,9 @@ The Agent sessions feature's required Harness is any of `SESSION_HARNESS_KINDS` 
 Every Harness Connection goes through one boundary, `HarnessAdapter` (`agents/harness-adapters.ts`, data types in `packages/contracts/src/harness.ts`, ADR 0006): detect, preview, apply, status, refresh and uninstall.
 Each adapter reports MCP access, memory (`none`, `runtime-fresh`, `managed-file`) and session capture (`none`, `with-final-event`, `without-final-event`) separately, and whether a running Harness must restart before a change takes effect.
 Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part it could not remove with its file.
+Pi, OpenCode and Copilot CLI record their installed locations and names in this instance's local state.
+Disconnect revokes their memory and capture before removing their configuration, so a plugin or hook already loaded in a running Harness cannot keep saving.
+The command-line uninstaller uses those recorded locations even when its environment differs from the service's.
 Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
 The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).
 `GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disconnecting returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
@@ -532,7 +535,8 @@ Pi loads it on its own and it calls `pi.registerMcpServer` with the same `attach
 They are read only to refuse a setup the registration could not work in: a file that does not parse, `-builtin:mcp` in `settings.json`, or a same-name server in `mcp.json`, which Pi would use instead.
 The same extension handles Pi's `context` event, which runs before every model call: it imports this install's hook script, reads the session context the service keeps for the session's folder (`sessionContext`, the same choice of project or global file as the session-start hook), and puts it ahead of the conversation as a custom message of type `attache-memory`, its text wrapped in `<attache-memory>` tags.
 Pi does not save what a `context` handler adds, so a resumed or compacted session never carries old memory, and Pi's compaction summaries are written without it; the handler also drops any earlier `attache-memory` message before adding the current one.
-Transcript parsers strip `<attache-memory>` blocks with the other injected tags, and a Pi parser must drop `attache-memory` custom messages.
+Each extension's custom message type includes its server name, so it can replace its own memory without removing another connected Brain's memory.
+Transcript parsers strip `<attache-memory>` blocks with the other injected tags, and the Pi parser drops custom messages.
 The same extension saves sessions: on `agent_settled` (Pi is done with a prompt; spooled as `turn-end`), `session_before_compact` (`pre-compact`) and `session_shutdown` (`session-end`, or `turn-end` for a `/reload`, which goes on with the same session) it hands the hook script's `spoolSession` a snapshot `{attache: "pi-session", v: 1, header, forkedAt, entries}` of `ctx.sessionManager.getBranch()`.
 Pi keeps compacted messages on the branch, so each snapshot holds the branch's whole conversation; Pi runs `session_shutdown` on quitting, Ctrl+C, Ctrl+D, SIGHUP and SIGTERM and awaits the handler, so only a killed or crashed Pi can lose its newest turn.
 Sessions without a file (`--no-session`, which Pi's subagent example uses for its subagents) are never spooled.
@@ -562,13 +566,24 @@ It reads OpenCode's global `config.json`, `opencode.json`, `opencode.jsonc` and 
 Project-level configuration is not checked.
 The same plugin saves sessions.
 OpenCode keeps them in a database that is not a public interface, so the plugin asks OpenCode for a session's messages through its plugin API and hands a snapshot to the hook script's `spoolSession`, which spools it like a hook's transcript copy (`spoolText`, nothing while the session context is absent, so capture follows the Agent sessions feature).
-It does so when a turn ends (OpenCode 1's `session.status` idle event, read with `client.session.messages`, the whole session; OpenCode 2's `experimental.idle` session hook, read with `ctx.session.context`, which holds only the messages since the last compaction), before each compaction (OpenCode 1's `experimental.session.compacting`; OpenCode 2's `compaction` hook, whose `messages` are the ones about to leave the context), and once more for the sessions it saw when OpenCode unloads it (OpenCode 1 `dispose`, OpenCode 2 the cleanup `setup` returns; OpenCode 1 did not run `dispose` on SIGTERM in a probe, OpenCode 2 ran its cleanup).
+OpenCode 1 reports turn end through the `session.status` idle event and compaction through `experimental.session.compacting`, and Attache reads the whole session with `client.session.messages`.
+OpenCode 2 reports those boundaries through `experimental.idle` and `compaction`, and Attache reads the typed `ctx.session.context`, which holds only the messages since the last compaction.
+The plugin saves the sessions it saw once more when OpenCode unloads it.
+OpenCode 1 did not run its `dispose` hook on SIGTERM in a probe, while OpenCode 2 ran the cleanup returned by `setup`.
 A session with a parent (a subagent's) is never saved.
 OpenCode has no session-end event, so the capability is `without-final-event` and the setup note says a turn still running when OpenCode quits can be missed; summaries wait for a quiet spell, as for Antigravity.
-`agents/opencode-transcript.ts` reads the snapshot envelope (`{ attache: "opencode-session", v: 1, opencode, shape, sessionID, parentID, title, directory, messages }`, shapes `v1-messages`, `v2-context`, `v2-request`): user and assistant text only, no tool calls or results, reasoning, synthetic or ignored parts, system, skill or shell messages, compaction requests or summaries, OpenCode 1's replayed copy of the owner's message after an automatic compaction, or an answer still being written; it strips `<attache-memory>` and the other injected tags.
+`agents/opencode-transcript.ts` reads the snapshot envelope (`{ attache: "opencode-session", v: 1, opencode, shape, sessionID, parentID, title, directory, messages }`, shapes `v1-messages` and `v2-context`).
+Only the owner's and assistant's text becomes a turn.
+OpenCode 2 capture reads typed session context at compaction so injected user-role text from the model request is never treated as the owner's words.
+The parser drops tool calls and results, reasoning, synthetic or ignored parts, system, skill or shell messages, compactions and summaries, OpenCode 1's replay after automatic overflow compaction, and answers still being written.
+It strips `<attache-memory>` and the other injected tags.
 An unknown envelope, shape, message type or role yields no turns and a `problem` naming the OpenCode format; the service keeps a sample, logs it and puts it on the Connection's last error.
-Each turn carries its OpenCode message id, and the service joins a partial source's snapshots by id (`joinTurns` in `agents/sessions.ts`, sources in `agents/session-sources.ts`): a saved turn keeps its place and a new one follows, so turns compacted out of OpenCode 2's context stay saved and the summary watermark stays positional; such sessions' summariser caches are kept for 30 days after their last snapshot (others: 7 days), and after that a snapshot is taken whole and never replaces a longer saved conversation.
-A cache that no longer parses is removed and logged once, so the next snapshot is saved instead of the spool record failing on every scan.
+Each turn carries its OpenCode message id, and the service joins a partial source's snapshots by id (`joinTurns` in `agents/sessions.ts`, sources in `agents/session-sources.ts`).
+A saved turn keeps its place and a new one follows, so turns compacted out of OpenCode 2's context stay saved and the summary watermark stays positional.
+For partial sources, Attache keeps the redacted turns and message IDs in its state folder so it can resume joining snapshots after a long pause.
+If that state is lost, Attache preserves the archive and reports that it could not join the new turns.
+Fully summarised sessions from other sources lose their local cache after seven quiet days.
+A cache that no longer parses is removed and logged once.
 The marker and ownership rules are Pi's (owner recognised by the `// Managed by Attache: ` prefix plus the instance line, so the MCP-only file an earlier version wrote is refreshed or removed); a running OpenCode (or OpenCode 2's background service) must restart to load a change.
 `test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disconnecting.
 It also drives a private `opencode serve` against a local stand-in model (no credentials) to check that every agent-loop call carries the Brain's current memory after a Brain change, a compaction and a resume (a new server continuing the session), that compaction requests carry none, that OpenCode's database and data folder never contain it, and that none is sent after disconnecting.
@@ -585,7 +600,10 @@ A file that does not parse, a non-object `mcpServers` or a same-name server Atta
 `settings.json` is read only to refuse a setup whose `disabledMcpServers` (where `copilot mcp disable` records it) lists this instance's server.
 `~/.copilot` alone is not a sign that Copilot CLI is installed (the GitHub Copilot app and SDK-hosted runtimes share it): detection looks for a `copilot` executable in the tool folders and for `gh copilot`'s download folder, and connecting stays possible without either.
 A running session must start again, or run `/mcp reload`; a repository's own `.mcp.json` can replace a same-name server for sessions in that repository.
-`test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in (skipped where it is not on PATH or in `ATTACHE_COPILOT_EXECUTABLE`): `copilot mcp list --json` and `copilot mcp get --json` show Attache's server as a user server, enabled, next to the owner's; the server as Copilot CLI read it starts and answers from the Brain; after disconnecting only the owner's is listed.
+`test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in.
+It runs when `copilot` is on PATH or `ATTACHE_COPILOT_EXECUTABLE` names it.
+`copilot mcp list --json` and `copilot mcp get --json` show a user server next to the owner's, and a live session starts it and saves to the Brain as Copilot CLI.
+After disconnecting, only the owner's server is listed.
 It passed against `@github/copilot` 1.0.114 on macOS.
 Memory comes from one personal hooks file per instance, `<Copilot home>/hooks/<owner key>.json` (`{ version: 1, hooks: { sessionStart: [{ type: "command", bash, powershell, timeoutSec: 10 }] } }`), which runs `attache-agent-hook copilot-cli session-start`.
 The hook prints `{"additionalContext": "<attache-memory>…</attache-memory>"}` from the session's folder's context file (`hook-profiles.ts` `copilot-cli`), or nothing when there is no memory.

@@ -2,7 +2,7 @@
  * TEST-ONLY OpenCode session snapshots in the envelope Attache's OpenCode
  * plugin spools (agents/opencode-transcript.ts). The message shapes inside
  * are the ones real OpenCode 1.19.6 (`client.session.messages`) and 2.3.2
- * (`ctx.session.context`, the `compaction` hook's `messages`) returned in an
+ * (`ctx.session.context`) returned in an
  * isolated home with a stand-in model (probe-107), trimmed to the fields that
  * matter and with made-up ids and text.
  */
@@ -12,7 +12,7 @@ export const SECRET = "sk-live-abcdef1234567890";
 export const TOOL_OUTPUT = "TOOL-OUTPUT-7731";
 const READ_OUTPUT = `Read file /work/.env, lines 1-2\n1: # ${TOOL_OUTPUT}\n2: OPENAI_API_KEY=${SECRET}`;
 
-type Shape = "v1-messages" | "v2-context" | "v2-request";
+type Shape = "v1-messages" | "v2-context";
 export function snapshot(shape: Shape, messages: unknown, extra: Record<string, unknown> = {}): string {
   return JSON.stringify({ attache: "opencode-session", v: 1, opencode: shape === "v1-messages" ? 1 : 2, shape, sessionID: "ses_1", parentID: null, title: "Plan the Orion cutover", directory: "/work/orion", messages, ...extra });
 }

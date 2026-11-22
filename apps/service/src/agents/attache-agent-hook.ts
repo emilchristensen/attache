@@ -12,7 +12,8 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPTURE_EVENTS, contextFile, spoolCapture, spoolText, type HookEvent } from "./spool.ts";
+import { CAPTURE_EVENTS, spoolCapture, spoolText, type HookEvent } from "./spool.ts";
+import { harnessSessionActive, hasHarnessSessionState } from "./harness-session-state.ts";
 import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
 import { currentOs } from "../platform/os.ts";
@@ -43,6 +44,10 @@ export function sessionContext(stateDir: string, folder: string | null, env: Nod
   return existsSync(file) ? readFileSync(file, "utf8") : null;
 }
 
+export function harnessSessionContext(stateDir: string, agent: "pi" | "opencode", folder: string | null): string | null {
+  return harnessSessionActive(stateDir, agent) ? sessionContext(stateDir, folder) : null;
+}
+
 /**
  * Spool a session snapshot a Harness plugin made (Attache's OpenCode plugin
  * imports this), for the service to save. Nothing is spooled while the Agent
@@ -51,7 +56,7 @@ export function sessionContext(stateDir: string, folder: string | null, env: Nod
  */
 export function spoolSession(stateDir: string, input: { agent: string; event: HookEvent; sessionId: string; cwd: string | null }, text: string, env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return false;
-  if (!CAPTURE_EVENTS.includes(input.event) || !existsSync(contextFile(stateDir))) return false;
+  if (!CAPTURE_EVENTS.includes(input.event) || !hasHarnessSessionState(input.agent) || !harnessSessionActive(stateDir, input.agent)) return false;
   spoolText(stateDir, input, text);
   return true;
 }
@@ -64,6 +69,7 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (!agent || !profile || !stateDir || !HOOK_EVENTS.includes(event as HookEvent)) return "";
   // Sessions that tools start on their own (Attache's model calls, other Agent SDK scripts) are not the user's work.
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return "";
+  if (hasHarnessSessionState(agent) && !harnessSessionActive(stateDir, agent)) return "";
   const payload = readStdin();
   const input = profile.parse(payload);
   if (event === "session-start") {
@@ -74,6 +80,7 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
     const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;
     if (sourcePath) profile.awaitTranscript?.(sourcePath, event as HookEvent, payload);
+    if (hasHarnessSessionState(agent) && !harnessSessionActive(stateDir, agent)) return "";
     spoolCapture(stateDir, { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath });
   }
   return "";

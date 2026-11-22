@@ -6,6 +6,7 @@ import { locationsForHome } from "../platform/locations.ts";
 import { PI_AGENT_DIR, piInstall } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
 import { readHarnessJson } from "./harness-json.ts";
+import { withHarnessSessionState, type RootedHarnessAdapter } from "./harness-session-state.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
 
@@ -81,7 +82,7 @@ export function piExtensionText(stateDir: string, server: string, hook: string):
     `const CONFIG = ${JSON.stringify(config, null, 2)};`,
     `const STATE_DIR = ${JSON.stringify(stateDir)};`,
     `const HOOK = ${JSON.stringify(pathToFileURL(hook).href)};`,
-    `const MEMORY = ${JSON.stringify(PI_MEMORY_CUSTOM_TYPE)};`,
+    `const MEMORY = ${JSON.stringify(`${PI_MEMORY_CUSTOM_TYPE}:${server}`)};`,
     "",
     "let hook;",
     "",
@@ -99,7 +100,7 @@ export function piExtensionText(stateDir: string, server: string, hook: string):
     "/** The Brain's current memory for a session in `folder`, or null; read from the files Attache keeps up to date. */",
     "async function memory(folder) {",
     "  try {",
-    "    return (await loadHook())?.sessionContext(STATE_DIR, folder) ?? null;",
+    '    return (await loadHook())?.harnessSessionContext(STATE_DIR, "pi", folder) ?? null;',
     "  } catch {",
     "    // Never break the session.",
     "    return null;",
@@ -184,7 +185,7 @@ const sameServer = (a: string, b: string) => a.replace(/_/g, "-").toLowerCase() 
 
 export function piAdapter(hooks: AgentHooks): HarnessAdapter {
   const server = () => hooks.ownerKey();
-  const extension = () => join(piAgentDir(), "extensions", `${server()}.ts`);
+  const extension = (root = piAgentDir(), owner = server()) => join(root, "extensions", `${owner}.ts`);
   const expected = () => piExtensionText(hooks.stateDir, server(), stablePath(hookScript()));
 
   /** Throws, naming the file, when Pi's setup would refuse or hide this instance's registration. */
@@ -218,7 +219,7 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   const restartRequired = true;
-  const adapter: HarnessAdapter = {
+  const adapter: RootedHarnessAdapter = {
     kind: "pi",
     label: "Pi",
     capabilities: { mcp: true, memory: "runtime-fresh", capture: "with-final-event" },
@@ -253,8 +254,8 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
       }
     },
     refresh: () => adapter.apply(),
-    uninstall: () => {
-      const path = extension();
+    uninstall: ({ root, owner }) => {
+      const path = extension(root, owner);
       try {
         if (!existsSync(path) || instanceOf(readFileSync(path, "utf8")) !== hooks.stateDir) return { removed: [], failures: [] };
         rmSync(path);
@@ -264,5 +265,5 @@ export function piAdapter(hooks: AgentHooks): HarnessAdapter {
       }
     },
   };
-  return adapter;
+  return withHarnessSessionState("pi", adapter, hooks.stateDir, () => ({ root: piAgentDir(), owner: server() }));
 }

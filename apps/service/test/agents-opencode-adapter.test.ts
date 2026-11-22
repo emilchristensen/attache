@@ -7,7 +7,7 @@ import { harnessAdapters } from "../src/agents/harness-adapters.ts";
 import { removeContextFiles, writeContextFiles } from "../src/agents/context-files.ts";
 import { listSpool, spoolCopyPath } from "../src/agents/spool.ts";
 import { parseOpenCode } from "../src/agents/opencode-transcript.ts";
-import { v1Normal, v2Assistant, v2User } from "./fixtures/agents/opencode.ts";
+import { SECRET, v1Normal, v2Assistant, v2User } from "./fixtures/agents/opencode.ts";
 
 /**
  * OpenCode through its official plugin API: Attache owns one plugin file per
@@ -557,9 +557,11 @@ describe("saving OpenCode sessions", () => {
 
   it("OpenCode 2: spools the session's context when a turn ends, and the messages it is about to compact before a compaction", async () => {
     openCode().apply();
-    const s = await v2Host(ours(), at("work"), { context: [v2User("after compaction", 0), v2Assistant([{ type: "text", text: "pong" }], 1)] });
+    const session = { context: [v2User("first question", 0)] as unknown[] };
+    const s = await v2Host(ours(), at("work"), session);
     expect(s.hooks).toEqual(["compaction", "context", "experimental.idle"]);
-    await s.compaction([{ id: "msg_a", role: "user", content: [{ type: "text", text: "first question" }] }]);
+    await s.compaction([{ id: "msg_a", role: "user", content: [{ type: "text", text: SECRET }] }]);
+    session.context = [v2User("after compaction", 1), v2Assistant([{ type: "text", text: "pong" }], 2)];
     await s.idle();
     await s.cleanup();
     expect(spooled().map((r) => [r.event, r.parsed.turns.map((t) => t.text)])).toEqual([

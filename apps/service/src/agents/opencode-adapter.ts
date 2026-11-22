@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import type { HarnessApplyResult, HarnessFileChange, HarnessStatusReport } from "@attache/contracts";
 import { OPENCODE_CONFIG_DIR } from "../platform/harness-locations.ts";
 import { HooksFileError, replaceFile, writeConfigText } from "./hooks-config.ts";
+import { withHarnessSessionState, type RootedHarnessAdapter } from "./harness-session-state.ts";
 import { readHarnessJson } from "./harness-json.ts";
 import { agentHome, hookScript, mcpServerEntry, stablePath, type AgentHooks } from "./install.ts";
 import type { HarnessAdapter } from "./harness-adapters.ts";
@@ -104,7 +105,7 @@ export function openCodePluginText(stateDir: string, id: string, hook: string): 
     "async function memory(folder) {",
     "  let text;",
     "  try {",
-    "    text = (await attache())?.sessionContext(STATE_DIR, folder || process.cwd());",
+    '    text = (await attache())?.harnessSessionContext(STATE_DIR, "opencode", folder || process.cwd());',
     "  } catch {",
     "    // Never break the session.",
     "    return null;",
@@ -140,26 +141,19 @@ export function openCodePluginText(stateDir: string, id: string, hook: string): 
     "    });",
     "    // Sessions saved since the plugin loaded, saved once more when it unloads.",
     "    const seen = new Set();",
-    "    const saveContext = async (sessionID) => {",
+    '    const saveContext = async (sessionID, event = "turn-end") => {',
     "      try {",
     "        const info = data(await ctx.session.get({ sessionID }));",
     "        // The context holds the messages since the last compaction; the compaction hook below saved the ones before.",
-    '        if (await save("turn-end", info && { ...info, id: info.id ?? sessionID }, 2, "v2-context", data(await ctx.session.context({ sessionID })), folder)) seen.add(sessionID);',
+    '        if (await save(event, info && { ...info, id: info.id ?? sessionID }, 2, "v2-context", data(await ctx.session.context({ sessionID })), folder)) seen.add(sessionID);',
     "      } catch {",
     "        // Never break the session; the next turn saves it again.",
     "      }",
     "    };",
     "    // When a session finishes its model work and goes idle: the end of a turn.",
     '    await ctx.session.hook("experimental.idle", async (event) => saveContext(event.sessionID));',
-    "    // Before a compaction: the messages it summarises leave the session's context once it completes.",
-    '    await ctx.session.hook("compaction", async (event) => {',
-    "      try {",
-    "        const info = data(await ctx.session.get({ sessionID: event.sessionID }));",
-    '        await save("pre-compact", info && { ...info, id: info.id ?? event.sessionID }, 2, "v2-request", event.messages, folder);',
-    "      } catch {",
-    "        // Never break the compaction.",
-    "      }",
-    "    });",
+    "    // Before compaction, take the typed session context. The model request can include injected user-role text.",
+    '    await ctx.session.hook("compaction", async (event) => saveContext(event.sessionID, "pre-compact"));',
     "    return async () => {",
     "      for (const sessionID of seen) await saveContext(sessionID);",
     "    };",
@@ -250,7 +244,7 @@ function turnedOffBy(plugins: unknown, id: string): string | null {
 
 export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   const id = () => hooks.ownerKey();
-  const plugin = () => join(openCodeConfigDir(), "plugins", `${id()}.js`);
+  const plugin = (root = openCodeConfigDir(), owner = id()) => join(root, "plugins", `${owner}.js`);
   const expected = () => openCodePluginText(hooks.stateDir, id(), stablePath(hookScript()));
 
   /** The plugin file's text when it is this instance's, null when absent; throws when another file is in its place. */
@@ -297,7 +291,7 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
   }
 
   const restartRequired = true;
-  const adapter: HarnessAdapter = {
+  const adapter: RootedHarnessAdapter = {
     kind: "opencode",
     label: "OpenCode",
     capabilities: { mcp: true, memory: "runtime-fresh", capture: "without-final-event" },
@@ -322,8 +316,8 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
     },
     // The version was checked when the owner connected; a refresh (on every start) never waits for OpenCode.
     refresh: () => write(plan(false)),
-    uninstall: () => {
-      const path = plugin();
+    uninstall: ({ root, owner }) => {
+      const path = plugin(root, owner);
       try {
         if (!existsSync(path) || instanceOf(readFileSync(path, "utf8")) !== hooks.stateDir) return { removed: [], failures: [] };
         rmSync(path);
@@ -333,5 +327,5 @@ export function openCodeAdapter(hooks: AgentHooks): HarnessAdapter {
       }
     },
   };
-  return adapter;
+  return withHarnessSessionState("opencode", adapter, hooks.stateDir, () => ({ root: openCodeConfigDir(), owner: id() }));
 }

@@ -120,7 +120,7 @@ describe("injected context and side-chains in Copilot CLI sessions", () => {
   });
 
   it("keeps an answer whose parentToolCallId is null: only a subagent's answer names a parent tool call", () => {
-    expect(said(events([start(), user("Go", 1), assistant("Done", 2, { parentToolCallId: null })]))).toEqual([
+    expect(said(events([start(), user("Go", 1, { source: null }), assistant("Done", 2, { parentToolCallId: null })]))).toEqual([
       ["user", "Go"],
       ["assistant", "Done"],
     ]);
@@ -136,6 +136,7 @@ describe("injected context and side-chains in Copilot CLI sessions", () => {
 
 describe("Copilot CLI formats Attache cannot read", () => {
   const cases: Array<[string, string, RegExp]> = [
+    ["a single non-JSON line", "not an event", /not JSON/],
     ["a line that is not an event", events([start(), user("Go", 1)]).replace("\n", '\n["what"]\n'), /line that is not an event/],
     ["a line that is not JSON in the middle", events([start(), user("Go", 1)]).replace("\n", "\n{oops\n"), /not JSON/],
     ["a file that does not start with session.start", events([user("Go", 1), assistant("Ok", 2)]), /does not start with session\.start/],

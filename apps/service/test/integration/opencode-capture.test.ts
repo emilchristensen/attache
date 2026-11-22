@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
-import { SECRET, TOOL_OUTPUT, v1Assistant, v1Normal, v1Text, v1User, v2Assistant, v2Compaction, v2Idle, v2ReadTool, v2User } from "../fixtures/agents/opencode.ts";
+import { SECRET, TOOL_OUTPUT, snapshot, v1Assistant, v1Normal, v1Text, v1User, v2Assistant, v2Compaction, v2Idle, v2ReadTool, v2User } from "../fixtures/agents/opencode.ts";
 import { spoolDir, spoolText } from "../../src/agents/spool.ts";
 
 /**
@@ -45,6 +45,11 @@ async function openCode2(sessionID: string) {
     session,
     turnEnds: () => hooks["experimental.idle"]!({ sessionID, background: [] }),
     compacts: (messages: unknown[]) => hooks.compaction!({ sessionID, messages }),
+    async memory() {
+      const system: unknown[] = [];
+      await hooks.context!({ sessionID, system });
+      return system;
+    },
   };
 }
 
@@ -118,8 +123,9 @@ describe("OpenCode session capture", () => {
     await oc.turnEnds();
     await spoolEmpty();
     const second = [v2User("Check the env file", 3), v2Assistant([v2ReadTool()], 4), v2Assistant([{ type: "text", text: "It sets an API key; I left it alone." }], 5)];
-    // The compaction hook gets the messages being summarised, in the model's request shape.
-    await oc.compacts([...first, ...second].filter((m) => m.type !== "idle").map((m) => ({ id: m.id, role: m.type, content: m.type === "user" ? [{ type: "text", text: (m as { text: string }).text }] : (m as { content: unknown[] }).content.map((c) => (c as { type: string }).type === "tool" ? { type: "tool-call", name: "read" } : c) })));
+    // The model request flattens injected text into user messages. Attache reads the typed session instead.
+    oc.session.context = [...first, ...second, { id: "injected", type: "synthetic", text: SECRET }];
+    await oc.compacts([{ id: "injected", role: "user", content: SECRET }]);
     // After the compaction OpenCode 2's context starts at the compaction: the earlier turns are gone from it.
     oc.session.context = [v2Compaction(6, "## Objective\n- the summary text"), v2Idle(7), v2User("Ship it on Saturday", 8), v2Assistant([{ type: "text", text: "Booked for Saturday." }], 9)];
     await oc.turnEnds();
@@ -142,9 +148,7 @@ describe("OpenCode session capture", () => {
   });
 
   it("the summary of the turns reads only the owner's and the assistant's words, never tool output or injected memory", async () => {
-    // A turn's end waits for the conversation to be quiet for a while before summarising; the test does not wait that long.
-    const queued = jobsFor("ses_v2").find((j) => j.status === "queued");
-    svc.app.jobs.reschedule(queued!.id, null);
+    // The compaction makes the summary ready even when the next idle snapshot arrives before the queue runs.
     const job = await until(() => jobsFor("ses_v2").find((j) => j.status === "succeeded"), 20_000);
     expect(job.result).toMatchObject({ summarised: true });
     const sent = JSON.stringify(fx.requests.map((r) => r.body));
@@ -184,5 +188,39 @@ describe("OpenCode session capture", () => {
     expect(readdirSync(join(svc.stateDir, "agents/unparsed")).some((f) => f.includes("ses_new"))).toBe(true);
     const c = (await svc.get<Array<{ kind: string; lastError?: string | null }>>("/connections")).find((x) => x.kind === "opencode")!;
     expect(c.lastError).toMatch(/OpenCode 3 v3-stream/);
+  });
+
+  it("keeps earlier archived turns when a compacted session resumes after a long time", async () => {
+    const sessionId = "ses_after_retention";
+    const input = { agent: "opencode", sessionId, cwd: WORK };
+    spoolText(svc.stateDir, { ...input, event: "pre-compact" }, snapshot("v2-context", [v2User("Earlier question", 0), v2Assistant([{ type: "text", text: "Earlier answer" }], 1)]));
+    await until(() => jobsFor(sessionId).some((j) => j.status === "succeeded"));
+    svc.app.db.prepare("update agent_sessions set updated_at = ? where agent = ? and session_id = ?").run("2000-01-01T00:00:00.000Z", "opencode", sessionId);
+    svc.app.sessions.tick();
+
+    spoolText(svc.stateDir, { ...input, event: "pre-compact" }, snapshot("v2-context", [v2User("Later question", 2), v2Assistant([{ type: "text", text: "Later answer" }], 3)]));
+    await spoolEmpty();
+    expect(turnsOf(archived(sessionId)!)).toEqual(["Ada: Earlier question", "OpenCode: Earlier answer", "Ada: Later question", "OpenCode: Later answer"]);
+    await until(() => jobsFor(sessionId).filter((j) => j.status === "succeeded").length === 2);
+  });
+
+  it("stops a still-loaded plugin from injecting memory or saving after disconnect", async () => {
+    const sessionId = "ses_after_disconnect";
+    const oc = await openCode2(sessionId);
+    const messages = [v2User("After disconnect", 0)];
+    oc.session.context = messages;
+    expect(await oc.memory()).not.toEqual([]);
+    await svc.post("/connections/opencode/disconnect", { deleteData: false });
+    try {
+      await oc.turnEnds();
+      expect(await oc.memory()).toEqual([]);
+      expect(readdirSync(spoolDir(svc.stateDir)).some((f) => f.includes(sessionId))).toBe(false);
+      // An older plugin may still use a hook module it had already loaded.
+      spoolText(svc.stateDir, { agent: "opencode", event: "turn-end", sessionId, cwd: WORK }, snapshot("v2-context", messages));
+      await spoolEmpty();
+      expect(archived(sessionId)).toBeNull();
+    } finally {
+      await svc.post("/connections/opencode/configure", { method: "hooks", fields: {} });
+    }
   });
 });

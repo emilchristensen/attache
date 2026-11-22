@@ -140,13 +140,14 @@ describe("OpenCode as a Harness Connection", () => {
 });
 
 describe("uninstalling Attache", () => {
-  it("the uninstaller's agent-hooks uninstall also removes Attache's OpenCode plugin, and nothing else of OpenCode's", async () => {
+  it("the uninstaller removes the OpenCode plugin from the service's folder even when the shell sees another folder", async () => {
     await svc.post("/connections/opencode/configure", { method: "mcp", fields: {} });
     expect(readdirSync(PLUGINS)).toHaveLength(2);
     const main = join(import.meta.dirname, "../../src/main.ts");
     const status = JSON.parse(execFileSync(process.execPath, [main, "agent-hooks", "status", "--agent", "opencode", "--state-dir", svc.stateDir], { encoding: "utf8", env: { ...process.env, ATTACHE_AGENT_HOME: HOME } })) as Array<{ agent: string; state?: string }>;
     expect(status).toEqual([expect.objectContaining({ agent: "opencode", state: "current" })]);
-    const out = JSON.parse(execFileSync(process.execPath, [main, "agent-hooks", "uninstall", "--state-dir", svc.stateDir], { encoding: "utf8", env: { ...process.env, ATTACHE_AGENT_HOME: HOME } })) as Array<{ agent: string; error?: string }>;
+    const otherEnv = { ...process.env, ATTACHE_AGENT_HOME: HOME, ATTACHE_STATE_DIR: svc.stateDir, OPENCODE_CONFIG_DIR: at("another-opencode-folder") };
+    const out = JSON.parse(execFileSync(process.execPath, [main, "agent-hooks", "uninstall", "--state-dir", svc.stateDir], { encoding: "utf8", env: otherEnv })) as Array<{ agent: string; error?: string }>;
     expect(out.find((r) => r.agent === "opencode")).toMatchObject({ agent: "opencode", removed: 1 });
     expect(readdirSync(PLUGINS)).toEqual(["mine.js"]);
   });

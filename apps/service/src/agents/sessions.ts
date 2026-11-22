@@ -3,9 +3,10 @@ import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { App } from "../app.ts";
 import type { JobContext } from "../jobs/queue.ts";
-import { nowIso } from "../core/db.ts";
+import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
+import { hasHarnessSessionState } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
@@ -43,8 +44,6 @@ const SCAN_EVERY_MS = 60_000;
 /** Agents that only report finished turns are summarised once the conversation has been quiet this long. */
 const TURN_END_QUIET_MS = 15 * 60_000;
 const CACHE_RETENTION_MS = 7 * 86_400_000;
-/** A plugin's session can go on (Pi and OpenCode resume it) and its next snapshot joins the cached turns, so its cache stays longer. */
-const PARTIAL_CACHE_RETENTION_MS = 30 * 86_400_000;
 const MAX_UNPARSED_SAMPLES = 5;
 const MAX_LOGGED_BULLETS = 12;
 
@@ -138,6 +137,8 @@ export class AgentSessions {
   }
 
   private ingestOne(r: SpoolRecord): boolean {
+    // An already loaded extension can still spool after its connection is removed.
+    if (hasHarnessSessionState(r.agent) && this.app.connections.record(r.agent)?.status !== "connected") return false;
     const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
     if (!source || !copy || !existsSync(copy)) {
@@ -155,12 +156,16 @@ export class AgentSessions {
       return false;
     }
     const existing = this.row(r.agent, r.sessionId);
-    // A plugin's snapshot may hold only part of the session: it joins the turns saved before, while their copy is kept.
+    // A plugin snapshot may hold only part of the session. Keep its archived turns if the merge state was lost.
     const saved = source.partial && existing ? this.readCache(r.agent, r.sessionId) : null;
-    const joins = source.partial && !(existing && !saved);
+    if (source.partial && existing && (!saved || saved.turns.length < existing.turns)) {
+      this.app.log.warn("could not join new turns to a saved agent session", { agent: r.agent, sessionId: r.sessionId });
+      this.reportSessionProblem(r.agent, `Attache could not join new turns to a saved ${source.label} session because its local session state is missing or incomplete. Use the wrap-up prompt to keep what the new turns decided.`);
+      return false;
+    }
     // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (!joins && existing && parsed.turns.length < existing.turns) return false;
-    const turns = joins ? joinTurns(saved?.turns ?? [], parsed.turns) : parsed.turns;
+    if (!source.partial && existing && parsed.turns.length < existing.turns) return false;
+    const turns = source.partial ? joinTurns(saved?.turns ?? [], parsed.turns) : parsed.turns;
     const cwd = parsed.cwd ?? r.cwd;
     const startedAt = (source.partial ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? parsed.startedAt ?? r.at;
     const title = parsed.title ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
@@ -181,8 +186,8 @@ export class AgentSessions {
 
   /**
    * The summariser's copy of a session's saved turns; null when there is none.
-   * A copy that no longer parses (a disk or crash fault) is removed and logged,
-   * once, so the session's next snapshot is saved instead of failing forever.
+   * A copy that no longer parses is removed and logged once.
+   * Partial snapshots cannot replace an existing archive if its state was lost.
    */
   private readCache(agent: string, sessionId: string): CachedSession | null {
     const file = this.cachePath(agent, sessionId);
@@ -193,7 +198,7 @@ export class AgentSessions {
       return cached;
     } catch (e) {
       rmSync(file, { force: true });
-      this.app.log.warn("the summariser's copy of an agent session was unreadable and was removed; the next copy of the session replaces it", { agent, sessionId, error: (e as Error).message });
+      this.app.log.warn("the summariser's copy of an agent session was unreadable and was removed", { agent, sessionId, error: (e as Error).message });
       return null;
     }
   }
@@ -205,8 +210,12 @@ export class AgentSessions {
    */
   private reportUnreadable(r: SpoolRecord, copy: string, label: string, problem: string) {
     this.keepUnparsed(r, copy, problem);
-    const message = `Attache could not read a ${label} session (${problem}), so it saved nothing of it. Updating Attache may fix this; until then, use the wrap-up prompt to keep what a conversation decided.`;
-    this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status = 'connected'").run(message, nowIso(), r.agent);
+    this.reportSessionProblem(r.agent, `Attache could not read a ${label} session (${problem}), so it saved nothing of it. Updating Attache may fix this; until then, use the wrap-up prompt to keep what a conversation decided.`);
+  }
+
+  private reportSessionProblem(agent: string, message: string) {
+    const updated = this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status = 'connected' and last_error is not ? returning id").get(message, nowIso(), agent, message) as { id: string } | undefined;
+    if (updated) this.app.bus.emit("event", { type: "connections.changed", id: updated.id });
   }
 
   /**
@@ -228,12 +237,13 @@ export class AgentSessions {
    */
   private scheduleSummary(r: SpoolRecord, label: string, title: string, turns: number) {
     const pending = this.app.db
-      .prepare("select id from jobs where kind = 'session-distill' and status = 'queued' and json_extract(input, '$.agent') = ? and json_extract(input, '$.sessionId') = ?")
-      .get(r.agent, r.sessionId) as { id: string } | undefined;
+      .prepare("select id, run_after from jobs where kind = 'session-distill' and status = 'queued' and json_extract(input, '$.agent') = ? and json_extract(input, '$.sessionId') = ?")
+      .get(r.agent, r.sessionId) as { id: string; run_after: string | null } | undefined;
     const now = r.event !== "turn-end";
     const quietUntil = new Date(Date.now() + TURN_END_QUIET_MS).toISOString();
     if (pending) {
-      this.app.jobs.reschedule(pending.id, now ? null : quietUntil);
+      // An idle snapshot can add turns to a due summary without making it wait again.
+      if (pending.run_after !== null) this.app.jobs.reschedule(pending.id, now ? null : quietUntil);
       return;
     }
     this.app.jobs.create({
@@ -256,17 +266,14 @@ export class AgentSessions {
   }
 
   /**
-   * Drop summariser caches for sessions that are fully summarised and quiet:
-   * a week since the last copy, or, for a plugin's sessions, whose later
-   * snapshots join the saved turns, a month since the last snapshot. After
-   * that a snapshot of such a session is taken whole, like a transcript: it
-   * replaces the saved conversation only when it is no shorter.
+   * Drop the cache of a fully summarised transcript after a quiet week.
+   * Partial sources need their redacted turns and IDs to join later snapshots,
+   * which may arrive after OpenCode has compacted away its copy of those turns.
    */
   private pruneCaches() {
-    const cutoff = (ms: number) => new Date(Date.now() - ms).toISOString();
-    const done = this.app.db.prepare("select agent, session_id, updated_at from agent_sessions where distilled_turns >= turns and updated_at < ?").all(cutoff(CACHE_RETENTION_MS)) as Array<{ agent: string; session_id: string; updated_at: string }>;
-    const partialCutoff = cutoff(PARTIAL_CACHE_RETENTION_MS);
-    for (const d of done.filter((x) => !PARTIAL_SOURCE_KINDS.includes(x.agent) || x.updated_at < partialCutoff)) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
+    const cutoff = new Date(Date.now() - CACHE_RETENTION_MS).toISOString();
+    const done = this.app.db.prepare(`select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ? and agent not in (${placeholders(PARTIAL_SOURCE_KINDS)})`).all(cutoff, ...PARTIAL_SOURCE_KINDS) as Array<{ agent: string; session_id: string }>;
+    for (const d of done) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
   }
 
   private row(agent: string, sessionId: string): SessionRow | undefined {

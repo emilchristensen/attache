@@ -309,12 +309,16 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
   it("saves the conversation at each turn's end, before and after a compaction and across a resume, without tool output, memory or the summary, and shuts down cleanly", { timeout: 300_000 }, async () => {
     await remember("Altair review");
     const prompts = ["capture one", "please read the secret file", "capture after compaction"];
+    const dir = join(svc.dataDir, "evidence", "sessions", "transcripts", "opencode");
+    const archive = () => (existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).find((d) => d.includes("capture one")) : undefined) ?? "";
     let server = await serve();
     try {
       await prompt(server.url, prompts[0]!, true);
       await prompt(server.url, prompts[1]!);
       await compact(server.url);
       await prompt(server.url, prompts[2]!);
+      // The run command receives its answer before OpenCode 1 finishes notifying the idle plugin.
+      await expect.poll(archive, { timeout: 30_000 }).toContain(prompts[2]);
     } finally {
       server.child.kill();
     }
@@ -323,13 +327,11 @@ describe.skipIf(!OPENCODE)("the real OpenCode executable", () => {
     server = await serve();
     try {
       await prompt(server.url, "capture resumed");
+      await expect.poll(archive, { timeout: 30_000 }).toContain("capture resumed");
     } finally {
       server.child.kill();
     }
     await expect.poll(() => server.child.exitCode !== null || server.child.signalCode !== null, { timeout: 15_000 }).toBe(true);
-    const dir = join(svc.dataDir, "evidence", "sessions", "transcripts", "opencode");
-    const archive = () => (existsSync(dir) ? readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf8")).find((d) => d.includes("capture one")) : undefined) ?? "";
-    await expect.poll(archive, { timeout: 30_000 }).toContain("capture resumed");
     const doc = archive();
     // Every owner turn once, in order (OpenCode 1's `run` sends a prompt wrapped in double quotes).
     const owner = [...doc.matchAll(/^### Ada Lovelace[^\n]*\n\n"?([^"\n]*)"?$/gm)].map((m) => m[1]);
