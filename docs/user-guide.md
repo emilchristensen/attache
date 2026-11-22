@@ -473,6 +473,8 @@ What they have in common:
 - **What is saved.**
   Only your words and the Harness's answers are kept, never tool calls, tool output, Attache's memory, other injected context or subagent conversations.
   A session in a format Attache does not recognise is not saved at all; the Connection shows the problem, naming the Harness and the format.
+  Pi and OpenCode keep a redacted local copy of captured turns in Attache's state folder so a session can still resume after a long pause.
+  Attache retains these copies indefinitely.
 
 ### Pi
 

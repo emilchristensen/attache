@@ -109,5 +109,6 @@ export function parsePi(raw: string): ParsedSession {
     if (e instanceof Unreadable) return empty(`${format} snapshot with ${e.message}`);
     throw e;
   }
-  return { turns: parsed.turns, title: parsed.title, cwd: str(header.cwd), startedAt: parsed.turns.find((t) => t.at)?.at ?? null };
+  const createdAt = parsed.turns.length && !header.parentSession ? str(header.timestamp) : null;
+  return { turns: parsed.turns, title: parsed.title, cwd: str(header.cwd), startedAt: parsed.turns.find((t) => t.at)?.at ?? null, ...(createdAt ? { createdAt } : {}) };
 }

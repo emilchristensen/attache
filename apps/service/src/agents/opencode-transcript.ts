@@ -27,12 +27,13 @@ export interface OpenCodeSnapshot {
   /** Set for a subagent's session: a side-chain, never the owner's conversation. */
   parentID: string | null;
   title: string | null;
+  created?: unknown;
   directory: string | null;
   messages: unknown;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-const iso = (ms: unknown) => (typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null);
+const iso = (ms: unknown) => (typeof ms === "number" && Math.abs(ms) <= 8.64e15 ? new Date(ms).toISOString() : null);
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
 
 class Unreadable extends Error {}
@@ -143,5 +144,6 @@ export function parseOpenCode(raw: string): ParsedSession {
     if (e instanceof Unreadable) return empty(`${format} snapshot with ${e.message}`);
     throw e;
   }
-  return { turns, title: str(snap.title), cwd: str(snap.directory), startedAt: turns.find((t) => t.at)?.at ?? null };
+  const createdAt = iso(snap.created) ?? str(snap.created);
+  return { turns, title: str(snap.title), cwd: str(snap.directory), startedAt: turns.find((t) => t.at)?.at ?? null, ...(createdAt ? { createdAt } : {}) };
 }

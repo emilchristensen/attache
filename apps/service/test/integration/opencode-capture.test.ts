@@ -29,7 +29,7 @@ const plugin = async () => {
 };
 
 /** OpenCode 2 hosting the plugin for one session whose context (messages since the last compaction) the test sets. */
-async function openCode2(sessionID: string) {
+async function openCode2(sessionID: string, created?: number) {
   const session = { context: [] as unknown[] };
   const hooks: Record<string, (e: unknown) => Promise<void>> = {};
   await (await plugin()).setup({
@@ -37,7 +37,7 @@ async function openCode2(sessionID: string) {
     mcp: { transform: async () => ({ dispose: async () => {} }) },
     session: {
       hook: async (name: string, cb: (e: unknown) => Promise<void>) => ((hooks[name] = cb), { dispose: async () => {} }),
-      get: async () => ({ id: sessionID, title: "Plan the Orion cutover", location: { directory: WORK } }),
+      get: async () => ({ id: sessionID, title: "Plan the Orion cutover", time: { created }, location: { directory: WORK } }),
       context: async () => session.context,
     },
   });
@@ -264,6 +264,13 @@ describe("OpenCode session capture", () => {
     await oc.turnEnds();
     await spoolEmpty();
     expect(turnsOf(archived(sessionId)!)).toEqual(["Ada: Before disconnect", "Ada: After reconnect"]);
+
+    const newId = "ses_created_after_reconnect";
+    const newSession = await openCode2(newId, after);
+    newSession.session.context = [{ ...v2User("A new conversation", 0), time: { created: after } }];
+    await newSession.turnEnds();
+    await spoolEmpty();
+    expect(archived(newId)).toContain("title: Plan the Orion cutover");
   });
 
   it("does not postpone a due summary when the plugin submits the same turn again", async () => {

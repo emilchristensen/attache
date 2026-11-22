@@ -49,6 +49,15 @@ export function canIngestHarnessSnapshot(state: SessionState, at: string): boole
   return Number.isFinite(ms) && !state.pauses.some(({ from, until }) => ms > from && (until === null || ms < until));
 }
 
+const overlapsPause = (state: SessionState, started: number, ended: number) =>
+  state.pauses.some(({ from, until }) => ended >= from && (until === null || started < until));
+
+/** The Harness's title can describe earlier turns omitted from a partial snapshot. */
+export function sessionMaySpanCapturePause(state: SessionState, createdAt: string | undefined, capturedAt: string): boolean {
+  const created = createdAt ? Date.parse(createdAt) : NaN;
+  return overlapsPause(state, Number.isFinite(created) ? created : -Infinity, Date.parse(capturedAt));
+}
+
 /** A resumed session may include turns the owner wrote while the Connection was off. */
 export function turnsWhileConnected(turns: Turn[], state: SessionState): Turn[] {
   if (!state.pauses.length) return turns;
@@ -56,8 +65,7 @@ export function turnsWhileConnected(turns: Turn[], state: SessionState): Turn[] 
   return turns.filter((turn) => {
     const started = turn.at === null ? NaN : Date.parse(turn.at);
     const ended = turn.completedAt === undefined ? started : turn.completedAt === null ? NaN : Date.parse(turn.completedAt);
-    const allowed = Number.isFinite(started) && Number.isFinite(ended) &&
-      !state.pauses.some(({ from, until }) => ended >= from && (until === null || started < until));
+    const allowed = Number.isFinite(started) && Number.isFinite(ended) && !overlapsPause(state, started, ended);
     if (turn.role === "user") promptAllowed = allowed;
     return allowed && promptAllowed;
   });

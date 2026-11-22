@@ -6,7 +6,7 @@ import type { JobContext } from "../jobs/queue.ts";
 import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { canIngestHarnessSnapshot, harnessSessionState, hasHarnessSessionState, turnsWhileConnected } from "./harness-session-state.ts";
+import { canIngestHarnessSnapshot, harnessSessionState, hasHarnessSessionState, sessionMaySpanCapturePause, turnsWhileConnected } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
 import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
@@ -171,10 +171,15 @@ export class AgentSessions {
       return false;
     }
     // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (!source.partial && existing && available.length < existing.turns) return false;
+    if (!source.partial && existing && available.length < existing.turns) {
+      if (available.length < parsed.turns.length) {
+        this.reportSessionProblem(r.agent, `Attache could not safely update a saved ${source.label} transcript after a pause in capture. Use the wrap-up prompt to keep what the new turns decided.`);
+      }
+      return false;
+    }
     const turns = source.partial ? joinTurns(saved?.turns ?? [], available) : available;
     const cwd = parsed.cwd ?? r.cwd;
-    const paused = !!capture?.pauses.length;
+    const paused = !!capture && (available.length < parsed.turns.length || sessionMaySpanCapturePause(capture, parsed.createdAt, r.at));
     const startedAt = (source.partial || paused ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? (paused ? null : parsed.startedAt) ?? r.at;
     // A Harness's generated title may describe prompts that Attache skipped.
     const title = (paused ? existing?.title : parsed.title) ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;

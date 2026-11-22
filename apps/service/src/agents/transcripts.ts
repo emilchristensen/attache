@@ -23,6 +23,8 @@ export interface ParsedSession {
   title: string | null;
   cwd: string | null;
   startedAt: string | null;
+  /** When the Harness created the session, even if its snapshot starts after a compaction. */
+  createdAt?: string;
   /** Why a transcript gave no turns although it was not empty: the format Attache could not read. */
   problem?: string;
 }

@@ -318,7 +318,11 @@ export class App {
       if (f.id === "sessions") {
         // Every Harness whose memory or session capture needs the feature, whatever it uses (hooks, a plugin or an extension).
         const lifecycle = this.harnesses().filter((h) => h.capabilities.memory !== "none" || h.capabilities.capture !== "none");
-        for (const h of lifecycle) if (this.connections.record(h.kind)?.status === "connected") void this.connections.disconnect(h.kind as ConnectionKind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: h.kind, error: (e as Error).message }));
+        for (const h of lifecycle) {
+          const connection = this.connections.record(h.kind);
+          if (!connection || connection.status === "disconnected") continue;
+          void this.connections.disconnect(h.kind as ConnectionKind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: h.kind, error: (e as Error).message }));
+        }
       }
     }
     this.sessions.refreshContext();
