@@ -62,7 +62,7 @@ let clock = 1795294232000;
 async function copilotRuns(hookType: "agentStop" | "preCompact" | "sessionEnd", id: string, written: CopilotEvent[], extra: Record<string, unknown> = {}) {
   const input = { sessionId: id, timestamp: clock++, cwd: HOME, ...(hookType === "sessionEnd" ? { reason: "user_exit" } : { transcriptPath: eventsFile(id) }), ...extra };
   const command = (JSON.parse(readFileSync(hooksFile, "utf8")) as { hooks: Record<string, Array<{ bash: string }>> }).hooks[hookType]![0]!.bash;
-  const child = spawn("bash", ["-c", command], { env: { ...process.env, HOME } });
+  const child = spawn("bash", ["-c", command], { env: { ...process.env, HOME, USERPROFILE: HOME } });
   let stdout = "";
   child.stdout.on("data", (d) => (stdout += String(d)));
   const closed = new Promise<number | null>((r) => child.on("close", r));

@@ -60,10 +60,12 @@ describe("Pi, OpenCode and Copilot CLI across an Attache upgrade", () => {
 describe("turning Agent sessions off", () => {
   it("disconnects Pi, OpenCode and Copilot CLI and removes their files, as it does for the hook Harnesses", async () => {
     for (const kind of KINDS) await svc.post(`/connections/${kind}/configure`, { method: "mcp", fields: {} });
+    const [openCodePlugin] = (await connection("opencode")).harness!.files;
+    expect(existsSync(openCodePlugin!)).toBe(true);
     await svc.put("/features", { changes: { sessions: false }, cascade: true });
     for (const kind of KINDS) await until(async () => (await connection(kind)).status === "disconnected");
     expect(readdirSync(at(".pi/agent/extensions")).filter((f) => f.startsWith("attache"))).toEqual([]);
-    expect(readdirSync(at(".config/opencode/plugins")).filter((f) => f.startsWith("attache"))).toEqual([]);
+    expect(existsSync(openCodePlugin!)).toBe(false);
     expect(existsSync(at(".copilot/hooks")) ? readdirSync(at(".copilot/hooks")) : []).toEqual([]);
   });
 });
