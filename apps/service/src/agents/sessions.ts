@@ -8,7 +8,7 @@ import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
 import { captureStateForSnapshot, harnessSessionState, hasHarnessSessionState, sessionMaySpanCapturePause, turnsWhileConnected } from "./harness-session-state.ts";
 import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
-import { PARTIAL_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
+import { MANAGED_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
@@ -60,6 +60,7 @@ export class AgentSessions {
   private debounce: NodeJS.Timeout | null = null;
   private onBus: ((ev: { type?: string }) => void) | null = null;
   private stopped = false;
+  private verifyingHarnesses = false;
   private readonly chains = new Map<string, Promise<unknown>>();
 
   constructor(app: App) {
@@ -77,7 +78,8 @@ export class AgentSessions {
 
   start() {
     mkdirSync(spoolDir(this.stateDir), { recursive: true, mode: 0o700 });
-    this.upgradeHarnesses();
+    const verification = this.upgradeHarnesses();
+    this.verifyingHarnesses = verification.length > 0;
     const kick = () => {
       if (this.debounce) clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.tick(), 300);
@@ -95,7 +97,14 @@ export class AgentSessions {
       if (ev.type === "memory.changed" || ev.type === "config.changed") kick();
     };
     this.app.bus.on("event", this.onBus);
-    this.tick();
+    if (this.verifyingHarnesses) {
+      // Repair clears the old Connection error. Let that finish before the
+      // spool can report any new transcript error.
+      void Promise.all(verification).then(() => {
+        this.verifyingHarnesses = false;
+        this.tick();
+      });
+    } else this.tick();
   }
 
   stop() {
@@ -121,7 +130,7 @@ export class AgentSessions {
 
   /** Archive every spooled transcript and queue its summary. Records stay spooled while the feature is off. */
   ingest(): { ingested: number } {
-    if (!this.enabled()) return { ingested: 0 };
+    if (this.verifyingHarnesses || !this.enabled()) return { ingested: 0 };
     let ingested = 0;
     for (const r of listSpool(this.stateDir)) {
       try {
@@ -164,21 +173,18 @@ export class AgentSessions {
     const available = capture ? turnsWhileConnected(parsed.turns, capture) : parsed.turns;
     if (!available.length) return false;
     const existing = this.row(r.agent, r.sessionId);
-    // A plugin snapshot may hold only part of the session. Keep its archived turns if the merge state was lost.
-    const saved = source.partial && existing ? this.readCache(r.agent, r.sessionId) : null;
-    if (source.partial && existing && (!saved || saved.turns.length < existing.turns)) {
+    // Partial snapshots omit compacted or branched history. A complete
+    // Copilot CLI copy can also omit authorised turns once pauses are filtered.
+    const joins = source.partial || (managed === "copilot-cli" && !!capture?.pauses.length);
+    const saved = joins && existing ? this.readCache(r.agent, r.sessionId) : null;
+    if (joins && existing && (!saved || saved.turns.length < existing.turns)) {
       this.app.log.warn("could not join new turns to a saved agent session", { agent: r.agent, sessionId: r.sessionId });
       this.reportSessionProblem(r.agent, `Attache could not join new turns to a saved ${source.label} session because its local session state is missing or incomplete. Use the wrap-up prompt to keep what the new turns decided.`);
       return false;
     }
-    // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (!source.partial && existing && available.length < existing.turns) {
-      if (available.length < parsed.turns.length) {
-        this.reportSessionProblem(r.agent, `Attache could not safely update a saved ${source.label} transcript after a pause in capture. Use the wrap-up prompt to keep what the new turns decided.`);
-      }
-      return false;
-    }
-    const turns = source.partial ? joinTurns(saved?.turns ?? [], available) : available;
+    // Without a join, a later copy of the same session is a superset.
+    if (!joins && existing && available.length < existing.turns) return false;
+    const turns = joins ? joinTurns(saved?.turns ?? [], available) : available;
     const cwd = parsed.cwd ?? r.cwd;
     const paused = !!capture && (available.length < parsed.turns.length || sessionMaySpanCapturePause(capture, parsed.createdAt, r.at));
     const startedAt = (source.partial || paused ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? (paused ? null : parsed.startedAt) ?? r.at;
@@ -202,7 +208,7 @@ export class AgentSessions {
   /**
    * The summariser's copy of a session's saved turns; null when there is none.
    * A copy that no longer parses is removed and logged once.
-   * Partial snapshots cannot replace an existing archive if its state was lost.
+   * Snapshots that require a join cannot replace the archive if its state was lost.
    */
   private readCache(agent: string, sessionId: string): CachedSession | null {
     const file = this.cachePath(agent, sessionId);
@@ -284,12 +290,12 @@ export class AgentSessions {
 
   /**
    * Drop the cache of a fully summarised transcript after a quiet week.
-   * Partial sources need their redacted turns and IDs to join later snapshots,
-   * which may arrive after OpenCode has compacted away its copy of those turns.
+   * Managed Harnesses need redacted turns and IDs to join later snapshots
+   * after a compaction, branch switch or capture pause.
    */
   private pruneCaches() {
     const cutoff = new Date(Date.now() - CACHE_RETENTION_MS).toISOString();
-    const done = this.app.db.prepare(`select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ? and agent not in (${placeholders(PARTIAL_SOURCE_KINDS)})`).all(cutoff, ...PARTIAL_SOURCE_KINDS) as Array<{ agent: string; session_id: string }>;
+    const done = this.app.db.prepare(`select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ? and agent not in (${placeholders(MANAGED_SOURCE_KINDS)})`).all(cutoff, ...MANAGED_SOURCE_KINDS) as Array<{ agent: string; session_id: string }>;
     for (const d of done) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
   }
 
@@ -424,7 +430,8 @@ export class AgentSessions {
    * Copilot CLI) are refreshed, and the save and audit skills earlier
    * versions installed are removed, since the MCP prompts replace them.
    */
-  private upgradeHarnesses() {
+  private upgradeHarnesses(): Promise<unknown>[] {
+    const verification: Promise<unknown>[] = [];
     const skills = removeLegacySkills(agentHome(), this.stateDir);
     if (skills.removed.length) this.app.log.info("removed the save and audit skills the MCP prompts replace", { folders: skills.removed });
     for (const e of skills.errors) this.app.log.warn("could not remove an earlier version's skill folder", e);
@@ -445,12 +452,13 @@ export class AgentSessions {
         const r = h.refresh();
         if (r.changes.length) this.app.log.info("brought Attache's files in a Harness up to date", { agent: h.kind, files: r.changes.map((c) => c.path), backups: r.backups });
         if (connection.status !== "connected" && h.status().state === "current") {
-          void this.app.connections.test(connection.id).catch((e) => this.app.log.warn("could not verify a repaired Harness Connection", { agent: h.kind, error: (e as Error).message }));
+          verification.push(this.app.connections.test(connection.id).catch((e) => this.app.log.warn("could not verify a repaired Harness Connection", { agent: h.kind, error: (e as Error).message })));
         }
       } catch (e) {
         this.app.log.warn("could not bring Attache's files in a Harness up to date", { agent: h.kind, error: (e as Error).message });
       }
     }
+    return verification;
   }
 
   /** The current context text, for installing an agent before the first refresh. */

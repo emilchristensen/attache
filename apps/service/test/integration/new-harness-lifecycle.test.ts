@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appendFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { spoolText } from "../../src/agents/spool.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
 /**
@@ -16,6 +17,7 @@ const KINDS = ["pi", "opencode", "copilot-cli"] as const;
 interface Status {
   kind?: string;
   status: string;
+  lastError?: string | null;
   harness?: { state: string; message: string; files: string[] };
 }
 
@@ -55,9 +57,13 @@ describe("Pi, OpenCode and Copilot CLI across an Attache upgrade", () => {
     expect((await connection("opencode")).status).toBe("error");
     const { stateDir, dataDir } = svc;
     await svc.stop();
+    spoolText(stateDir, { agent: "opencode", event: "pre-compact", sessionId: "old-plugin-format", cwd: null }, JSON.stringify({
+      attache: "opencode-session", v: 1, opencode: 2, shape: "v2-request", sessionID: "old-plugin-format", messages: [],
+    }));
     svc = await startTestService({ stateDir, dataDir });
     for (const kind of KINDS) expect((await connection(kind)).harness?.state, kind).toBe("current");
     await until(async () => (await connection("opencode")).status === "connected");
+    expect((await connection("opencode")).lastError).toMatch(/could not read an? OpenCode session.*Restart OpenCode/i);
   });
 });
 

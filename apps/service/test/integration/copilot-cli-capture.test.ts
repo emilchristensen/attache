@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,6 +7,7 @@ import { startTestService, type TestService } from "./harness.ts";
 import { startFixtureServer, type FixtureServer } from "../fixtures/fixture-server.ts";
 import { installFixtureModel } from "../fixtures/fixture-model.ts";
 import { MEMORY, SECRET, SESSION, SIDE, TOOL_OUTPUT, assistant, compaction, event, events, hook, memoryHook, normal, readTool, resume, shutdown, start, subagent, turn, turnEnd, user, type CopilotEvent } from "../fixtures/agents/copilot-cli.ts";
+import { harnessCaptureGrant } from "../../src/agents/harness-session-state.ts";
 import { spoolCapture, spoolDir } from "../../src/agents/spool.ts";
 
 /**
@@ -176,5 +177,57 @@ describe("Copilot CLI session capture", () => {
     await spoolEmpty();
     expect(archived(id)).toBeNull();
     expect(warnings().some((e) => e.data?.sessionId === id)).toBe(false);
+  });
+
+  it("keeps an authorised boundary answer and excludes an answer that ran across the pause after reconnect", async () => {
+    const id = "resume-across-capture-pause";
+    const sourcePath = eventsFile(id);
+    mkdirSync(dirname(sourcePath), { recursive: true });
+    const cutoff = Date.now();
+    const at = (e: CopilotEvent, offset: number) => ({ ...e, timestamp: new Date(cutoff + offset).toISOString() });
+    const before = [
+      at(start(), -20),
+      at(user("Finish this before disconnect", 0), -10),
+      ...turn(0, "1").map((e) => at(e, -9)),
+      at(assistant("Authorised at the cutoff", 0), 0),
+      at(turnEnd(0, "1"), 0),
+      at(user("Start a second response", 0, { delivery: "steering" }), -1),
+    ];
+    const input = { agent: "copilot-cli", event: "turn-end", sessionId: id, cwd: HOME, sourcePath } as const;
+    vi.setSystemTime(cutoff);
+    try {
+      writeFileSync(sourcePath, events(before));
+      const captureGrant = harnessCaptureGrant(svc.stateDir, "copilot-cli")!;
+      expect(captureGrant).toBeTruthy();
+      spoolCapture(svc.stateDir, { ...input, captureGrant });
+      await svc.post("/connections/copilot-cli/disconnect", { deleteData: false });
+      expect(svc.app.sessions.ingest().ingested).toBe(1);
+      expect(archived(id)).toContain("Authorised at the cutoff");
+
+      vi.setSystemTime(cutoff + 10);
+      await svc.post("/connections/copilot-cli/configure", { method: "hooks", fields: {} });
+      vi.setSystemTime(cutoff + 20);
+      appendFileSync(sourcePath, events([
+        ...turn(0, "2").map((e) => at(e, 5)),
+        at(assistant("Response streamed during the pause", 0), 12),
+        at(turnEnd(0, "2"), 13),
+        at(user("A fresh question", 0), 14),
+        ...turn(0, "3").map((e) => at(e, 15)),
+        at(assistant("A fresh answer", 0), 16),
+        at(turnEnd(0, "3"), 17),
+      ]));
+      spoolCapture(svc.stateDir, { ...input, captureGrant: harnessCaptureGrant(svc.stateDir, "copilot-cli")! });
+      expect(svc.app.sessions.ingest().ingested).toBe(1);
+      expect(turnsOf(archived(id)!)).toEqual([
+        "Ada: Finish this before disconnect",
+        "Copilot CLI: Authorised at the cutoff",
+        "Ada: Start a second response",
+        "Ada: A fresh question",
+        "Copilot CLI: A fresh answer",
+      ]);
+    } finally {
+      vi.useRealTimers();
+      await svc.post("/connections/copilot-cli/configure", { method: "hooks", fields: {} });
+    }
   });
 });

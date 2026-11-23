@@ -29,7 +29,7 @@ export interface SessionSource {
   strict?: true;
 }
 
-const PLUGIN_SOURCES: Record<string, SessionSource> = {
+const MANAGED_SOURCES: Record<string, SessionSource> = {
   opencode: { label: "OpenCode", parse: parseOpenCode, partial: true },
   pi: { label: "Pi", parse: parsePi, partial: true },
   // Copilot CLI's hooks copy its whole events.jsonl, which it only appends to: each copy holds every earlier one.
@@ -39,7 +39,7 @@ const PLUGIN_SOURCES: Record<string, SessionSource> = {
 export function sessionSourceFor(kind: string): SessionSource | null {
   const hooks = integrationFor(kind);
   if (hooks?.hooks) return { label: hooks.label, parse: hooks.hooks.parseTranscript };
-  return PLUGIN_SOURCES[kind] ?? null;
+  return MANAGED_SOURCES[kind] ?? null;
 }
 
-export const PARTIAL_SOURCE_KINDS = Object.keys(PLUGIN_SOURCES).filter((k) => PLUGIN_SOURCES[k]!.partial);
+export const MANAGED_SOURCE_KINDS = Object.keys(MANAGED_SOURCES);

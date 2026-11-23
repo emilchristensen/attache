@@ -364,6 +364,8 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     const doc = archived(captured)!;
     expect(turnsOf(doc)).toEqual([`Ada Lovelace: Look at the notes ${READ_SECRET}`, "Copilot CLI: I read the file and left it alone."]);
     const cache = readFileSync(join(svc.stateDir, "agents/sessions/copilot-cli", `${captured}.json`), "utf8");
+    // The real transcript supplies the root turn start as well as the answer timestamp.
+    expect(JSON.parse(cache).turns[1]).toMatchObject({ at: expect.any(String), completedAt: expect.any(String) });
     for (const text of [doc, cache]) for (const marker of [TOOL_OUTPUT, SECRET, "attache-memory", "Orion migration", "Vega launch"]) expect(text).not.toContain(marker);
   });
 
