@@ -49,10 +49,10 @@ describe("Copilot CLI sessions", () => {
   });
 
   it("uses the matching root turn's start and never borrows it for another interaction", () => {
-    const sideTurn = event("assistant.turn_start", 3, { turnId: "side", interactionId: "i1", parentToolCallId: "call_1" });
+    const sideTurn = event("assistant.turn_start", 3, { turnId: "side", interactionId: "child", parentToolCallId: "call_1" });
     const p = parseCopilotCli(events([
       start(), user("Go", 1), ...turn(2), sideTurn,
-      assistant("Other interaction", 4, { interactionId: "different" }),
+      assistant("Other interaction", 4, { interactionId: "child" }),
       assistant("Root response", 5), turnEnd(6),
     ]));
     expect(p.turns.slice(1)).toMatchObject([
