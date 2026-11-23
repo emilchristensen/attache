@@ -39,7 +39,7 @@ export const hook = (hookType: string, at: number, output?: unknown) => [
 ];
 /** Attache's sessionStart hook output: Copilot CLI keeps it only on the hook's end event. */
 export const memoryHook = (at: number) => hook("sessionStart", at, { additionalContext: `<attache-memory>\n${MEMORY}\n</attache-memory>` });
-export const turn = (at: number, id = "0") => [event("assistant.turn_start", at, { turnId: id, interactionId: "i1", agentMode: "interactive" }), event("session.usage_record", at, { usage: { model: "stand-in" } })];
+export const turn = (at: number, id = "0", interactionId = "i1") => [event("assistant.turn_start", at, { turnId: id, interactionId, agentMode: "interactive" }), event("session.usage_record", at, { usage: { model: "stand-in" } })];
 export const turnEnd = (at: number, id = "0") => event("assistant.turn_end", at, { turnId: id });
 
 /** A tool reading a secret-bearing file: the call, its execution, and its output. */

@@ -626,7 +626,8 @@ A subagent's `agentStop` carries `agentId` and the parent's `transcriptPath` and
 The file only grows: compaction (`session.compaction_start`/`_complete`, the summary in `summaryContent`) and `--resume` (`session.resume`) append to it, so every copy holds every earlier copy.
 The service takes the newest copy in full until a capture pause, then joins eligible turns by message ID.
 `agents/copilot-cli-transcript.ts` reads it: the first event must be `session.start` with `data.version` 1 and `producer` `copilot-agent`; `user.message` `data.content` (not `transformedContent`) and `assistant.message` `data.content` are the turns; events with `agentId`, user messages with a `source` or `isAutopilotContinuation`, assistant messages with `parentToolCallId` or `phase: "thinking"` are dropped, as are whole kinds (`session`, `hook` where the memory is, `tool`, `subagent`, `system`, `skill`, `instruction`, `permission`) and turn markers; any other event type, version, producer or content shape yields no turns and a `problem` naming the Copilot CLI events format.
-Attache uses the root assistant turn's start and the response event's timestamp to exclude answers that overlap a capture pause.
+Attache uses the first root assistant turn's timestamp in each interaction and the response timestamp to exclude answers that overlap a capture pause.
+Tool follow-ups share that first timestamp because they can carry text from an earlier model call.
 A partly written last line is left for the next copy; a file with nothing said is no failure (`SessionSource.strict`).
 Only a Copilot CLI killed or crashing mid-turn can lose that turn; `sessionEnd` fires on exit, on `-p` completion and when the terminal closes (seen).
 The smoke test runs a session that reads a secret-bearing file with the `view` tool, resumes it and (with python3) `/compact`s it, and checks the archive holds only the owner's and Copilot CLI's words, each once.

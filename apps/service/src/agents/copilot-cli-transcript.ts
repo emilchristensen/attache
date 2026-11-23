@@ -27,7 +27,7 @@ const VERSIONS = new Set([1]);
 /** Kinds of event that never hold the owner's or the assistant's words, by the part of the type before the dot. */
 const SKIPPED_KINDS = new Set(["session", "hook", "tool", "subagent", "system", "skill", "instruction", "permission"]);
 /** Events of the conversation's own kinds that are not its words. */
-const SKIPPED_TYPES = new Set(["assistant.reasoning", "assistant.message_delta", "assistant.intent", "assistant.usage", "user.message_queued"]);
+const SKIPPED_TYPES = new Set(["assistant.turn_end", "assistant.reasoning", "assistant.message_delta", "assistant.intent", "assistant.usage", "user.message_queued"]);
 /** Phases of an assistant message: only its response is what it said. */
 const PHASES = new Map<unknown, boolean>([
   [undefined, true],
@@ -62,9 +62,7 @@ function eventsOf(raw: string): unknown[] {
   });
 }
 
-type AssistantTurn = { id: string | null; interaction: string | null; startedAt: string | null };
-
-function turnOf(e: Record<string, unknown>, active: AssistantTurn | null): Turn | null {
+function turnOf(e: Record<string, unknown>, interactionStarts: ReadonlyMap<string, string | null>): Turn | null {
   if (e.agentId !== undefined && e.agentId !== null) return null;
   const d = isObject(e.data) ? e.data : unreadable(`a ${String(e.type)} event without data`);
   const role = e.type === "user.message" ? "user" : "assistant";
@@ -82,7 +80,8 @@ function turnOf(e: Record<string, unknown>, active: AssistantTurn | null): Turn 
   if (role === "user") return { role, text, at: timestamp, id };
   // The response event marks completion. Without a matching start we cannot
   // prove that an answer stayed inside a capture window.
-  const at = active?.interaction && active.interaction === str(d.interactionId) ? active.startedAt : null;
+  const interaction = str(d.interactionId);
+  const at = interaction ? interactionStarts.get(interaction) ?? null : null;
   return { role, text, at, completedAt: timestamp, id };
 }
 
@@ -103,20 +102,21 @@ export function parseCopilotCli(raw: string): ParsedSession {
   const cwd = isObject(context) ? str(context.cwd) : null;
   const format = `Copilot CLI events format version ${String(version)}`;
   const turns: Turn[] = [];
-  let active: AssistantTurn | null = null;
+  // One Copilot CLI interaction can make several model calls around tools.
+  // A follow-up can repeat text from any earlier call in the interaction.
+  const interactionStarts = new Map<string, string | null>();
   try {
     for (const e of list) {
       if (!isObject(e)) unreadable("a line that is not an event");
       if (typeof e.type !== "string") unreadable("an event without a type");
-      if (e.type === "assistant.turn_start" || e.type === "assistant.turn_end") {
+      if (e.type === "assistant.turn_start") {
         if (e.agentId != null || !isObject(e.data) || e.data.parentToolCallId != null) continue;
-        const id = str(e.data.turnId);
-        if (e.type === "assistant.turn_start") active = { id, interaction: str(e.data.interactionId), startedAt: str(e.timestamp) };
-        else if (active?.id === id) active = null;
+        const interaction = str(e.data.interactionId);
+        if (interaction && !interactionStarts.has(interaction)) interactionStarts.set(interaction, str(e.timestamp));
         continue;
       }
       if (e.type === "user.message" || e.type === "assistant.message") {
-        const t = turnOf(e, active);
+        const t = turnOf(e, interactionStarts);
         if (t) turns.push(t);
         continue;
       }

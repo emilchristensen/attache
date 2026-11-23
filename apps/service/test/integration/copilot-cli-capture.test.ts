@@ -179,7 +179,7 @@ describe("Copilot CLI session capture", () => {
     expect(warnings().some((e) => e.data?.sessionId === id)).toBe(false);
   });
 
-  it("keeps an authorised boundary answer and excludes an answer that ran across the pause after reconnect", async () => {
+  it("keeps an authorised boundary answer and excludes all tool follow-ups of a paused interaction", async () => {
     const id = "resume-across-capture-pause";
     const sourcePath = eventsFile(id);
     mkdirSync(dirname(sourcePath), { recursive: true });
@@ -188,8 +188,8 @@ describe("Copilot CLI session capture", () => {
     const before = [
       at(start(), -20),
       at(user("Finish this before disconnect", 0), -10),
-      ...turn(0, "1").map((e) => at(e, -9)),
-      at(assistant("Authorised at the cutoff", 0), 0),
+      ...turn(0, "1", "first").map((e) => at(e, -9)),
+      at(assistant("Authorised at the cutoff", 0, { interactionId: "first" }), 0),
       at(turnEnd(0, "1"), 0),
       at(user("Start a second response", 0, { delivery: "steering" }), -1),
     ];
@@ -208,13 +208,16 @@ describe("Copilot CLI session capture", () => {
       await svc.post("/connections/copilot-cli/configure", { method: "hooks", fields: {} });
       vi.setSystemTime(cutoff + 20);
       appendFileSync(sourcePath, events([
-        ...turn(0, "2").map((e) => at(e, 5)),
-        at(assistant("Response streamed during the pause", 0), 12),
+        ...turn(0, "2", "crossed").map((e) => at(e, 5)),
+        at(assistant("Streamed while paused: private tool marker", 0, { interactionId: "crossed" }), 12),
         at(turnEnd(0, "2"), 13),
-        at(user("A fresh question", 0), 14),
-        ...turn(0, "3").map((e) => at(e, 15)),
-        at(assistant("A fresh answer", 0), 16),
-        at(turnEnd(0, "3"), 17),
+        ...turn(0, "3", "crossed").map((e) => at(e, 14)),
+        at(assistant("Tool follow-up repeats the private tool marker", 0, { interactionId: "crossed" }), 15),
+        at(turnEnd(0, "3"), 16),
+        at(user("A fresh question", 0), 17),
+        ...turn(0, "4", "fresh").map((e) => at(e, 18)),
+        at(assistant("A fresh answer", 0, { interactionId: "fresh" }), 19),
+        at(turnEnd(0, "4"), 20),
       ]));
       spoolCapture(svc.stateDir, { ...input, captureGrant: harnessCaptureGrant(svc.stateDir, "copilot-cli")! });
       expect(svc.app.sessions.ingest().ingested).toBe(1);
@@ -225,6 +228,7 @@ describe("Copilot CLI session capture", () => {
         "Ada: A fresh question",
         "Copilot CLI: A fresh answer",
       ]);
+      expect(cacheOf(id)).not.toContain("private tool marker");
     } finally {
       vi.useRealTimers();
       await svc.post("/connections/copilot-cli/configure", { method: "hooks", fields: {} });
