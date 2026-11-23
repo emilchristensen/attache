@@ -44,7 +44,7 @@ Without the executable on `PATH` or named, a smoke test is skipped, and a skippe
 
 ## Last verified
 
-All runs on macOS 26.6.2 (Darwin 25.6.0, Apple silicon) on 2026-11-23, at commit `ef1c5a6`.
+All runs on macOS 26.6.2 (Darwin 25.6.0, Apple silicon) on 2026-11-23, at commit `1bc7d72`.
 
 | Harness | Version | Smoke test result |
 |---|---|---|
