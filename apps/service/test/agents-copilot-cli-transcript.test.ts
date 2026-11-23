@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCopilotCli } from "../src/agents/copilot-cli-transcript.ts";
-import { MEMORY, SECRET, SIDE, SUBAGENT, TOOL_OUTPUT, assistant, compaction, event, events, hook, memoryHook, normal, readTool, resume, shutdown, start, subagent, system, turn, turnEnd, user } from "./fixtures/agents/copilot-cli.ts";
+import { MEMORY, SECRET, SIDE, SUBAGENT, TOOL_OUTPUT, assistant, compaction, event, events, hook, iso, memoryHook, normal, readTool, resume, shutdown, start, subagent, system, turn, turnEnd, user } from "./fixtures/agents/copilot-cli.ts";
 
 /**
  * Copilot CLI's events.jsonl, as Attache's hooks copy it, normalised to the
@@ -45,6 +45,19 @@ describe("Copilot CLI sessions", () => {
       ["user", "Go"],
       ["user", "Also check the docs"],
       ["assistant", "Done"],
+    ]);
+  });
+
+  it("uses the matching root turn's start and never borrows it for another interaction", () => {
+    const sideTurn = event("assistant.turn_start", 3, { turnId: "side", interactionId: "i1", parentToolCallId: "call_1" });
+    const p = parseCopilotCli(events([
+      start(), user("Go", 1), ...turn(2), sideTurn,
+      assistant("Other interaction", 4, { interactionId: "different" }),
+      assistant("Root response", 5), turnEnd(6),
+    ]));
+    expect(p.turns.slice(1)).toMatchObject([
+      { text: "Other interaction", at: null, completedAt: iso(4) },
+      { text: "Root response", at: iso(2), completedAt: iso(5) },
     ]);
   });
 
