@@ -1,3 +1,11 @@
+/**
+ * The owner's journeys through the whole product, in order: pairing and onboarding, then Home, search, the Inbox,
+ * Drafts, Jobs, wording, feature switches, this Machine, credentials, narrow layouts, the Brain, Approvals,
+ * reconnecting and Replication, driven through the Dashboard against the real bundled service and the TEST-ONLY
+ * fixtures. The tests run serially and share one stack: later tests rely on the pairing and onboarding the first
+ * ones do, so this file runs whole (`pnpm e2e`, or `npx playwright test tests/e2e/journeys.spec.ts`), never one test
+ * picked with `-g`.
+ */
 import { test, expect, type Page, type BrowserContextOptions, type BrowserType, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
