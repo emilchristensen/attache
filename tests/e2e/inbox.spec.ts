@@ -7,7 +7,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser } from "./browser.ts";
-import { inboxRow, inboxView, openRow } from "./inbox.ts";
+import { inboxRow, inboxType, inboxView, openRow, typeChoices } from "./inbox.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -60,7 +60,6 @@ test.afterAll(async () => {
 });
 
 const rows = (page: Page) => page.locator("#inbox [data-inbox-row]");
-const typePicker = (page: Page) => page.locator("#inbox").getByRole("combobox", { name: "Type" });
 
 /** What tells a row's type apart: the word, the glyph's drawing and the word's colour. */
 async function typeOf(row: Locator) {
@@ -83,9 +82,9 @@ test("rows: kind stamp and word, subject, source line and time; a review request
   // The subject is the row's own words, without the verb the kind word already says.
   await expect(review.locator("[data-row-toggle]")).toHaveText("Add checkout retry");
   await expect(review.locator(".inbox-time")).toHaveText(/^\d\d:\d\d$|^Yesterday$|^\d+ \w{3}$/);
-  // The kind column is about 185 px, with a 34 px stamp and a 19 px glyph.
+  // The kind column is 150 px in the Inbox's two thirds (185 px at full width), with a 34 px stamp and a 19 px glyph.
   const kind = (await review.locator(".inbox-kind").boundingBox())!;
-  expect(Math.round(kind.width)).toBe(185);
+  expect(Math.round(kind.width)).toBe(150);
   const stamp = (await review.locator(".type-icon").boundingBox())!;
   expect([Math.round(stamp.width), Math.round(stamp.height)]).toEqual([34, 34]);
   expect(Math.round((await review.locator(".type-icon svg").boundingBox())!.width)).toBe(19);
@@ -171,13 +170,13 @@ test("order and pages: service priority by default, twenty rows with a range and
 test("type picker and views: counts in the options, one type, Newest first, Group by type with three previews and Show all, and Hidden", async () => {
   const page = await journeys.open("/");
   await expect(rows(page).first()).toBeVisible();
-  const options = await typePicker(page).locator("option").allTextContents();
-  expect(options[0]).toMatch(/^All types \(\d+\)$/);
-  expect(options).toEqual(expect.arrayContaining([`Deadline (${RELEASE_TASKS.length + 3})`, "Review request (2)", "Pending reply (1)"]));
-  await typePicker(page).selectOption({ label: "Pending reply (1)" });
+  const options = await typeChoices(page);
+  expect(options[0]).toMatch(/^All types \d+$/);
+  expect(options).toEqual(expect.arrayContaining([`Deadline ${RELEASE_TASKS.length + 3}`, "Review request 2", "Pending reply 1"]));
+  await inboxType(page, "Pending reply");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Contract renewal");
-  await typePicker(page).selectOption({ index: 0 });
+  await inboxType(page, "All types");
 
   // Newest first keeps every type: the same total, newest first seen at the top.
   const total = (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length;
@@ -454,15 +453,14 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   await page.screenshot({ path: "test-results/screens/narrow-home-inbox-head.png" });
   // On a narrow window Show new items' place shows the range while nothing waits, at the button's height.
   await expect(page.locator(".inbox-tools-range")).toHaveText(/^1–20 of \d+$/);
-  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
-  const deadline = (await typePicker(page).locator("option").allTextContents()).find((o) => o.startsWith("Deadline ("))!;
-  await typePicker(page).selectOption({ label: deadline });
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(44);
+  await inboxType(page, "Deadline");
   await expect(rows(page).first()).toHaveAttribute("data-type", "deadline");
   await inboxView(page, "Newest first");
   // Group by type keeps Show new items' place too, with the count in it.
   await inboxView(page, "Group by type");
   await expect(page.locator(".inbox-tools-range")).toHaveText(/^\d+ items$/);
-  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(44);
   await inboxView(page, "Priority order");
   const long = inboxRow(page, LONG);
   await long.scrollIntoViewIfNeeded();
@@ -478,7 +476,7 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   expect(text).toBeLessThan(source!);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   // The last row and its actions stay above the bottom bar.
-  await typePicker(page).selectOption({ index: 0 });
+  await inboxType(page, "All types");
   await page.getByRole("button", { name: "Load more" }).click();
   const last = rows(page).last();
   await openRow(last);

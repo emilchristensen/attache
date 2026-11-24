@@ -29,9 +29,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
-  font-size: var(--fs-body);
-  font-weight: 600;
-  color: var(--ink);
+  font-size: var(--fs-control);
+  color: var(--ink-2);
 }
 .count-line {
   margin: var(--s-1) 0 0;
@@ -45,12 +44,13 @@
   gap: var(--s-2);
   margin-left: auto;
 }
-select.inbox-picker {
-  width: auto;
-  max-width: 100%;
-  font-size: var(--fs-control);
+/* Show new items and the two menus are small buttons, as tall as the heading's line. */
+.inbox-tools > button,
+.inbox-tools .choice-menu-trigger {
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: var(--fs-meta);
   line-height: 20px;
-  padding: 7px 10px;
 }
 /* Show new items keeps its place while nothing waits, so its arrival never moves the list. */
 .inbox-show-new:not([data-waiting]) {
@@ -73,38 +73,59 @@ select.inbox-picker {
 .inbox-row {
   border-bottom: 1px solid var(--rule);
 }
-/* Kind (stamp and word, about 185 px), the subject with its source line, and the time. */
+/*
+ * One line per row, as the mockups draw it: kind (stamp and word, about 185 px), the subject with its source line,
+ * the time, then the row's own actions. The row answers its list's width: in a two-thirds space the time moves onto
+ * the source line and Snooze and Done become icons; in a half or narrower space it takes its narrow form (below).
+ */
 .inbox-line {
   position: relative;
   display: grid;
-  grid-template-columns: 185px minmax(0, 1fr) auto;
+  grid-template-columns: 185px minmax(0, 1fr) auto auto;
   align-items: center;
   column-gap: 14px;
-  padding: 14px 4px;
+  padding: 10px 4px;
 }
 .inbox-row:not(.decided) > .inbox-line:hover {
   background: var(--row-hover);
 }
 .inbox-row-actions {
-  grid-column: 2 / -1;
   display: flex;
   align-items: center;
-  gap: var(--s-2);
-  margin-top: var(--s-2);
+  gap: 2px;
   position: relative;
   z-index: 1;
 }
+.inbox-row-actions button {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: var(--fs-meta);
+  line-height: 20px;
+}
+/* Start working is outlined; Snooze is plain with a caret; Done is a green check and its word, never the primary. */
 .inbox-row-actions > .inbox-start {
-  border: 1px solid var(--ink);
+  margin-right: var(--s-1);
+  border-color: var(--ink);
   background: transparent;
 }
 .inbox-row-secondary {
   display: contents;
 }
 .inbox-row-secondary button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
+  gap: 4px;
+  padding-inline: 8px;
+  border-color: transparent;
+  background: transparent;
+}
+.inbox-row-secondary .inbox-done-button {
+  color: var(--green);
+}
+.inbox-action-icon {
+  display: none;
+}
+.inbox-snooze-caret {
+  transform: rotate(90deg);
+  color: var(--ink-3);
 }
 .inbox-actions-menu {
   display: none;
@@ -122,6 +143,13 @@ select.inbox-picker {
 }
 .inbox-not-started {
   margin-left: calc(185px + 14px + 4px);
+}
+/* The snooze times hang under their button, at the right edge of a row whose actions end the line. */
+.inbox-row-actions .inbox-snooze {
+  left: auto;
+  right: 0;
+  width: max-content;
+  max-width: min(360px, 100cqi);
 }
 .inbox-kind {
   display: flex;
@@ -160,21 +188,6 @@ button.inbox-subject::after {
   content: "";
   position: absolute;
   inset: 0;
-}
-/*
- * On a touch screen the subject is its own 44 px target rather than the whole line: the line holds the row's own
- * actions, and a tap meant for the line must never land on Start working, Snooze or Done.
- */
-@media (pointer: coarse) {
-  button.inbox-subject {
-    position: relative;
-    z-index: 2;
-    min-height: 44px;
-  }
-  button.inbox-subject::after {
-    content: none;
-    position: static;
-  }
 }
 .inbox-source {
   display: flex;
@@ -316,57 +329,61 @@ a.source-chip {
   color: var(--ink-2);
 }
 
-@container (max-width: 620px) {
-  .inbox-row-secondary button span {
+/* ---- a two-thirds space: Snooze and Done as icons with their full names, the time under them ---------------------- */
+
+@container (max-width: 800px) {
+  .inbox-line {
+    grid-template-columns: 150px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "kind subject actions"
+      "kind source time";
+    row-gap: 2px;
+  }
+  .inbox-main {
+    display: contents;
+  }
+  .inbox-kind {
+    grid-area: kind;
+  }
+  button.inbox-subject {
+    grid-area: subject;
+  }
+  .inbox-source {
+    grid-area: source;
+    margin: 0;
+  }
+  .inbox-time {
+    grid-area: time;
+  }
+  .inbox-row-actions {
+    grid-area: actions;
+  }
+  .inbox-row.decided > .inbox-line {
+    grid-template-areas: "kind subject actions";
+  }
+  .inbox-decided {
+    grid-area: subject;
+  }
+  .inbox-undo {
+    grid-area: actions;
+  }
+  .inbox-action-icon {
+    display: block;
+  }
+  .inbox-action-word,
+  .inbox-snooze-caret {
     display: none;
   }
   .inbox-row-secondary button {
-    width: 36px;
+    width: 32px;
     padding-inline: 0;
     justify-content: center;
   }
-}
-
-@container (max-width: 440px) {
-  button.inbox-subject {
-    position: relative;
-    z-index: 2;
-    min-height: 44px;
+  .inbox-detail {
+    padding-left: calc(150px + 14px + 4px);
   }
-  button.inbox-subject::after {
-    content: none;
-    position: static;
-  }
-  .inbox-row-actions {
-    grid-column: 1 / -1;
-  }
-  .inbox-actions-menu {
-    display: inline-flex;
-  }
-  .inbox-row-actions > .inbox-start {
-    display: none;
-  }
-  .inbox-row-actions:has(.inbox-row-secondary[data-open]) > .inbox-start {
-    display: inline-flex;
-  }
-  .inbox-row-secondary {
-    display: none;
-    grid-column: 1 / -1;
-  }
-  .inbox-row-secondary[data-open] {
-    display: flex;
-    flex-basis: 100%;
-    gap: var(--s-2);
-  }
-  .inbox-row-secondary button {
-    width: auto;
-    padding-inline: var(--s-3);
-  }
-  .inbox-row-secondary button span {
-    display: inline;
-  }
-  .inbox-row-actions {
-    flex-wrap: wrap;
+  .inbox-not-started {
+    margin-left: calc(150px + 14px + 4px);
   }
 }
 
@@ -416,7 +433,7 @@ a.source-chip {
 
 /* ---- narrow: stamp and kind first, the whole subject next, then source and time ------------------------- */
 
-@container (max-width: 540px) {
+@container (max-width: 600px) {
   .inbox-tools {
     margin-left: 0;
     flex: 1 1 100%;
@@ -442,17 +459,56 @@ a.source-chip {
     font-size: var(--fs-meta);
     color: var(--ink-2);
   }
-  select.inbox-picker {
+  .inbox-tools .choice-menu-trigger {
     width: 100%;
+    justify-content: space-between;
   }
   .inbox-line {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "kind kind"
       "subject subject"
-      "source time";
+      "source time"
+      "actions actions";
     row-gap: var(--s-1);
     padding: var(--s-3) 2px;
+  }
+  /* One Actions button; open, it shows Start working, Snooze and Done with their words. */
+  .inbox-row-actions {
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin-top: var(--s-1);
+  }
+  .inbox-actions-menu {
+    display: inline-flex;
+  }
+  .inbox-row-actions > .inbox-start {
+    display: none;
+    margin-right: 0;
+  }
+  .inbox-row-actions:has(.inbox-row-secondary[data-open]) > .inbox-start {
+    display: inline-flex;
+  }
+  .inbox-row-secondary {
+    display: none;
+  }
+  .inbox-row-secondary[data-open] {
+    display: flex;
+    flex-basis: 100%;
+    gap: var(--s-2);
+  }
+  .inbox-row-secondary button {
+    width: auto;
+    padding-inline: var(--s-3);
+    border-color: var(--line);
+    background: var(--paper);
+  }
+  .inbox-action-word {
+    display: inline;
+  }
+  .inbox-row-actions .inbox-snooze {
+    left: 0;
+    right: auto;
   }
   .inbox-main {
     display: contents;
@@ -483,26 +539,19 @@ a.source-chip {
   }
   .inbox-row.decided > .inbox-line {
     grid-template-areas:
-      "kind undo"
+      "kind actions"
       "subject subject";
   }
   .inbox-decided {
     grid-area: subject;
   }
   .inbox-undo {
-    grid-area: undo;
+    grid-area: actions;
   }
   .inbox-detail {
     padding: 0 2px var(--s-4);
   }
   .inbox-not-started {
     margin-left: 2px;
-  }
-}
-
-/* A touch screen's buttons are 44 px tall, so the range keeps that height in the button's place. */
-@media (max-width: 720px) and (pointer: coarse) {
-  .inbox-tools-range {
-    min-height: 44px;
   }
 }

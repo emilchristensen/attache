@@ -223,13 +223,14 @@ function RowQuickActions({ item, actions, onOpen, draftsOn }: { item: AttentionI
         Actions
       </button>
       <div className="inbox-row-secondary" id={menu} data-open={compactMenu || undefined}>
-        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
-          <Icon name="clock" size={16} />
-          <span>Snooze</span>
+        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} title="Snooze" aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
+          <Icon name="clock" size={16} className="inbox-action-icon" />
+          <span className="inbox-action-word">Snooze</span>
+          <Icon name="chevron" size={12} className="inbox-snooze-caret" />
         </button>
-        <button className="inbox-done-button" aria-label={`Done: ${subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
-          <Icon name="check" size={16} />
-          <span>Done</span>
+        <button className="inbox-done-button" aria-label={`Done: ${subject}`} title="Done" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+          <Icon name="check" size={14} />
+          <span className="inbox-action-word">Done</span>
         </button>
       </div>
       {snoozing && <SnoozeTimes item={item} actions={actions} id={times} role="menu" />}

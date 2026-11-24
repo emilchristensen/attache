@@ -57,7 +57,7 @@
 }
 .masthead-inner {
   overflow: hidden;
-  min-height: 74px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   gap: var(--s-6);
@@ -75,6 +75,15 @@
   font-size: 27px;
   color: var(--ink);
   text-decoration: none;
+}
+/* The total, raised beside the wordmark like a footnote's number; the link's name says it in words. */
+.brand-total {
+  margin-top: -14px;
+  margin-left: -4px;
+  font: 600 13px/1 var(--font);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
 
 .masthead-nav {
@@ -153,8 +162,15 @@
   display: flex;
   min-width: 0;
 }
+/* As the mockups draw it: this Machine's name and a caret, without an edge, at the far right of the masthead. */
 .machine-trigger {
   min-width: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+.machine:not([data-lost]) .machine-trigger-icon {
+  display: none;
 }
 .machine-trigger-name,
 .machine-trigger-live {
@@ -513,6 +529,9 @@
   .search-launcher-label,
   .machine-trigger-name {
     display: none;
+  }
+  .machine:not([data-lost]) .machine-trigger-icon {
+    display: block;
   }
 }
 

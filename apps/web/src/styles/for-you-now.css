@@ -49,7 +49,7 @@
 }
 
 /* A narrow space: kind and actions on one line, the subject under them, then the reason and the time. */
-@container (max-width: 540px) {
+@container (max-width: 600px) {
   .for-you-now .inbox-rows {
     margin-top: var(--s-1);
   }
@@ -86,14 +86,5 @@
   }
   .for-you-now .inbox-row-actions button {
     min-height: 24px;
-  }
-}
-
-/* On a phone, where the list has the whole width, every control is a 44 px touch target. */
-@media (max-width: 599px) {
-  .for-you-now .inbox-subject,
-  .for-you-now .inbox-row-actions,
-  .for-you-now .inbox-row-actions button {
-    min-height: 44px;
   }
 }

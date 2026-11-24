@@ -17,7 +17,7 @@ test.describe.configure({ mode: "serial" });
 const HELIOS = Array.from({ length: 8 }, (_, i) => `Helios workstream ${i + 1}`);
 const VENDOR = "memory/decisions/email-vendor.md";
 /** Px from the top of the page to the next area on Home at 1280 x 800, arithmetic in the first journey. */
-const BUDGET = 136;
+const BUDGET = 140;
 
 test.beforeAll(async ({ browser }) => {
   buildAll();
@@ -72,7 +72,7 @@ async function promptFits(page: Page): Promise<{ text: number; room: number }> {
   return field(page).evaluate(placeholderFit);
 }
 
-test("home: a compact heading and today's date over one search field, not focused on arrival and with no repeated headline", async () => {
+test("home: Home with today's full date beside it over one search field, not focused on arrival and with no repeated headline", async () => {
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
@@ -90,8 +90,8 @@ test("home: a compact heading and today's date over one search field, not focuse
   expect(box.height).toBeLessThanOrEqual(58);
   await expect(page.locator(".search-home .search-key")).toHaveText(/^(Ctrl K|⌘ K)$/);
   await expect(page.locator(".search-home .search-key")).toBeVisible();
-  // Its share of the first viewport (#25's fold budget): the page's 24 px top padding, the 18 px heading line and
-  // its 12 px gap, the 54 px field with its 3 px ruled shadow, and the 24 px before the next area = 135 px.
+  // Its share of the first viewport (spec #82's fold): the page's 24 px top padding, the 42 px line of "Home" and the
+  // date and its 8 px gap, the 54 px field, and the 12 px before the next area = 140 px.
   const share = await page.locator(".home-search").evaluate((area) => {
     const page = area.closest(".page")!.getBoundingClientRect().top;
     return area.getBoundingClientRect().bottom + parseFloat(getComputedStyle(area).marginBottom) - page;
@@ -269,6 +269,10 @@ test("home: only the answer to what the field says now can be opened; keys follo
   // Esc from a link in the results closes them and puts the owner back in the field.
   await page.goto(`${stack.url}/`);
   await field(page).fill("Helios");
+  await expect(options).toHaveCount(6);
+  // Browse sits inside the field, so Tab reaches it first and the results stay open.
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".search-home .browse-toggle")).toBeFocused();
   await expect(options).toHaveCount(6);
   await page.keyboard.press("Tab");
   await expect(page.locator(".search-home [data-ranking]").getByRole("link", { name: "Settings" })).toBeFocused();

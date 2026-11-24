@@ -112,20 +112,21 @@ Attache has no chat box: you ask the Brain from your Harness (see Using the Brai
 ### Getting around
 
 On a desktop window the masthead runs along the top: the Attache mark, then **Home**, **Approvals**, **Brain**, **Connections**, **Jobs** and **Settings** on one line, with the page below in a centred reading column.
-The screen you are on is filled in ink.
-A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
+The total of every decision that waits sits as a small raised number beside the word Attache.
+The screen you are on is a solid ink pill.
+A number in an outlined box beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
 When the rows and the decisions differ, a line under the heading relates them, such as "3 items need you here · 1 Draft in Approvals": an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
-The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
+The numbers beside Home, Approvals and Connections always add up to the one in the tab title and beside the word Attache.
 The count is exact however many decisions wait.
 When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
 A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; in Settings the same words sit under **Machines and Replication**, which says why and what to do.
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
-At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
+At the far right of the masthead, this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
 When live updates to the service drop, the button itself says **Reconnecting** or **Offline** until they are back; work in progress carries on in the service meanwhile.
 A full-width Connection banner sits directly under the masthead on every screen except **Connections**.
 It names the issue that most needs you with its source, state and what may be missing, for example "Gmail · Sign-in needed · Replies may be missing", counts any others as more connection issues, and offers the fixing action (**Reconnect**, **Retry now**, **Refresh now**, or **Machines and Replication** for a silent Reader), **Disable** for a problem owned by one Connection, and **Go to Connections**.
@@ -181,7 +182,8 @@ From 600 to 959 px, the shared row splits in half.
 Below 600 px, the areas stack as Search the Brain, The Daily Briefing, For you now, Your day and Inbox.
 Each area responds to the space it is given, so an area in a narrow column looks and behaves as it does on a phone.
 
-- **Search the Brain** sits under a short line with the word Home and today's date.
+- **Search the Brain** sits under the heading Home, with today's full date beside it on the same line, such as "Wednesday, 18 November".
+  It is one tall field with the search icon, the `Ctrl K` keycap and **Browse**.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
   As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
   The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
@@ -189,7 +191,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
   **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
   Searching starts no job and changes nothing.
-- **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
+- **Browse**, inside the field at its right end, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain on a line under it.
 - **The Daily Briefing** is its own Home area for the whole day.
   It shows the latest briefing written today, its time, a locally shipped public-domain painting, credit, and **First on your list**.
   **Read briefing** opens the briefing page, under "Home / The Daily Briefing": First on your list with the briefing's points, Top to-dos as they were when it was written, New updates, and Your day as it stands now; every entry opens the Inbox item, Draft or Proposal it comes from, and its source.
@@ -224,6 +226,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
+  The actions end the row's line: **Start working** outlined, **Snooze** with a caret and **Done** with a green check.
   On a narrow window the type comes first, then the whole subject, then the source and time.
   Every row offers **Start working**, **Snooze** and **Done** without opening it.
   **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place.
@@ -231,14 +234,15 @@ Each area responds to the space it is given, so an area in a narrow column looks
   Opening the row shows **Not started** to clear the mark.
   A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
   **Snooze** opens the same return times as an opened row.
-  In a two-thirds space, Snooze and Done become icon buttons with full accessible names; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
+  In a two-thirds space, as the Inbox has beside For you now on a desktop window, Snooze and Done become a clock and a check with their full names for a screen reader and on hover, and the time moves under them; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
   Select a row to open it in place for the summary, why it is here, evidence, the main action and every decision, including **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
-  The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
+  The list does not reorder itself while you read: new items wait behind **Show 1 new item** in the Inbox heading until you press it, and the page does not scroll or close the row you have open.
   Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
-  The **Type** menu lists every type with its count and shows one type at a time.
-  The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
+  Two menus sit at the right of the Inbox heading.
+  **All types** lists every type with its count and shows one type at a time; the button then names the type.
+  **View options** offers **Priority order** (the default), **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
   The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
   When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
   When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.

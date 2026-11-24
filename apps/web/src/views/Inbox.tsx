@@ -3,6 +3,7 @@ import { plural, type AttentionItemView } from "@attache/contracts";
 import { useResource } from "../live.ts";
 import { Empty, Link, Loading, TurnOnInSettings } from "../components/ui.tsx";
 import { GroupFailure } from "../components/GroupFailure.tsx";
+import { ChoiceMenu } from "../components/ChoiceMenu.tsx";
 import { Logo } from "../components/Logo.tsx";
 import type { ConnectionsStatus } from "../connection-status.ts";
 import { emptyInbox, inboxReach, type EmptyInbox } from "../inbox-empty.ts";
@@ -14,7 +15,7 @@ import { AttentionDot } from "../components/AttentionDot.tsx";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { ALL_TYPES, groupRows, listedNow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
 import { snoozeChoices } from "../inbox-rows.ts";
-import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
+import { DEFAULT_PLACE, INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { moveAmongRows, useRowKeys, type RowKey } from "../shortcuts.ts";
 import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
@@ -93,7 +94,7 @@ interface ToolsProps {
   onShowNew: () => void;
 }
 
-/** The view controls: Show new items in a place kept for it, the one type picker with counts, and the view. */
+/** The view controls: Show new items in a place kept for it, then the "All types" and "View options" menus. */
 function InboxTools({ items, type, view, arrivals, range, onType, onView, onShowNew }: ToolsProps) {
   // Nothing to count (no answer yet, a failed one, or an empty list with no type chosen): no "All types (0)".
   const options = useMemo(() => (items && (items.length > 0 || type !== ALL_TYPES) ? typeOptions(items, type) : null), [items, type]);
@@ -107,22 +108,8 @@ function InboxTools({ items, type, view, arrivals, range, onType, onView, onShow
       <button className="inbox-show-new" data-show-new data-waiting={arrivals > 0 || undefined} disabled={arrivals === 0} aria-hidden={arrivals === 0 || undefined} tabIndex={arrivals === 0 ? -1 : undefined} onClick={onShowNew}>
         Show {plural(arrivals, "new item")}
       </button>
-      {options && (
-        <select className="inbox-picker" aria-label="Type" value={type} onChange={(e) => onType(e.target.value)}>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label} ({o.count})
-            </option>
-          ))}
-        </select>
-      )}
-      <select className="inbox-picker" aria-label="View" value={view} onChange={(e) => onView(e.target.value as InboxViewId)}>
-        {INBOX_VIEWS.map((v) => (
-          <option key={v.id} value={v.id}>
-            {v.label}
-          </option>
-        ))}
-      </select>
+      {options && <ChoiceMenu name="Type" shown={options.find((o) => o.id === type)!.label} choices={options} chosen={type} onChoose={onType} />}
+      <ChoiceMenu name="View options" shown={view === DEFAULT_PLACE.view ? "View options" : INBOX_VIEWS.find((v) => v.id === view)!.label} choices={INBOX_VIEWS} chosen={view} onChoose={onView} />
     </div>
   );
 }
