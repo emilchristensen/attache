@@ -5,12 +5,12 @@ import { composeBriefing, deterministicSummary } from "../src/attention/briefing
 import { applyModelWords, askForBriefingWords, BRIEFING_MODEL_UPDATES } from "../src/attention/briefing-words.ts";
 import type { ModelProvider, StreamRequest } from "../src/models/providers.ts";
 
-function addItem(db: ReturnType<typeof openDb>, id: string, priority: number, words: { title?: string; summary?: string } = {}, seenAt = "2026-01-01T08:00:00.000Z") {
+function addItem(db: ReturnType<typeof openDb>, id: string, priority: number, words: { title?: string; summary?: string } = {}, seenAt = "2026-01-01T08:00:00.000Z", kind = "deadline") {
   db.prepare(
     `insert into attention_items
       (id, item_key, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, priority, state, first_seen_at, updated_at)
-     values (?, ?, ?, 'deadline', ?, ?, '', 'test', 'test', '[]', ?, 'open', ?, ?)`,
-  ).run(id, `key:${id}`, `fingerprint:${id}`, words.title ?? `Title ${id}`, words.summary ?? `Summary ${id}`, priority, seenAt, seenAt);
+     values (?, ?, ?, ?, ?, ?, '', 'test', 'test', '[]', ?, 'open', ?, ?)`,
+  ).run(id, `key:${id}`, `fingerprint:${id}`, kind, words.title ?? `Title ${id}`, words.summary ?? `Summary ${id}`, priority, seenAt, seenAt);
 }
 
 /** Two open items, both new since the last briefing, so each is flagged for an update text. */
@@ -86,6 +86,28 @@ describe("an away summary", () => {
     const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
 
     expect(deterministicSummary(away)).toBe("Nothing new or changed since the time you gave; 1 item is still open.");
+  });
+
+  it("counts a new item of the Other section, and never says nothing is new beside it", () => {
+    const db = openDb(":memory:");
+    addItem(db, "old", 90);
+    addItem(db, "issue", 20, {}, "2026-01-03T08:00:00.000Z", "assigned_issue");
+
+    const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
+
+    expect(deterministicSummary(away)).toBe("1 other item. 1 new and 0 changed since the time you gave.");
+  });
+});
+
+describe("a Daily Briefing's summary", () => {
+  it("counts items of the Other section like every other section", () => {
+    const db = openDb(":memory:");
+    addItem(db, "pr", 90, {}, undefined, "authored_pr");
+    addItem(db, "issue", 80, {}, undefined, "assigned_issue");
+
+    const daily = composeBriefing(db, { kind: "daily", since: null, coverage: [] });
+
+    expect(deterministicSummary(daily)).toBe("2 other items.");
   });
 });
 
