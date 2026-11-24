@@ -41,6 +41,7 @@ Each smoke test (`apps/service/test/integration/<harness>-smoke.test.ts`) instal
 
 Run one with the executable named, for example `ATTACHE_PI_EXECUTABLE=<path>/pi pnpm vitest run apps/service/test/integration/pi-smoke.test.ts`; `ATTACHE_OPENCODE_EXECUTABLE` and `ATTACHE_COPILOT_EXECUTABLE` work the same way.
 Without the executable on `PATH` or named, a smoke test is skipped, and a skipped smoke test is no evidence.
+A version manager's shim (mise or asdf) is resolved to the executable it runs before the smoke test changes `HOME`, because in the isolated home the shim finds none of the owner's installs (`apps/service/test/integration/harness-executable.ts`).
 
 ## Last verified
 
