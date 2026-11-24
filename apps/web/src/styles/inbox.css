@@ -45,7 +45,8 @@
   margin-left: auto;
 }
 /* Show new items and the two menus are small buttons, as tall as the heading's line. */
-.inbox-tools > button {
+.inbox-tools > button,
+.inbox-tools .choice-menu-trigger {
   min-height: 32px;
   padding: 5px 12px;
   font-size: var(--fs-meta);
