@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Knowledge workers who spend their day inside an AI Harness such as Claude Code, Codex, Claude Desktop or Antigravity, and whose work is spread across GitHub, Jira, Confluence, Slack, Gmail and Google Calendar.
+Knowledge workers who spend their day inside an AI Harness such as Claude Code, Codex, Claude Desktop, Antigravity, OpenCode, Pi or Copilot CLI, and whose work is spread across GitHub, Jira, Confluence, Slack, Gmail and Google Calendar.
 They install Attache on their own computer, on macOS, Linux or Windows, and are comfortable running an installer and pairing a browser, but should not need developer tools.
 The project's author is one such person, not the design target: decisions are made for the general case.
 
