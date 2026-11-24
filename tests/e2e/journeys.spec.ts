@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
+import { chromeEnv } from "./fonts.ts";
 import { connection, openConnection } from "./connections.ts";
 import { approvalRow, approvalRowById, draftsGroup, openApprovalRow, proposalsGroup } from "./approvals.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
@@ -57,7 +58,7 @@ test.afterAll(async () => {
  * so a script in `dir` appends it. Elsewhere Chrome launches as is.
  */
 async function pageWithClassicScrollbars(playwright: { chromium: BrowserType }, dir: string, options: BrowserContextOptions): Promise<{ page: Page; close: () => Promise<void> }> {
-  const chrome = await playwright.chromium.launch({ ...classicScrollbarChrome(dir), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  const chrome = await playwright.chromium.launch({ ...classicScrollbarChrome(dir), env: chromeEnv(), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
   return { page: await (await chrome.newContext(options)).newPage(), close: () => chrome.close() };
 }
 
