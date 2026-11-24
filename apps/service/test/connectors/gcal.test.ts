@@ -77,10 +77,10 @@ describe("Google Calendar adapter contract (claude.ai Google Calendar connector)
     expect((await gcalAdapter.refresh!(ctx())).coverage.state).toBe("denied");
   });
 
-  it("queries from the start of today in the zone furthest ahead of UTC to 48 hours ahead, ordered by start", async () => {
+  it("queries from one longest local day ago, so today in every zone is read, to 48 hours ahead, ordered by start", async () => {
     events([]);
     await gcalAdapter.refresh!(ctx());
-    expect(calls()[0]!.args).toEqual({ startTime: "2026-09-29T10:00:00.000Z", endTime: "2026-10-02T10:00:00.000Z", orderBy: "startTime", pageSize: 100 });
+    expect(calls()[0]!.args).toEqual({ startTime: "2026-09-29T09:00:00.000Z", endTime: "2026-10-02T10:00:00.000Z", orderBy: "startTime", pageSize: 100 });
   });
 
   it("pagination: follows nextPageToken; a page cap is partial", async () => {

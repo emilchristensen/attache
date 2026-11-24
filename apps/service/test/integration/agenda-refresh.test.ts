@@ -70,4 +70,20 @@ describe("the agenda after a Source refresh", () => {
     const { items } = await svc.get<{ items: AttentionItemView[] }>("/attention?state=open");
     expect(items.filter((i) => i.key.startsWith("gcal:"))).toEqual([]);
   });
+
+  it("keeps a zone behind UTC's morning meeting after UTC midnight, while that zone's day goes on", async () => {
+    // The Azores (UTC-1 in November): 23 November runs from 01:00 UTC on the 23rd to 01:00 UTC on the 24th.
+    await clock.advance(Date.parse("2026-11-23T08:00:00.000Z") - clock.now().getTime());
+    scenario.gcal.events = [{ id: "azores", summary: "Harbour walk-through", start: { dateTime: "2026-11-23T09:00:00Z" }, end: { dateTime: "2026-11-23T09:30:00Z" }, attendees }];
+    await refresh();
+    const azoresToday = () => svc.get<AgendaResponse>("/agenda?from=2026-11-23T01:00:00.000Z&to=2026-11-24T01:00:00.000Z");
+    expect((await azoresToday()).events.map((e) => e.id)).toEqual(["azores"]);
+
+    // 00:30 UTC on the 24th is 23:30 on the 23rd in the Azores: a complete read then still keeps the morning's meeting.
+    await clock.advance(Date.parse("2026-11-24T00:30:00.000Z") - clock.now().getTime());
+    await refresh();
+    const late = await azoresToday();
+    expect(late.coverage).toMatchObject({ state: "complete" });
+    expect(late.events.map((e) => e.id)).toEqual(["azores"]);
+  });
 });
