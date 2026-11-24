@@ -12,6 +12,7 @@
 .your-day-band {
   display: grid;
   grid-template-columns: 185px minmax(0, 1fr);
+  align-items: center;
   gap: var(--s-4);
 }
 .your-day h2 {
@@ -35,24 +36,30 @@
   padding: 0;
   margin: 0;
 }
+/* One line per meeting, as the mockups draw it: the time in monospace, the title in bold, and Join at the end. */
 .your-day-event {
   min-width: 0;
   flex: 1 1 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px var(--s-2);
-  padding-left: var(--s-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px var(--s-3);
+  min-height: 30px;
+  padding-left: var(--s-4);
   border-left: 2px solid var(--rule);
 }
 .your-day-time {
-  grid-column: 1 / -1;
   font-family: var(--mono);
   font-size: var(--fs-meta);
   color: var(--ink-2);
 }
 .your-day-title {
   min-width: 0;
-  font-weight: 600;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.your-day-title a {
+  color: var(--ink);
 }
 .your-day-response {
   display: block;
@@ -81,7 +88,7 @@
   display: none;
 }
 
-@container (max-width: 540px) {
+@container (max-width: 600px) {
   .your-day-band {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--s-2);
@@ -92,6 +99,7 @@
   }
   .your-day-event {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     padding: 8px 0 8px var(--s-3);
   }
   .your-day-time {
