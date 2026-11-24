@@ -78,7 +78,7 @@
 }
 /* The total, raised beside the wordmark like a footnote's number; the link's name says it in words. */
 .brand-total {
-  align-self: flex-start;
+  margin-top: -14px;
   margin-left: -4px;
   font: 600 13px/1 var(--font);
   letter-spacing: 0;

@@ -60,6 +60,14 @@
   .search-key {
     display: none;
   }
+  /* The prompt keeps its whole width beside Browse: the field's own gaps and edges give way first. */
+  .search-box {
+    gap: var(--s-2);
+    padding-inline: var(--s-3);
+  }
+  .search .search-box .browse-toggle {
+    padding-left: var(--s-3);
+  }
 }
 .search {
   container: search-field / inline-size;
