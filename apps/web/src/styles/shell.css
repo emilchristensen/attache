@@ -628,10 +628,11 @@
 }
 
 /*
- * The narrowest phones (a folded phone's 280 px): while the live connection is lost, the briefcase alone is the mark
- * and the state keeps its words. "Attache" stays the link's name for a screen reader.
+ * Narrow phones (below 360 px, down to a folded phone's 280 px): while the live connection is lost, the briefcase
+ * alone is the mark and the state keeps its words with room to spare for wider fonts. "Attache" stays the link's name
+ * for a screen reader.
  */
-@media (max-width: 319px) {
+@media (max-width: 359px) {
   .masthead-inner:has(.machine[data-lost]) .brand-name {
     position: absolute;
     width: 1px;

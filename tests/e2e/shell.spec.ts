@@ -412,8 +412,11 @@ async function mastheadFits(page: Page): Promise<string[]> {
  * they do not overlap, and the button stays inside the column. Measured rather than assumed: the mark is set in the
  * system's Georgia, which is wider on macOS and Windows than Linux's stand-in.
  */
+/** What a narrow masthead keeps free between the mark and the Machine button, for fonts wider than Linux's. */
+const NARROW_MASTHEAD_SPARE_PX = 16;
+
 async function narrowMastheadFits(page: Page): Promise<string[]> {
-  return page.locator(".masthead-inner").evaluate((inner) => {
+  return page.locator(".masthead-inner").evaluate((inner, NARROW_MASTHEAD_SPARE_PX) => {
     const brand = inner.querySelector<HTMLElement>(".brand")!;
     const button = inner.querySelector(".machine-trigger")!.getBoundingClientRect();
     const live = inner.querySelector<HTMLElement>(".machine-trigger-live")!;
@@ -422,10 +425,13 @@ async function narrowMastheadFits(page: Page): Promise<string[]> {
     const problems: string[] = [];
     if (button.right > edge + 1) problems.push(`the Machine button leaves the column (${button.right} > ${edge})`);
     if (brand.getBoundingClientRect().right > button.left) problems.push("the mark runs under the Machine button");
+    // Room to spare, so the slightly wider fonts of macOS and Windows still fit the state.
+    const spare = button.left - brand.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).columnGap || "0");
+    if (spare < NARROW_MASTHEAD_SPARE_PX) problems.push(`only ${Math.round(spare)} px to spare beside the mark`);
     if (brand.scrollWidth > brand.clientWidth) problems.push("the mark is cut short");
     if (live.scrollWidth > live.clientWidth) problems.push(`the state "${live.textContent}" is cut short`);
     return problems;
-  });
+  }, NARROW_MASTHEAD_SPARE_PX);
 }
 
 test("this Machine: the masthead disclosure names this Machine and the Reader, and reports a lost live connection", async () => {
@@ -467,9 +473,9 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await trigger.click();
   await expect(panel).toContainText(/Reconnecting to the Attache service|Disconnected from the Attache service/);
   await page.keyboard.press("Escape");
-  // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. On
-  // the narrowest phones (280 px) the briefcase alone is the mark, and the link is still named Attache, with the
-  // decisions that wait.
+  // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. Below
+  // 360 px (320 and a folded phone's 280) the briefcase alone is the mark, and the link is still named Attache, with
+  // the decisions that wait.
   for (const width of [320, 280]) {
     await page.setViewportSize({ width, height: 800 });
     await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
