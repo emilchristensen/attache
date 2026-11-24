@@ -211,6 +211,20 @@ describe("summarizeJob", () => {
       },
     ]);
   });
+  it("says a command was stopped by its time limit when the step ends with timeout's exit code 124", () => {
+    const steps = ["Set up job", "Linux desktop session tests", "Complete job"].map((name, i) => step(i + 1, name, name === "Linux desktop session tests" ? "failure" : "success"));
+    const job = { name: "checks (ubuntu-latest, current Node)", conclusion: "failure", status: "completed", steps };
+    const log = jobLog([
+      "##[group]Run sudo timeout 3m apt-get -o Acquire::Retries=3 update",
+      "##[endgroup]",
+      "Get:30 http://archive.ubuntu.com/ubuntu resolute/main amd64v3 libnotify-bin amd64 0.8.8-1 [10.8 kB]",
+      "Get:18 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64v3 libgtk-4-1 amd64 4.22.4+ds-0ubuntu0.2 [3555 kB]",
+      "##[error]Process completed with exit code 124.",
+    ]);
+
+    expect(summarizeJob({ job, log, annotations: [] }).steps[0].output[0]).toBe("Process completed with exit code 124: a command hit its `timeout` limit.");
+  });
+
   it("says why a job never started, from its annotations", () => {
     const job = { name: "checks (macos-latest)", conclusion: "failure", status: "completed", steps: [] };
     const annotations = [

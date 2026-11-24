@@ -1,3 +1,8 @@
+/**
+ * For you now as the curated list (spec #82): meeting prep with its reason and Suggested now on its Inbox row, Open
+ * prep taking it off, Done with Undo and the hold while focus is inside, a failed Inbox with Retry, and the Daily
+ * Briefing's picks when it could not be read. It sets itself up through the API, so it runs on its own.
+ */
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
