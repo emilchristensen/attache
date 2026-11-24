@@ -407,14 +407,14 @@ async function mastheadFits(page: Page): Promise<string[]> {
   });
 }
 
+/** What a narrow masthead keeps free between the mark and the Machine button, for fonts wider than Linux's. */
+const NARROW_MASTHEAD_SPARE_PX = 16;
+
 /**
  * A narrow masthead holds the mark and, while the live connection is lost, this Machine's button: neither is cut short,
  * they do not overlap, and the button stays inside the column. Measured rather than assumed: the mark is set in the
  * system's Georgia, which is wider on macOS and Windows than Linux's stand-in.
  */
-/** What a narrow masthead keeps free between the mark and the Machine button, for fonts wider than Linux's. */
-const NARROW_MASTHEAD_SPARE_PX = 16;
-
 async function narrowMastheadFits(page: Page): Promise<string[]> {
   return page.locator(".masthead-inner").evaluate((inner, NARROW_MASTHEAD_SPARE_PX) => {
     const brand = inner.querySelector<HTMLElement>(".brand")!;
