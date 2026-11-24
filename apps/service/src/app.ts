@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import type { ConnectionKind, FeatureId, JobView } from "@attache/contracts";
+import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView } from "@attache/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
@@ -28,8 +28,8 @@ import type { ModelProvider } from "./models/providers.ts";
 import { registerRunners } from "./jobs/runners.ts";
 import { Inbox } from "./attention/inbox.ts";
 import { AgentSessions } from "./agents/sessions.ts";
-import { AGENT_INTEGRATIONS, integrationFor } from "./agents/integrations.ts";
 import { agentAdapter } from "./connectors/agent.ts";
+import { harnessAdapters, type HarnessAdapter } from "./agents/harness-adapters.ts";
 import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
@@ -121,7 +121,11 @@ export class App {
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
     this.machine.get();
-    this.autoAccept = new AutoAcceptStore(this.db, (kind) => this.connections.record(kind)?.status === "connected");
+    this.autoAccept = new AutoAcceptStore(
+      this.db,
+      (kind) => this.connections.record(kind)?.status === "connected",
+      () => this.harnesses(),
+    );
     this.clock = opts.clock ?? systemClock;
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
     this.replication = new Replication({
@@ -182,7 +186,7 @@ export class App {
     this.memory.indexer.onChange(() => this.settleMergeNotices());
     this.sessions = new AgentSessions(this);
     // Agent connections install hooks for this instance's state folder, so they are built per App.
-    this.adapters = new Map([...ADAPTERS, ...AGENT_INTEGRATIONS.map((a) => [a.kind, agentAdapter(a, this.sessions.hooks, () => this.sessions.contextText())] as const)]);
+    this.adapters = new Map([...ADAPTERS, ...harnessAdapters(this.sessions.hooks, () => this.sessions.contextText()).map((h) => [h.kind as ConnectionKind, agentAdapter(h)] as const)]);
     this.connections = new ConnectionManager({
       db: this.db,
       secrets: this.secrets,
@@ -212,19 +216,17 @@ export class App {
       this.bus.emit("event", { type: "connections.changed", id });
     };
     this.connections.onDisconnect = (id, kind) => {
-      const agent = integrationFor(kind);
-      if (agent) {
+      const harness = this.adapters.get(kind)?.harness;
+      let removed: HarnessUninstallResult | undefined;
+      if (harness) {
         // Connecting the Harness again starts with auto-accept on, as a new Harness does (ADR 0004).
-        this.autoAccept.forget(agent.kind);
-        try {
-          this.sessions.hooks.uninstall(agent);
-        } catch (e) {
-          this.log.error("could not remove agent hooks", { agent: kind, error: (e as Error).message });
-        }
+        this.autoAccept.forget(kind);
+        removed = harness.uninstall();
+        if (removed.failures.length) this.log.error("could not remove every Attache entry from a Harness", { agent: kind, failures: removed.failures });
       }
       const cancelledJobs = this.jobs.cancelWhere((j) => j.connectionId === id || (kind === "model" && (j.kind === "research" || j.kind === "draft")), `Connection ${id} was disconnected`);
       const revokedActions = this.actions.revokeWhere((a) => a.connectionId === id, "connection disconnected");
-      return { cancelledJobs, revokedActions };
+      return { cancelledJobs, revokedActions, ...(removed ? { harness: removed } : {}) };
     };
     this.jobs.gate = (job) => this.jobGate(job);
     this.jobs.onUnsuccessful = (job) => {
@@ -282,7 +284,7 @@ export class App {
 
   featureStatuses() {
     const cfg = this.config.get();
-    const conns = this.connections.statuses().map((c) => ({ kind: c.kind, status: c.status }));
+    const conns = this.connections.records();
     return computeStatus(cfg.features, conns, { dataFolder: cfg.dataFolder });
   }
 
@@ -313,7 +315,15 @@ export class App {
       cancelled.push(...this.jobs.cancelWhere((j) => f.jobKinds.includes(j.kind), `${f.label} was turned off`));
       if (f.id === "drafts") this.actions.revokeWhere(() => true, "Drafts and approvals was turned off");
       // No hooks may keep spooling or injecting memory for a feature that is off.
-      if (f.id === "sessions") for (const a of AGENT_INTEGRATIONS) if (a.hooks && this.connections.record(a.kind)?.status === "connected") void this.connections.disconnect(a.kind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: a.kind, error: (e as Error).message }));
+      if (f.id === "sessions") {
+        // Every Harness whose memory or session capture needs the feature, whatever it uses (hooks, a plugin or an extension).
+        const lifecycle = this.harnesses().filter((h) => h.capabilities.memory !== "none" || h.capabilities.capture !== "none");
+        for (const h of lifecycle) {
+          const connection = this.connections.record(h.kind);
+          if (!connection || connection.status === "disconnected") continue;
+          void this.connections.disconnect(h.kind as ConnectionKind, { deleteData: false }).catch((e) => this.log.error("could not disconnect agent", { agent: h.kind, error: (e as Error).message }));
+        }
+      }
     }
     this.sessions.refreshContext();
     this.scheduler.reconcile(this.config.get());
@@ -525,5 +535,10 @@ export class App {
 
   connectionKinds(): ConnectionKind[] {
     return [...this.adapters.keys()];
+  }
+
+  /** Every Harness Attache can connect, through its adapter (ADR 0006). */
+  harnesses(): HarnessAdapter[] {
+    return [...this.adapters.values()].flatMap((a) => (a.harness ? [a.harness] : []));
   }
 }

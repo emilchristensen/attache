@@ -8,6 +8,14 @@ export interface Turn {
   role: "user" | "assistant";
   text: string;
   at: string | null;
+  /** When a streamed answer finished, when the Harness records it separately. */
+  completedAt?: string | null;
+  /**
+   * The Harness's own id for the message this turn came from, for Harnesses
+   * whose snapshots each hold only part of a session (OpenCode): the service
+   * joins snapshots by it instead of by position.
+   */
+  id?: string;
 }
 
 export interface ParsedSession {
@@ -15,11 +23,16 @@ export interface ParsedSession {
   title: string | null;
   cwd: string | null;
   startedAt: string | null;
+  /** When the Harness created the session, even if its snapshot starts after a compaction. */
+  createdAt?: string;
+  /** Why a transcript gave no turns although it was not empty: the format Attache could not read. */
+  problem?: string;
 }
 
-const INJECTED = /<(system-reminder|command-name|command-message|command-args|local-command-stdout|local-command-caveat|environment_context|user_instructions|turn_aborted|user_shell_command|task-notification)>[\s\S]*?<\/\1>/g;
+// `attache-memory` wraps the memory Attache gives a Harness (see agents/pi-adapter.ts): never the owner's words.
+const INJECTED = /<(attache-memory|system-reminder|command-name|command-message|command-args|local-command-stdout|local-command-caveat|environment_context|user_instructions|turn_aborted|user_shell_command|task-notification)>[\s\S]*?<\/\1>/g;
 
-function clean(text: string): string {
+export function clean(text: string): string {
   return text.replace(INJECTED, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
