@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { win32 } from "node:path";
 import { launchTool } from "./launch.ts";
 
@@ -31,23 +31,39 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
       const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : error && !exited ? error.message : "";
       resolve({ code, stdout: String(stdout), stderr: String(stderr) || reason, timedOut });
     });
+    // A tool that exits before reading all its input closes the pipe (EPIPE, or EOF on Windows); its exit code and stderr say why, so
+    // the write's own error is left to them rather than thrown out of the service.
+    child.stdin?.on("error", () => {});
     if (opts.input !== undefined) child.stdin?.end(opts.input);
   });
+}
+
+/** How writing to a tool's stdin fails after the tool has gone: EPIPE on macOS and Linux, EOF on Windows. */
+const CLOSED_INPUT = new Set(["EPIPE", "EOF"]);
+
+/**
+ * Why a `spawnSync` call could not run its tool, or undefined when the tool ran. A closed input is not such a reason:
+ * the tool ran and exited before reading all its input, and its exit code and stderr say why.
+ */
+export function spawnFailure(r: SpawnSyncReturns<string>): NodeJS.ErrnoException | undefined {
+  const error = r.error as NodeJS.ErrnoException | undefined;
+  return error?.code && CLOSED_INPUT.has(error.code) ? undefined : error;
 }
 
 /**
  * `run`, waiting for the tool: for a short question to a tool (such as its
  * `--version`) from code that cannot wait asynchronously. Never throws.
  */
-export function runSync(cmd: string, args: string[], opts: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): RunResult {
+export function runSync(cmd: string, args: string[], opts: { input?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {}): RunResult {
   let launch;
   try {
     launch = launchTool(cmd, args);
   } catch (e) {
     return { code: 1, stdout: "", stderr: (e as Error).message, timedOut: false };
   }
-  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) });
-  const timedOut = !!opts.timeoutMs && (r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
-  const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : (r.error?.message ?? "");
+  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", maxBuffer: 1024 * 1024, windowsHide: true, ...(opts.input !== undefined ? { input: opts.input } : {}), ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}), ...(opts.env ? { env: opts.env } : {}) });
+  const failure = spawnFailure(r);
+  const timedOut = !!opts.timeoutMs && failure?.code === "ETIMEDOUT";
+  const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : (failure?.message ?? "");
   return { code: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr || reason, timedOut };
 }
