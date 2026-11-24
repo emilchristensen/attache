@@ -67,6 +67,47 @@ button.menu-item {
 button.menu-item:hover:not(:disabled) {
   background: var(--row-hover);
 }
+/* A choice behind a small button (components/ChoiceMenu.tsx): the Inbox heading's "All types" and "View options". */
+.choice-menu {
+  position: relative;
+  min-width: 0;
+}
+.choice-menu-trigger {
+  max-width: 100%;
+}
+.choice-menu-caret {
+  flex: none;
+  transform: rotate(90deg);
+  color: var(--ink-3);
+}
+.choice-menu-pop {
+  width: max-content;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 2 * var(--gutter)));
+}
+button.choice-menu-item {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-2);
+}
+.choice-menu-check {
+  flex: none;
+  visibility: hidden;
+}
+.choice-menu-item[aria-pressed="true"] {
+  font-weight: 600;
+}
+.choice-menu-item[aria-pressed="true"] .choice-menu-check {
+  visibility: visible;
+}
+.choice-menu-label {
+  flex: 1;
+}
+.choice-menu-count {
+  font: 500 12px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
 .menu-help {
   font-size: var(--fs-meta);
   line-height: var(--lh-meta);

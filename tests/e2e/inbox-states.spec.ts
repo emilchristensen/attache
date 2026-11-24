@@ -208,7 +208,7 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await expect(failure(page)).toContainText("The Inbox could not be loaded. This is not an empty list: Attache does not know what is here. The Inbox store is locked");
   await expect(emptyState(page)).toHaveCount(0);
   await expect(rows(page)).toHaveCount(0);
-  await expect(inbox(page).getByRole("combobox", { name: "Type" })).toHaveCount(0);
+  await expect(inbox(page).getByRole("button", { name: /^Type:/ })).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
   // The count route still answers, and the total stays on the tab; beside a failed list the heading claims nothing.
   await expect(page).toHaveTitle(/^\(\d+\) Attache$/);
@@ -217,7 +217,7 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(rows(page).first()).toBeVisible();
   await expect(failure(page)).toHaveCount(0);
-  await expect(inbox(page).getByRole("combobox", { name: "Type" })).toBeVisible();
+  await expect(inbox(page).getByRole("button", { name: /^Type:/ })).toBeVisible();
   await expect(page.locator("[data-need-you]")).toBeVisible();
   await page.close();
 });

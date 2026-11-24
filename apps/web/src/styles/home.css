@@ -38,15 +38,6 @@
     padding-block: 0;
   }
 }
-/* Beside another area the rows sit a little closer, so the first rows of both lists show without scrolling. */
-@media (min-width: 600px) {
-  .home-areas .inbox-line {
-    padding-block: 8px;
-  }
-  .home-areas .inbox-row-actions {
-    margin-top: 2px;
-  }
-}
 
 /* Tablet (600 to 959 px): the same rows, For you now and the Inbox at half each. */
 @media (max-width: 959px) {

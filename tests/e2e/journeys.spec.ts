@@ -380,8 +380,8 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
     // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
     const first = page.locator("#inbox [data-inbox-row]").first();
     if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
-    const onCard = first.locator(".inbox-row-actions").getByRole("button", { name: "Snooze" });
-    const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
+    const onCard = first.locator(".inbox-row-actions").getByRole("button", { name: /^(Start working|Continue):/ });
+    const onCanvas = page.locator("#inbox").getByRole("button", { name: /^View options/ });
     const onQuiet = page.getByRole("region", { name: "The Daily Briefing" }).getByRole("button", { name: "Briefing options" });
     // Control edges: a secondary button on a card and on the canvas.
     for (const control of [onCard, onQuiet, onCanvas]) {
