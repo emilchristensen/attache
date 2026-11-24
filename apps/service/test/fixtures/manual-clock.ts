@@ -8,6 +8,17 @@ interface Timer {
 }
 
 /**
+ * How a timer meets the wall clock on a real Machine. Node runs a timer by its event loop's clock, which can be a
+ * few milliseconds ahead of the wall clock Attache reads, and the wall clock moves on while the timer's work runs.
+ */
+export interface TimerSkew {
+  /** How long before its time a timer runs, by the wall clock. */
+  leadMs: number;
+  /** How much later each reading of the clock is than the one before, while a timer runs. */
+  readStepMs: number;
+}
+
+/**
  * A clock that only moves when a test moves it. Timers fire in due order
  * during `advance`, which waits for any promise a timer callback returns, so
  * a test that advances past a Replication check sees the check finished.
@@ -17,13 +28,17 @@ export class ManualClock implements Clock {
   private timers: Timer[] = [];
   private nextId = 1;
   private seq = 0;
+  private skew: TimerSkew = { leadMs: 0, readStepMs: 0 };
+  private inTimer = false;
 
   constructor(start = Date.now()) {
     this.time = start;
   }
 
   now(): Date {
-    return new Date(this.time);
+    const at = this.time;
+    if (this.inTimer) this.time += this.skew.readStepMs;
+    return new Date(at);
   }
 
   setTimeout(fn: () => unknown, ms: number): TimerHandle {
@@ -34,6 +49,14 @@ export class ManualClock implements Clock {
 
   clearTimeout(handle: TimerHandle): void {
     this.timers = this.timers.filter((t) => t.id !== (handle as unknown as number));
+  }
+
+  /**
+   * Run timers as a real Machine can (see `TimerSkew`) from now on; `skewTimers({ leadMs: 0, readStepMs: 0 })`
+   * goes back to running each timer exactly at its time.
+   */
+  skewTimers(skew: TimerSkew): void {
+    this.skew = { ...skew };
   }
 
   /**
@@ -51,9 +74,14 @@ export class ManualClock implements Clock {
       const due = [...this.timers].filter((t) => t.at <= end).sort((a, b) => a.at - b.at || a.seq - b.seq)[0];
       if (!due) break;
       this.timers = this.timers.filter((t) => t.id !== due.id);
-      this.time = Math.max(this.time, due.at);
-      await due.fn();
+      this.time = Math.max(this.time, due.at - this.skew.leadMs);
+      this.inTimer = true;
+      try {
+        await due.fn();
+      } finally {
+        this.inTimer = false;
+      }
     }
-    this.time = end;
+    this.time = Math.max(this.time, end);
   }
 }
