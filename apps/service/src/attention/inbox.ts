@@ -95,9 +95,9 @@ export class Inbox {
     if (passTime(this.d.db, this.d.ctx.now()).length) this.d.onChange();
   }
 
-  /** When `wake` next has a meeting to resolve, so housekeeping can run at that moment; null when none is waiting. */
+  /** When `wake` next has a meeting to resolve, so housekeeping can run at that moment (a past end: at once); null when none is waiting. */
   nextMeetingEnd(): Date | null {
-    return nextMeetingEnd(this.d.db, this.d.ctx.now());
+    return nextMeetingEnd(this.d.db);
   }
 
   /**
