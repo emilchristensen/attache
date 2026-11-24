@@ -51,9 +51,10 @@ export class McpRegistration {
   };
 
   /** Same command and arguments; fields a Harness adds on its own (such as `type` or an empty `env`) do not count. */
-  private sameCommand(e: McpServerEntry): boolean {
+  sameCommand(e: unknown): boolean {
     const want = this.entry();
-    return e.command === want.command && isDeepStrictEqual([...e.args], want.args);
+    const { command, args } = (e ?? {}) as Partial<McpServerEntry>;
+    return command === want.command && Array.isArray(args) && isDeepStrictEqual([...args], want.args);
   }
 
   private format(a: AgentIntegration) {
@@ -69,7 +70,7 @@ export class McpRegistration {
     const path = this.path(a);
     const servers = this.format(a).servers(this.read(path), path);
     const ours = Object.entries(servers).filter(([, e]) => this.isOurs(e));
-    const current = ours.length === 1 && ours[0]![0] === this.name() && this.sameCommand(ours[0]![1] as McpServerEntry);
+    const current = ours.length === 1 && ours[0]![0] === this.name() && this.sameCommand(ours[0]![1]);
     return { path, registered: ours.length > 0, current };
   }
 

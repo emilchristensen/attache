@@ -1,11 +1,12 @@
 import { z } from "zod";
+import type { HarnessCapabilities, HarnessFileChange, HarnessStatusReport } from "./harness.ts";
 
 /** API contract: Features and connections. */
 
 export const FeatureId = z.enum(["recall", "capture", "attention", "drafts", "jobs", "sessions"]);
 export type FeatureId = z.infer<typeof FeatureId>;
 
-export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop"]);
+export const ConnectionKind = z.enum(["vault", "github", "jira", "confluence", "slack", "gmail", "gcal", "model", "claude-code", "codex", "antigravity", "claude-desktop", "pi", "opencode", "copilot-cli"]);
 export type ConnectionKind = z.infer<typeof ConnectionKind>;
 
 export const ReadinessState = z.enum(["ready", "needs_setup", "unavailable", "partial", "disabled"]);
@@ -55,6 +56,8 @@ export interface ConnectionStatus {
   coverage: Coverage | null;
   authMethod: string;
   setupHelp: string;
+  /** Harness Connections that are set up: the state of Attache's entries in the Harness, judged from its files (ADR 0006). */
+  harness?: HarnessStatusReport;
 }
 
 /** What disconnecting a connection would do, shown before the owner confirms (`GET /connections/:id/disconnect-preview`). */
@@ -81,4 +84,13 @@ export interface ConnectionDefinition {
   writeActions: Array<{ id: string; label: string }>;
   setupHelp: string;
   unavoidableSteps: string[];
+  /** Harness Connections: what connecting gives the Harness, each capability on its own, and whether it must be restarted. */
+  harness?: { capabilities: HarnessCapabilities; restartRequired: boolean };
+}
+
+/** What connecting a Harness would change (`GET /connections/:kind/harness-preview`), worked out without writing anything. */
+export interface HarnessConnectionPreview {
+  changes: HarnessFileChange[];
+  restartRequired: boolean;
+  capabilities: HarnessCapabilities;
 }

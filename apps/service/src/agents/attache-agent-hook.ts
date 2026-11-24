@@ -12,7 +12,8 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CAPTURE_EVENTS, spoolCapture, type HookEvent } from "./spool.ts";
+import { CAPTURE_EVENTS, spoolCapture, spoolText, type HookEvent } from "./spool.ts";
+import { harnessCaptureGrant, harnessSessionActive, hasHarnessSessionState } from "./harness-session-state.ts";
 import { contextFileFor } from "./context-files.ts";
 import { HOOK_EVENTS, HOOK_PROFILES } from "./hook-profiles.ts";
 import { currentOs } from "../platform/os.ts";
@@ -30,6 +31,38 @@ function readStdin(): Record<string, unknown> {
   }
 }
 
+/**
+ * The session context for a session in `folder`, the way the session-start
+ * hook prints it: the project's when the folder is one of its repositories,
+ * otherwise the global one; null when there is none, or for sessions tools
+ * start on their own. Attache's Pi extension imports this to read memory
+ * fresh before each model call.
+ */
+export function sessionContext(stateDir: string, folder: string | null, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return null;
+  const file = contextFileFor(stateDir, folder ?? process.cwd());
+  return existsSync(file) ? readFileSync(file, "utf8") : null;
+}
+
+export function harnessSessionContext(stateDir: string, agent: "pi" | "opencode", folder: string | null): string | null {
+  return harnessSessionActive(stateDir, agent) ? sessionContext(stateDir, folder) : null;
+}
+
+/**
+ * Spool a session snapshot a Harness plugin made (Attache's OpenCode plugin
+ * imports this), for the service to save. Nothing is spooled while the Agent
+ * sessions feature is off (the service then removes the session context), or
+ * for sessions tools start on their own. True when it spooled.
+ */
+export function spoolSession(stateDir: string, input: { agent: string; event: HookEvent; sessionId: string; cwd: string | null }, text: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return false;
+  if (!CAPTURE_EVENTS.includes(input.event) || !hasHarnessSessionState(input.agent)) return false;
+  const captureGrant = harnessCaptureGrant(stateDir, input.agent);
+  if (!captureGrant) return false;
+  spoolText(stateDir, { ...input, captureGrant }, text);
+  return true;
+}
+
 export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): string {
   const [agent, event] = argv;
   const i = argv.indexOf("--state-dir");
@@ -38,15 +71,22 @@ export function runHook(argv: string[], env: NodeJS.ProcessEnv = process.env): s
   if (!agent || !profile || !stateDir || !HOOK_EVENTS.includes(event as HookEvent)) return "";
   // Sessions that tools start on their own (Attache's model calls, other Agent SDK scripts) are not the user's work.
   if (env.CLAUDE_INVOKED_BY || env.ATTACHE_AGENT_HOOK_DISABLED) return "";
-  const input = profile.parse(readStdin());
+  if (hasHarnessSessionState(agent) && !harnessSessionActive(stateDir, agent)) return "";
+  const payload = readStdin();
+  const input = profile.parse(payload);
   if (event === "session-start") {
     // The session's own folder decides which project's context it gets; the hook never asks the service.
-    const file = contextFileFor(stateDir, input.cwd ?? process.cwd());
-    return existsSync(file) ? profile.sessionStartOutput(readFileSync(file, "utf8")) : "";
+    const context = sessionContext(stateDir, input.cwd, env);
+    return context === null ? "" : profile.sessionStartOutput(context);
   }
   if (CAPTURE_EVENTS.includes(event as HookEvent) && input.capture !== false) {
     const sourcePath = input.transcriptPath ?? profile.locateTranscript?.(input.sessionId, platformLocations(currentOs(), env).home) ?? null;
-    spoolCapture(stateDir, { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath });
+    if (sourcePath) profile.awaitTranscript?.(sourcePath, event as HookEvent, payload);
+    const record = { agent, event: event as HookEvent, sessionId: input.sessionId, cwd: input.cwd, sourcePath };
+    if (hasHarnessSessionState(agent)) {
+      const captureGrant = harnessCaptureGrant(stateDir, agent);
+      if (captureGrant) spoolCapture(stateDir, { ...record, captureGrant }, () => harnessCaptureGrant(stateDir, agent) === captureGrant);
+    } else spoolCapture(stateDir, record);
   }
   return "";
 }

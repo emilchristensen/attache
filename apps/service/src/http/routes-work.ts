@@ -212,6 +212,17 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
     const revoked = removed.length ? app.actions.revokeWhere((a) => a.connectionId === rec.id && removed.includes(a.kind), "write permission removed") : [];
     return { ...out, revoked };
   });
+  r.get("/connections/:kind/harness-preview", (c) => {
+    const kind = ConnectionKind.parse(c.params.kind);
+    const h = app.connections.adapter(kind).harness;
+    if (!h) throw new HttpError(400, "not_harness", `${kind} is not a Harness`);
+    try {
+      return { ...h.preview(), capabilities: h.capabilities };
+    } catch (e) {
+      // A file Attache cannot safely edit stops the preview as it would stop connecting.
+      throw new HttpError(409, "harness_file_refused", (e as Error).message);
+    }
+  });
   r.get("/connections/:id/disconnect-preview", (c) => app.connections.disconnectEffects(c.params.id!));
   r.post("/connections/:id/disconnect", async (c) => {
     const body = await c.body(z.object({ deleteData: z.boolean() }));

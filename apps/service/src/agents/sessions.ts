@@ -3,10 +3,12 @@ import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { App } from "../app.ts";
 import type { JobContext } from "../jobs/queue.ts";
-import { nowIso } from "../core/db.ts";
+import { nowIso, placeholders } from "../core/db.ts";
 import { complete } from "../models/providers.ts";
 import { AgentHooks, agentHome, stablePath } from "./install.ts";
-import { AGENT_INTEGRATIONS, integrationFor, type AgentIntegration } from "./integrations.ts";
+import { captureStateForSnapshot, harnessSessionState, hasHarnessSessionState, sessionMaySpanCapturePause, turnsWhileConnected } from "./harness-session-state.ts";
+import { AGENT_INTEGRATIONS, type AgentIntegration } from "./integrations.ts";
+import { MANAGED_SOURCE_KINDS, sessionSourceFor } from "./session-sources.ts";
 import { removeLegacySkills } from "./legacy-skills.ts";
 import { agentsDir, contextFile, listSpool, removeSpool, spoolCopyPath, spoolDir, type SpoolRecord } from "./spool.ts";
 import { chunkTurns, renderTurns, type ParsedSession, type Turn } from "./transcripts.ts";
@@ -58,6 +60,7 @@ export class AgentSessions {
   private debounce: NodeJS.Timeout | null = null;
   private onBus: ((ev: { type?: string }) => void) | null = null;
   private stopped = false;
+  private verifyingHarnesses = false;
   private readonly chains = new Map<string, Promise<unknown>>();
 
   constructor(app: App) {
@@ -75,7 +78,8 @@ export class AgentSessions {
 
   start() {
     mkdirSync(spoolDir(this.stateDir), { recursive: true, mode: 0o700 });
-    this.upgradeHarnesses();
+    const verification = this.upgradeHarnesses();
+    this.verifyingHarnesses = verification.length > 0;
     const kick = () => {
       if (this.debounce) clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.tick(), 300);
@@ -93,7 +97,14 @@ export class AgentSessions {
       if (ev.type === "memory.changed" || ev.type === "config.changed") kick();
     };
     this.app.bus.on("event", this.onBus);
-    this.tick();
+    if (this.verifyingHarnesses) {
+      // Repair clears the old Connection error. Let that finish before the
+      // spool can report any new transcript error.
+      void Promise.all(verification).then(() => {
+        this.verifyingHarnesses = false;
+        this.tick();
+      });
+    } else this.tick();
   }
 
   stop() {
@@ -119,7 +130,7 @@ export class AgentSessions {
 
   /** Archive every spooled transcript and queue its summary. Records stay spooled while the feature is off. */
   ingest(): { ingested: number } {
-    if (!this.enabled()) return { ingested: 0 };
+    if (this.verifyingHarnesses || !this.enabled()) return { ingested: 0 };
     let ingested = 0;
     for (const r of listSpool(this.stateDir)) {
       try {
@@ -135,39 +146,99 @@ export class AgentSessions {
   }
 
   private ingestOne(r: SpoolRecord): boolean {
-    const integration = integrationFor(r.agent);
+    const managed = hasHarnessSessionState(r.agent) ? r.agent : null;
+    const sessionState = managed ? harnessSessionState(this.stateDir, managed) : null;
+    const capture = sessionState ? captureStateForSnapshot(sessionState, r) : null;
+    if (managed) {
+      const connection = this.app.connections.record(managed);
+      // Preserve copies made before disconnect, and fail closed if revocation could not update the on-disk grant.
+      if (!connection || !capture || (capture.active && connection.status === "disconnected")) return false;
+    }
+    const source = sessionSourceFor(r.agent);
     const copy = spoolCopyPath(this.stateDir, r);
-    if (!integration?.hooks || !copy || !existsSync(copy)) {
-      const detail = { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (integration ? "the transcript copy is missing" : "unknown agent") };
-      if (integration && this.hadNoConversation(r)) this.app.log.debug("agent session had no conversation; nothing to save", detail);
+    if (!source || !copy || !existsSync(copy)) {
+      const detail = { agent: r.agent, sessionId: r.sessionId, event: r.event, reason: r.error ?? (source ? "the transcript copy is missing" : "unknown agent") };
+      if (source && this.hadNoConversation(r)) this.app.log.debug("agent session had no conversation; nothing to save", detail);
       else this.app.log.warn("agent session not saved", detail);
       return false;
     }
     const raw = readFileSync(copy, "utf8");
-    const parsed = integration.hooks.parseTranscript(raw);
+    const parsed = source.parse(raw);
     if (!parsed.turns.length) {
-      if (raw.trim()) this.keepUnparsed(r, copy);
+      if (parsed.problem) this.reportUnreadable(r, capture?.pauses.length ? null : copy, source.label, parsed.problem);
+      // A plugin's snapshot of a session with nothing said yet, or of a subagent's side-chain, is no failure; nor is a strict parser's empty session.
+      else if (raw.trim() && !source.partial && !source.strict) this.keepUnparsed(r, copy);
       return false;
     }
+    const available = capture ? turnsWhileConnected(parsed.turns, capture) : parsed.turns;
+    if (!available.length) return false;
     const existing = this.row(r.agent, r.sessionId);
-    // A later copy of the same session is a superset; never replace it with an older, shorter one.
-    if (existing && parsed.turns.length < existing.turns) return false;
+    // Partial snapshots omit compacted or branched history. A complete
+    // Copilot CLI copy can also omit authorised turns once pauses are filtered.
+    const joins = source.partial || (managed === "copilot-cli" && !!capture?.pauses.length);
+    const saved = joins && existing ? this.readCache(r.agent, r.sessionId) : null;
+    if (joins && existing && (!saved || saved.turns.length < existing.turns)) {
+      this.app.log.warn("could not join new turns to a saved agent session", { agent: r.agent, sessionId: r.sessionId });
+      this.reportSessionProblem(r.agent, `Attache could not join new turns to a saved ${source.label} session because its local session state is missing or incomplete. Use the wrap-up prompt to keep what the new turns decided.`);
+      return false;
+    }
+    // Without a join, a later copy of the same session is a superset.
+    if (!joins && existing && available.length < existing.turns) return false;
+    const turns = joins ? joinTurns(saved?.turns ?? [], available) : available;
     const cwd = parsed.cwd ?? r.cwd;
-    const startedAt = parsed.startedAt ?? r.at;
-    const title = parsed.title ?? firstLine(parsed.turns.find((t) => t.role === "user")?.text) ?? `${integration.label} session`;
+    const paused = !!capture && (available.length < parsed.turns.length || sessionMaySpanCapturePause(capture, parsed.createdAt, r.at));
+    const startedAt = (source.partial || paused ? turns.find((t) => t.at)?.at : parsed.startedAt) ?? (paused ? null : parsed.startedAt) ?? r.at;
+    // A Harness's generated title may describe prompts that Attache skipped.
+    const title = (paused ? existing?.title : parsed.title) ?? firstLine(turns.find((t) => t.role === "user")?.text) ?? `${source.label} session`;
     const relPath = existing?.rel_path ?? `evidence/sessions/transcripts/${r.agent}/${localDate(startedAt)}-${r.sessionId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64)}.md`;
     // The cache feeds the summariser, which may be a remote model: it never holds unredacted secrets.
-    this.writeCache({ ...parsed, turns: parsed.turns.map((t) => ({ ...t, text: redact(t.text) })), agent: r.agent, sessionId: r.sessionId, cwd, title, startedAt });
-    this.app.memory.archiveAgentSession(relPath, { agent: r.agent, agentLabel: integration.label, sessionId: r.sessionId, title, cwd, startedAt }, parsed.turns, this.userName());
+    this.writeCache({ ...parsed, turns: turns.map((t) => ({ ...t, text: redact(t.text) })), agent: r.agent, sessionId: r.sessionId, cwd, title, startedAt });
+    this.app.memory.archiveAgentSession(relPath, { agent: r.agent, agentLabel: source.label, sessionId: r.sessionId, title, cwd, startedAt }, turns, this.userName());
     this.app.db
       .prepare(
         `insert into agent_sessions (agent, session_id, rel_path, title, cwd, started_at, updated_at, turns) values (?,?,?,?,?,?,?,?)
          on conflict (agent, session_id) do update set title = excluded.title, cwd = excluded.cwd, updated_at = excluded.updated_at, turns = excluded.turns`,
       )
-      .run(r.agent, r.sessionId, relPath, title, cwd, startedAt, nowIso(), parsed.turns.length);
+      .run(r.agent, r.sessionId, relPath, title, cwd, startedAt, nowIso(), turns.length);
     const row = this.row(r.agent, r.sessionId)!;
-    if (row.turns > row.distilled_turns) this.scheduleSummary(r, integration.label, title, row.turns);
+    if (row.turns > row.distilled_turns) this.scheduleSummary(r, source.label, title, row.turns, row.turns > (existing?.turns ?? 0));
     return true;
+  }
+
+  /**
+   * The summariser's copy of a session's saved turns; null when there is none.
+   * A copy that no longer parses is removed and logged once.
+   * Snapshots that require a join cannot replace the archive if its state was lost.
+   */
+  private readCache(agent: string, sessionId: string): CachedSession | null {
+    const file = this.cachePath(agent, sessionId);
+    if (!existsSync(file)) return null;
+    try {
+      const cached = JSON.parse(readFileSync(file, "utf8")) as CachedSession;
+      if (!Array.isArray(cached?.turns)) throw new Error("it holds no turns");
+      return cached;
+    } catch (e) {
+      rmSync(file, { force: true });
+      this.app.log.warn("the summariser's copy of an agent session was unreadable and was removed", { agent, sessionId, error: (e as Error).message });
+      return null;
+    }
+  }
+
+  /**
+   * A transcript in a format Attache could not read: nothing of it is saved,
+   * a sample is kept only if capture has been continuous, and the Connection names the format, so
+   * the owner sees that an upstream change stopped their sessions being saved.
+   */
+  private reportUnreadable(r: SpoolRecord, copy: string | null, label: string, problem: string) {
+    if (copy) this.keepUnparsed(r, copy, problem);
+    else this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, problem });
+    const repair = r.agent === "opencode" ? "Restart OpenCode to load the current plugin. Updating Attache may help if the problem persists." : "Updating Attache may fix this.";
+    this.reportSessionProblem(r.agent, `Attache could not read a ${label} session (${problem}), so it saved nothing of it. ${repair} Use the wrap-up prompt to keep what the conversation decided.`);
+  }
+
+  private reportSessionProblem(agent: string, message: string) {
+    const updated = this.app.db.prepare("update connections set last_error = ?, last_error_at = ? where kind = ? and status <> 'disconnected' and last_error is not ? returning id").get(message, nowIso(), agent, message) as { id: string } | undefined;
+    if (updated) this.app.bus.emit("event", { type: "connections.changed", id: updated.id });
   }
 
   /**
@@ -187,14 +258,15 @@ export class AgentSessions {
    * turn; a session end or compaction runs it straight away. A summary that is
    * already running is followed by a new one (see `distill` for ordering).
    */
-  private scheduleSummary(r: SpoolRecord, label: string, title: string, turns: number) {
+  private scheduleSummary(r: SpoolRecord, label: string, title: string, turns: number, addedTurns: boolean) {
     const pending = this.app.db
-      .prepare("select id from jobs where kind = 'session-distill' and status = 'queued' and json_extract(input, '$.agent') = ? and json_extract(input, '$.sessionId') = ?")
-      .get(r.agent, r.sessionId) as { id: string } | undefined;
-    const now = r.event !== "turn-end";
+      .prepare("select id, run_after from jobs where kind = 'session-distill' and status = 'queued' and json_extract(input, '$.agent') = ? and json_extract(input, '$.sessionId') = ?")
+      .get(r.agent, r.sessionId) as { id: string; run_after: string | null } | undefined;
+    const immediate = r.event !== "turn-end";
     const quietUntil = new Date(Date.now() + TURN_END_QUIET_MS).toISOString();
     if (pending) {
-      this.app.jobs.reschedule(pending.id, now ? null : quietUntil);
+      // Keep due work eligible. Only new turns extend an ongoing quiet period.
+      if (pending.run_after !== null && (immediate || (addedTurns && pending.run_after > nowIso()))) this.app.jobs.reschedule(pending.id, immediate ? null : quietUntil);
       return;
     }
     this.app.jobs.create({
@@ -203,23 +275,27 @@ export class AgentSessions {
       input: { agent: r.agent, sessionId: r.sessionId },
       capability: "sessions",
       idempotencyKey: `session-distill:${r.agent}:${r.sessionId}:${turns}`,
-      ...(now ? {} : { runAfter: quietUntil }),
+      ...(immediate ? {} : { runAfter: quietUntil }),
     });
   }
 
   /** Keep a few transcripts no parser understood, so a changed agent format can be diagnosed. */
-  private keepUnparsed(r: SpoolRecord, copy: string) {
+  private keepUnparsed(r: SpoolRecord, copy: string, problem?: string) {
     const dir = join(agentsDir(this.stateDir), "unparsed");
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     copyFileSync(copy, join(dir, `${r.id}.transcript`));
     for (const old of readdirSync(dir).sort().reverse().slice(MAX_UNPARSED_SAMPLES)) rmSync(join(dir, old), { force: true });
-    this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, sample: join(dir, `${r.id}.transcript`) });
+    this.app.log.warn("agent transcript not understood; nothing was saved", { agent: r.agent, sessionId: r.sessionId, sample: join(dir, `${r.id}.transcript`), ...(problem ? { problem } : {}) });
   }
 
-  /** Drop summariser caches for sessions that are fully summarised and quiet for a week. */
+  /**
+   * Drop the cache of a fully summarised transcript after a quiet week.
+   * Managed Harnesses need redacted turns and IDs to join later snapshots
+   * after a compaction, branch switch or capture pause.
+   */
   private pruneCaches() {
     const cutoff = new Date(Date.now() - CACHE_RETENTION_MS).toISOString();
-    const done = this.app.db.prepare("select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ?").all(cutoff) as Array<{ agent: string; session_id: string }>;
+    const done = this.app.db.prepare(`select agent, session_id from agent_sessions where distilled_turns >= turns and updated_at < ? and agent not in (${placeholders(MANAGED_SOURCE_KINDS)})`).all(cutoff, ...MANAGED_SOURCE_KINDS) as Array<{ agent: string; session_id: string }>;
     for (const d of done) rmSync(this.cachePath(d.agent, d.session_id), { force: true });
   }
 
@@ -267,11 +343,10 @@ export class AgentSessions {
   private async distillNow(ctx: JobContext) {
     const agent = String(ctx.input.agent ?? "");
     const sessionId = String(ctx.input.sessionId ?? "");
-    const integration = integrationFor(agent);
+    const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
-    const cacheFile = this.cachePath(agent, sessionId);
-    if (!integration || !row || !existsSync(cacheFile)) return { skipped: "session not found" };
-    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const cached = integration && row ? this.readCache(agent, sessionId) : null;
+    if (!integration || !row || !cached) return { skipped: "session not found" };
     const from = row.distilled_turns;
     const to = cached.turns.length;
     if (to <= from) return { skipped: "already summarised" };
@@ -309,11 +384,10 @@ export class AgentSessions {
 
   /** Turns `from` up to `to` of a session as the summariser read them (redacted), for Consolidation; null when the session is gone. */
   sessionPart(agent: string, sessionId: string, from: number, to: number): { turns: Turn[]; title: string; cwd: string | null; agentLabel: string; userName: string } | null {
-    const integration = integrationFor(agent);
+    const integration = sessionSourceFor(agent);
     const row = this.row(agent, sessionId);
-    const cacheFile = this.cachePath(agent, sessionId);
-    if (!integration || !row || !existsSync(cacheFile)) return null;
-    const cached = JSON.parse(readFileSync(cacheFile, "utf8")) as CachedSession;
+    const cached = integration && row ? this.readCache(agent, sessionId) : null;
+    if (!integration || !row || !cached) return null;
     const turns = cached.turns.slice(from, to);
     return turns.length ? { turns, title: row.title ?? "Session", cwd: row.cwd, agentLabel: integration.label, userName: this.userName() } : null;
   }
@@ -352,10 +426,12 @@ export class AgentSessions {
   /**
    * Bring connected Harnesses up to this version once per start: an upgrade
    * may move the install's paths, so the MCP server entry is rewritten when it
-   * no longer matches, and the save and audit skills earlier versions
-   * installed are removed, since the MCP prompts replace them.
+   * no longer matches, the files of adapter-driven Harnesses (Pi, OpenCode,
+   * Copilot CLI) are refreshed, and the save and audit skills earlier
+   * versions installed are removed, since the MCP prompts replace them.
    */
-  private upgradeHarnesses() {
+  private upgradeHarnesses(): Promise<unknown>[] {
+    const verification: Promise<unknown>[] = [];
     const skills = removeLegacySkills(agentHome(), this.stateDir);
     if (skills.removed.length) this.app.log.info("removed the save and audit skills the MCP prompts replace", { folders: skills.removed });
     for (const e of skills.errors) this.app.log.warn("could not remove an earlier version's skill folder", e);
@@ -367,6 +443,22 @@ export class AgentSessions {
         this.app.log.warn("could not register Attache's MCP server", { agent: a.kind, error: (e as Error).message });
       }
     }
+    // Harnesses whose files carry this install's paths (a plugin, an extension, a hooks file) are refreshed through their adapter.
+    for (const h of this.app.harnesses()) {
+      if (!hasHarnessSessionState(h.kind)) continue;
+      const connection = this.app.connections.record(h.kind);
+      if (!connection || connection.status === "disconnected" || !connection.settings.authMethod) continue;
+      try {
+        const r = h.refresh();
+        if (r.changes.length) this.app.log.info("brought Attache's files in a Harness up to date", { agent: h.kind, files: r.changes.map((c) => c.path), backups: r.backups });
+        if (connection.status !== "connected" && h.status().state === "current") {
+          verification.push(this.app.connections.test(connection.id).catch((e) => this.app.log.warn("could not verify a repaired Harness Connection", { agent: h.kind, error: (e as Error).message })));
+        }
+      } catch (e) {
+        this.app.log.warn("could not bring Attache's files in a Harness up to date", { agent: h.kind, error: (e as Error).message });
+      }
+    }
+    return verification;
   }
 
   /** The current context text, for installing an agent before the first refresh. */
@@ -381,6 +473,24 @@ export class AgentSessions {
     return searchCommand({ os: currentOs(), execPath: stablePath(process.execPath), entry: entry && stablePath(entry), stateDir: this.stateDir });
   }
 
+}
+
+/**
+ * Turns saved before joined with a newer snapshot's, by message id: a turn
+ * already saved keeps its place and takes the newer text, a new one follows,
+ * so the session stays in order and only grows.
+ */
+export function joinTurns(saved: Turn[], next: Turn[]): Turn[] {
+  const out = [...saved];
+  const at = new Map(out.flatMap((t, i) => (t.id ? [[t.id, i] as const] : [])));
+  for (const t of next) {
+    const i = t.id === undefined ? undefined : at.get(t.id);
+    if (i === undefined) {
+      if (t.id) at.set(t.id, out.length);
+      out.push(t);
+    } else out[i] = { ...t, at: t.at ?? out[i]!.at };
+  }
+  return out;
 }
 
 function firstLine(text: string | undefined): string | null {

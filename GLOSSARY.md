@@ -91,9 +91,22 @@ Only the data folder is required, and a Machine can instead join the Brain anoth
 Setup resumes at the step the owner left.
 
 **Harness**:
-The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex or Antigravity.
+The agent application the owner talks to, such as Claude Code, Claude Desktop, Codex, Antigravity, OpenCode, Pi or Copilot CLI.
 It is where the owner asks about the Brain and adds to it.
+What Attache can do in a Harness is described by three separate capabilities, MCP access, memory and session capture; having one never implies another (ADR 0006).
 _Avoid_: client, coding agent
+
+**MCP access**:
+Attache's MCP server registered in a Harness, which gives its agent search, read, save and audit and the save, audit and wrap-up prompts.
+Every connected Harness has it; on its own it brings no memory and saves no sessions.
+
+**Runtime-fresh memory**:
+Attache memory the Harness reads from the Brain at the moment it needs it, when a session starts or at a prompt boundary, so long-running and resumed sessions see the current memory.
+A memory file Attache keeps for a Harness to load is a managed file instead, and a Harness with neither has no memory from Attache.
+
+**Session capture**:
+Attache saving a Harness's conversation, owner and agent turns only, at the boundaries the Harness reports, such as a stop, a compaction or the end of a session.
+A Harness without a reliable final event can miss the newest in-flight turn, and its Connection notes say so.
 
 **Connection**:
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.

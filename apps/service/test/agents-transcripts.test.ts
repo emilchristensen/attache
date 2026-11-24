@@ -36,6 +36,13 @@ describe("agent transcripts", () => {
     expect(JSON.stringify(p)).not.toMatch(/system note|private/);
   });
 
+  it("Attache's own memory block, wherever a Harness echoes it into a turn, is never read as the owner's words", () => {
+    const raw = claudeTranscript("s2", "/work/attache", [["<attache-memory>\n## Attache memory\n\nOrion cutover in December.\n</attache-memory>\nWhat is next?", "The cutover."]]);
+    const p = parseClaudeCode(raw);
+    expect(p.turns[0]).toMatchObject({ role: "user", text: "What is next?" });
+    expect(JSON.stringify(p)).not.toMatch(/Orion cutover|attache-memory/);
+  });
+
   it("unrecognised or broken lines yield nothing instead of garbage", () => {
     expect(parseClaudeCode("not json\n{}\n").turns).toEqual([]);
     expect(parseCodex('{"type":"event_msg"}').turns).toEqual([]);

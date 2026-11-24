@@ -4,6 +4,8 @@
  * already open, when a Connection needs sign-in, where Home's Reconnect lands. Driven through the Dashboard against the
  * real bundled service and the TEST-ONLY fixtures; it sets itself up through the API, so it runs on its own.
  */
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser } from "./browser.ts";
 import { connection, connectionToggle, openConnection } from "./connections.ts";
@@ -91,7 +93,7 @@ test("groups: the Reader first, then rows in Notes, Work sources, Harnesses and 
   const row = await box(page, `${work} .connection-row`);
   expect(tile.width).toBeLessThan(row.width / 3);
   expect(tile.height).toBeLessThanOrEqual(64);
-  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop"]);
+  await expect(page.locator('[data-group="harnesses"] .connection-tile-name')).toHaveText(["Codex", "Antigravity", "Claude Desktop", "Pi", "OpenCode", "Copilot CLI"]);
   // The data folder is described in the glossary's words: the Machine's copy of the Brain.
   await openConnection(page, "vault-data");
   await expect(connection(page, "vault-data")).toContainText("Where this Machine keeps its copy of your Brain (curated notes, evidence and deliverables) as Markdown.");
@@ -308,6 +310,121 @@ test("captures: the page in light, dark and narrow, with a row open and with a s
   await expect(claudeCode.locator(":focus")).toHaveCount(1);
   await page.unroute("**/api/v1/capabilities");
   await page.setViewportSize({ width: 1360, height: 900 });
+});
+
+test("a Harness shows its capabilities and every file it will change before connecting, its state once connected, and what a disconnect could not remove", async () => {
+  mkdirSync(join(stack.agentHome, ".codex"), { recursive: true });
+  const page = await journeys.open("/connections");
+  const codex = await openConnection(page, "codex");
+  await expect(codex.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
+  ]);
+  const files = codex.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([`Create ${join(stack.agentHome, ".codex", "hooks.json")}: Attache's hooks for Codex`, `Create ${join(stack.agentHome, ".codex", "config.toml")}: Attache's MCP server`]);
+  // Nothing is written until the owner connects.
+  expect(existsSync(join(stack.agentHome, ".codex", "config.toml"))).toBe(false);
+  await codex.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "codex");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  await expect(row.locator("[data-harness-state]")).toContainText("Up to date");
+
+  // A hooks file the owner broke by hand: the state says so, and disconnecting names what remains.
+  const hooks = join(stack.agentHome, ".codex", "hooks.json");
+  writeFileSync(hooks, `${readFileSync(hooks, "utf8")}\n// mine`);
+  await page.reload();
+  const broken = await openConnection(page, "codex");
+  await expect(broken.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "failed");
+  await broken.getByRole("button", { name: "Disconnect…" }).click();
+  await broken.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect(page.getByText(/Disconnected, but some of Attache's entries remain: .*hooks\.json/).first()).toBeVisible();
+  expect(readFileSync(join(stack.agentHome, ".codex", "config.toml"), "utf8")).not.toContain("--state-dir");
+  rmSync(join(stack.agentHome, ".codex"), { recursive: true });
+});
+
+test("Pi is its own Harness: MCP access, memory and session capture, its one extension file and the reload it needs, connectable even when Attache did not find Pi", async () => {
+  const extensions = join(stack.agentHome, ".pi", "agent", "extensions");
+  const page = await journeys.open("/connections");
+  const pi = await openConnection(page, "pi");
+  await expect(pi.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
+  ]);
+  const files = pi.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${extensions.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.ts: Attache's Pi extension, which registers Attache's MCP server, gives your Attache memory to each Pi session and saves your Pi sessions$`)]);
+  await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
+  expect(existsSync(extensions)).toBe(false);
+  await pi.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "pi");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  expect(readdirSync(extensions)).toHaveLength(1);
+  const connected = await openConnection(page, "pi");
+  await connected.getByRole("button", { name: "Disconnect…" }).click();
+  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect.poll(() => readdirSync(extensions)).toEqual([]);
+  rmSync(join(stack.agentHome, ".pi"), { recursive: true });
+});
+
+test("OpenCode is its own Harness: MCP access, memory and session capture at each turn, its one plugin file and the restart it needs, connectable even when Attache did not find OpenCode", async () => {
+  const plugins = join(stack.agentHome, ".config", "opencode", "plugins");
+  const page = await journeys.open("/connections");
+  const opencode = await openConnection(page, "opencode");
+  await expect(opencode.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: at each turn, with no session end, so the newest in-flight turn can be missed",
+  ]);
+  const files = opencode.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([new RegExp(`^Create ${plugins.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.js: Attache's OpenCode plugin, which registers Attache's MCP server, gives your Attache memory to each OpenCode session and saves your OpenCode sessions$`)]);
+  await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
+  expect(existsSync(plugins)).toBe(false);
+  await opencode.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "opencode");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  expect(readdirSync(plugins)).toHaveLength(1);
+  const connected = await openConnection(page, "opencode");
+  await connected.getByRole("button", { name: "Disconnect…" }).click();
+  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await expect.poll(() => readdirSync(plugins)).toEqual([]);
+  rmSync(join(stack.agentHome, ".config"), { recursive: true });
+});
+
+test("Copilot CLI is its own Harness: MCP access, runtime-fresh memory and session capture, its personal MCP configuration and hooks file, and the restart it needs, connectable even when Attache did not find Copilot CLI", async () => {
+  const config = join(stack.agentHome, ".copilot", "mcp-config.json");
+  const hooks = join(stack.agentHome, ".copilot", "hooks");
+  const ownHooks = join(hooks, "mine.json");
+  mkdirSync(hooks, { recursive: true });
+  writeFileSync(ownHooks, JSON.stringify({ version: 1, hooks: { sessionStart: [{ type: "command", bash: "echo '{}'" }] } }));
+  const own = { mcpServers: { playwright: { type: "local", command: "npx", args: ["@playwright/mcp@latest"], tools: ["*"] } } };
+  mkdirSync(dirname(config), { recursive: true });
+  writeFileSync(config, JSON.stringify(own));
+  const page = await journeys.open("/connections");
+  const copilot = await openConnection(page, "copilot-cli");
+  await expect(copilot.getByRole("list", { name: "What connecting gives the Harness" }).getByRole("listitem")).toHaveText([
+    "MCP access: search, read and save to your Brain",
+    "Memory: read fresh from your Brain when a session starts, and before every model call where the Harness allows it",
+    "Session capture: as the session goes, after a turn or before a compaction as the Harness allows, and when the session ends",
+  ]);
+  const files = copilot.getByLabel("Files Attache will change");
+  await expect(files.getByRole("listitem")).toHaveText([
+    `Update ${config}: Attache's MCP server in Copilot CLI's personal MCP configuration (backed up first)`,
+    new RegExp(`^Create ${hooks.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&")}[\\\\/]attache(-[0-9a-f]{8})?\\.json: Attache's personal Copilot CLI hooks that give each new, cleared or resumed session your current Attache memory and save the conversation after each turn, before compaction and when the session ends$`),
+  ]);
+  await expect(files.getByText("Restart the Harness after connecting so it loads the change.")).toBeVisible();
+  await copilot.getByRole("button", { name: "Connect" }).click();
+  const row = connection(page, "copilot-cli");
+  await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
+  expect(Object.keys((JSON.parse(readFileSync(config, "utf8")) as typeof own).mcpServers).sort()).toEqual([expect.stringMatching(/^attache/), "playwright"]);
+  const connected = await openConnection(page, "copilot-cli");
+  await connected.getByRole("button", { name: "Disconnect…" }).click();
+  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  // Disconnect restores the MCP config before it removes Attache's hooks file.
+  await expect(page.getByText("Disconnected; data kept", { exact: true })).toBeVisible();
+  expect(JSON.parse(readFileSync(config, "utf8"))).toEqual(own);
+  expect(readdirSync(hooks)).toEqual(["mine.json"]);
+  rmSync(join(stack.agentHome, ".copilot"), { recursive: true });
 });
 
 test("no unresolved console errors across the Connections journeys", () => {
