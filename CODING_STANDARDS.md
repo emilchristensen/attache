@@ -25,6 +25,9 @@ Vocabulary follows `GLOSSARY.md`, and decisions follow `docs/adr/`.
 
 ## Behaviour
 
+- **A new state or operation on a shared record passes every guard on that record.**
+  A new status gets a decision at each place that lists statuses, and a new action that relinks, restores or resends goes through the same checks as the actions already there.
+  Look hardest where two changes meet: one adds the guard, the other the operation.
 - **Every caught error is handled, logged or surfaced to the owner.**
   An empty or comment-only `catch` needs the reason it is safe, in the code.
 - **User-facing text tells the owner what to do next**, in the glossary's words, and never shows a secret.
