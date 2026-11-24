@@ -57,6 +57,17 @@ test("empty, progress and switched-off states", async () => {
   await api(page, "PUT", "/features", { changes: { attention: true, drafts: true }, cascade: true });
 });
 
+test("Prepare a briefing with none today writes today's Daily Briefing, so the area fills with its card", async () => {
+  const page = await journeys.open("/");
+  await expect(area(page)).toContainText("No briefing yet today");
+  await area(page).locator(".briefing-empty").getByRole("button", { name: "Prepare a briefing" }).click();
+  const card = area(page).locator(".daily-briefing-card");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(area(page)).not.toContainText("No briefing yet today");
+  await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
+  expect((await api<{ daily: { kind: string } | null; requested: unknown }>(page, "GET", "/briefings")).daily?.kind).toBe("daily");
+});
+
 test("daily: own all-day card, Got it fold, and briefing page", async () => {
   const page = await journeys.open("/");
   await writeBriefing(page, "daily");
@@ -104,6 +115,14 @@ test("options and requested briefings live above the daily card", async () => {
   await area(page).getByRole("button", { name: /^Away summary/ }).click();
   await expect.poll(async () => (await api<{ requested: { kind: string } | null }>(page, "GET", "/briefings")).requested?.kind, { timeout: 30_000 }).toBe("away");
   await expect(area(page).locator(".requested-briefing")).toBeVisible({ timeout: 30_000 });
+  // Its page is named for what it is, an Away summary, without the Daily Briefing's painting.
+  await area(page).locator(".requested-briefing").getByRole("link", { name: "Read briefing" }).click();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Home/Away summary");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Away summary");
+  await expect(page.getByRole("region", { name: "Away summary" })).toBeVisible();
+  await expect(page.locator(".briefing-painting")).toHaveCount(0);
+  await expect(page.locator(".briefing-page").getByText("Daily Briefing")).toHaveCount(0);
+  await page.goBack();
   await area(page).locator(".requested-briefing").getByRole("button", { name: "Got it" }).click();
   await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
 });

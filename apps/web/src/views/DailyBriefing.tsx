@@ -1,27 +1,25 @@
 import { useId, useState } from "react";
 import type { BriefingView } from "@attache/contracts";
-import { areaState, leadWords, requestedShown, settledKey, todaysDaily } from "../briefing-area.ts";
+import { areaState, BRIEFING_NAME, leadWords, requestedShown, settledKey, todaysDaily } from "../briefing-area.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { paintingForDate } from "../paintings.ts";
 import { briefingHref } from "../routes.ts";
 import { clockTime, dayKey } from "../zoned-time.ts";
 import { Link, TurnOnInSettings, useAction } from "../components/ui.tsx";
-import { BriefingActions } from "./BriefingActions.tsx";
+import { BriefingActions, PREPARING } from "./BriefingActions.tsx";
 import { BriefingPainting } from "./BriefingPainting.tsx";
 import { MeetingContext } from "./BriefingParts.tsx";
 import { useBriefingJob, type BriefingJob } from "./briefing-job.ts";
 import { useBriefings } from "./briefings.ts";
 
-const REQUESTED_NAME: Readonly<Record<BriefingView["kind"], string>> = { away: "Away summary", manual: "Briefing you asked for", daily: "The Daily Briefing" };
-
 /** An away summary or a briefing the owner asked for: a plain card above the Daily Briefing, named for what it is. */
 function RequestedBriefing({ briefing, onGotIt }: { briefing: BriefingView; onGotIt: () => void }) {
   const words = leadWords(briefing);
   return (
-    <article className="requested-briefing" aria-label={REQUESTED_NAME[briefing.kind]}>
+    <article className="requested-briefing" aria-label={BRIEFING_NAME[briefing.kind]}>
       <div>
-        <strong>{REQUESTED_NAME[briefing.kind]}</strong>
+        <strong>{BRIEFING_NAME[briefing.kind]}</strong>
         <h3>{words.headline}</h3>
         <p>{words.explanation}</p>
       </div>
@@ -110,7 +108,7 @@ export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; cl
     <section className="daily-briefing-area" aria-labelledby={headingId}>
       <div className="daily-briefing-head">
         <h2 id={headingId}>The Daily Briefing</h2>
-        <BriefingActions running={!!job} hasBriefing={!!latest} start={start} onMeetingContext={() => setContext(true)} />
+        <BriefingActions running={!!job} hasBriefing={!!latest} noDailyToday={state === "none"} start={start} onMeetingContext={() => setContext(true)} />
       </div>
       {requested && <RequestedBriefing briefing={requested} onGotIt={() => settle(settledKey(requested))} />}
       {state === "off" && (
@@ -130,7 +128,8 @@ export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; cl
       {state === "none" && (
         <div className="briefing-empty">
           <strong>No briefing yet today</strong>
-          <button className="primary" disabled={busy !== null} onClick={() => void run("prepare", () => start("manual"), "Preparing a briefing in the background")}>
+          {/* With none today, the briefing written now is today's Daily Briefing: it fills this area, with this morning's picks. */}
+          <button className="primary" disabled={busy !== null} onClick={() => void run("prepare", () => start("daily"), PREPARING.daily)}>
             Prepare a briefing
           </button>
         </div>

@@ -1,6 +1,6 @@
 import type { MouseEvent, ReactNode } from "react";
 import type { BriefingView } from "@attache/contracts";
-import { entryTarget, leadWords, type EntryTarget } from "../briefing-area.ts";
+import { BRIEFING_NAME, entryTarget, leadWords, type EntryTarget } from "../briefing-area.ts";
 import { useHomeClock } from "../heads-up-clock.ts";
 import { openOnHome } from "../inbox-place.ts";
 import { paintingForDate } from "../paintings.ts";
@@ -74,22 +74,31 @@ export function BriefingPage({ id }: { id: string }) {
       </section>
     );
   const items = new Map<string, Item>(briefing.sections.flatMap((s) => s.items).map((i) => [i.id, i]));
-  const painting = paintingForDate(dayKey(Date.parse(briefing.createdAt), clock.timeZone));
   const lead = leadWords(briefing);
   const picks = briefing.topPicks.flatMap((pick) => items.get(pick) ?? []);
+  const name = BRIEFING_NAME[briefing.kind];
+  const written = `Written ${clockTime(Date.parse(briefing.createdAt), clock.timeZone)}`;
   return (
-    <section className="page briefing-page" aria-label="The Daily Briefing">
+    <section className="page briefing-page" aria-label={name}>
       <nav className="breadcrumbs" aria-label="Breadcrumb">
         <Link to="/">Home</Link>
         <span aria-hidden>/</span>
-        <span aria-current="page">The Daily Briefing</span>
+        <span aria-current="page">{name}</span>
       </nav>
-      <BriefingPainting painting={painting} className="briefing-page-hero">
-        <p className="briefing-page-written">Written {clockTime(Date.parse(briefing.createdAt), clock.timeZone)}</p>
-        <h1>
-          <span className="briefing-painting-the">The</span> Daily Briefing
-        </h1>
-      </BriefingPainting>
+      {briefing.kind === "daily" ? (
+        <BriefingPainting painting={paintingForDate(dayKey(Date.parse(briefing.createdAt), clock.timeZone))} className="briefing-page-hero">
+          <p className="briefing-page-written">{written}</p>
+          <h1>
+            <span className="briefing-painting-the">The</span> Daily Briefing
+          </h1>
+        </BriefingPainting>
+      ) : (
+        // An away summary or a briefing asked for is named for what it is, without the Daily Briefing's painting.
+        <header className="briefing-page-plain">
+          <h1>{name}</h1>
+          <p className="briefing-page-written">{written}</p>
+        </header>
+      )}
       <Section title="First on your list">
         <ul className="briefing-items">
           {briefing.lead ? <Entry briefing={briefing} itemId={briefing.lead.itemId} headline={lead.headline} text={lead.explanation} url={items.get(briefing.lead.itemId)?.url ?? null} /> : <li className="briefing-item">{lead.headline}</li>}

@@ -7,6 +7,9 @@ import type { BriefingView } from "@attache/contracts";
 import { REQUESTED_BRIEFING_STAYS_MS } from "./heads-up-rules.ts";
 import { dayKey } from "./zoned-time.ts";
 
+/** What each kind of briefing is called, on its card and its page: only the Daily Briefing has the painting. */
+export const BRIEFING_NAME: Readonly<Record<BriefingView["kind"], string>> = { daily: "The Daily Briefing", away: "Away summary", manual: "Briefing you asked for" };
+
 /** The key Got it remembers a briefing by (`heads-up-memory.ts`). */
 export const settledKey = (briefing: Pick<BriefingView, "id">) => `briefing:${briefing.id}`;
 
