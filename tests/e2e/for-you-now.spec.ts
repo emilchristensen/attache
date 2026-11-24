@@ -34,10 +34,16 @@ test.afterAll(async () => {
 const area = (page: Page) => page.getByRole("region", { name: "The Daily Briefing" });
 const forYou = (page: Page) => page.getByRole("region", { name: "For you now" });
 
-async function writeBriefing(page: Page, kind: "daily" | "away" | "manual") {
-  const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+/** Writes a briefing through the API and waits until the Daily Briefing area shows it; answers its id. */
+async function writeBriefing(page: Page, kind: "daily" | "away" | "manual"): Promise<string> {
+  const latest = async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+  const before = await latest();
   await api(page, "POST", "/briefings", { kind, ...(kind === "away" ? { since: new Date(Date.now() - 3 * 86_400_000).toISOString() } : {}) });
-  await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
+  await expect.poll(latest, { timeout: 30_000 }).not.toBe(before);
+  const id = (await latest())!;
+  // The area hears of it through a live event: its card leads to the new briefing, not the one it replaced.
+  if (kind === "daily") await expect(area(page).locator(".daily-briefing-card").getByRole("link", { name: "Read briefing" })).toHaveAttribute("href", new RegExp(`/briefing/${id}$`));
+  return id;
 }
 
 test("empty, progress and switched-off states", async () => {
@@ -55,6 +61,17 @@ test("empty, progress and switched-off states", async () => {
   await area(page).getByRole("link", { name: "Turn it on in Settings" }).click();
   await expect(page).toHaveURL(/\/settings\/features$/);
   await api(page, "PUT", "/features", { changes: { attention: true, drafts: true }, cascade: true });
+});
+
+test("Prepare a briefing with none today writes today's Daily Briefing, so the area fills with its card", async () => {
+  const page = await journeys.open("/");
+  await expect(area(page)).toContainText("No briefing yet today");
+  await area(page).locator(".briefing-empty").getByRole("button", { name: "Prepare a briefing" }).click();
+  const card = area(page).locator(".daily-briefing-card");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(area(page)).not.toContainText("No briefing yet today");
+  await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
+  expect((await api<{ daily: { kind: string } | null; requested: unknown }>(page, "GET", "/briefings")).daily?.kind).toBe("daily");
 });
 
 test("daily: own all-day card, Got it fold, and briefing page", async () => {
@@ -104,6 +121,14 @@ test("options and requested briefings live above the daily card", async () => {
   await area(page).getByRole("button", { name: /^Away summary/ }).click();
   await expect.poll(async () => (await api<{ requested: { kind: string } | null }>(page, "GET", "/briefings")).requested?.kind, { timeout: 30_000 }).toBe("away");
   await expect(area(page).locator(".requested-briefing")).toBeVisible({ timeout: 30_000 });
+  // Its page is named for what it is, an Away summary, without the Daily Briefing's painting.
+  await area(page).locator(".requested-briefing").getByRole("link", { name: "Read briefing" }).click();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Home/Away summary");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Away summary");
+  await expect(page.getByRole("region", { name: "Away summary" })).toBeVisible();
+  await expect(page.locator(".briefing-painting")).toHaveCount(0);
+  await expect(page.locator(".briefing-page").getByText("Daily Briefing")).toHaveCount(0);
+  await page.goBack();
   await area(page).locator(".requested-briefing").getByRole("button", { name: "Got it" }).click();
   await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
 });

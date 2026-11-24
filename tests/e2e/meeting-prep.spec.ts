@@ -116,6 +116,24 @@ test("upcoming: 15 minutes before the start its prep is in For you now and stays
   await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
 });
 
+test("read by opening: opening unread prep from its Inbox row takes it off For you now on another page too, and marks it In progress", async () => {
+  const page = await journeys.open("/");
+  await setCalendar(page, [{ id: "retro", summary: "Sprint retro", start: 8, end: 38 }]);
+  await page.reload();
+  // A second page stands in for another Machine's Dashboard: it hears the decision as a live event.
+  const other = await journeys.newPage();
+  await other.goto(stack.url);
+  await expect(meetingHeadsUp(other, "Sprint retro")).toBeVisible();
+  await expect(meetingHeadsUp(page, "Sprint retro")).toBeVisible();
+  // The row's subject, not Start working: reading the prep is what counts.
+  await openRow(rowFor(page, "retro"));
+  await expect(rowFor(page, "retro").locator("[data-meeting-detail]")).toBeVisible();
+  await expect(meetingHeadsUp(other, "Sprint retro")).toHaveCount(0);
+  await expect(rowFor(other, "retro").locator(".inbox-source")).toContainText("In progress");
+  await expect(rowFor(page, "retro").locator(".inbox-source")).toContainText("In progress");
+  await other.close();
+});
+
 test("related notes: the newest briefing's notes for the meeting, labelled with its time, or that it found none", async () => {
   const page = await journeys.open("/");
   // A person note the briefing can relate to the meeting, saved as a Harness saves (the Dashboard never writes the Brain).
@@ -171,6 +189,10 @@ test("in progress: For you now says the meeting started, Your day offers Join, n
   // Opened in the Inbox, its prep has Join too, while the meeting runs.
   await openPrep(rowFor(page, "handover"));
   await expect(rowFor(page, "handover").locator("[data-meeting-detail]").getByRole("link", { name: "Join" })).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
+  // Opening it read the prep, so it is In progress; Not started makes it unread again, back in For you now.
+  await expect(rowFor(page, "handover").locator(".inbox-source")).toContainText("In progress");
+  await rowFor(page, "handover").getByRole("button", { name: "Not started: Pilot handover" }).click();
+  await expect(rowFor(page, "handover").locator(".inbox-source")).not.toContainText("In progress");
   // Snooze is the one way to put something off.
   await expect(page.getByRole("button", { name: /Not now/ })).toHaveCount(0);
   await rowFor(page, "handover").locator("[data-row-toggle]").click();
@@ -257,6 +279,11 @@ test("narrow: meeting prep fits a phone with no sideways scrolling and no clippe
 
 test("captures: overlapping meetings and an open prep, light, dark and narrow", async () => {
   const page = await journeys.open("/");
+  // Fresh meetings: the narrow journey opened its prep, which read it and took it off For you now.
+  await setCalendar(page, [
+    { id: "handover3", summary: "Steering group handover with the client", start: -10, end: 10, meetLink: "https://meet.google.com/abc-defg-hij" },
+    { id: "triage3", summary: "Billing triage for the invoice fallback", start: 10, end: 40, meetLink: "https://meet.google.com/bil-ling-tri" },
+  ]);
   await expect(meetingHeadsUp(page, "Billing triage for the invoice fallback")).toBeVisible();
   await page.mouse.move(5, 5);
   const shoot = async (name: string) => {
@@ -276,6 +303,36 @@ test("captures: overlapping meetings and an open prep, light, dark and narrow", 
   await page.mouse.move(5, 5);
   await shoot("-prep-open");
   await page.emulateMedia({ colorScheme: null });
+});
+
+test("your day after the last meeting: it stays read, an unanswered all-day invitation keeps its link and Not answered, and the day says Nothing more today", async () => {
+  const page = await journeys.open("/");
+  // Today in the browser's zone: a meeting that has already ended (read for the first time only now, after its end) and
+  // an all-day offsite the owner has not answered.
+  const day = await page.evaluate(() => {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const date = (d: Date) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
+    const span = now.getTime() - midnight;
+    return { today: date(now), tomorrow: date(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)), from: new Date(midnight).toISOString(), to: new Date(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).getTime()).toISOString(), endedStart: new Date(midnight + span / 4).toISOString(), endedEnd: new Date(midnight + span / 2).toISOString() };
+  });
+  const events = [
+    { id: "sync", summary: "Morning sync", start: { dateTime: day.endedStart }, end: { dateTime: day.endedEnd }, attendees: [{ email: SELF, self: true, responseStatus: "accepted" }, { email: "nora@client.example", displayName: "Nora Lind", responseStatus: "accepted" }] },
+    { id: "offsite", summary: "Team offsite", start: { date: day.today }, end: { date: day.tomorrow }, attendees: [{ email: SELF, self: true, responseStatus: "needsAction" }, { email: "mia@client.example", displayName: "Mia Jensen", responseStatus: "accepted" }] },
+  ];
+  expect((await page.request.post(`${stack.fixtureUrl}/__control/gcal-events`, { data: { events } })).ok()).toBe(true);
+  await api(page, "POST", "/connections/gcal/refresh");
+  // The read starts at the start of today, so the meeting that ended is still on the agenda.
+  const agenda = `/agenda?from=${encodeURIComponent(day.from)}&to=${encodeURIComponent(day.to)}`;
+  await expect.poll(async () => (await api<{ events: Array<{ id: string }> }>(page, "GET", agenda)).events.map((e) => e.id).sort(), { timeout: 30_000 }).toEqual(["offsite", "sync"]);
+  await page.reload();
+  const yourDay = page.getByRole("region", { name: "Your day" });
+  const allDay = yourDay.getByRole("list", { name: "All day" });
+  await expect(allDay.getByRole("link", { name: "Team offsite" })).toHaveAttribute("href", "https://calendar.google.com/event?eid=offsite");
+  await expect(allDay.getByRole("listitem").filter({ hasText: "Team offsite" })).toContainText("Not answered");
+  // The all-day event is never a meeting in progress: with the last meeting over, nothing more comes today.
+  await expect(yourDay.locator(".your-day-message")).toHaveText("Nothing more today");
+  await expect(yourDay).not.toContainText("Nothing on your calendar today");
 });
 
 test("no console errors during the meeting prep journeys", () => {

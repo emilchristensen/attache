@@ -24,10 +24,24 @@ describe("the Inbox kind-to-first-step map", () => {
     ["replication_prose_versions", "row"],
     ["replication_deleted_and_changed", "row"],
   ] as const)("maps %s to %s", (kind, step) => {
-    expect(firstStepFor({ kind })).toBe(step);
+    expect(firstStepFor({ kind, draftable: null })).toBe(step);
   });
 
   it("opens a newer kind in its row", () => {
-    expect(firstStepFor({ kind: "newer_kind" })).toBe("row");
+    expect(firstStepFor({ kind: "newer_kind", draftable: null })).toBe("row");
+  });
+
+  const reply = { actionKind: "slack.reply", target: { channel: "D1" }, context: {} };
+  it.each(["deadline", "fact-review", "replication_blocked", "slack_dm"])("prepares a draft for any other draftable item: a draftable %s", (kind) => {
+    expect(firstStepFor({ kind, draftable: reply })).toBe("draft");
+  });
+
+  it.each([
+    ["review_request", "source"],
+    ["meeting_prep", "prep"],
+    ["invite_response", "calendar"],
+    ["pending_reply", "draft"],
+  ] as const)("keeps the step its kind names for a draftable %s: %s", (kind, step) => {
+    expect(firstStepFor({ kind, draftable: reply })).toBe(step);
   });
 });

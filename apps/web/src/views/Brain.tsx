@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMoveKeys } from "../shortcuts.ts";
 import { useResource } from "../live.ts";
 import { Empty, ErrorState, Loading, navigate, useLocation } from "../components/ui.tsx";
 import { ChipNav } from "../components/ChipNav.tsx";
 import { Icon } from "../components/icons.tsx";
-import { useMenuDismiss } from "../components/menu.ts";
+import { usePopover } from "../components/menu.ts";
 import { usePageRoom, useRevealDetail } from "../components/reveal-detail.ts";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { tabId, Tabs } from "../components/Tabs.tsx";
@@ -40,20 +40,15 @@ const VIEW_PANEL = "brain-view";
 
 /** The Brain's menu: actions that need no room on the page. Rebuild index is also in Settings. */
 function BrainMenu() {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  const chosen = useMenuDismiss(open, close, root, button);
+  const menu = usePopover();
   const { rebuild, busy } = useRebuildIndex();
   return (
-    <div className="brain-menu" ref={root}>
-      <button ref={button} className="icon-button" aria-label="Brain menu" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen(!open)}>
+    <div className="brain-menu">
+      <button className="icon-button" aria-label="Brain menu" {...menu.buttonProps}>
         <Icon name="more" size={20} />
       </button>
-      {open && (
-        <div id={menuId} className="menu-pop" role="group" aria-label="Brain menu" onClick={chosen}>
+      {menu.open && (
+        <div className="menu-pop" aria-label="Brain menu" {...menu.listProps}>
           <button className="menu-item" disabled={busy} onClick={rebuild}>
             <span>Rebuild index</span>
             <span className="menu-help">Read every note into search again, when search misses one. Notes are not changed.</span>

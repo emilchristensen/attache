@@ -84,9 +84,16 @@ async function routeUnbrokenNote(page: Page) {
   });
 }
 
+/** Opening prep reads it (In progress), so an earlier journey's opened prep is made unread again with Not started. */
+async function unreadPrep(page: Page): Promise<void> {
+  const items = (await api<{ items: Array<{ id: string; kind: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items;
+  for (const read of items.filter((i) => i.kind === "meeting_prep" && i.startedAt)) await api(page, "POST", `/attention/${read.id}/decision`, { decision: "reopen" });
+}
+
 /** Home on a phone with both meetings' prep open, Recently added open and the mixed Connections rows. */
 async function phoneHome(): Promise<Page> {
   const page = await journeys.open("/");
+  await unreadPrep(page);
   await routeMixedHealth(page);
   await routeUnbrokenNote(page);
   await page.reload();
@@ -124,7 +131,10 @@ test("targets: Home row actions and Reconnect are 44 x 44, apart and whole at 37
 });
 
 test("destinations: Start working opens each meeting's event", async () => {
-  const page = await phoneHome();
+  // Both preps unread, so both are in For you now with Start working (an opened prep is read and leaves it).
+  const page = await journeys.open("/");
+  await unreadPrep(page);
+  await page.reload();
   for (const m of [HANDOVER, TRIAGE]) {
     const row = meetingHeadsUp(page, m.summary);
     await row.getByRole("button", { name: "Actions" }).click();
@@ -233,7 +243,11 @@ test("Done from the keyboard leaves the other meeting's Inbox item untouched", a
   await page.keyboard.press("Enter");
   await expect(triage).toHaveCount(0);
   await expect(page.locator('#inbox [data-inbox-row][data-item-key="gcal:triage"]')).toHaveCount(0);
-  await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
+  // The other meeting's item is untouched: still in the Inbox, open and undecided (its prep, opened above, was read).
+  const handover = page.locator('#inbox [data-inbox-row][data-item-key="gcal:handover"]');
+  await expect(handover).toBeVisible();
+  await expect(handover).not.toHaveAttribute("data-decided");
+  await expect(handover.locator(".inbox-source")).toContainText("In progress");
 });
 
 test("no console errors during the narrow Home journeys", () => {

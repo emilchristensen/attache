@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import type { AttentionItemView } from "@attache/contracts";
 import { useSignals } from "../nav-signals.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
-import { curateForYouNow, type ForYouNowEntry, type ForYouNowResult } from "../for-you-now.ts";
+import { curateForYouNow, holdEntries, type ForYouNowEntry, type ForYouNowResult } from "../for-you-now.ts";
 import { useHold } from "../hold.ts";
 import { DecidedRow, InboxRow, type RowDecision } from "./InboxRow.tsx";
 import { useBriefings } from "./briefings.ts";
@@ -17,14 +17,30 @@ interface Decided {
   at: number;
 }
 
-/** The list as shown: while the pointer or focus is inside it, the list it showed when the hold began. */
-function useFrozenResult(live: ForYouNowResult, held: boolean): ForYouNowResult {
+/**
+ * The list as shown: while the pointer or focus is inside it, the entries and order it showed when the hold began,
+ * each with its item's current data (`holdEntries`).
+ */
+function useHeldResult(live: ForYouNowResult, items: readonly AttentionItemView[], held: boolean): ForYouNowResult {
   const frozen = useRef(live);
   if (!held) frozen.current = live;
-  return frozen.current;
+  const start = frozen.current;
+  return useMemo(() => (held ? holdEntries(start, live, items) : live), [held, start, live, items]);
 }
 
-type Shown = { entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
+/** The Daily Briefing's picks could not be read, so the list may lack them; never left unsaid. */
+function PicksFailed({ retry }: { retry: () => void }) {
+  return (
+    <>
+      Could not read the Daily Briefing, so its picks are missing.{" "}
+      <button className="small" onClick={retry}>
+        Retry
+      </button>
+    </>
+  );
+}
+
+type Shown ={ entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
 
 /**
  * The entries with each decided line in its place: over its entry while the list still holds the item (an answer
@@ -55,12 +71,10 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
   const briefings = useBriefings(attentionOn);
   const [openId, setOpenId] = useState<string | null>(null);
   const [decided, setDecided] = useState<readonly Decided[]>([]);
-  const live = useMemo(
-    () => curateForYouNow({ items: openInbox.data?.items ?? [], briefing: briefings.data?.daily ?? null, now: clock.now, timeZone: clock.timeZone }),
-    [openInbox.data, briefings.data, clock.now, clock.timeZone],
-  );
+  const items = useMemo(() => openInbox.data?.items ?? [], [openInbox.data]);
+  const live = useMemo(() => curateForYouNow({ items, briefing: briefings.data?.daily ?? null, now: clock.now, timeZone: clock.timeZone }), [items, briefings.data, clock.now, clock.timeZone]);
   const { held, holdProps } = useHold("data-item-key");
-  const shown = useFrozenResult(live, held);
+  const shown = useHeldResult(live, items, held);
   useEffect(() => onShown(shown.entries.map((e) => e.item.id)), [shown, onShown]);
   const rows = withDecided(shown.entries, decided);
 
@@ -72,7 +86,7 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
     },
     [shown],
   );
-  const { actions, undo } = useRowActions({ reload: openInbox.reload, onDecided, onUndone: (item) => setDecided((d) => d.filter((x) => x.item.id !== item.id)) });
+  const { actions, undo } = useRowActions({ reload: openInbox.reload, onDecided, onUndone: (item) => setDecided((d) => d.filter((x) => x.item.id !== item.id)), draftsOn });
 
   if (!attentionOn)
     return (
@@ -86,6 +100,8 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
 
   const failed = !!openInbox.error;
   const listed = rows.length > 0;
+  // The Daily Briefing could not be read: its picks are missing, said quietly under the entries or in their place.
+  const picksFailed = !!briefings.error && !briefings.data;
   return (
     <section className={`for-you-now${listed ? "" : " quiet"}`} aria-labelledby={headingId} data-for-you-now={listed ? "entries" : "quiet"} {...holdProps}>
       <div className="for-you-now-head">
@@ -116,16 +132,16 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
               <a href="#inbox">{shown.moreInInbox} more in the Inbox</a>
             </p>
           )}
+          {picksFailed && (
+            <p className="for-you-now-quiet-text" role="status" data-picks-failed>
+              <PicksFailed retry={briefings.reload} />
+            </p>
+          )}
         </>
       ) : (
         <p className="for-you-now-quiet-text" role="status">
-          {briefings.error && !briefings.data ? (
-            <>
-              Could not read the Daily Briefing, so its picks are missing.{" "}
-              <button className="small" onClick={briefings.reload}>
-                Retry
-              </button>
-            </>
+          {picksFailed ? (
+            <PicksFailed retry={briefings.reload} />
           ) : openInbox.data ? (
             shown.quiet
           ) : (

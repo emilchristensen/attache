@@ -1,6 +1,7 @@
 import type { AgendaResponse } from "@attache/contracts";
 import { json, type Db } from "../core/db.ts";
 import type { ConnectionManager } from "../connectors/manager.ts";
+import { WIDEST_ZONE_OFFSET_MS } from "../core/day.ts";
 
 interface AgendaRow {
   external_id: string;
@@ -12,9 +13,9 @@ interface AgendaRow {
 
 /**
  * An all-day event is a date with no zone, so which instants it covers depends on the owner's zone: it is kept when it
- * overlaps the range widened by the largest offset any zone has from UTC, and the Dashboard decides its day.
+ * overlaps the range widened by the largest offset any zone has from UTC (`WIDEST_ZONE_OFFSET_MS`), and the
+ * Dashboard decides its day.
  */
-const WIDEST_ZONE_OFFSET_MS = 14 * 60 * 60_000;
 
 /**
  * The calendar events that overlap `from` to `to` (ISO instants, validated by the route), from what the calendar

@@ -10,6 +10,7 @@ import { daysBetween, listingState, recordFailure } from "./common.ts";
 import { CLAUDE_SERVERS, claudeAuthMethods, claudeDataNote, claudeSetupSteps, configureClaude, paginateStreams, serverName, streamOrThrow, testClaude, toolError } from "./claude-adapter.ts";
 import { str } from "./atlassian-shapes.ts";
 import { plural } from "@attache/contracts";
+import { startOfTodayEverywhere } from "../core/day.ts";
 
 export interface EventTime {
   date?: string;
@@ -40,11 +41,12 @@ interface CalendarEvent {
 }
 
 const HOUR = 3_600_000;
+/** How far ahead of now a read reaches. It starts at the start of today in every zone, so today's ended meetings stay read. */
 const RANGE_MS = 48 * HOUR;
 const PREP_MS = 24 * HOUR;
 const MAX_PAGES = 3;
 const MAX_NAMES = 6;
-const SCOPE_LABEL = "Upcoming events (48 hours)";
+const SCOPE_LABEL = "Events today and in the next 48 hours";
 const WALL_TIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?/;
 
 const server = (ctx: AdapterContext) => serverName(ctx, CLAUDE_SERVERS.gcal);
@@ -101,7 +103,14 @@ function endMs(ev: CalendarEvent, start: number): number {
   return Number.isFinite(end) && end > start ? end : start;
 }
 
+/** When an event is over: its scheduled end, an all-day event's end date at midnight; NaN when it gives no end. */
+function overAt(ev: CalendarEvent): number {
+  return Date.parse(ev.end?.dateTime ?? (ev.end?.date ? `${ev.end.date}T00:00:00` : ""));
+}
+
 function attentionFor(ev: CalendarEvent, allDay: boolean, response: string, nowMs: number): AttentionCandidate | undefined {
+  // The read reaches back to the start of today for Your day; an event that is over needs nothing from the owner.
+  if (overAt(ev) <= nowMs) return undefined;
   const title = ev.summary || "(untitled event)";
   const when = startLabel(ev.start);
   const start = startMs(ev.start);
@@ -162,9 +171,13 @@ export function parseEventPage(text: string): { items: CalendarEvent[]; next: st
   return { items, next: str(res.nextPageToken), unreadable: events.length - items.length, calendar: str(res.summary) };
 }
 
-/** The window is fixed once per listing: a page token only belongs to the query that produced it. */
+/**
+ * From the start of today in every zone (so a meeting that ended today is still read, and Your day can say Nothing
+ * more today) to 48 hours ahead. The window is fixed once per listing: a page token only belongs to the query that
+ * produced it.
+ */
 function eventsCall(now: Date, cursor: string | null, pageSize = 100) {
-  return { tool: "list_events", args: { startTime: now.toISOString(), endTime: new Date(now.getTime() + RANGE_MS).toISOString(), orderBy: "startTime", pageSize, ...(cursor ? { pageToken: cursor } : {}) } };
+  return { tool: "list_events", args: { startTime: new Date(startOfTodayEverywhere(now.getTime())).toISOString(), endTime: new Date(now.getTime() + RANGE_MS).toISOString(), orderBy: "startTime", pageSize, ...(cursor ? { pageToken: cursor } : {}) } };
 }
 
 export const gcalAdapter: ConnectorAdapter = {
@@ -173,9 +186,9 @@ export const gcalAdapter: ConnectorAdapter = {
   definition: {
     kind: "gcal",
     label: "Google Calendar",
-    description: "Meetings in the next 48 hours that need preparation, and invitations waiting for your response.",
+    description: "Today's meetings for Your day, meetings in the next 48 hours that need preparation, and invitations waiting for your response.",
     authMethods: claudeAuthMethods(CLAUDE_SERVERS.gcal),
-    scopes: [{ id: "upcoming", label: "My primary calendar, next 48 hours", default: true }],
+    scopes: [{ id: "upcoming", label: "My primary calendar, today and the next 48 hours", default: true }],
     writeActions: [],
     setupHelp: `${claudeDataNote(CLAUDE_SERVERS.gcal)} Attache only reads your primary calendar and never changes events.`,
     unavoidableSteps: claudeSetupSteps(CLAUDE_SERVERS.gcal),

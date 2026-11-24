@@ -154,8 +154,12 @@ function useFocusAfter(): (id: string, target: "undo" | "row") => void {
   }, []);
 }
 
-/** `j`/`k` move between rows; the decision keys, once switched on, decide on the focused row. */
-function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActions["decide"], busy: boolean): void {
+/**
+ * `j`/`k` move between rows; the decision keys, once switched on, decide on the focused row, and `w` takes Start
+ * working's first step as the button does (`openRow` opens a row in place).
+ */
+function useInboxKeys(live: readonly AttentionItemView[] | null, actions: RowActions, openId: string | null, openRow: (id: string) => void): void {
+  const { decide, start, busy } = actions;
   const onRowKey = useCallback(
     (key: RowKey): boolean => {
       if (key === "next" || key === "previous") return moveAmongRows([...document.querySelectorAll<HTMLElement>("#inbox [data-row-toggle]")], key);
@@ -163,10 +167,11 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
       const decision = KEY_DECISION[key];
       const item = live?.find((i) => i.id === row?.dataset.itemId);
       if (!decision || !item || item.state !== "open" || busy) return false;
-      void decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
+      if (decision === "start") void start(item, { open: openId === item.id, openRow: () => openRow(item.id) });
+      else void decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
       return true;
     },
-    [live, busy, decide],
+    [live, busy, decide, start, openId, openRow],
   );
   useRowKeys(onRowKey);
 }
@@ -229,8 +234,10 @@ export function Inbox({ attentionOn, draftsOn, connections, suggested, clock, af
     onUndone: (item) => focusAfter(item.id, "row"),
     // Coming back from the Draft finds the open row where it stood.
     beforeViewDraft: () => setPlace({ anchor: place.openId ? anchorOf(place.openId) : null }),
+    draftsOn,
   });
-  useInboxKeys(live, actions.decide, actions.busy);
+  const openRow = useCallback((id: string) => setPlace({ openId: id }), [setPlace]);
+  useInboxKeys(live, actions, place.openId, openRow);
 
   const showNew = () => {
     const first = arrivals[0]?.id;
