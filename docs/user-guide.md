@@ -216,7 +216,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   Every row has **Start working**, **Snooze** and **Done**, and opens with the same detail as its Inbox row.
   Starting an item keeps it in progress when its reason still applies.
   Opening meeting prep (the meeting's time, the other attendees and the notes the newest briefing related to it) marks it read, whether you open its row, press **Start working** or press `w`: it goes **In progress** and leaves the list on every page and Machine; its row stays in the complete Inbox throughout, with **Suggested now** while it is listed here.
-  **Done** or **Snooze** on an entry leaves one line with **Undo** in its place.
+  **Done** or **Snooze** on an entry leaves one line with **Undo** in its place, and **Undo** puts the entry back in that place, even while your pointer or focus is in the list.
   An entry never moves or leaves while your pointer or keyboard focus is in the list, but it shows what changes at once, such as **In progress**; one whose reason has ended leaves when you move away.
   With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
   When the Daily Briefing could not be read, a quiet line says its picks are missing, with **Retry**, under any entries the list still has.

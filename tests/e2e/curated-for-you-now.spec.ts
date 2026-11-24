@@ -81,10 +81,15 @@ test("Done from an entry leaves one line with Undo in its place; the list holds 
   await expect(line).toHaveCount(1);
   await expect(line.getByRole("button", { name: "Undo" })).toBeVisible();
   // The line stays once the keyboard and pointer leave, so a mistake costs one click.
-  await forYou(page).getByRole("heading", { name: "For you now" }).focus();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.mouse.move(2, 2);
+  // The Inbox is read again without the item before the next hold begins, so that hold starts without its entry.
+  await expect(page.getByRole("link", { name: /^Attache, 4 need you/ })).toBeVisible();
   await expect(line).toHaveCount(1);
+  // Undo while the list holds still (focus inside it, the pointer on Undo) still brings the entry back in its place.
+  await forYou(page).getByRole("heading", { name: "For you now" }).focus();
   await line.getByRole("button", { name: "Undo" }).click();
+  await expect(forYou(page).locator("[data-inbox-row]:not([data-decided])").first()).toHaveAttribute("data-item-id", before!);
   await expect(forYou(page).locator(`[data-item-id="${before}"]:not([data-decided])`)).toHaveCount(1);
   // Done for good: after a reload only the live list shows, without the item.
   await (await rowAction(forYou(page).locator(`[data-item-id="${before}"]`), "Done")).click();
