@@ -29,9 +29,15 @@ const CLAUDE_CODE: HarnessIdentity = { id: "claude-code", label: "Claude Code" }
 const CLAUDE_DESKTOP: HarnessIdentity = { id: "claude-desktop", label: "Claude Desktop" };
 const CODEX: HarnessIdentity = { id: "codex", label: "Codex" };
 const ANTIGRAVITY: HarnessIdentity = { id: "antigravity", label: "Antigravity" };
+const PI: HarnessIdentity = { id: "pi", label: "Pi" };
+const OPENCODE: HarnessIdentity = { id: "opencode", label: "OpenCode" };
+const COPILOT_CLI: HarnessIdentity = { id: "copilot-cli", label: "Copilot CLI" };
 
 /** The Harnesses Attache knows, by id. */
-const KNOWN_IDS: Record<string, HarnessIdentity> = Object.fromEntries([CLAUDE_CODE, CLAUDE_DESKTOP, CODEX, ANTIGRAVITY].map((h) => [h.id, h]));
+const KNOWN_IDS: Record<string, HarnessIdentity> = Object.fromEntries([CLAUDE_CODE, CLAUDE_DESKTOP, CODEX, ANTIGRAVITY, PI, OPENCODE, COPILOT_CLI].map((h) => [h.id, h]));
+
+/** What the owner calls a Harness Attache knows by its id, or null for any other id. */
+export const knownHarnessLabel = (id: string): string | null => KNOWN_IDS[id]?.label ?? null;
 
 /** The names Harnesses give themselves when they connect, mapped to the Harnesses Attache knows. */
 const KNOWN_CLIENTS: Record<string, HarnessIdentity> = {
@@ -40,6 +46,12 @@ const KNOWN_CLIENTS: Record<string, HarnessIdentity> = {
   "codex-mcp-client": CODEX,
   codex: CODEX,
   antigravity: ANTIGRAVITY,
+  // Pi's built-in MCP client names itself "pi" (earendil-works/pi packages/coding-agent/src/extensions/mcp/runtime.ts).
+  pi: PI,
+  // OpenCode 1 and 2 both name their MCP client "opencode" (seen from opencode-ai 1.19.6 and @opencode/cli 2.3.2).
+  opencode: OPENCODE,
+  // Copilot CLI names its MCP client "copilot-cli" (seen from Copilot CLI 1.0.114, offline with a stand-in model).
+  "copilot-cli": COPILOT_CLI,
 };
 
 const UNKNOWN: HarnessIdentity = { id: "unknown-harness", label: "an unknown Harness" };

@@ -47,6 +47,11 @@
   margin: var(--s-2) 0 0;
   font-size: var(--fs-meta);
 }
+/* The note about the Daily Briefing's picks, under the entries or under the quiet line. */
+.for-you-now-rows ~ .for-you-now-quiet-text,
+.for-you-now-quiet-text + .for-you-now-quiet-text {
+  margin-top: var(--s-2);
+}
 
 /* A narrow space: kind and actions on one line, the subject under them, then the reason and the time. */
 @container (max-width: 600px) {

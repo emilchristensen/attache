@@ -97,7 +97,8 @@ export function useRowActions({ reload, onDecided, onUndone, beforeViewDraft, dr
 /**
  * Opening unread meeting prep, by any route (its row, Start working, the `w` key, a briefing's entry), is reading it:
  * the `start` decision is recorded once as the row opens, so the prep leaves For you now on every page and Machine.
- * A later Not started while the row stays open is the owner's word and is not undone.
+ * A later Not started while the row stays open is the owner's word and is not undone. A start that could not be
+ * recorded is not counted, so it is tried again with the item's next data or the next open.
  */
 export function useReadPrep(item: AttentionItemView, open: boolean, decide: RowActions["decide"]): void {
   const recorded = useRef(false);
@@ -109,6 +110,9 @@ export function useReadPrep(item: AttentionItemView, open: boolean, decide: RowA
     }
     if (recorded.current) return;
     recorded.current = true;
-    if (unread) void decide(item, "start");
+    if (!unread) return;
+    void decide(item, "start").then((made) => {
+      if (!made) recorded.current = false;
+    });
   }, [open, unread, item, decide]);
 }

@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import type { BriefingView } from "@attache/contracts";
-import { areaState, BRIEFING_NAME, leadWords, requestedShown, settledKey, todaysDaily } from "../briefing-area.ts";
+import { areaState, BRIEFING_NAME, leadWords, requestedShown, settledKey, staleReadAt, todaysDaily } from "../briefing-area.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { paintingForDate } from "../paintings.ts";
@@ -104,6 +104,8 @@ export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; cl
   const requested = requestedShown(briefings.data?.requested ?? null, settled, clock.now);
   const latest = briefings.data?.daily ?? briefings.data?.requested ?? null;
   const state = areaState({ attentionOn, writing: !!job, failed: !!briefings.error, answered: !!briefings.data, daily, folded: !!daily && settled.has(settledKey(daily)) });
+  // A later read failed after a good one: what was read stays, and a quiet line says it may be out of date.
+  const staleAt = state === "off" ? null : staleReadAt({ failed: !!briefings.error, answeredAt: briefings.answeredAt });
   return (
     <section className="daily-briefing-area" aria-labelledby={headingId}>
       <div className="daily-briefing-head">
@@ -136,6 +138,14 @@ export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; cl
       )}
       {state === "folded" && daily && <FoldedBriefing briefing={daily} timeZone={clock.timeZone} onOpen={() => unsettle(settledKey(daily))} />}
       {state === "card" && daily && <DailyCard briefing={daily} timeZone={clock.timeZone} onGotIt={() => settle(settledKey(daily))} />}
+      {staleAt !== null && (
+        <p className="briefing-stale" role="status" data-briefing-stale>
+          Could not check for a newer briefing; this is the one read at {clockTime(staleAt, clock.timeZone)}.{" "}
+          <button className="small" onClick={briefings.reload}>
+            Retry
+          </button>
+        </p>
+      )}
       {context && latest && <MeetingContext briefing={latest} now={clock.now} timeZone={clock.timeZone} onClose={() => setContext(false)} />}
     </section>
   );

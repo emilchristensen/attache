@@ -4,6 +4,7 @@ import type { HookEvent } from "./spool.ts";
 import { parseAntigravity, parseClaudeCode, parseCodex, type ParsedSession } from "./transcripts.ts";
 import { locationsForHome } from "../platform/locations.ts";
 import { HARNESS_FILES, harnessInstalls, type HarnessKind } from "../platform/harness-locations.ts";
+import { knownHarnessLabel } from "../mcp/harness.ts";
 
 /**
  * How a Harness runs Attache's hooks: where they live and in which shape,
@@ -77,7 +78,7 @@ export const codex: AgentIntegration = {
     parseTranscript: parseCodex,
   },
   detect: installed("codex"),
-  setupNote: `Adds Attache's MCP server to ~/.codex/config.toml and three hooks to ~/.codex/hooks.json: SessionStart gives each new session your Attache memory, PreCompact and SessionEnd save the conversation. ${MCP_NOTE} ${KEPT_NOTE} Codex runs new hooks only after you approve them: the next time Codex starts, choose Review hooks and trust the three Attache hooks. Codex remembers that trust by position, so after you disconnect it may ask you to review hooks that came after Attache's again.`,
+  setupNote: `Adds Attache's MCP server to ~/.codex/config.toml and three hooks to ~/.codex/hooks.json: SessionStart gives each new session your Attache memory, PreCompact and SessionEnd save the conversation. ${MCP_NOTE} ${KEPT_NOTE} Codex runs new hooks only after you approve them: the next time Codex starts, choose Review hooks and trust the three Attache hooks. Codex remembers that trust by position, so after you disable it it may ask you to review hooks that came after Attache's again.`,
 };
 
 export const antigravity: AgentIntegration = {
@@ -111,4 +112,4 @@ export const HOOK_AGENT_KINDS = AGENT_INTEGRATIONS.filter((a) => a.hooks).map((a
 export const integrationFor = (kind: string) => AGENT_INTEGRATIONS.find((a) => a.kind === kind) ?? null;
 
 /** How the owner knows a Harness: its integration's label, or the name it gave Attache. */
-export const harnessLabel = (kind: string): string => integrationFor(kind)?.label ?? kind;
+export const harnessLabel = (kind: string): string => knownHarnessLabel(kind) ?? integrationFor(kind)?.label ?? kind;

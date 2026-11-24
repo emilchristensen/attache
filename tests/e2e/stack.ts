@@ -83,6 +83,14 @@ export async function startStack(): Promise<Stack> {
   const meaningModel = join(base, "meaning-model.json");
   writeFileSync(meaningModel, JSON.stringify(fixtureModelDescription(`${fixtureUrl}/meaning-model`)));
   const env = { ...process.env, ATTACHE_MEANING_MODEL: meaningModel, ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ATTACHE_TEST_ENDPOINTS: "1", ATTACHE_FIXTURE_URL: fixtureUrl, ATTACHE_INSTANCE: "e2e", ATTACHE_AGENT_HOME: agentHome, ATTACHE_LOCK_DIR: join(base, "locks"), ...claude };
+  // OpenCode's config folder is under the test home, and the Machine's own OpenCode is never asked for its version.
+  for (const key of ["XDG_CONFIG_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG"]) delete env[key];
+  env.ATTACHE_OPENCODE_BIN = join(base, "no-opencode");
+  // Harness executables are looked for only in the test home's own tool folder, never in the Machine's (/opt/homebrew/bin may have Codex).
+  env.ATTACHE_HARNESS_TOOL_DIRS = join(agentHome, ".local", "bin");
+  // Copilot CLI's home folder is under the test home too, and the Machine's own Copilot CLI is never asked for its version.
+  delete env.COPILOT_HOME;
+  env.ATTACHE_COPILOT_BIN = join(base, "no-copilot");
   let service: ChildProcess | null = null;
   // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
   let port = 0;

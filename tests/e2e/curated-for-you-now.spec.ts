@@ -50,6 +50,8 @@ test("meeting prep appears at 15 minutes, stays in the Inbox, and Open prep remo
   await expect(suggested.locator("[data-meeting-detail]")).toBeVisible();
   // Held under the pointer and focus, the entry keeps its place but shows the item as it is now: In progress, Continue.
   await expect(suggested.locator(".inbox-source")).toContainText("In progress");
+  // Its reason has ended, so the words "prep not read" are gone while it holds its place.
+  await expect(suggested.locator(".inbox-source")).not.toContainText("prep not read");
   await expect(suggested.getByRole("button", { name: "Continue: Pilot handover" })).toHaveCount(1);
   // A change made elsewhere (another Dashboard, here the API) shows at once too, while the entry still holds still.
   const id = await suggested.getAttribute("data-item-id");
@@ -112,6 +114,40 @@ test("a Daily Briefing that could not be read is said under the entries, never h
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await said.getByRole("button", { name: "Retry" }).click();
   await expect(said).toHaveCount(0);
+});
+
+test("a briefing read that fails after a good one keeps the picks and the card, and says so quietly with Retry", async () => {
+  const page = await journeys.open("/");
+  const before = (await api<{ daily: { id: string } | null }>(page, "GET", "/briefings")).daily?.id ?? null;
+  await api(page, "POST", "/briefings", { kind: "daily" });
+  await expect.poll(async () => (await api<{ daily: { id: string } | null }>(page, "GET", "/briefings")).daily?.id ?? null, { timeout: 30_000 }).not.toBe(before);
+  await page.reload();
+  const area = page.getByRole("region", { name: "The Daily Briefing" });
+  const card = area.locator(".daily-briefing-card");
+  await expect(card).toBeVisible();
+  const picked = forYou(page).locator("[data-inbox-row]").filter({ hasText: "Picked in today’s Daily Briefing" });
+  await expect(picked.first()).toBeVisible();
+  const pickedCount = await picked.count();
+
+  // Every later read of the briefings fails; the next briefing written makes Home ask again.
+  await page.route("**/api/v1/briefings", (route) => (route.request().method() === "GET" ? route.abort() : route.fallback()));
+  await api(page, "POST", "/briefings", { kind: "manual" });
+  const stalePicks = forYou(page).locator("[data-picks-stale]");
+  await expect(stalePicks).toHaveText(/^Could not check the Daily Briefing again, so its picks are as read at \d{2}:\d{2}\. Retry$/, { timeout: 30_000 });
+  await expect(picked).toHaveCount(pickedCount);
+  const staleArea = area.locator("[data-briefing-stale]");
+  await expect(staleArea).toHaveText(/^Could not check for a newer briefing; this is the one read at \d{2}:\d{2}\. Retry$/);
+  await expect(card).toBeVisible();
+  await expect(area).not.toContainText("Could not check for a briefing.");
+
+  // Retry once the service answers: each line goes, and the briefing written meanwhile shows.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await staleArea.getByRole("button", { name: "Retry" }).click();
+  await expect(staleArea).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Briefing you asked for" })).toBeVisible();
+  await stalePicks.getByRole("button", { name: "Retry" }).click();
+  await expect(stalePicks).toHaveCount(0);
+  await expect(picked).toHaveCount(pickedCount);
 });
 
 test("curated list fits light, dark and narrow captures", async () => {

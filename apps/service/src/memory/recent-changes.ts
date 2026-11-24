@@ -1,6 +1,6 @@
 import { UNREVIEWED_DAYS, type RecentChangeView } from "@attache/contracts";
 import type { Db } from "../core/db.ts";
-import { integrationFor } from "../agents/integrations.ts";
+import { harnessLabel as labelOf } from "../agents/integrations.ts";
 import { fileTitle, parseMarkdown } from "./markdown.ts";
 import { CONSOLIDATION_ACTOR } from "./policy.ts";
 import { checkRevert, isBrainChange } from "./revert.ts";
@@ -66,7 +66,7 @@ function sourcesOf(db: Db): (c: MemoryChange) => RecentChangeView["source"] {
   const indexedTitle = db.prepare("select title from documents where root = 'data' and rel_path = ?");
   const captureOf = (relPath: string) => ({ relPath, title: (indexedTitle.get(relPath) as { title: string } | undefined)?.title ?? fileTitle(relPath) });
   return (c) => {
-    const harnessLabel = c.harness ? (integrationFor(c.harness)?.label ?? c.harness) : null;
+    const harnessLabel = c.harness ? labelOf(c.harness) : null;
     const session = harnessLabel ? `${harnessLabel}${c.sessionId ? `, session ${c.sessionId}` : ""}` : null;
     const base = { harness: c.harness, harnessLabel, sessionId: c.sessionId, autoAccepted: c.autoAccepted };
     if (c.actor === CONSOLIDATION_ACTOR) {

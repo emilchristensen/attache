@@ -125,14 +125,16 @@ describe("meeting preparation, team recall and pending replies through claude.ai
     expect(b.deliverablePath).toMatch(/^deliverables\/briefings\//);
   });
 
-  it("an away summary covers only what is new or changed since the given time", async () => {
+  it("an away summary covers only what is new or changed since the given time, besides its lead and top picks", async () => {
     const since = new Date().toISOString();
     const { job } = await svc.post("/briefings", { kind: "away", since });
     await svc.waitJob(job.id);
     const away = (await svc.get("/briefings/latest")).briefing;
     expect(away.kind).toBe("away");
     const items = away.sections.filter((s: any) => !["prepared", "memory"].includes(s.id)).flatMap((s: any) => s.items);
-    expect(items.every((i: any) => i.isNew || i.changed)).toBe(true);
+    expect(items.every((i: any) => i.isNew || i.changed || away.topPicks.includes(i.id))).toBe(true);
+    expect(away.topPicks.length).toBeGreaterThan(0);
+    expect(away.topPicks.every((id: string) => items.some((i: any) => i.id === id))).toBe(true);
     expect(away.counts.new).toBe(0);
   });
 });

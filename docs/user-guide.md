@@ -92,8 +92,9 @@ Each step works without the ones after it, you can go back to any step you have 
    For Jira and Confluence you also enter your site URL, for example `https://acme.atlassian.net`.
    If your organization allows it, Jira and Confluence can instead connect directly with **Sign in with Atlassian** or an Atlassian API token made for the MCP server.
    Steps that need an admin on the other side (allowing the Atlassian Rovo MCP server, enabling a claude.ai connector for the workspace, a GitHub token) are explained on the card before you connect.
-   Under *Harnesses*, connect Claude Code, Codex, Antigravity or Claude Desktop if you use them.
-   Each gets Attache's MCP server, so it can search your Brain and save to it without asking (you can switch that off per Harness in Settings); Claude Code, Codex and Antigravity also get the hooks that save their sessions (see Agent sessions and The Brain in any Harness below).
+   Under *Harnesses*, connect Claude Code, Codex, Antigravity, Claude Desktop, Pi, OpenCode or Copilot CLI if you use them.
+   Each gets Attache's MCP server, so it can search your Brain and save to it (see The Brain in any Harness below).
+   Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI also save their sessions and give each session your memory (see Agent sessions, and Pi, OpenCode and Copilot CLI, below).
 4. **Model and schedules.**
    Pick a model: Claude Code on this computer (uses your existing Claude sign-in), an Anthropic API key, or any OpenAI-compatible endpoint including a local Ollama or LM Studio.
    Without a model, Attache still searches and shows you the evidence it finds.
@@ -201,10 +202,12 @@ Each area responds to the space it is given, so an area in a narrow column looks
   The painting changes each day and is the same on every Machine that day; Attache ships the paintings and never fetches them.
   **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
+  When Attache could not check for a newer briefing after a good read, the area keeps what it showed and a quiet line says from what time, with **Retry**.
   With no Daily Briefing yet today, **Prepare a briefing** writes today's Daily Briefing, so the area fills with its card and its picks reach For you now; once there is one, it writes a briefing you asked for.
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**, as a plain card named for what it is; **Read briefing** opens its page under that name, without a painting.
+  An Away summary lists only what is new or changed since the time you give, and still names its first item and Top to-dos from the whole Inbox.
 - **For you now** is a short curated list of the Inbox items to act on now.
-  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and this morning's Daily Briefing picks.
+  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and today's Daily Briefing picks.
   A due date without a time of day is never nearly due: it counts as due today on its own day, wherever you are.
   Each row gives its reason, such as "Starts in 12 min, prep not read" or "Nora has waited since Tuesday"; an item appears once under its most urgent reason.
   At most five items show, followed by the count of the rest in the Inbox.
@@ -215,6 +218,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   An entry never moves or leaves while your pointer or keyboard focus is in the list, but it shows what changes at once, such as **In progress**; one whose reason has ended leaves when you move away.
   With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
   When the Daily Briefing could not be read, a quiet line says its picks are missing, with **Retry**, under any entries the list still has.
+  When it could not be read again after a good read, the list keeps the picks it had and the line says from what time they are, also with **Retry**.
   With Attention and briefings switched off, the area says so with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
   It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one compact line above timed meetings.
@@ -427,8 +431,9 @@ Jobs keep running when you close the browser; reopen the page and progress resum
 
 ## Agent sessions
 
-Attache remembers your work in the Harnesses that run hooks: Claude Code, Codex and Antigravity.
-Connect each one you use under Connections → *Harnesses*; its tile says exactly which files change before you connect.
+Attache remembers your work in Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI.
+Connect each one you use under Connections → *Harnesses*; its tile lists what the Connection gives the Harness (MCP access, memory and session capture, each on its own), every file that changes, and whether the Harness must restart, before you connect.
+This section describes Claude Code, Codex and Antigravity; Pi, OpenCode and Copilot CLI connect through their own extension, plugin and hooks, described in their own section below.
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
@@ -465,8 +470,80 @@ Connect each one you use under Connections → *Harnesses*; its tile says exactl
   Codex remembers trust by position, so after you disable it you may need to review hooks listed after Attache's again; connecting it again updates Attache's hooks in place and leaves yours where they are.
 - **If Attache is not running,** sessions are queued on your computer and saved the next time it starts.
 
-Turning *Agent sessions* off in Settings disables Claude Code, Codex and Antigravity and removes their hooks and Attache's MCP server; Claude Desktop stays connected.
+Turning *Agent sessions* off in Settings disables Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI and removes Attache's hooks, extension, plugin and MCP server from them; Claude Desktop stays connected.
+Connect them again after you turn the feature back on.
 Uninstalling Attache removes them all.
+
+## Pi, OpenCode and Copilot CLI
+
+Pi, OpenCode and Copilot CLI are Harnesses of their own under Connections → *Harnesses*, each connected and disabled on its own.
+Each connects through the product's own extension, plugin or hooks system, and its tile lists three capabilities on their own: MCP access, memory and session capture.
+MCP access never implies the other two; each is listed only because Attache's tests show it working with the real program (see `docs/harness-support.md` for the versions and what each test covers).
+All three get MCP access, memory read fresh from your Brain, and session capture, and all three must restart, or start a new session, before a change takes effect.
+Memory and session capture need the *Agent sessions* feature on.
+You can connect each one even when Attache did not find it on this computer.
+
+What they have in common:
+
+- **Only Attache's own files and entries change.**
+  Each file Attache writes names this Attache install inside it, so a second Attache install on the same computer gets its own file (`attache-<code>`) and disabling one leaves the other.
+  Your own settings, MCP servers, extensions, plugins and hooks are never changed.
+- **A file Attache cannot read stops the change.**
+  If the Harness's own settings file does not parse, or it already lists a server under Attache's name, or it turns Attache's extension, plugin or hooks off, connecting stops with a message that names the file, and nothing is written.
+- **Backups and recovery.**
+  Before Attache changes a file that already exists, it copies it to the `backups/` folder in Attache's state folder, named after the file's path and the time, so you can copy it back.
+  A file Attache creates has no earlier version to back up; disabling it removes the file.
+- **Out of date.**
+  When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
+  Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
+- **Saves through MCP.**
+  Like every connected Harness, each saves without asking while its auto-accept switch in Settings is on, which it is when you connect it; with the switch off, a save asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
+- **What is saved.**
+  Only your words and the Harness's answers are kept, never tool calls, tool output, Attache's memory, other injected context or subagent conversations.
+  A session in a format Attache does not recognise is not saved at all; the Connection shows the problem, naming the Harness and the format.
+  Pi, OpenCode and Copilot CLI keep a redacted local copy of captured turns in Attache's state folder so a session can resume after a long pause.
+  Attache retains these copies indefinitely.
+
+### Pi
+
+- **Setup:** connect Pi under *Harnesses*, then run `/reload` in a Pi session that is already open, or start a new one.
+  Pi 0.99.0 or later with its built-in MCP support on is needed.
+- **Files:** one extension, `~/.pi/agent/extensions/attache.ts` (or in `PI_CODING_AGENT_DIR` when the Attache service has it set).
+  Your Pi `settings.json`, `mcp.json` and other extensions are only read, never changed.
+- **MCP access:** the extension registers Attache's MCP server each time Pi starts a session, for that session only.
+- **Memory:** sent with every model call and never saved in the session, so resumed and compacted sessions see today's memory.
+- **Session capture:** after each prompt, before each compaction and when a session closes.
+  Sessions run with `--no-session`, such as Pi's subagents, are never saved.
+- **Limits:** only the newest turn of a Pi that is killed or crashes can be missed.
+  Pi started with its extensions turned off gets neither MCP access nor memory.
+
+### OpenCode
+
+- **Setup:** connect OpenCode under *Harnesses*, then restart OpenCode; for OpenCode 2's background service, run `opencode service restart`.
+  OpenCode 1 (1.18.29 or later) and OpenCode 2 work; an older OpenCode 1 is refused.
+- **Files:** one plugin, `~/.config/opencode/plugins/attache.js` (or in `XDG_CONFIG_HOME` or `OPENCODE_CONFIG_DIR` when the Attache service has them set).
+  Your `opencode.json`, `opencode.jsonc`, MCP servers and other plugins are only read, never changed.
+  OpenCode 1 itself writes `package.json`, a lockfile and `node_modules` into that folder when it starts.
+- **MCP access:** the plugin registers Attache's MCP server each time OpenCode loads it; OpenCode 2 loads it inside its server or background service.
+- **Memory:** added to the system prompt of every model call and never saved in the session.
+- **Session capture:** each time a turn ends and before each compaction.
+- **Limits:** OpenCode has no session-end event, so a turn still running when OpenCode quits can be missed.
+  OpenCode started with `--pure` loads no plugins, so it gets neither MCP access nor memory.
+  Project-level OpenCode settings are not checked.
+
+### Copilot CLI
+
+- **Setup:** connect Copilot CLI under *Harnesses*, then start a new `copilot` process; Copilot CLI reads hooks when it starts.
+  Copilot CLI 1.0.22 or later is needed.
+- **Files:** Attache's entry in your personal MCP configuration, `~/.copilot/mcp-config.json`, and one personal hooks file, `~/.copilot/hooks/attache.json` (both in `COPILOT_HOME` when the Attache service has it set).
+  `mcp-config.json` is backed up first and written back as plain JSON, so comments in it are kept only in the backup.
+  Your other MCP servers and hooks files are not changed, and no repository is touched.
+- **MCP access:** Copilot CLI starts Attache's MCP server from your personal MCP configuration.
+- **Memory:** the session-start hook gives each new, cleared (`/clear`) or resumed session your current memory.
+- **Session capture:** after each turn, before compaction and when the session ends, read from the session's `events.jsonl`.
+- **Limits:** after `/compact` a session has no Attache memory until you `/clear`, resume or start a new one.
+  Only a Copilot CLI that is killed or crashes mid-turn can lose that newest turn.
+  A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns Attache's hooks off there, and a repository's own `.mcp.json` can replace a server of the same name.
 
 ## Meeting captures
 

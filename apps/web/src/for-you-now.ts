@@ -26,7 +26,8 @@ export type ForYouNowReason = "meeting-prep" | "reply-nearly-late" | "due-today"
 export interface ForYouNowEntry {
   item: AttentionItemView;
   reason: ForYouNowReason;
-  reasonText: string;
+  /** What the reason says, in place of the row's source line; null for an entry held after its reason ended. */
+  reasonText: string | null;
 }
 
 export interface ForYouNowInput {
@@ -108,7 +109,7 @@ export const REASONS: readonly Reason[] = [
   {
     id: "picked-this-morning",
     applies: (item, { briefing, now, timeZone }) => item.kind !== "meeting_prep" && briefing?.kind === "daily" && dayKey(Date.parse(briefing.createdAt), timeZone) === dayKey(now, timeZone) && briefing.topPicks.includes(item.id),
-    text: () => "Picked in this morning’s Daily Briefing",
+    text: () => "Picked in today’s Daily Briefing",
   },
 ];
 
@@ -132,13 +133,17 @@ function nextPrep(items: readonly AttentionItemView[], { now, timeZone }: Contex
 /**
  * What shows while the pointer or focus is inside the list: the entries and order of `held` (the list when the hold
  * began), each with its item's current data, so a decision or a replicated change shows at once while nothing moves
- * or leaves. An entry still listed takes its current reason too; one whose reason has ended keeps its last words; one
- * whose item left the Inbox keeps its last data until the hold ends.
+ * or leaves. An entry still listed takes its current reason too; one whose reason has ended keeps its place without
+ * the reason's words, so its row's own source line shows; one whose item left the Inbox keeps its last data until the
+ * hold ends.
  */
 export function holdEntries(held: ForYouNowResult, live: ForYouNowResult, items: readonly AttentionItemView[]): ForYouNowResult {
   const listed = new Map(live.entries.map((e) => [e.item.id, e]));
   const current = new Map(items.map((i) => [i.id, i]));
-  const entries = held.entries.map((e) => listed.get(e.item.id) ?? { ...e, item: current.get(e.item.id) ?? e.item });
+  const entries = held.entries.map((e): ForYouNowEntry => {
+    const now = current.get(e.item.id);
+    return listed.get(e.item.id) ?? (now ? { ...e, item: now, reasonText: null } : e);
+  });
   return { ...held, entries };
 }
 

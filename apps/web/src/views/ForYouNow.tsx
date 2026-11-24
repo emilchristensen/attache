@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
+import { staleReadAt } from "../briefing-area.ts";
 import { useSignals } from "../nav-signals.ts";
+import { clockTime } from "../zoned-time.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { curateForYouNow, holdEntries, type ForYouNowEntry, type ForYouNowResult } from "../for-you-now.ts";
 import { useHold } from "../hold.ts";
@@ -28,11 +30,14 @@ function useHeldResult(live: ForYouNowResult, items: readonly AttentionItemView[
   return useMemo(() => (held ? holdEntries(start, live, items) : live), [held, start, live, items]);
 }
 
-/** The Daily Briefing's picks could not be read, so the list may lack them; never left unsaid. */
-function PicksFailed({ retry }: { retry: () => void }) {
+/**
+ * How the Daily Briefing's picks were read, when it was not well: never read (the list may lack them) or not read
+ * again after a good read (the list keeps the picks as last read). Never left unsaid.
+ */
+function PicksNote({ staleAt, timeZone, retry }: { staleAt: number | null; timeZone: string; retry: () => void }) {
   return (
     <>
-      Could not read the Daily Briefing, so its picks are missing.{" "}
+      {staleAt === null ? "Could not read the Daily Briefing, so its picks are missing." : `Could not check the Daily Briefing again, so its picks are as read at ${clockTime(staleAt, timeZone)}.`}{" "}
       <button className="small" onClick={retry}>
         Retry
       </button>
@@ -40,7 +45,7 @@ function PicksFailed({ retry }: { retry: () => void }) {
   );
 }
 
-type Shown ={ entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
+type Shown = { entry: ForYouNowEntry; decided: null } | { entry: null; decided: Decided };
 
 /**
  * The entries with each decided line in its place: over its entry while the list still holds the item (an answer
@@ -100,8 +105,15 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
 
   const failed = !!openInbox.error;
   const listed = rows.length > 0;
-  // The Daily Briefing could not be read: its picks are missing, said quietly under the entries or in their place.
+  // The Daily Briefing could not be read (its picks are missing) or not read again (its picks are as last read): said
+  // quietly under the entries, or beside the quiet line.
   const picksFailed = !!briefings.error && !briefings.data;
+  const picksStale = staleReadAt({ failed: !!briefings.error, answeredAt: briefings.answeredAt });
+  const picksNote = (picksFailed || picksStale !== null) && (
+    <p className="for-you-now-quiet-text" role="status" {...(picksFailed ? { "data-picks-failed": "" } : { "data-picks-stale": "" })}>
+      <PicksNote staleAt={picksFailed ? null : picksStale} timeZone={clock.timeZone} retry={briefings.reload} />
+    </p>
+  );
   return (
     <section className={`for-you-now${listed ? "" : " quiet"}`} aria-labelledby={headingId} data-for-you-now={listed ? "entries" : "quiet"} {...holdProps}>
       <div className="for-you-now-head">
@@ -123,7 +135,7 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
               row.decided ? (
                 <DecidedRow key={row.decided.item.id} item={row.decided.item} decision={row.decided.decision} until={row.decided.until} onUndo={() => undo(row.decided.item)} busy={actions.busy} clock={clock} />
               ) : (
-                <InboxRow key={row.entry.item.id} item={row.entry.item} open={openId === row.entry.item.id} onToggle={() => setOpenId(openId === row.entry.item.id ? null : row.entry.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} reason={row.entry.reasonText} />
+                <InboxRow key={row.entry.item.id} item={row.entry.item} open={openId === row.entry.item.id} onToggle={() => setOpenId(openId === row.entry.item.id ? null : row.entry.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} reason={row.entry.reasonText ?? undefined} />
               ),
             )}
           </ul>
@@ -132,22 +144,17 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
               <a href="#inbox">{shown.moreInInbox} more in the Inbox</a>
             </p>
           )}
-          {picksFailed && (
-            <p className="for-you-now-quiet-text" role="status" data-picks-failed>
-              <PicksFailed retry={briefings.reload} />
-            </p>
-          )}
+          {picksNote}
         </>
+      ) : picksFailed ? (
+        picksNote
       ) : (
-        <p className="for-you-now-quiet-text" role="status">
-          {picksFailed ? (
-            <PicksFailed retry={briefings.reload} />
-          ) : openInbox.data ? (
-            shown.quiet
-          ) : (
-            "Checking For you now…"
-          )}
-        </p>
+        <>
+          <p className="for-you-now-quiet-text" role="status">
+            {openInbox.data ? shown.quiet : "Checking For you now…"}
+          </p>
+          {picksNote}
+        </>
       )}
     </section>
   );

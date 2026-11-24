@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BriefingView } from "@attache/contracts";
-import { areaState, entryTarget, leadWords, requestedShown, todaysDaily } from "../src/briefing-area.ts";
+import { areaState, entryTarget, leadWords, requestedShown, staleReadAt, todaysDaily } from "../src/briefing-area.ts";
 
 const CPH = "Europe/Copenhagen";
 const NOW = Date.parse("2026-11-18T12:00:00Z");
@@ -39,6 +39,14 @@ describe("The Daily Briefing area", () => {
     ["the card", { attentionOn: true, writing: false, failed: false, answered: true, daily: briefing(), folded: false }, "card"],
   ])("is %s", (_, input, expected) => {
     expect(areaState(input)).toBe(expected);
+  });
+
+  it.each<[string, Parameters<typeof staleReadAt>[0], number | null]>([
+    ["never read and failed: a failure, not stale", { failed: true, answeredAt: null }, null],
+    ["read and fine", { failed: false, answeredAt: NOW }, null],
+    ["read, then a later read failed: stale since that read", { failed: true, answeredAt: NOW }, NOW],
+  ])("keeps what was read when %s", (_, input, expected) => {
+    expect(staleReadAt(input)).toBe(expected);
   });
 
   it.each<[string, string, { kind: string; id: string }]>([

@@ -69,6 +69,9 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
   const items = listItems(db, { states: ["open"], limit: 200 });
   const last = db.prepare("select created_at from briefings order by created_at desc limit 1").get() as { created_at: string } | undefined;
   const since = input.since ?? last?.created_at ?? null;
+  // The picks and their order are the Inbox's, by fixed rules; a model only words them later (`applyModelWords`).
+  const topPicks = items.slice(0, BRIEFING_TOP_PICKS).map((item) => item.id);
+  const picked = new Set(topPicks);
   const sections = new Map<string, BriefingSection>();
   let newCount = 0;
   let changedCount = 0;
@@ -78,7 +81,9 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
     const changed = !isNew && !!since && it.updatedAt > since;
     if (isNew) newCount++;
     if (changed) changedCount++;
-    if (input.kind === "away" && since && !isNew && !changed) continue;
+    // An away summary leaves out what did not change, except the lead and the picks: their entries are the snapshot
+    // the briefing page lists them from and the words the model writes the lead from.
+    if (input.kind === "away" && since && !isNew && !changed && !picked.has(it.id)) continue;
     const entry: BriefingSection["items"][number] = { id: it.id, title: it.title, summary: it.summary, url: it.url, isNew, changed };
     if (s.id === "meetings") entry.related = relatedNotes(db, it);
     if (!sections.has(s.id)) sections.set(s.id, { id: s.id, title: s.title, items: [] });
@@ -89,8 +94,6 @@ export function composeBriefing(db: Db, input: { kind: Briefing["kind"]; since: 
   const proposals = new ProposalIndex(db).list({ statuses: ["proposed"], limit: 20 });
   if (proposals.length) sections.set("memory", { id: "memory", title: "Memory changes to review", items: proposals.map((p) => ({ id: p.id, title: proposalHeadline(p), summary: `Proposed for ${p.target}`, url: null, isNew: false, changed: false })) });
   const order = ["deadlines", "reviews", "meetings", "replies", "prepared", "memory", "facts", "other"];
-  // The picks and their order are the Inbox's, by fixed rules; a model only words them later (`applyModelWords`).
-  const topPicks = items.slice(0, BRIEFING_TOP_PICKS).map((item) => item.id);
   const leadItem = items[0];
   const flagged = items.filter((item) => !!since && (item.firstSeenAt > since || item.updatedAt > since));
   return {

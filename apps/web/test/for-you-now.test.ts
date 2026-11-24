@@ -90,6 +90,9 @@ describe("For you now reasons", () => {
   it("applies a daily briefing pick while it remains open and the briefing is today's latest", () => {
     const picked = item("picked");
     expect(decide([picked], { briefing: briefing([picked.id]) }).entries[0]?.reason).toBe("picked-this-morning");
+    // A Daily Briefing prepared in the afternoon is still today's, not this morning's.
+    const afternoon = briefing([picked.id], { createdAt: "2026-11-18T13:30:00Z" });
+    expect(decide([picked], { briefing: afternoon, now: Date.parse("2026-11-18T14:00:00Z") }).entries[0]?.reasonText).toBe("Picked in today’s Daily Briefing");
     expect(decide([picked], { briefing: briefing([]) }).entries).toEqual([]);
     expect(decide([{ ...picked, state: "snoozed" }], { briefing: briefing([picked.id]) }).entries).toEqual([]);
   });
@@ -170,7 +173,7 @@ describe("For you now curation", () => {
     expect(decide([prep("next", "2026-11-18T09:20:00Z")], { now: Date.parse("2026-11-18T09:00:00Z") }).quiet).toBe("Nothing right now. Next: prep for next at 10:20");
   });
 
-  it("holds membership and order while held, with each entry's current item and reason", () => {
+  it("holds membership and order while held, with each entry's current item and reason, and no words for a reason that ended", () => {
     const reply = item("reply", { dueAt: "2026-11-18T10:30:00Z" });
     const meeting = prep("meeting");
     const held = decide([reply, meeting]);
@@ -181,8 +184,9 @@ describe("For you now curation", () => {
     const arrived = item("arrived", { dueAt: "2026-11-18T09:30:00Z" });
     const items = [arrived, sooner, started];
     const shown = holdEntries(held, decide(items), items);
+    // The started prep keeps its place, but not "prep not read" beside its In progress: its row's own source line shows.
     expect(shown.entries.map((e) => [e.item.id, e.reasonText])).toEqual([
-      ["meeting", "Starts in 12 min, prep not read"],
+      ["meeting", null],
       ["reply", "Due in 45 min"],
     ]);
     expect(shown.entries[0]!.item.startedAt).toBe("2026-11-18T09:00:00Z");

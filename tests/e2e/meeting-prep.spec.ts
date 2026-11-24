@@ -134,6 +134,34 @@ test("read by opening: opening unread prep from its Inbox row takes it off For y
   await other.close();
 });
 
+test("read by opening, after a failure: prep opened while its start could not be recorded is recorded on the next try", async () => {
+  const page = await journeys.open("/");
+  await setCalendar(page, [{ id: "vendor", summary: "Vendor check-in", start: 9, end: 39 }]);
+  await page.reload();
+  const startedAt = async () => (await api<{ items: Array<{ key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.key === "gcal:vendor")?.startedAt ?? null;
+  // The decisions the Dashboard sends fail for a while, as when the service is briefly away.
+  let away = true;
+  let failures = 0;
+  await page.route("**/api/v1/attention/*/decision", (route) => {
+    if (!away) return route.fallback();
+    failures++;
+    return route.fulfill({ status: 503, json: { error: "unavailable" } });
+  });
+  await openRow(rowFor(page, "vendor"));
+  await expect(rowFor(page, "vendor").locator("[data-meeting-detail]")).toBeVisible();
+  await expect.poll(() => failures).toBeGreaterThan(0);
+  expect(await startedAt()).toBeNull();
+  away = false;
+  // The owner keeps reading; the next time the list is read again (here after another item changed elsewhere), the
+  // open prep is recorded as read.
+  const elsewhere = (await api<{ items: Array<{ id: string; key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => !i.key.startsWith("gcal:") && !i.startedAt)!;
+  await api(page, "POST", `/attention/${elsewhere.id}/decision`, { decision: "start" });
+  await expect.poll(startedAt, { timeout: 15_000 }).not.toBeNull();
+  await expect(rowFor(page, "vendor").locator(".inbox-source")).toContainText("In progress");
+  await api(page, "POST", `/attention/${elsewhere.id}/decision`, { decision: "reopen" });
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("related notes: the newest briefing's notes for the meeting, labelled with its time, or that it found none", async () => {
   const page = await journeys.open("/");
   // A person note the briefing can relate to the meeting, saved as a Harness saves (the Dashboard never writes the Brain).
@@ -144,10 +172,19 @@ test("related notes: the newest briefing's notes for the meeting, labelled with 
   ]);
   const before = (await api<{ requested: { id: string } | null }>(page, "GET", "/briefings")).requested?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "manual" });
-  let written: { id: string; createdAt: string } | null = null;
-  await expect.poll(async () => ((written = (await api<{ requested: { id: string; createdAt: string } | null }>(page, "GET", "/briefings")).requested), written !== null && written.id !== before), { timeout: 30_000 }).toBe(true);
-  const when = await clock(page, written!.createdAt);
+  let written!: { id: string; createdAt: string };
+  await expect.poll(async () => {
+    const { requested } = await api<{ requested: typeof written | null }>(page, "GET", "/briefings");
+    if (!requested || requested.id === before) return false;
+    written = requested;
+    return true;
+  }, { timeout: 30_000 }).toBe(true);
+  const when = await clock(page, written.createdAt);
+  await page.mouse.move(5, 5);
   await page.reload();
+  // Prep names the related notes of the briefing Home has read. Wait for Home to show the new briefing first.
+  const briefingCard = page.getByRole("article", { name: "Briefing you asked for" }).getByRole("link", { name: "Read briefing" });
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
   const handover = rowFor(page, "handover");
   await openPrep(handover);
   const notes = handover.getByRole("group", { name: `Related notes · As the briefing at ${when} found them` });
@@ -166,7 +203,9 @@ test("related notes: the newest briefing's notes for the meeting, labelled with 
     for (const b of [body.daily, body.requested]) for (const section of b?.sections ?? []) section.items = section.items.map((i) => (i.id === standupId ? { ...i, related: [] } : i));
     await route.fulfill({ response: res, json: body });
   });
+  await page.mouse.move(5, 5);
   await page.reload();
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
   const standup = rowFor(page, "standup");
   await openPrep(standup);
   await expect(standup.locator("[data-meeting-notes]")).toHaveText(`No related notes: the briefing at ${when} found none in your Brain.`);
