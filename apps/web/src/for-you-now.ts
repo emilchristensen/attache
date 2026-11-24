@@ -129,6 +129,19 @@ function nextPrep(items: readonly AttentionItemView[], { now, timeZone }: Contex
   return `Next: prep for ${rowText(next.item).subject} ${day}at ${clockTime(next.at, timeZone)}`;
 }
 
+/**
+ * What shows while the pointer or focus is inside the list: the entries and order of `held` (the list when the hold
+ * began), each with its item's current data, so a decision or a replicated change shows at once while nothing moves
+ * or leaves. An entry still listed takes its current reason too; one whose reason has ended keeps its last words; one
+ * whose item left the Inbox keeps its last data until the hold ends.
+ */
+export function holdEntries(held: ForYouNowResult, live: ForYouNowResult, items: readonly AttentionItemView[]): ForYouNowResult {
+  const listed = new Map(live.entries.map((e) => [e.item.id, e]));
+  const current = new Map(items.map((i) => [i.id, i]));
+  const entries = held.entries.map((e) => listed.get(e.item.id) ?? { ...e, item: current.get(e.item.id) ?? e.item });
+  return { ...held, entries };
+}
+
 export function curateForYouNow({ items, briefing, now, timeZone }: ForYouNowInput): ForYouNowResult {
   const ctx: Context = { briefing, now, timeZone };
   const rank = (e: ForYouNowEntry) => REASONS.findIndex((r) => r.id === e.reason);

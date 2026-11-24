@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionItemView, BriefingView } from "@attache/contracts";
-import { curateForYouNow, FOR_YOU_NOW_LIMIT, MEETING_LEAD_MS, REPLY_DUE_SOON_MS, REPLY_WORKING_DAY_MS } from "../src/for-you-now.ts";
+import { curateForYouNow, FOR_YOU_NOW_LIMIT, holdEntries, MEETING_LEAD_MS, REPLY_DUE_SOON_MS, REPLY_WORKING_DAY_MS } from "../src/for-you-now.ts";
 
 const CPH = "Europe/Copenhagen";
 const NOW = "2026-11-18T09:00:00Z";
@@ -168,6 +168,31 @@ describe("For you now curation", () => {
   it("says what comes next when no reason applies", () => {
     expect(decide([], { now: Date.parse("2026-11-18T08:00:00Z") }).quiet).toBe("Nothing right now.");
     expect(decide([prep("next", "2026-11-18T09:20:00Z")], { now: Date.parse("2026-11-18T09:00:00Z") }).quiet).toBe("Nothing right now. Next: prep for next at 10:20");
+  });
+
+  it("holds membership and order while held, with each entry's current item and reason", () => {
+    const reply = item("reply", { dueAt: "2026-11-18T10:30:00Z" });
+    const meeting = prep("meeting");
+    const held = decide([reply, meeting]);
+    expect(held.entries.map((e) => e.item.id)).toEqual(["meeting", "reply"]);
+    // Prep started (its reason has ended), the reply's due time moved closer, and a new item became timely.
+    const started = { ...meeting, startedAt: "2026-11-18T09:00:00Z" };
+    const sooner = { ...reply, dueAt: "2026-11-18T09:45:00Z" };
+    const arrived = item("arrived", { dueAt: "2026-11-18T09:30:00Z" });
+    const items = [arrived, sooner, started];
+    const shown = holdEntries(held, decide(items), items);
+    expect(shown.entries.map((e) => [e.item.id, e.reasonText])).toEqual([
+      ["meeting", "Starts in 12 min, prep not read"],
+      ["reply", "Due in 45 min"],
+    ]);
+    expect(shown.entries[0]!.item.startedAt).toBe("2026-11-18T09:00:00Z");
+    expect(shown.moreInInbox).toBe(held.moreInInbox);
+  });
+
+  it("keeps an item's last data while held once it has left the Inbox", () => {
+    const reply = item("reply", { dueAt: "2026-11-18T10:30:00Z" });
+    const held = decide([reply]);
+    expect(holdEntries(held, decide([]), []).entries).toEqual(held.entries);
   });
 
   it("says tomorrow when the next prep is not today", () => {

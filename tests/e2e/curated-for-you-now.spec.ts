@@ -48,7 +48,17 @@ test("meeting prep appears at 15 minutes, stays in the Inbox, and Open prep remo
   // Open prep: the meeting's prep opens in place, and the entry holds still while the pointer is on it.
   await (await rowAction(suggested, "Start working")).click();
   await expect(suggested.locator("[data-meeting-detail]")).toBeVisible();
-  await forYou(page).getByRole("heading", { name: "For you now" }).focus();
+  // Held under the pointer and focus, the entry keeps its place but shows the item as it is now: In progress, Continue.
+  await expect(suggested.locator(".inbox-source")).toContainText("In progress");
+  await expect(suggested.getByRole("button", { name: "Continue: Pilot handover" })).toHaveCount(1);
+  // A change made elsewhere (another Dashboard, here the API) shows at once too, while the entry still holds still.
+  const id = await suggested.getAttribute("data-item-id");
+  await api(page, "POST", `/attention/${id}/decision`, { decision: "reopen" });
+  await expect(suggested.locator(".inbox-source")).not.toContainText("In progress");
+  await api(page, "POST", `/attention/${id}/decision`, { decision: "start" });
+  await expect(suggested.locator(".inbox-source")).toContainText("In progress");
+  // Once the pointer and focus leave the list, the entry whose reason has ended leaves.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.mouse.move(2, 2);
   await expect(suggested).toHaveCount(0);
   await expect(itemRow(page, "Pilot handover")).toContainText("In progress");
@@ -89,6 +99,19 @@ test("Inbox failure is an error with Retry, never an empty curated list", async 
   await page.unroute("**/api/v1/attention?state=open*");
   await forYou(page).getByRole("button", { name: "Retry" }).click();
   await expect(forYou(page)).not.toContainText("Could not read the Inbox.");
+});
+
+test("a Daily Briefing that could not be read is said under the entries, never hidden by them", async () => {
+  const page = await journeys.open("/");
+  await setCalendar(page, [{ id: "picks", summary: "Roadmap sync", start: 10, end: 40 }]);
+  await page.route("**/api/v1/briefings", (route) => route.abort());
+  await page.reload();
+  await expect(forYou(page).locator("[data-inbox-row]").filter({ hasText: "Roadmap sync" })).toBeVisible();
+  const said = forYou(page).locator("[data-picks-failed]");
+  await expect(said).toHaveText("Could not read the Daily Briefing, so its picks are missing. Retry");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await said.getByRole("button", { name: "Retry" }).click();
+  await expect(said).toHaveCount(0);
 });
 
 test("curated list fits light, dark and narrow captures", async () => {
