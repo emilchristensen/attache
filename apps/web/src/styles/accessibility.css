@@ -60,11 +60,12 @@
     content: none;
     position: static;
   }
-  .page .for-you-now .inbox-row-actions {
+  .page .for-you-now .inbox-row-actions,
+  .page .for-you-now .inbox-row-actions button {
     min-height: 44px;
   }
   /* A touch screen's buttons are 44 px tall, so the Inbox's range keeps that height in the button's place. */
-  .inbox-tools-range {
+  .page .inbox-tools-range {
     min-height: 44px;
   }
   /* A checkbox is tapped on its whole line: its label is part of the target. */

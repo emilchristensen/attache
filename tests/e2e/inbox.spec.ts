@@ -82,9 +82,9 @@ test("rows: kind stamp and word, subject, source line and time; a review request
   // The subject is the row's own words, without the verb the kind word already says.
   await expect(review.locator("[data-row-toggle]")).toHaveText("Add checkout retry");
   await expect(review.locator(".inbox-time")).toHaveText(/^\d\d:\d\d$|^Yesterday$|^\d+ \w{3}$/);
-  // The kind column is about 185 px, with a 34 px stamp and a 19 px glyph.
+  // The kind column is 150 px in the Inbox's two thirds (185 px at full width), with a 34 px stamp and a 19 px glyph.
   const kind = (await review.locator(".inbox-kind").boundingBox())!;
-  expect(Math.round(kind.width)).toBe(185);
+  expect(Math.round(kind.width)).toBe(150);
   const stamp = (await review.locator(".type-icon").boundingBox())!;
   expect([Math.round(stamp.width), Math.round(stamp.height)]).toEqual([34, 34]);
   expect(Math.round((await review.locator(".type-icon svg").boundingBox())!.width)).toBe(19);

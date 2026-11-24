@@ -5,7 +5,7 @@ import { SCREENS, type ScreenId } from "../routes.ts";
 import { Icon } from "./icons.tsx";
 import { Logo } from "./Logo.tsx";
 import { MachineDisclosure } from "./MachinePanel.tsx";
-import { ScreenLink } from "./ScreenLink.tsx";
+import { ScreenLink, spokenName } from "./ScreenLink.tsx";
 import { Link } from "./ui.tsx";
 
 /**
@@ -18,15 +18,14 @@ export function Masthead({ current, signals, connections, onSearch }: { current:
   return (
     <header className="masthead">
       <div className="masthead-inner">
-        {/* The raised total is part of the link's name, with its words for a screen reader: "Attache, 7 need you". */}
-        <Link to="/" className="brand">
+        {/* The name starts with the words on screen, "Attache" and the raised total, then says what it counts (WCAG 2.5.3). */}
+        <Link to="/" className="brand" aria-label={spokenName("Attache", [total && `${total} ${needYou(signals.count.total.count)}`])}>
           <Logo size={32} attention={signals.dot} />
           <span className="brand-name">Attache</span>
           {total && (
             <>
-              <span className="sr-only">,</span>{" "}
+              {" "}
               <sup className="brand-total">{total}</sup>
-              <span className="sr-only"> {needYou(signals.count.total.count)}</span>
             </>
           )}
         </Link>
