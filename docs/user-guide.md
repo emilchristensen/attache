@@ -204,6 +204,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
   With no Daily Briefing yet today, **Prepare a briefing** writes today's Daily Briefing, so the area fills with its card and its picks reach For you now; once there is one, it writes a briefing you asked for.
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**, as a plain card named for what it is; **Read briefing** opens its page under that name, without a painting.
+  An Away summary lists only what is new or changed since the time you give, and still names its first item and Top to-dos from the whole Inbox.
 - **For you now** is a short curated list of the Inbox items to act on now.
   It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and this morning's Daily Briefing picks.
   A due date without a time of day is never nearly due: it counts as due today on its own day, wherever you are.

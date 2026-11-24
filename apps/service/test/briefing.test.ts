@@ -5,12 +5,12 @@ import { composeBriefing } from "../src/attention/briefing.ts";
 import { applyModelWords, askForBriefingWords, BRIEFING_MODEL_UPDATES } from "../src/attention/briefing-words.ts";
 import type { ModelProvider, StreamRequest } from "../src/models/providers.ts";
 
-function addItem(db: ReturnType<typeof openDb>, id: string, priority: number, words: { title?: string; summary?: string } = {}) {
+function addItem(db: ReturnType<typeof openDb>, id: string, priority: number, words: { title?: string; summary?: string } = {}, seenAt = "2026-01-01T08:00:00.000Z") {
   db.prepare(
     `insert into attention_items
       (id, item_key, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, priority, state, first_seen_at, updated_at)
      values (?, ?, ?, 'deadline', ?, ?, '', 'test', 'test', '[]', ?, 'open', ?, ?)`,
-  ).run(id, `key:${id}`, `fingerprint:${id}`, words.title ?? `Title ${id}`, words.summary ?? `Summary ${id}`, priority, "2026-01-01T08:00:00.000Z", "2026-01-01T08:00:00.000Z");
+  ).run(id, `key:${id}`, `fingerprint:${id}`, words.title ?? `Title ${id}`, words.summary ?? `Summary ${id}`, priority, seenAt, seenAt);
 }
 
 /** Two open items, both new since the last briefing, so each is flagged for an update text. */
@@ -49,6 +49,24 @@ describe("Daily Briefing picks", () => {
     expect(briefing.lead?.headline.startsWith("A headline x")).toBe(true);
     expect(briefing.lead?.explanation).toBe(briefing.lead?.headline);
     expect(BriefingViewSchema.safeParse({ ...briefing, summary: "", deliverablePath: null }).success).toBe(true);
+  });
+});
+
+describe("an away summary", () => {
+  it("lists what is new or changed, and keeps an entry for the lead and every top pick so the page and the model have their words", () => {
+    const db = openDb(":memory:");
+    for (const [id, priority] of [["one", 90], ["two", 80], ["three", 70], ["four", 60], ["five", 50], ["quiet", 10]] as Array<[string, number]>) addItem(db, id, priority);
+    addItem(db, "arrived", 20, {}, "2026-01-03T08:00:00.000Z");
+
+    const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
+    const entries = away.sections.flatMap((s) => s.items);
+
+    expect(away.lead?.itemId).toBe("one");
+    expect(away.topPicks).toEqual(["one", "two", "three", "four", "five"]);
+    expect(entries.map((e) => e.id).sort()).toEqual(["arrived", "five", "four", "one", "three", "two"]);
+    expect(entries.find((e) => e.id === "one")).toMatchObject({ title: "Title one", summary: "Summary one", isNew: false, changed: false });
+    expect(entries.find((e) => e.id === "arrived")).toMatchObject({ isNew: true });
+    expect(away.updates.map((u) => u.itemId)).toEqual(["arrived"]);
   });
 });
 
