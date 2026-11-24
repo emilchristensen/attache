@@ -112,6 +112,17 @@ describe("For you now reasons", () => {
     expect([entry?.reason, entry?.reasonText]).toEqual(["reply-nearly-late", text]);
   });
 
+  it.each<[string, string, string, string | null]>([
+    ["the evening before, in Copenhagen", "2026-11-17T22:30:00Z", CPH, null],
+    ["the afternoon before, in New York", "2026-11-17T22:30:00Z", "America/New_York", null],
+    ["on the day, in Copenhagen", "2026-11-18T09:00:00Z", CPH, "due-today"],
+    ["late on the day, in New York", "2026-11-19T03:30:00Z", "America/New_York", "due-today"],
+    ["the morning after, in Copenhagen", "2026-11-18T23:30:00Z", CPH, null],
+  ])("treats a date-only due value as a local date, never due soon: %s", (_, now, timeZone, reason) => {
+    const entries = decide([item("dated", { kind: "deadline", dueAt: "2026-11-18" })], { now: Date.parse(now), timeZone }).entries;
+    expect(entries.map((e) => e.reason)).toEqual(reason ? [reason] : []);
+  });
+
   it("says how many hours are left when more than one", () => {
     expect(decide([item("soon", { dueAt: "2026-11-18T10:30:00Z" })]).entries[0]?.reasonText).toBe("Due in 2 hours");
   });
