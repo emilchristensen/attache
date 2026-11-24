@@ -2,6 +2,7 @@ import type { ConnectionDefinition, ConnectionKind, Coverage, CoverageState, Inb
 import type { Logger } from "../core/log.ts";
 import type { HttpClient } from "./http.ts";
 import type { ClaudeConnectorRunner } from "./claude/runner.ts";
+import type { HarnessAdapter } from "../agents/harness-adapters.ts";
 
 export interface ConnectionRecord {
   id: string;
@@ -108,6 +109,8 @@ export interface ConnectorAdapter {
   prepareContext?(ctx: AdapterContext, target: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** Secret names this adapter stores. */
   secretNames: string[];
+  /** Harness Connections: the adapter boundary (ADR 0006) that previews, applies, checks and removes this Attache's entries. */
+  harness?: HarnessAdapter;
 }
 
 export class CoverageTracker {

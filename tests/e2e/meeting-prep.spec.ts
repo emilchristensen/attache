@@ -144,10 +144,19 @@ test("related notes: the newest briefing's notes for the meeting, labelled with 
   ]);
   const before = (await api<{ requested: { id: string } | null }>(page, "GET", "/briefings")).requested?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "manual" });
-  let written: { id: string; createdAt: string } | null = null;
-  await expect.poll(async () => ((written = (await api<{ requested: { id: string; createdAt: string } | null }>(page, "GET", "/briefings")).requested), written !== null && written.id !== before), { timeout: 30_000 }).toBe(true);
-  const when = await clock(page, written!.createdAt);
+  let written!: { id: string; createdAt: string };
+  await expect.poll(async () => {
+    const { requested } = await api<{ requested: typeof written | null }>(page, "GET", "/briefings");
+    if (!requested || requested.id === before) return false;
+    written = requested;
+    return true;
+  }, { timeout: 30_000 }).toBe(true);
+  const when = await clock(page, written.createdAt);
+  await page.mouse.move(5, 5);
   await page.reload();
+  // Prep names the related notes of the briefing Home has read. Wait for Home to show the new briefing first.
+  const briefingCard = page.getByRole("article", { name: "Briefing you asked for" }).getByRole("link", { name: "Read briefing" });
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
   const handover = rowFor(page, "handover");
   await openPrep(handover);
   const notes = handover.getByRole("group", { name: `Related notes · As the briefing at ${when} found them` });
@@ -166,7 +175,9 @@ test("related notes: the newest briefing's notes for the meeting, labelled with 
     for (const b of [body.daily, body.requested]) for (const section of b?.sections ?? []) section.items = section.items.map((i) => (i.id === standupId ? { ...i, related: [] } : i));
     await route.fulfill({ response: res, json: body });
   });
+  await page.mouse.move(5, 5);
   await page.reload();
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
   const standup = rowFor(page, "standup");
   await openPrep(standup);
   await expect(standup.locator("[data-meeting-notes]")).toHaveText(`No related notes: the briefing at ${when} found none in your Brain.`);
