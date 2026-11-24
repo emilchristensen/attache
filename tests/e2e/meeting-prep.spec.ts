@@ -139,17 +139,19 @@ test("read by opening, after a failure: prep opened while its start could not be
   await setCalendar(page, [{ id: "vendor", summary: "Vendor check-in", start: 9, end: 39 }]);
   await page.reload();
   const startedAt = async () => (await api<{ items: Array<{ key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.key === "gcal:vendor")?.startedAt ?? null;
-  // The first decision the Dashboard sends fails, as when the service is briefly away.
-  let failed = false;
+  // The decisions the Dashboard sends fail for a while, as when the service is briefly away.
+  let away = true;
+  let failures = 0;
   await page.route("**/api/v1/attention/*/decision", (route) => {
-    if (failed) return route.fallback();
-    failed = true;
+    if (!away) return route.fallback();
+    failures++;
     return route.fulfill({ status: 503, json: { error: "unavailable" } });
   });
   await openRow(rowFor(page, "vendor"));
   await expect(rowFor(page, "vendor").locator("[data-meeting-detail]")).toBeVisible();
-  await expect.poll(() => failed).toBe(true);
+  await expect.poll(() => failures).toBeGreaterThan(0);
   expect(await startedAt()).toBeNull();
+  away = false;
   // The owner keeps reading; the next time the list is read again (here after another item changed elsewhere), the
   // open prep is recorded as read.
   const elsewhere = (await api<{ items: Array<{ id: string; key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => !i.key.startsWith("gcal:") && !i.startedAt)!;
