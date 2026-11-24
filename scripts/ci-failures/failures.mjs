@@ -102,5 +102,12 @@ export function lastWords(lines) {
   // A script that crashed prints its error above a stack and details that can push it out of the tail.
   const firstError = printed.find((l) => ERROR_LINE.test(l));
   const lead = firstError && !tail.includes(firstError) ? [firstError] : [];
-  return [...errors.filter((e) => !/^Process completed with exit code \d+\.$/.test(e)), ...lead, ...tail].map(shorten);
+  return [...errors.flatMap(exitWords), ...lead, ...tail].map(shorten);
+}
+
+/** GitHub's "Process completed with exit code N." says nothing the step's output does not, except 124: `timeout` stopped a command. */
+function exitWords(error) {
+  const code = /^Process completed with exit code (\d+)\.$/.exec(error)?.[1];
+  if (code === undefined) return [error];
+  return code === "124" ? ["Process completed with exit code 124: a command hit its `timeout` limit."] : [];
 }

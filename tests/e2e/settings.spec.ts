@@ -5,7 +5,7 @@
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { FeatureStatus } from "@attache/contracts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -250,6 +250,21 @@ test("narrow: Settings opens on the section list; a section fills the screen wit
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
+test("tablet: a wide touch window keeps the list beside the section, with no way back to a list already in view", async ({ browser }) => {
+  const tablet = await JourneyBrowser.start(browser, stack.url, { storageState: await journeys.context.storageState(), hasTouch: true, isMobile: true, viewport: { width: 1024, height: 768 } });
+  try {
+    for (const path of ["/settings", "/settings/clients"]) {
+      const page = await tablet.open(path);
+      await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+      await expect(sectionList(page), path).toBeVisible();
+      await expect(shown(page), path).toBeVisible();
+      await expect(page.getByRole("link", { name: "All settings" }), path).toBeHidden();
+    }
+  } finally {
+    await tablet.close();
+  }
+});
+
 test("settings captures: every section, light, dark and narrow", async () => {
   const page = await journeys.open("/settings");
   const shots = "test-results/screens";
@@ -259,14 +274,14 @@ test("settings captures: every section, light, dark and narrow", async () => {
     if (scheme === "narrow") {
       await page.goto(`${stack.url}/settings`);
       await expect(sectionList(page)).toBeVisible();
-      await page.waitForTimeout(400);
+      await settled(page);
       await page.screenshot({ path: `${shots}/narrow-settings-list.png` });
     }
     for (const id of Object.keys(SECTIONS)) {
       await page.goto(`${stack.url}/settings/${id}`);
       await expectSection(page, id);
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(300);
+      await settled(page);
       await page.screenshot({ path: `${shots}/${scheme}-settings-${id}.png` });
     }
   }

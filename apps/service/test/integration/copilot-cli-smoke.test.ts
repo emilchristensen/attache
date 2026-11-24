@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { checkHarnessContract } from "./harness-smoke-contract.ts";
+import { findHarnessExecutable } from "./harness-executable.ts";
 import type { RecentChangesResult } from "@attache/contracts";
 import { contextFile, listSpool } from "../../src/agents/spool.ts";
 
@@ -40,14 +41,7 @@ import { contextFile, listSpool } from "../../src/agents/spool.ts";
  * withdraws that claim for Copilot CLI only (a failing capture case, the capture claim only).
  */
 
-function findCopilot(): string | null {
-  if (process.env.ATTACHE_COPILOT_EXECUTABLE) return process.env.ATTACHE_COPILOT_EXECUTABLE;
-  for (const dir of (process.env.PATH ?? "").split(delimiter).filter(Boolean)) {
-    for (const name of ["copilot", "copilot.cmd", "copilot.exe"]) if (existsSync(join(dir, name))) return join(dir, name);
-  }
-  return null;
-}
-const COPILOT = findCopilot();
+const COPILOT = findHarnessExecutable("copilot", "ATTACHE_COPILOT_EXECUTABLE");
 
 let svc: TestService;
 let model: Server;
@@ -139,16 +133,23 @@ function promptSession(prompt: string, resume?: string): Promise<string> {
 
 /** Every event in a session's events.jsonl, as Copilot CLI wrote it. */
 const sessionEvents = (id: string) => readFileSync(join(root, "copilot", "session-state", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { type: string; data?: unknown });
+/** Whether Copilot CLI has finished its turn on the newest message that mentions `prompt`, as the owner sees once it has answered. */
+const turnEnded = (id: string, prompt: string) => {
+  const events = sessionEvents(id);
+  const asked = events.findLastIndex((e) => e.type === "user.message" && JSON.stringify(e.data).includes(prompt));
+  return asked >= 0 && events.slice(asked).some((e) => e.type === "assistant.turn_end");
+};
 
 /**
  * Drives Copilot CLI's interactive terminal, which Node cannot open: each line on stdin is typed, and
  * the line "<enter>" presses Enter (sent apart from the text, which the terminal would otherwise
  * take as a paste); "ready" is printed once the prompt's footer ("? help", once colour codes are
- * removed) shows; stdin closing ends
- * it. It never waits on a clock.
+ * removed) shows. Stdin closing closes the terminal, which hangs Copilot CLI up (SIGHUP) the way
+ * closing a terminal window does, and waits for it to exit; one that is still running 30 s later
+ * is killed and the driver exits with an error.
  */
 const PTY_DRIVER = `
-import os, pty, sys, select, fcntl, termios, struct, re
+import os, pty, sys, select, fcntl, termios, struct, re, time
 pid, fd = pty.fork()
 if pid == 0:
     os.execvp(sys.argv[1], sys.argv[1:])
@@ -175,7 +176,13 @@ while True:
             break
         text = line.rstrip("\\n")
         os.write(fd, b"\\r" if text == "<enter>" else text.encode())
+os.close(fd)
+for _ in range(300):
+    if os.waitpid(pid, os.WNOHANG)[0]:
+        sys.exit(0)
+    time.sleep(0.1)
 os.kill(pid, 9)
+sys.exit("copilot was still running 30 s after its terminal closed")
 `;
 type Type = (line: string) => Promise<void>;
 /**
@@ -188,8 +195,10 @@ async function interactive(args: string[], steps: (type: Type, answered: (prompt
   writeFileSync(driver, PTY_DRIVER);
   const before = requests.length;
   // COPILOT_ALLOW_ALL=true trusts the working folder, so no trust question takes the first keystrokes.
-  const child = spawn(PYTHON!, [driver, COPILOT!, "--no-color", "--no-auto-update", ...args], { cwd: join(root, "work"), env: { ...sessionEnv(), COPILOT_ALLOW_ALL: "true" }, stdio: ["pipe", "pipe", "ignore"] });
-  const closed = new Promise<void>((resolve) => child.on("close", () => resolve()));
+  const child = spawn(PYTHON!, [driver, COPILOT!, "--no-color", "--no-auto-update", ...args], { cwd: join(root, "work"), env: { ...sessionEnv(), COPILOT_ALLOW_ALL: "true" }, stdio: ["pipe", "pipe", "pipe"] });
+  let driverErrors = "";
+  child.stderr!.on("data", (d) => (driverErrors += String(d)));
+  const closed = new Promise<number | null>((resolve) => child.on("close", (code) => resolve(code)));
   try {
     await new Promise<void>((resolve) => child.stdout!.on("data", (d) => String(d).includes("ready") && resolve()));
     // The footer shows before the session takes input; give it a moment.
@@ -207,6 +216,7 @@ async function interactive(args: string[], steps: (type: Type, answered: (prompt
     child.stdin!.end();
     await closed;
   }
+  expect(await closed, driverErrors).toBe(0);
 }
 
 /** The conversation Attache archived for a Copilot CLI session, or null. */
@@ -235,17 +245,20 @@ interface Listed {
   enabled?: boolean;
 }
 
-/** Run a Copilot CLI command in the isolated home and return its exit status and output. */
-function copilot(args: string[]): { status: number | null; out: string } {
+/**
+ * Run a Copilot CLI command in the isolated home and return its exit status, what it printed on
+ * stdout (where `--json` output goes), and everything it printed, for failure messages.
+ */
+function copilot(args: string[]): { status: number | null; stdout: string; out: string } {
   const r = spawnSync(COPILOT!, args, { cwd: join(root, "work"), env, encoding: "utf8", timeout: 60_000, windowsHide: true, shell: process.platform === "win32" });
-  return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  return { status: r.status, stdout: r.stdout ?? "", out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 
 /** The MCP servers Copilot CLI loads from its user configuration, by name. */
 function userServers(): Record<string, Listed> {
   const r = copilot(["mcp", "list", "--json"]);
   expect(r.status, r.out).toBe(0);
-  const all = (JSON.parse(r.out) as { mcpServers: Record<string, Listed> }).mcpServers;
+  const all = (JSON.parse(r.stdout) as { mcpServers: Record<string, Listed> }).mcpServers;
   return Object.fromEntries(Object.entries(all).filter(([, s]) => s.source === "user"));
 }
 
@@ -301,7 +314,7 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
     expect(servers[name!]).toMatchObject({ source: "user", enabled: true });
     const got = copilot(["mcp", "get", name!, "--json"]);
     expect(got.status, got.out).toBe(0);
-    expect((JSON.parse(got.out) as Record<string, Listed>)[name!]).toMatchObject({ source: "user", enabled: true });
+    expect((JSON.parse(got.stdout) as Record<string, Listed>)[name!]).toMatchObject({ source: "user", enabled: true });
     const id = await promptSession(SAVE_FIXTURE);
     const { changes } = await svc.get<RecentChangesResult>("/memory/recent-changes?unreviewed=1");
     const toolEvents = sessionEvents(id).filter((e) => e.type.startsWith("tool.execution"));
@@ -391,6 +404,8 @@ describe.skipIf(!COPILOT)("the real Copilot CLI executable", () => {
       expect(archived(captured)).toContain("before compacting");
       await type("after compacting");
       await answered("after compacting");
+      // The owner closes the terminal once Copilot CLI has shown its answer, not while it is still writing it.
+      await expect.poll(() => turnEnded(captured, "after compacting"), { timeout: 60_000, interval: 250 }).toBe(true);
     });
     await spoolSettled();
     await expect.poll(() => archived(captured), { timeout: 30_000, interval: 200 }).toContain("after compacting");

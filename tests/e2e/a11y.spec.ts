@@ -9,7 +9,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames } from "./browser.ts";
 import { axeFindings, focusRing, overlaps, sideways, TARGET, targets } from "./a11y.ts";
 import { openRow } from "./inbox.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
@@ -245,8 +245,9 @@ test("screen reader: the decision count is read out when a Source refresh change
   const item = open.find((i) => i.kind === "pending_reply")!;
   await api(page, "POST", `/attention/${item.id}/decision`, { decision: "done" });
   await expect.poll(total).toBe(before - 1);
-  await page.waitForTimeout(500);
-  await expect(said).toHaveText("");
+  // The count and the words come from one render: once that render is painted, nothing was said.
+  await nextFrames(page);
+  expect(await said.textContent()).toBe("");
   // A Source refresh that finds a new deadline is read out with the new total.
   const notes = (await api<Array<{ id: string; kind: string }>>(page, "GET", "/connections")).find((c) => c.kind === "vault" && c.id !== "vault-data")!;
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
@@ -260,9 +261,12 @@ test("screen reader: the decision count is read out when a Source refresh change
   const other = open.find((i) => i.kind === "deadline")!;
   await Promise.all([api(page, "POST", `/connections/${notes.id}/refresh`), api(page, "POST", `/attention/${other.id}/decision`, { decision: "done" })]);
   await expect.poll(total).toBe(before - 1);
-  await page.waitForTimeout(1500);
-  expect(await heard()).toBe(was);
+  // Undoing the decision is a later live update than the refresh's own, so once its count shows, the page has heard
+  // the refresh out and said all it was going to say.
   await api(page, "POST", `/attention/${other.id}/decision`, { decision: "reopen" });
+  await expect.poll(total).toBe(before);
+  await nextFrames(page);
+  expect(await heard()).toBe(was);
   // Undo the decision, so the other passes see the same Inbox.
   await api(page, "POST", `/attention/${item.id}/decision`, { decision: "reopen" });
 });

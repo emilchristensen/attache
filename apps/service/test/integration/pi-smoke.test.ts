@@ -3,9 +3,10 @@ import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { checkHarnessContract } from "./harness-smoke-contract.ts";
+import { findHarnessExecutable } from "./harness-executable.ts";
 
 /**
  * Smoke test against the real Pi executable, in an isolated Pi agent folder: connecting Pi through
@@ -20,14 +21,7 @@ import { checkHarnessContract } from "./harness-smoke-contract.ts";
  * while this passes; a failure here withdraws those claims for Pi only.
  */
 
-function findPi(): string | null {
-  if (process.env.ATTACHE_PI_EXECUTABLE) return process.env.ATTACHE_PI_EXECUTABLE;
-  for (const dir of (process.env.PATH ?? "").split(delimiter).filter(Boolean)) {
-    for (const name of ["pi", "pi.cmd", "pi.exe"]) if (existsSync(join(dir, name))) return join(dir, name);
-  }
-  return null;
-}
-const PI = findPi();
+const PI = findHarnessExecutable("pi", "ATTACHE_PI_EXECUTABLE");
 
 /**
  * A test-only extension, loaded next to Attache's with `-e`: once the session has started it waits

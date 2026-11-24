@@ -9,7 +9,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AttentionItemView, ConnectionStatus, DecisionTotals } from "@attache/contracts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 import { MINUTE, SELF, setCalendar } from "./meetings.ts";
 import { buildAll, ROOT, startStack, type Stack } from "./stack.ts";
@@ -66,7 +66,7 @@ async function captureDay(page: Page, day: string) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.mouse.move(1, 1);
       await page.locator(".page").evaluate((el) => el.scrollTo(0, 0));
-      await page.waitForTimeout(250);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${prefix}${scheme}-home-day-${day}.png` });
     }
   }

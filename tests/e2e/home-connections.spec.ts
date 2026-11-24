@@ -8,7 +8,7 @@
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { SELF, setCalendar } from "./meetings.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
@@ -109,7 +109,7 @@ async function captureArea(page: Page, prefix: string, name: string) {
   await page.setViewportSize({ width: size.width, height: 2400 });
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.waitForTimeout(200);
+    await settled(page);
     await connections(page).screenshot({ path: `test-results/screens/${prefix}${scheme}-home-connections-${name}.png` });
   }
   await page.emulateMedia({ colorScheme: "light" });
@@ -231,7 +231,7 @@ for (const [name, viewport] of [
     if (narrow) await connections(page).evaluate((e) => e.scrollIntoView({ block: "start" }));
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.waitForTimeout(200);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${prefix}${scheme}-home-connections-mixed.png` });
     }
     await page.emulateMedia({ colorScheme: "light" });

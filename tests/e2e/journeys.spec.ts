@@ -1,9 +1,18 @@
+/**
+ * The owner's journeys through the whole product, in order: pairing and onboarding, then Home, search, the Inbox,
+ * Drafts, Jobs, wording, feature switches, this Machine, credentials, narrow layouts, the Brain, Approvals,
+ * reconnecting and Replication, driven through the Dashboard against the real bundled service and the TEST-ONLY
+ * fixtures. The tests run serially and share one stack: later tests rely on the pairing and onboarding the first
+ * ones do, so this file runs whole (`pnpm e2e`, or `npx playwright test tests/e2e/journeys.spec.ts`), never one test
+ * picked with `-g`.
+ */
 import { test, expect, type Page, type BrowserContextOptions, type BrowserType, type Locator } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { JourneyBrowser } from "./browser.ts";
+import { chromeEnv } from "./fonts.ts";
 import { connection, openConnection } from "./connections.ts";
 import { approvalRow, approvalRowById, draftsGroup, openApprovalRow, proposalsGroup } from "./approvals.ts";
 import { buildAll, endApproval, harnessSave, startStack, type Stack } from "./stack.ts";
@@ -57,7 +66,7 @@ test.afterAll(async () => {
  * so a script in `dir` appends it. Elsewhere Chrome launches as is.
  */
 async function pageWithClassicScrollbars(playwright: { chromium: BrowserType }, dir: string, options: BrowserContextOptions): Promise<{ page: Page; close: () => Promise<void> }> {
-  const chrome = await playwright.chromium.launch({ ...classicScrollbarChrome(dir), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
+  const chrome = await playwright.chromium.launch({ ...classicScrollbarChrome(dir), env: chromeEnv(), headless: true, ignoreDefaultArgs: ["--hide-scrollbars"] });
   return { page: await (await chrome.newContext(options)).newPage(), close: () => chrome.close() };
 }
 

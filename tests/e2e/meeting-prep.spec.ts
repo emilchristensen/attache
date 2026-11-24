@@ -5,7 +5,7 @@
  * meeting prep items with their start, end and Meet link, and For you now promotes them on the real clock.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames, settled } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 import { openRow } from "./inbox.ts";
@@ -259,7 +259,7 @@ test("Done clears the Heads-up and decides the Inbox item, which no longer count
   await expect(back).toBeVisible();
   await back.hover();
   await back.getByRole("button", { name: "Open prep" }).focus();
-  await page.waitForTimeout(500);
+  await nextFrames(page);
   await expect(back).toBeVisible();
   await page.evaluate(() => (document.activeElement as HTMLElement).blur());
 });
@@ -297,7 +297,7 @@ test("hold: with focus on Join, the next meeting still comes in on time below it
   await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
   await next.hover();
   await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await nextFrames(page);
   await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
   await expect(lines.first()).toContainText("Hiring sync");
   // Still held (the pointer stays in the Heads-ups), Not now on the arrived meeting takes it out at once, back to the Inbox.
@@ -365,7 +365,7 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
         ...Array.from({ length: step + 1 }, (_, n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
       ]);
       await expect(meetingHeadsUp(page, subject)).toHaveCount(1);
-      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await nextFrames(page);
       expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring, reading at ${place}`).toBeLessThanOrEqual(1);
     }
     // The first row in view is a meeting that comes due: it moves up into For you now, and the row after it stays put.
@@ -381,7 +381,7 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
       ...[0, 1].map((n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
     ]);
     await expect(meetingHeadsUp(page, "Quarterly planning")).toHaveCount(1);
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    await nextFrames(page);
     expect(Math.abs((await kept.boundingBox())!.y - was), `${safari ? "without" : "with"} scroll anchoring, the row after the promoted one`).toBeLessThanOrEqual(1);
     // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
     const prep = meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync 1`).getByRole("button", { name: "Open prep" });
@@ -392,7 +392,7 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
     const at = (await prep.boundingBox())!.y;
     await prep.click();
     await expect(prep).toHaveAttribute("aria-expanded", "true");
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    await nextFrames(page);
     expect(Math.abs((await prep.boundingBox())!.y - at), `Open prep ${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
     await page.close();
   }
@@ -422,11 +422,11 @@ test("captures: overlapping meetings and an open prep, light, dark and narrow", 
     for (const scheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.emulateMedia({ colorScheme: scheme });
-      await page.waitForTimeout(400);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${scheme}-home-meetings${name}.png` });
     }
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.waitForTimeout(400);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-home-meetings${name}.png` });
   };
   await shoot("");

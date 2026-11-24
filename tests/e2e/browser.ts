@@ -1,5 +1,8 @@
 /** The browser side of the journeys: one paired browser profile per spec, and the Attache API as the Dashboard calls it. */
-import type { Browser, BrowserContext, BrowserContextOptions, ConsoleMessage, Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type BrowserContextOptions, type ConsoleMessage, type Page } from "@playwright/test";
+
+/** The header `api()` marks its requests with, so a wait for the Dashboard's own requests can pass them by. */
+const JOURNEY_CALL = "x-journey-call";
 
 /**
  * One paired browser profile for a spec's journeys, like a real user's
@@ -53,12 +56,52 @@ export class JourneyBrowser {
 /** Call the Attache API from a paired page, as the Dashboard does, and return its answer. */
 export async function api<T = unknown>(page: Page, method: string, path: string, body?: unknown): Promise<T> {
   return page.evaluate(
-    async ([m, p, b]) => {
-      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
+    async ([m, p, b, marker]) => {
+      const res = await fetch(`/api/v1${p}`, { method: m, credentials: "same-origin", headers: { "content-type": "application/json", "x-attache-client": "1", [marker]: "1" }, ...(b === undefined ? {} : { body: JSON.stringify(b) }) });
       if (!res.ok) throw new Error(`${m} ${p} failed: ${res.status} ${await res.text()}`);
       const text = await res.text();
       return text ? JSON.parse(text) : null;
     },
-    [method, path, body] as const,
+    [method, path, body, JOURNEY_CALL] as const,
   ) as Promise<T>;
+}
+
+/**
+ * The Dashboard's own next answer to `GET /api/v1{path}` that `accept` takes, not one `api()` asked for: the moment
+ * the page knows what the service now says. Start the wait before the step that makes the service say it.
+ */
+export async function dashboardAnswer<T>(page: Page, path: string, accept: (body: T) => boolean): Promise<T> {
+  const response = await page.waitForResponse(async (r) => {
+    const request = r.request();
+    if (request.method() !== "GET" || request.headers()[JOURNEY_CALL] || !r.ok()) return false;
+    const url = new URL(r.url());
+    if (`${url.pathname}${url.search}` !== `/api/v1${path}`) return false;
+    return accept((await r.json()) as T);
+  });
+  return (await response.json()) as T;
+}
+
+/**
+ * Two animation frames: whatever the page was doing when this is called has been rendered, laid out and painted, so
+ * a measurement or a check that something did not change reads the page as it now is. Needs the page's clock running.
+ */
+export async function nextFrames(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+}
+
+/**
+ * The page drawn as it will stay, for a capture: a page just loaded has finished its requests, no screen is still
+ * loading (its placeholder lines or a busy region), web fonts are in, every transition and animation that ends has
+ * finished, and that is painted. A change of theme, size, address or content just before is settled after this.
+ */
+export async function settled(page: Page): Promise<void> {
+  await page.waitForLoadState("networkidle");
+  await expect(page.locator(".skeleton, [aria-busy='true']")).toHaveCount(0);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const ending = document.getAnimations().filter((a) => a.playState === "running" && a.effect?.getComputedTiming().endTime !== Infinity);
+    // A transition the next style change cancels rejects its `finished`; that one is over too.
+    await Promise.all(ending.map((a) => a.finished.catch(() => undefined)));
+  });
+  await nextFrames(page);
 }
