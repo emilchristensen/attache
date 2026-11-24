@@ -29,10 +29,43 @@ export interface ConnectionsView {
   reload: () => void;
 }
 
-/** A resource as one answer: useResource keeps the last data after a failed refetch, and a failure still wins. */
-function reply<T>(data: T | null, error: Resource<T>["error"]): Reply<T> {
-  if (error) return { state: "failed", message: error.message };
+/** How soon a failed check is asked again on its own, while the failure may still be only a moment's. */
+export const CHECK_RETRY_MS = 2_000;
+/** A failed check counts only once it has lasted this long: a failure that lasts a moment never raises the banner. */
+export const CHECK_GRACE_MS = 5_000;
+/** How often a failure that has lasted is asked again on its own, so the banner goes once an answer comes. */
+export const CHECK_RECHECK_MS = 10_000;
+
+/**
+ * A resource as one answer: useResource keeps the last data after a failed refetch, and a failure that has lasted
+ * (`counted`) wins. Before then the last answer stands, or Checking when there is none yet.
+ */
+function reply<T>(data: T | null, error: Resource<T>["error"], counted = true): Reply<T> {
+  if (error && counted) return { state: "failed", message: error.message };
   return data ? { state: "ok", data } : { state: "waiting" };
+}
+
+/**
+ * A check's answer as the shell decides on it: a failure counts only once it has lasted `CHECK_GRACE_MS`, and a failed
+ * check is asked again on its own (soon, then every `CHECK_RECHECK_MS`) rather than waiting for the next live event.
+ */
+function useSteadyReply<T>(resource: Pick<Resource<T>, "data" | "error" | "reload">): Reply<T> {
+  const { data, error, reload } = resource;
+  const failing = error !== null;
+  const [lasted, setLasted] = useState(false);
+  useEffect(() => {
+    setLasted(false);
+    if (!failing) return;
+    const timer = window.setTimeout(() => setLasted(true), CHECK_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, [failing]);
+  // Armed again by each new failure, so a check that keeps failing keeps being asked.
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(reload, lasted ? CHECK_RECHECK_MS : CHECK_RETRY_MS);
+    return () => window.clearTimeout(timer);
+  }, [error, lasted, reload]);
+  return useMemo(() => reply(data, error, lasted), [data, error, lasted]);
 }
 
 function mapReply<T, U>(r: Reply<T>, f: (t: T) => U): Reply<U> {
@@ -78,19 +111,20 @@ export function useConnectionsStatus(): ConnectionsView {
   const reader = useReader();
   const schedules = useResource<Schedule[]>("/schedules", ["config.changed", "reader.changed"]);
   const nextRefreshAt = useNextRefresh(schedules);
-  const { data: capsData, error: capsError, reload: reloadCaps } = caps;
-  const { data: readerData, error: readerError, reload: reloadReader } = reader;
+  const capsReply = useSteadyReply(caps);
+  const readerReply = useSteadyReply<ReaderView>(reader);
+  const { data: capsData, reload: reloadCaps } = caps;
+  const reloadReader = reader.reload;
   const reloadSchedules = schedules.reload;
   return useMemo(() => {
-    const capsReply = reply(capsData, capsError);
-    const status = connectionsStatus({ connections: mapReply(capsReply, (c) => c.connections), features: mapReply(capsReply, (c) => c.features), reader: reply<ReaderView>(readerData, readerError), nextRefreshAt });
+    const status = connectionsStatus({ connections: mapReply(capsReply, (c) => c.connections), features: mapReply(capsReply, (c) => c.features), reader: readerReply, nextRefreshAt });
     const reload = () => {
       reloadCaps();
       reloadReader();
       reloadSchedules();
     };
     return { status, caps: capsData, reload };
-  }, [capsData, capsError, readerData, readerError, nextRefreshAt, reloadCaps, reloadReader, reloadSchedules]);
+  }, [capsReply, readerReply, capsData, nextRefreshAt, reloadCaps, reloadReader, reloadSchedules]);
 }
 
 /** Checking, until the shell's answers arrive: never a claim that every Connection works. */

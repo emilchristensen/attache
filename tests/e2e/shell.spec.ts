@@ -661,6 +661,8 @@ test("Reader: a silent Reader is the Connection banner's Not reading on every sc
   await api(tab, "PATCH", "/machine", { name });
   await tab.clock.runFor(500);
   await failed;
+  // A failure counts once it has lasted (CHECK_GRACE_MS, five seconds); the Dashboard asks again meanwhile, still failing.
+  await tab.clock.runFor(5_000);
   // A failed answer is said as such (Could not check, with Retry), never taken for the Reader being back.
   await expect(tab.locator('[data-connection-banner][data-state="could_not_check"]')).toContainText("Reader · Could not check");
   answer = "renewed";

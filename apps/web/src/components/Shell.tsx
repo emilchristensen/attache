@@ -6,7 +6,7 @@ import { focusHomeSearch } from "../search-launch.ts";
 import { useShortcuts } from "../shortcuts.ts";
 import { useTabSignal } from "../tab-signal.ts";
 import { ConnectionsContext, useConnectionsStatus } from "../connections-view.ts";
-import { ConnectionBanner } from "./ConnectionBanner.tsx";
+import { ConnectionAnnouncement, ConnectionBanner } from "./ConnectionBanner.tsx";
 import { BottomBar } from "./BottomBar.tsx";
 import { Masthead } from "./Masthead.tsx";
 import { MoreSheet } from "./MoreSheet.tsx";
@@ -62,6 +62,7 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       </a>
       <Masthead current={current} signals={signals} onSearch={search} connections={connections.status} />
       {current !== "connections" && <ConnectionBanner view={connections} />}
+      <ConnectionAnnouncement view={connections} shown={current !== "connections"} />
       {/* Present from the start and empty, so what a Source refresh changed is read out when it is written. */}
       <p className="sr-only" role="status" data-count-announcement>
         {announcement}

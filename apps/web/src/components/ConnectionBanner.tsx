@@ -7,6 +7,7 @@ import { connectionHref, reconnectMethod, reconfigureSignIn, retestConnection, s
 import { settingsHref } from "../routes.ts";
 import { DisconnectConfirm } from "./ConnectionParts.tsx";
 import { Icon } from "./icons.tsx";
+import { usePopover } from "./menu.ts";
 import { Link, navigate, useAction } from "./ui.tsx";
 
 const CONNECTIONS = "/connections";
@@ -91,14 +92,28 @@ function useDisable(view: ConnectionsView, connectionId: string | null) {
 }
 
 /**
+ * The polite announcement of the banner's issue, mounted by the shell from the start and always there, so a screen
+ * reader hears each new issue: only its words change, and only when the issue does, never on a refresh that leaves it
+ * the same. Empty while no banner shows (`shown` false on the Connections page).
+ */
+export function ConnectionAnnouncement({ view, shown }: { view: ConnectionsView; shown: boolean }) {
+  const banner = shown ? connectionBanner(view.status) : null;
+  return (
+    <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-banner-announcement>
+      {banner ? `${banner.issue.subject} · ${banner.issue.word} · ${banner.issue.impact}` : ""}
+    </p>
+  );
+}
+
+/**
  * The Connection banner under the masthead, on every screen but Connections: the issue that most needs the owner,
  * "N more connection issues", its fixing button, Disable when it belongs to one Connection, and Go to Connections. No
- * close button: it stays while the Inbox may be incomplete. A screen reader hears a new issue once, not every refresh.
+ * close button: it stays while the Inbox may be incomplete. The shell announces it (`ConnectionAnnouncement`).
  */
 export function ConnectionBanner({ view }: { view: ConnectionsView }) {
   const banner = connectionBanner(view.status);
   const disable = useDisable(view, banner?.disableConnectionId ?? null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const menu = usePopover();
   if (!banner) return null;
   const { issue } = banner;
   const lineId = `connection-banner-${issue.key}`;
@@ -128,11 +143,11 @@ export function ConnectionBanner({ view }: { view: ConnectionsView }) {
         </Link>
       </div>
       <div className="connection-banner-menu">
-        <button className="ghost" aria-expanded={menuOpen} aria-label="Connection issue actions" onClick={() => setMenuOpen(!menuOpen)}>
+        <button className="ghost" aria-label="Connection issue actions" {...menu.buttonProps}>
           Actions
         </button>
-        {menuOpen && (
-          <div className="connection-banner-menu-popover">
+        {menu.open && (
+          <div className="connection-banner-menu-popover" aria-label="Connection issue actions" {...menu.listProps}>
             {disableButton}
             <Link to={CONNECTIONS} className="btn ghost">
               Go to Connections
@@ -140,10 +155,6 @@ export function ConnectionBanner({ view }: { view: ConnectionsView }) {
           </div>
         )}
       </div>
-      {/* The words change only when the issue does, so a refresh that leaves it the same is not read out again. */}
-      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {`${issue.subject} · ${issue.word} · ${issue.impact}`}
-      </span>
       {disable.preview && <DisconnectConfirm status={disable.preview.status} preview={disable.preview.effects} disconnect={disable.disable} onCancel={disable.cancel} />}
     </section>
   );
