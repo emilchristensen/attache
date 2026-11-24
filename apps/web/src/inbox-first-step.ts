@@ -20,6 +20,12 @@ export const FIRST_STEP: Readonly<Record<InboxKind, FirstStep>> = {
   replication_deleted_and_changed: "row",
 };
 
-export function firstStepFor(item: Pick<AttentionItemView, "kind">): FirstStep {
-  return Object.hasOwn(FIRST_STEP, item.kind) ? FIRST_STEP[item.kind as InboxKind] : "row";
+/**
+ * Start working's first step for an item: the step its kind maps to (`FIRST_STEP`), a kind newer than this map as
+ * "row"; and Prepare draft for any other draftable item, one whose kind would only open the row (a source, the event
+ * or the prep stays the step its kind names).
+ */
+export function firstStepFor(item: Pick<AttentionItemView, "kind" | "draftable">): FirstStep {
+  const step = Object.hasOwn(FIRST_STEP, item.kind) ? FIRST_STEP[item.kind as InboxKind] : "row";
+  return step === "row" && item.draftable ? "draft" : step;
 }

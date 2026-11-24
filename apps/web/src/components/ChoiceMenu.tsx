@@ -1,6 +1,5 @@
-import { useCallback, useId, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
-import { useMenuDismiss } from "./menu.ts";
+import { usePopover } from "./menu.ts";
 
 export interface Choice<T extends string> {
   id: T;
@@ -24,23 +23,18 @@ interface Props<T extends string> {
  * do. The chosen entry is pressed and carries a check; a choice closes the menu and returns focus to its button.
  */
 export function ChoiceMenu<T extends string>({ name, shown, choices, chosen, onChoose }: Props<T>) {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const close = useCallback(() => setOpen(false), []);
-  const chose = useMenuDismiss(open, close, root, button);
+  const menu = usePopover();
   // The visible words lead the name when they say the menu's name already (WCAG 2.5.3).
   const prefix = shown.startsWith(name) ? null : `${name}: `;
   return (
-    <div className="choice-menu" ref={root}>
-      <button ref={button} className="small choice-menu-trigger" aria-expanded={open} aria-controls={menuId} onClick={() => setOpen(!open)}>
+    <div className="choice-menu">
+      <button className="small choice-menu-trigger" {...menu.buttonProps}>
         {prefix && <span className="sr-only">{prefix}</span>}
         {shown}
         <Icon name="chevron" size={12} className="choice-menu-caret" />
       </button>
-      {open && (
-        <div id={menuId} className="menu-pop choice-menu-pop" role="group" aria-label={name} onClick={chose}>
+      {menu.open && (
+        <div className="menu-pop choice-menu-pop" aria-label={name} {...menu.listProps}>
           {choices.map((c) => (
             <button key={c.id} className="menu-item choice-menu-item" aria-pressed={c.id === chosen} onClick={() => onChoose(c.id)}>
               <Icon name="check" size={14} className="choice-menu-check" />

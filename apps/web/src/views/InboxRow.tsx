@@ -2,23 +2,32 @@ import { useId, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Icon } from "../components/icons.tsx";
+import { usePopover } from "../components/menu.ts";
 import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { hueClass } from "../theme/hues.ts";
 import { inboxType } from "../inbox-types.ts";
 import { draftTag, rowText, rowTime, rowWhy, snoozeChoices, untilText } from "../inbox-rows.ts";
 import { openDraftId } from "../linked-draft.ts";
-import { firstStepFor } from "../inbox-first-step.ts";
 import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
 import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
 import { MeetingPrepDetail } from "./MeetingPrepDetail.tsx";
+import { useReadPrep } from "./row-actions.ts";
 
 /** What the owner decided in a row; Undo reopens the item. */
 export type RowDecision = "start" | "done" | "dismiss" | "snooze" | "reopen";
 
+/** Where a row stands, for Start working: whether it is open, and how to open it in place. */
+export interface RowPlace {
+  open: boolean;
+  openRow: () => void;
+}
+
 export interface RowActions {
   /** Records a decision; answers whether it was recorded (a failure is already said in a notification). */
   decide: (item: AttentionItemView, decision: RowDecision, until?: string) => Promise<boolean>;
+  /** Start working: the item in progress and the first step for its kind, from the button or the `w` key. */
+  start: (item: AttentionItemView, row: RowPlace) => Promise<void>;
   prepareDraft: (item: AttentionItemView) => void;
   /** The owner's explicit choice to replace `draftId`, the item's Draft whose send has an unknown outcome. */
   prepareReplacement: (item: AttentionItemView, draftId: string) => void;
@@ -77,13 +86,15 @@ function Evidence({ item }: { item: AttentionItemView }) {
   );
 }
 
-/** The snooze times, the same choice wherever Snooze opens them. */
-function SnoozeTimes({ item, actions, id, role }: { item: AttentionItemView; actions: RowActions; id: string; role: "menu" | "group" }) {
-  const choiceRole = role === "menu" ? "menuitem" : undefined;
+/**
+ * The snooze times, the same choice wherever Snooze opens them: in place under an open row, or as the row action's
+ * popover (`popover`, from `usePopover`), a plain group that Escape or a pointer outside closes.
+ */
+function SnoozeTimes({ item, actions, id, popover }: { item: AttentionItemView; actions: RowActions; id?: string; popover?: ReturnType<typeof usePopover>["listProps"] }) {
   return (
-    <div className="inbox-snooze" id={id} role={role} aria-label={role === "menu" ? `Snooze: ${rowText(item).subject}` : "Snooze until"}>
+    <div className="inbox-snooze" id={id} role="group" aria-label={popover ? `Snooze: ${rowText(item).subject}` : "Snooze until"} {...popover}>
       {snoozeChoices(new Date()).map((t) => (
-        <button key={t.label} role={choiceRole} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
+        <button key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
           {t.label}
         </button>
       ))}
@@ -115,7 +126,7 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
       <button aria-label={`Dismiss: ${subject}`} onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
         Dismiss
       </button>
-      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} role="group" />}
+      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} />}
     </>
   );
 }
@@ -191,39 +202,22 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
   );
 }
 
-/**
- * Start working: marks the item in progress and takes the first step for its kind (`inbox-first-step.ts`). A waiting
- * Draft opens first; the source or the event opens in a new tab at once, while the click still allows it; Open prep
- * and every other kind open the row in place.
- */
-async function startWorking(item: AttentionItemView, actions: RowActions, onOpen: () => void, draftsOn: boolean): Promise<void> {
-  const draftId = openDraftId(item);
-  const step = firstStepFor(item);
-  const elsewhere = !draftId && (step === "source" || step === "calendar") && item.url ? item.url : null;
-  if (elsewhere) window.open(elsewhere, "_blank", "noopener,noreferrer");
-  if (!(await actions.decide(item, "start")) || elsewhere) return;
-  if (draftId) actions.viewDraft(draftId);
-  else if (step === "draft" && draftsOn && item.draftable) actions.prepareDraft(item);
-  else onOpen();
-}
-
-function RowQuickActions({ item, actions, onOpen, draftsOn }: { item: AttentionItemView; actions: RowActions; onOpen: () => void; draftsOn: boolean }) {
-  const [snoozing, setSnoozing] = useState(false);
+function RowQuickActions({ item, actions, row }: { item: AttentionItemView; actions: RowActions; row: RowPlace }) {
+  const snooze = usePopover();
   const [compactMenu, setCompactMenu] = useState(false);
   const subject = rowText(item).subject;
-  const times = useId();
   const menu = useId();
   if (item.state !== "open") return null;
   return (
     <div className="inbox-row-actions">
-      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => void startWorking(item, actions, onOpen, draftsOn)}>
+      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => void actions.start(item, row)}>
         {item.startedAt ? "Continue" : "Start working"}
       </button>
       <button className="inbox-actions-menu" aria-label={`Actions: ${subject}`} aria-expanded={compactMenu} aria-controls={menu} onClick={() => setCompactMenu(!compactMenu)}>
         Actions
       </button>
       <div className="inbox-row-secondary" id={menu} data-open={compactMenu || undefined}>
-        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} title="Snooze" aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
+        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} title="Snooze" {...snooze.buttonProps}>
           <Icon name="clock" size={16} className="inbox-action-icon" />
           <span className="inbox-action-word">Snooze</span>
           <Icon name="chevron" size={12} className="inbox-snooze-caret" />
@@ -233,7 +227,7 @@ function RowQuickActions({ item, actions, onOpen, draftsOn }: { item: AttentionI
           <span className="inbox-action-word">Done</span>
         </button>
       </div>
-      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} role="menu" />}
+      {snooze.open && <SnoozeTimes item={item} actions={actions} popover={snooze.listProps} />}
     </div>
   );
 }
@@ -264,6 +258,7 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reaso
   const text = rowText(item);
   const time = rowTime(item, clock.now, clock.timeZone);
   const type = inboxType(item);
+  useReadPrep(item, open, actions.decide);
   return (
     <li className={open ? "inbox-row open" : "inbox-row"} data-inbox-row data-item-id={item.id} data-item-key={item.key} data-type={type.id}>
       <div className="inbox-line">
@@ -283,7 +278,7 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reaso
         <time className="inbox-time" dateTime={time.iso} title={time.label}>
           {time.text}
         </time>
-        <RowQuickActions item={item} actions={actions} onOpen={() => !open && onToggle()} draftsOn={draftsOn} />
+        <RowQuickActions item={item} actions={actions} row={{ open, openRow: () => !open && onToggle() }} />
       </div>
       {open && (
         <>

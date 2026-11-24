@@ -125,9 +125,23 @@ test("row actions: Start working stays open and becomes Continue, then Not start
   await row.getByRole("button", { name: "Not started: Add checkout retry" }).click();
   await expect(row).not.toContainText("In progress");
 
-  await row.getByRole("button", { name: "Snooze: Add checkout retry" }).first().click();
-  await expect(row.getByRole("menu", { name: "Snooze: Add checkout retry" })).toBeVisible();
-  await row.getByRole("menuitem").first().click();
+  // Snooze's times are a plain list under the button: Escape and a click outside close it, focus back on Snooze.
+  const snooze = row.locator(".inbox-row-actions").getByRole("button", { name: "Snooze: Add checkout retry" });
+  const times = row.getByRole("group", { name: "Snooze: Add checkout retry" });
+  await snooze.click();
+  await expect(snooze).toHaveAttribute("aria-expanded", "true");
+  await expect(times).toBeVisible();
+  await expect(row.getByRole("menu")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(times).toHaveCount(0);
+  await expect(snooze).toBeFocused();
+  await expect(snooze).toHaveAttribute("aria-expanded", "false");
+  await snooze.click();
+  await expect(times).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(times).toHaveCount(0);
+  await snooze.click();
+  await times.getByRole("button").first().click();
   await expect(row).toHaveAttribute("data-decided", "snooze");
   await row.getByRole("button", { name: "Undo" }).click();
   await row.getByRole("button", { name: "Done: Add checkout retry" }).first().click();
@@ -432,6 +446,26 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await expect(decided.getByRole("button", { name: "Undo" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(decided).not.toHaveAttribute("data-decided");
+
+  // w is Start working, first step included: a deadline opens in place, a review request opens its source in a new tab.
+  const deadline = inboxRow(page, LONG);
+  await deadline.locator("[data-row-toggle]").focus();
+  await page.keyboard.press("w");
+  await expect(deadline.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(deadline.locator(".inbox-source")).toContainText("In progress");
+  await deadline.getByRole("button", { name: `Not started: ${LONG}` }).click();
+  await expect(deadline.locator(".inbox-source")).not.toContainText("In progress");
+  await journeys.context.route("https://github.com/**", (r) => r.fulfill({ contentType: "text/html", body: "<title>acme/web #42</title>" }));
+  const review = inboxRow(page, "Add checkout retry");
+  await review.locator("[data-row-toggle]").focus();
+  const [tab] = await Promise.all([page.waitForEvent("popup"), page.keyboard.press("w")]);
+  await expect(tab).toHaveURL(/^https:\/\/github\.com\/acme\/web\/pull\/42/);
+  await tab.close();
+  await expect(review.locator(".inbox-source")).toContainText("In progress");
+  await openRow(review);
+  await review.getByRole("button", { name: "Not started: Add checkout retry" }).click();
+  await expect(review.locator(".inbox-source")).not.toContainText("In progress");
+  await journeys.context.unroute("https://github.com/**");
 
   // Off again, and it stays off after a reload.
   await page.keyboard.press("?");
