@@ -140,8 +140,9 @@ const OPENED: ReadonlyArray<readonly [where: string, path: string, h1: string, o
     await expect(page.getByRole("listbox", { name: "Results" }).getByRole("option").first()).toBeVisible();
   }],
   ["The briefing page Read briefing opens", "/", "Home", async (page) => {
+    // The only briefing here is one asked for: its page carries its own name, not the Daily Briefing's.
     await page.getByRole("region", { name: "The Daily Briefing" }).getByRole("link", { name: "Read briefing" }).first().click();
-    await expect(page.getByRole("heading", { level: 1, name: /Daily Briefing/ })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Briefing you asked for" })).toBeVisible();
     await expect(page.locator(".briefing-detail")).toBeVisible();
   }],
   [EVIDENCE, "/", "Home", async (page) => {

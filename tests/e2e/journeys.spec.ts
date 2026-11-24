@@ -445,9 +445,9 @@ test("attention: a decided row stays in place with Undo; dismiss and snooze pers
   const briefing = page.getByRole("region", { name: "The Daily Briefing" });
   await briefing.getByRole("button", { name: "Briefing options" }).click();
   await briefing.getByRole("group", { name: "Briefing actions" }).getByRole("button", { name: /^Prepare a briefing/ }).click();
-  // The briefing asked for shows above the Daily Briefing; Read briefing opens it as a page with its points, and a
-  // Top to-do there opens its Inbox item in place on Home.
-  await briefing.locator(".requested-briefing").getByRole("link", { name: "Read briefing" }).click({ timeout: 30_000 });
+  // With no Daily Briefing yet today, Prepare a briefing writes it: its card fills the area, Read briefing opens it as a
+  // page with its points, and a Top to-do there opens its Inbox item in place on Home.
+  await briefing.locator(".daily-briefing-card").getByRole("link", { name: "Read briefing" }).click({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/briefing\/[^/]+$/);
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
   const todo = page.locator(".briefing-page-section", { has: page.getByRole("heading", { name: "Top to-dos" }) }).locator("[data-briefing-entry=inbox]").first();

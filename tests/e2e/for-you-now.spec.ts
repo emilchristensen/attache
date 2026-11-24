@@ -34,10 +34,16 @@ test.afterAll(async () => {
 const area = (page: Page) => page.getByRole("region", { name: "The Daily Briefing" });
 const forYou = (page: Page) => page.getByRole("region", { name: "For you now" });
 
-async function writeBriefing(page: Page, kind: "daily" | "away" | "manual") {
-  const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+/** Writes a briefing through the API and waits until the Daily Briefing area shows it; answers its id. */
+async function writeBriefing(page: Page, kind: "daily" | "away" | "manual"): Promise<string> {
+  const latest = async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+  const before = await latest();
   await api(page, "POST", "/briefings", { kind, ...(kind === "away" ? { since: new Date(Date.now() - 3 * 86_400_000).toISOString() } : {}) });
-  await expect.poll(async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null, { timeout: 30_000 }).not.toBe(before);
+  await expect.poll(latest, { timeout: 30_000 }).not.toBe(before);
+  const id = (await latest())!;
+  // The area hears of it through a live event: its card leads to the new briefing, not the one it replaced.
+  if (kind === "daily") await expect(area(page).locator(".daily-briefing-card").getByRole("link", { name: "Read briefing" })).toHaveAttribute("href", new RegExp(`/briefing/${id}$`));
+  return id;
 }
 
 test("empty, progress and switched-off states", async () => {
