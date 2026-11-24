@@ -136,8 +136,11 @@ export function deterministicSummary(b: Omit<Briefing, "summary" | "deliverableP
       b.counts.proposals && `${b.counts.proposals} memory change${b.counts.proposals === 1 ? "" : "s"} to review`,
       count("facts") && `${count("facts")} fact${count("facts") === 1 ? "" : "s"} to check`,
     ].filter(Boolean);
-    parts.push(`${bits.join(", ")}.`);
-    if (b.counts.new || b.counts.changed) parts.push(`${b.counts.new} new and ${b.counts.changed} changed since the last briefing.`);
+    // An away summary is measured from the time the owner gave; the others from the last briefing.
+    const baseline = b.kind === "away" ? "since the time you gave" : "since the last briefing";
+    if (bits.length) parts.push(`${bits.join(", ")}.`);
+    else parts.push(`Nothing new or changed ${baseline}; ${b.counts.open} item${b.counts.open === 1 ? " is" : "s are"} still open.`);
+    if (b.counts.new || b.counts.changed) parts.push(`${b.counts.new} new and ${b.counts.changed} changed ${baseline}.`);
   }
   const failed = b.coverage.filter((c) => c.coverage && !["complete", "empty"].includes(c.coverage.state));
   if (failed.length) parts.push(`Incomplete: ${failed.map((f) => `${f.label} (${f.coverage!.state})`).join(", ")}: items from these sources may be missing.`);

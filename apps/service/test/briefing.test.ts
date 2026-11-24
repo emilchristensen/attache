@@ -76,7 +76,16 @@ describe("an away summary", () => {
 
     const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
 
-    expect(deterministicSummary(away)).toMatch(/^1 deadline\. 1 new and 0 changed/);
+    expect(deterministicSummary(away)).toBe("1 deadline. 1 new and 0 changed since the time you gave.");
+  });
+
+  it("says nothing is new or changed when only unchanged items are open, never a bare full stop", () => {
+    const db = openDb(":memory:");
+    addItem(db, "one", 90);
+
+    const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
+
+    expect(deterministicSummary(away)).toBe("Nothing new or changed since the time you gave; 1 item is still open.");
   });
 });
 
