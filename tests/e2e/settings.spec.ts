@@ -5,7 +5,7 @@
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { FeatureStatus } from "@attache/contracts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -274,14 +274,14 @@ test("settings captures: every section, light, dark and narrow", async () => {
     if (scheme === "narrow") {
       await page.goto(`${stack.url}/settings`);
       await expect(sectionList(page)).toBeVisible();
-      await page.waitForTimeout(400);
+      await settled(page);
       await page.screenshot({ path: `${shots}/narrow-settings-list.png` });
     }
     for (const id of Object.keys(SECTIONS)) {
       await page.goto(`${stack.url}/settings/${id}`);
       await expectSection(page, id);
       await page.waitForLoadState("networkidle");
-      await page.waitForTimeout(300);
+      await settled(page);
       await page.screenshot({ path: `${shots}/${scheme}-settings-${id}.png` });
     }
   }

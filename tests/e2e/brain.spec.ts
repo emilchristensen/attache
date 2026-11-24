@@ -6,7 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -164,11 +164,32 @@ test("brain: search results replace the Library with every result, say how they 
   const here = page.url();
   await page.getByRole("tab", { name: "Library" }).click();
   await expect(page).toHaveURL(here);
-  // Words typed but not yet searched stay behind when the owner goes to Recent saves straight away.
+  // Recent saves, chosen again, keeps its filter.
+  await page.getByRole("tab", { name: "Recent saves" }).click();
+  await expect(page).toHaveURL(`${stack.url}/brain/recent`);
+  await page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Reverted" }).click();
+  await page.getByRole("tab", { name: "Recent saves" }).click();
+  await expect(page).toHaveURL(`${stack.url}/brain/recent?show=reverted`);
+});
+
+test("brain: words typed but not yet searched stay behind when the owner leaves before they reach the address", async ({ browser }) => {
+  // The Brain writes typed words to the address after a quarter of a second. The browser clock is moved well past
+  // that, so a write the owner's leaving should have cancelled would show; the clock is the whole context's, so this
+  // journey has a paired context of its own.
+  const own = await JourneyBrowser.start(browser, stack.url, { storageState: await journeys.context.storageState() });
+  await own.context.clock.install();
+  const page = await own.open("/brain");
+  // The clock's run fires timers back to back without letting the page render in between, so it starts only once the
+  // field shows the new address's (empty) query: the page has taken the address in, as it would long before the write.
+  const pastTheWrite = async () => {
+    await expect(search(page)).toHaveValue("");
+    await page.clock.runFor(1_000);
+  };
+  // The owner goes to Recent saves straight away.
   await search(page).pressSequentially("He");
   await page.getByRole("tab", { name: "Recent saves" }).click();
   await expect(page).toHaveURL(`${stack.url}/brain/recent`);
-  await page.waitForTimeout(500);
+  await pastTheWrite();
   await expect(page).toHaveURL(`${stack.url}/brain/recent`);
   await expect(search(page)).toHaveValue("");
   // Back before the words reach the address takes the owner back, with Forward still there.
@@ -177,16 +198,13 @@ test("brain: search results replace the Library with every result, say how they 
   await search(page).pressSequentially("He");
   await page.goBack();
   await expect(page).toHaveURL(`${stack.url}/brain/recent`);
-  await page.waitForTimeout(500);
+  await pastTheWrite();
   await expect(page).toHaveURL(`${stack.url}/brain/recent`);
   await expect(search(page)).toHaveValue("");
   await page.goForward();
   await expect(page).toHaveURL(`${stack.url}/brain`);
-  await page.goBack();
-  // Choosing it again keeps its filter.
-  await page.getByRole("navigation", { name: "Show" }).getByRole("link", { name: "Reverted" }).click();
-  await page.getByRole("tab", { name: "Recent saves" }).click();
-  await expect(page).toHaveURL(`${stack.url}/brain/recent?show=reverted`);
+  expect(own.consoleErrors).toEqual([]);
+  await own.close();
 });
 
 test("brain: a note picked far down a long list opens in view beside it, and the list keeps its place", async () => {
@@ -414,7 +432,7 @@ test("brain narrow: the collections are one row of chips and the reader goes bel
 test("brain captures: Library with a note and an open source, every result, Recent saves and the menu, light, dark and narrow", async () => {
   const page = await journeys.open("/brain");
   const shots = "test-results/screens";
-  const settle = () => page.waitForTimeout(400);
+  const settle = () => settled(page);
   for (const [scheme, viewport] of [["light", { width: 1280, height: 800 }], ["dark", { width: 1280, height: 800 }], ["narrow", { width: 390, height: 844 }]] as const) {
     await page.emulateMedia({ colorScheme: scheme === "dark" ? "dark" : "light" });
     await page.setViewportSize(viewport);

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
 import { approvalRow, openApprovalRow } from "./approvals.ts";
-import { api } from "./browser.ts";
+import { api, settled } from "./browser.ts";
 import { arriveMeetingCapture, buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { inboxRow, openRecentlyAdded, openRow } from "./inbox.ts";
 
@@ -28,7 +28,7 @@ async function replicationScreens(page: Page) {
     await page.goto(`${stack.url}/settings/machines`);
     const card = page.getByRole("region", { name: "Replication" });
     if (on) await expect(card.locator(".machine-row").first()).toBeVisible();
-    await page.waitForTimeout(300);
+    await settled(page);
     await page.locator('[data-settings-section="machines"]').screenshot({ path });
   };
   const shoot = async (name: string) => {
@@ -73,7 +73,7 @@ async function replicationScreens(page: Page) {
  */
 async function setupScreens(page: Page, step: string) {
   // A disclosure's chevron turns in 0.15 s.
-  await page.waitForTimeout(250);
+  await settled(page);
   const shoot = async (width: number, path: string) => {
     await page.setViewportSize({ width, height: 900 });
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -135,7 +135,7 @@ async function routeBadDay(page: Page) {
 async function draftPageStates(page: Page, prefix: string) {
   const box = page.getByRole("textbox", { name: /^Text of v\d+$/ });
   await box.fill(`${await box.inputValue()}\nOne more thought before this goes out.`);
-  await page.waitForTimeout(200);
+  await settled(page);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-unsaved.png` });
   await page.getByRole("button", { name: "Discard changes" }).click();
   const id = await page.locator("[data-action-id]").getAttribute("data-action-id");
@@ -146,7 +146,7 @@ async function draftPageStates(page: Page, prefix: string) {
     });
     await page.reload();
     await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", String(change.status));
-    await page.waitForTimeout(300);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-${name}.png` });
     await page.unroute(`**/api/v1/actions/${id}`);
   };
@@ -159,19 +159,19 @@ async function approvalsScreens(page: Page, prefix: string) {
   await page.goto(`${stack.url}/approvals`);
   const draft = approvalRow(page, "draft", "Add checkout retry");
   await openApprovalRow(draft);
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-open.png` });
   await openApprovalRow(approvalRow(page, "proposal", "Priya Shah"));
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.getByRole("region", { name: "Changes to the Brain" }).screenshot({ path: `test-results/screens/${prefix}-approvals-proposal-open.png` });
   await openApprovalRow(draft);
   await draft.getByRole("link", { name: /^Review and approve/ }).click();
   await expect(page.getByRole("link", { name: "Back to Approvals" })).toBeVisible();
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-draft-page.png` });
   await draftPageStates(page, prefix);
   await page.goto(`${stack.url}/approvals?tab=finished`);
-  await page.waitForTimeout(500);
+  await settled(page);
   await page.screenshot({ path: `test-results/screens/${prefix}-approvals-finished.png` });
   const drafts = "**/api/v1/actions?status=draft,approved,revoked*";
   await page.route(drafts, (route) => route.abort());
@@ -184,7 +184,7 @@ async function approvalsScreens(page: Page, prefix: string) {
 async function homeConnectionsScreens(page: Page) {
   const area = page.getByRole("status", { name: "Connections" });
   const capture = async (path: string) => {
-    await page.waitForTimeout(300);
+    await settled(page);
     await area.screenshot({ path });
   };
   for (const scheme of ["light", "dark"] as const) {
@@ -239,7 +239,7 @@ test("screens", async ({ browser }) => {
   await joinBrain.click();
   await page.getByRole("button", { name: "Join into this folder" }).click();
   await expect(page.getByText("Enter the repository your other Machine replicates to.")).toBeVisible();
-  await page.waitForTimeout(250);
+  await settled(page);
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.locator(".join-brain").screenshot({ path: `test-results/screens/${scheme}-setup-join.png` });
@@ -274,11 +274,19 @@ test("screens", async ({ browser }) => {
   await page.getByRole("button", { name: "Finish setup" }).click();
   const pr = inboxRow(page, "Add checkout retry");
   await expect(pr).toBeVisible({ timeout: 20_000 });
+  const jobs = () => api<Array<{ status: string }>>(page, "GET", "/jobs?limit=100");
+  const jobsBefore = (await jobs()).length;
   await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
   await page.getByRole("button", { name: "Briefings" }).click();
   await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
-  await page.waitForTimeout(1500);
+  // The Draft and the briefing are written before the screens that show them are captured.
+  await expect
+    .poll(async () => {
+      const now = await jobs();
+      return now.length >= jobsBefore + 2 && now.every((j) => j.status !== "queued" && j.status !== "running");
+    }, { timeout: 30_000 })
+    .toBe(true);
   // Nothing written without review yet: Recently added says so in one line. A fresh load clears the toasts above.
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
@@ -332,7 +340,7 @@ test("screens", async ({ browser }) => {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [name, path] of [["home", "/"], ["brain", "/brain?tab=person"], ["approvals", "/approvals"], ["jobs", "/jobs"], ["connections", "/connections"], ["settings", "/settings"]] as const) {
       await page.goto(`${stack.url}${path}`);
-      await page.waitForTimeout(600);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png`, fullPage: false });
     }
     // Settings' parts with a Harness connected, each in its own section (settings.spec captures every section).
@@ -346,7 +354,7 @@ test("screens", async ({ browser }) => {
     // A note opened read-only, below the review lists.
     await page.goto(`${stack.url}/brain?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
     await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
-    await page.waitForTimeout(600);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/${scheme}-brain-note.png` });
     await page.goto(`${stack.url}/brain/recent`);
     await page.getByRole("region", { name: "Recent saves" }).screenshot({ path: `test-results/screens/${scheme}-recent-saves.png` });
@@ -398,19 +406,19 @@ test("screens", async ({ browser }) => {
   await page.getByRole("searchbox", { name: "Search the Brain" }).fill("When is the cutover plan due for the Orion migration?");
   await page.locator(".result-item", { hasText: "Orion" }).first().click();
   await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.screenshot({ path: "test-results/screens/dark-evidence.png" });
   await page.keyboard.press("Escape");
   await homeConnectionsScreens(page);
   await page.setViewportSize({ width: 390, height: 844 });
   for (const [name, path] of [["home", "/"], ["brain", "/brain?tab=person"], ["approvals", "/approvals"], ["jobs", "/jobs"], ["settings", "/settings"], ["connections", "/connections"]] as const) {
     await page.goto(`${stack.url}${path}`);
-    await page.waitForTimeout(500);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-${name}.png`, fullPage: false });
   }
   await page.goto(`${stack.url}/brain?tab=person&path=${encodeURIComponent("memory/people/priya-shah.md")}`);
   await page.locator("[data-subject]").first().scrollIntoViewIfNeeded();
-  await page.waitForTimeout(500);
+  await settled(page);
   await page.screenshot({ path: "test-results/screens/narrow-brain-note.png" });
   await approvalsScreens(page, "narrow");
   await page.goto(stack.url);

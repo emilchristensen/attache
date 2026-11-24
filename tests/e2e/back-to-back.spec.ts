@@ -6,7 +6,7 @@
  * checked against the service's own end of it.
  */
 import { test, expect, type Browser, type Locator, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 import { area, meetingHeadsUp, MINUTE, needYou, rowFor, SELF, setCalendar } from "./meetings.ts";
@@ -70,14 +70,13 @@ async function advanceTo(page: Page, at: number): Promise<void> {
   await page.clock.fastForward(Math.max(0, Math.round(at - now)));
 }
 
-const settle = (page: Page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 const calendarUrl = (id: string) => `https://calendar.google.com/event?eid=${id}`;
 const lead = (page: Page) => area(page).locator("article.heads-up-lead");
 /** Captures the page as it is, light and dark, for the visual review. */
 async function shoot(page: Page, name: string): Promise<void> {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await settle(page);
+    await nextFrames(page);
     await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png` });
   }
   await page.emulateMedia({ colorScheme: null });
@@ -182,7 +181,7 @@ async function toTheOverlap(browser: Browser, pair: Pair, { keyboardOnRow }: { k
   await expect(join).toBeFocused();
   expect(await page.evaluate(() => (document.activeElement as HTMLElement & { journeyMark?: string }).journeyMark), "the focused Join is the same element").toBe("first-join");
   await expect(join).toHaveAttribute("href", pair.first.meetLink);
-  await settle(page);
+  await nextFrames(page);
   expect(Math.abs((await join.boundingBox())!.y - joinAt), "the focused Join stays put").toBeLessThanOrEqual(1);
   expect(Math.abs((await area(page).getByRole("heading", { name: "For you now" }).boundingBox())!.y - headingAt)).toBeLessThanOrEqual(1);
   // Each open meeting counts once: both are above, neither is listed below, and the count has not changed.
@@ -212,12 +211,14 @@ test("back to back with Not now: the first meeting ends under the keyboard, Ente
   await expect(first.getByRole("link", { name: "Join" })).toBeFocused();
 
   // The first meeting really ends, half a minute past the minute. The browser's clock stands still two seconds before
-  // while the service's catches up, then runs past the end without reaching the next minute tick: its place shows
-  // "Meeting ended" at the same size, the focus lands there, and Enter neither joins the next call nor anything else.
+  // while the service's catches up and resolves its item, then runs past the end without reaching the next minute
+  // tick: its place shows "Meeting ended" at the same size, the focus lands there, and Enter neither joins the next
+  // call nor anything else.
   const height = (await first.boundingBox())!.height;
   await page.clock.pauseAt(ends - 2_000);
   await expect(first.getByRole("link", { name: "Join" })).toBeFocused();
-  await page.waitForTimeout(Math.max(0, ends + 1_000 - Date.now()));
+  const resolved = async () => (await api<{ items: Array<{ key: string }> }>(page, "GET", "/attention?state=resolved")).items.map((i) => i.key);
+  await expect.poll(resolved, { timeout: Math.max(0, ends - Date.now()) + 30_000 }).toContain(`gcal:${pair.first.id}`);
   const opened: Page[] = [];
   own.context.on("page", (p) => opened.push(p));
   await page.clock.runFor(3_000);
@@ -232,7 +233,7 @@ test("back to back with Not now: the first meeting ends under the keyboard, Ente
   await expect(ended).toBeFocused();
   const at = page.url();
   await page.keyboard.press("Enter");
-  await settle(page);
+  await nextFrames(page);
   expect(opened, "Enter opened no call").toEqual([]);
   expect(page.url()).toBe(at);
   await expect(ended).toBeFocused();
