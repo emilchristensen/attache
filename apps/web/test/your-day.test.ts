@@ -44,6 +44,16 @@ describe("Your day", () => {
     expect(yourDay({ ...base, events: [ended, holiday, standup] })).toMatchObject({ state: "nothing-more", tomorrow: { id: "standup" } });
   });
 
+  it("lets only timed meetings decide whether more comes today: an all-day event is never in progress", () => {
+    const holiday = event("holiday", "2026-11-20", "2026-11-21", { allDay: true });
+    const ended = event("ended", "2026-11-20T07:00:00Z", "2026-11-20T08:00:00Z");
+    const later = event("later", "2026-11-20T13:00:00Z", "2026-11-20T13:30:00Z");
+    expect(yourDay({ ...base, events: [holiday, ended] }).state).toBe("nothing-more");
+    expect(yourDay({ ...base, events: [holiday] }).state).toBe("nothing-more");
+    expect(yourDay({ ...base, events: [holiday, ended, later] }).state).toBe("events");
+    expect(yourDay({ ...base, events: [holiday] }).events[0]).toMatchObject({ id: "holiday", allDay: true });
+  });
+
   it("returns honest empty, stale, disconnected and switched-off states and limits the wide row", () => {
     const ended = event("ended", "2026-11-20T07:00:00Z", "2026-11-20T08:00:00Z");
     expect(yourDay({ ...base, events: [ended] }).state).toBe("nothing-more");

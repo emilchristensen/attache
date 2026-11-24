@@ -59,7 +59,8 @@ function decorate(event: Timed, now: number, visible: boolean): DayEvent {
 
 function stateOf(input: YourDayInput, today: readonly DayEvent[], tomorrow: Timed | undefined): YourDayView["state"] {
   if (input.coverage && !HEALTHY.has(input.coverage.state)) return "error";
-  if (today.length && today.some((e) => e.phase !== "ended")) return "events";
+  // Only timed meetings decide whether more comes today: an all-day event spans the whole day and is never in progress.
+  if (today.some((e) => !e.allDay && e.phase !== "ended")) return "events";
   if (today.length || tomorrow) return "nothing-more";
   // "Nothing on your calendar today" only after a complete read; before one, still checking.
   return input.coverage ? "empty" : "checking";
