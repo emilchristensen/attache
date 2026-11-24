@@ -5,6 +5,9 @@ const CHILD_PROCESS_MESSAGE =
   "Start tools through apps/service/src/platform: run() (platform/run.ts) to run one and read its output, spawnTool() (platform/launch.ts) to stream its output, launchTool() for the command and arguments.";
 const RENAME_MESSAGE = "Replace files with replaceWith() from apps/service/src/platform/replace-file.ts, which waits for Windows to let go of a file another program holds open.";
 
+const WAIT_FOR_TIMEOUT_MESSAGE =
+  "Wait for what the journey needs, not for a fixed time: a web-first assertion (expect(locator).toBeVisible(), toHaveText(), toHaveCount()), expect.poll(), page.waitForResponse() or dashboardAnswer(), page.waitForFunction(), settled() or nextFrames() from tests/e2e/browser.ts before a capture or a measurement, or the browser clock (page.clock) when the app waits for time to pass.";
+
 /** Service code starts no process itself; a type import (e.g. ChildProcess) starts nothing. */
 const processModules = () => ["node:child_process", "child_process"].map((name) => ({ name, message: CHILD_PROCESS_MESSAGE, allowTypeImports: true }));
 
@@ -41,5 +44,10 @@ export default tseslint.config(
   {
     files: ["**/test/**", "tests/**", "scripts/**", "**/*.mjs"],
     rules: { "@typescript-eslint/no-explicit-any": "off", "no-console": "off" },
+  },
+  {
+    // A fixed sleep is too short on a slow runner and wasted time on a fast one.
+    files: ["tests/e2e/**"],
+    rules: { "no-restricted-syntax": ["error", { selector: "CallExpression[callee.property.name='waitForTimeout']", message: WAIT_FOR_TIMEOUT_MESSAGE }] },
   },
 );

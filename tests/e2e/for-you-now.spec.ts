@@ -4,7 +4,7 @@
  * this morning's; the browser clock moves past noon to show the briefing leave.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, dashboardAnswer, JourneyBrowser, nextFrames, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 
@@ -53,6 +53,9 @@ async function writeBriefing(page: Page, kind: "daily" | "away" | "manual"): Pro
   await expect.poll(async () => (id = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null), { timeout: 30_000 }).not.toBe(before);
   return id!;
 }
+
+/** The Dashboard's own next answer for the latest briefing once it is a `kind` one: the page knows of it. */
+const latestBriefing = (page: Page, kind: "daily" | "away" | "manual") => dashboardAnswer<{ briefing: { kind: string } | null }>(page, "/briefings/latest", (b) => b.briefing?.kind === kind);
 
 /**
  * For you now's share of the first 1280 x 800 viewport, with disclosures closed. Home's other parts take the rest:
@@ -262,9 +265,12 @@ test("hold: a new briefing waits while the keyboard focus or the pointer is on t
   await writeBriefing(page, "daily");
   const daily = area(page).locator('[data-heads-up="daily-briefing"]');
   await daily.getByRole("button", { name: "Read briefing" }).focus();
-  // Another Machine or tab asks for a briefing: it becomes the latest, but the focused lead stays put.
+  // Another Machine or tab asks for a briefing: it becomes the latest, but the focused lead stays put once the page
+  // has it.
+  const manual = latestBriefing(page, "manual");
   await writeBriefing(page, "manual");
-  await page.waitForTimeout(1500);
+  await manual;
+  await nextFrames(page);
   await expect(daily).toBeVisible();
   await expect(daily.getByRole("button", { name: "Read briefing" })).toBeFocused();
   // Focus leaves: the briefing asked for takes the lead.
@@ -274,10 +280,11 @@ test("hold: a new briefing waits while the keyboard focus or the pointer is on t
   await expect(daily).toHaveCount(0);
   // Asked for here, from the menu that opens over the lead: the pointer rests on the lead when it closes, so the
   // Away summary waits until the pointer moves away, even though the owner asked for it.
+  const away = latestBriefing(page, "away");
   await area(page).getByRole("button", { name: "Briefings" }).click();
   await area(page).getByRole("button", { name: /^Away summary/ }).click();
-  await expect.poll(async () => (await api<{ briefing: { kind: string } }>(page, "GET", "/briefings/latest")).briefing.kind, { timeout: 30_000 }).toBe("away");
-  await page.waitForTimeout(1500);
+  await away;
+  await nextFrames(page);
   await expect(asked).toBeVisible();
   await page.mouse.move(5, 5);
   await expect(area(page).locator('[data-heads-up="away-summary"]')).toBeVisible();
@@ -317,7 +324,7 @@ test("hold: a briefing asked for takes its progress line's place under the point
   });
   const second = await writeBriefing(page, "manual");
   await dashboardHasIt;
-  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  await nextFrames(page);
   await expect(asked).toHaveAttribute("data-heads-up-key", `briefing:${first}`);
   await expect(read).toBeFocused();
   // Pointer and focus leave: the latest briefing takes its own place, leading.
@@ -346,11 +353,11 @@ test("captures: For you now in the morning, after Got it and quiet, light, dark 
     for (const scheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.emulateMedia({ colorScheme: scheme });
-      await page.waitForTimeout(400);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${scheme}-home-${name}.png` });
     }
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.waitForTimeout(400);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-home-${name}.png` });
   };
   await expect(area(page).locator('[data-heads-up="daily-briefing"]')).toBeVisible();
