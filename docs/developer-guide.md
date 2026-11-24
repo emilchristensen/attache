@@ -106,6 +106,8 @@ pnpm comes from `packageManager` in `package.json`, so CI and a local checkout u
 `.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
 Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
 The e2e stack (`tests/e2e/stack.ts`) starts its services and fixture server on ports the OS picks, so several checkouts on one computer can run `pnpm e2e` at the same time.
+Linux has no Georgia, the headings' font, so on Linux the browser journeys start Chrome with `FONTCONFIG_FILE` set to `tests/e2e/fonts/fonts.conf`, which draws Georgia with the bundled, metric-compatible Gelasio (`tests/e2e/fonts.ts`).
+Headings then wrap and overflow as on macOS and Windows, so a layout bug at a narrow width fails on Linux too; the `type:` journey in `shell.spec.ts` checks the mapping.
 Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
 
 To reproduce a Linux failure on a Mac, run the same commands in a container with the Node of the failing job, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.0-bookworm bash` for the minimum, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
