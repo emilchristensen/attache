@@ -4,7 +4,7 @@ import { run, runSync } from "../src/platform/run.ts";
 const HANG = ["-e", "setTimeout(() => {}, 30_000)"];
 /** A tool that fails at once without reading its input, as `secret-tool` does when there is no D-Bus. */
 const REFUSES = ["-e", "process.stderr.write('Cannot autolaunch D-Bus without X11 $DISPLAY\\n'); process.exit(1)"];
-/** More than a pipe holds, so writing it to a tool that has gone always fails with EPIPE. */
+/** More than a pipe holds, so writing it to a tool that has gone always fails (EPIPE, or EOF on Windows). */
 const LARGE_INPUT = "x".repeat(4 * 1024 * 1024);
 
 describe("run", () => {

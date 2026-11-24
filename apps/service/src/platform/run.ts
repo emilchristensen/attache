@@ -31,20 +31,23 @@ export function run(cmd: string, args: string[], opts: { input?: string; timeout
       const reason = timedOut ? `${win32.basename(cmd)} did not answer within ${opts.timeoutMs! / 1000} seconds` : error && !exited ? error.message : "";
       resolve({ code, stdout: String(stdout), stderr: String(stderr) || reason, timedOut });
     });
-    // A tool that exits before reading all its input closes the pipe (EPIPE); its exit code and stderr say why, so
+    // A tool that exits before reading all its input closes the pipe (EPIPE, or EOF on Windows); its exit code and stderr say why, so
     // the write's own error is left to them rather than thrown out of the service.
     child.stdin?.on("error", () => {});
     if (opts.input !== undefined) child.stdin?.end(opts.input);
   });
 }
 
+/** How writing to a tool's stdin fails after the tool has gone: EPIPE on macOS and Linux, EOF on Windows. */
+const CLOSED_INPUT = new Set(["EPIPE", "EOF"]);
+
 /**
- * Why a `spawnSync` call could not run its tool, or undefined when the tool ran. A broken pipe is not such a reason:
+ * Why a `spawnSync` call could not run its tool, or undefined when the tool ran. A closed input is not such a reason:
  * the tool ran and exited before reading all its input, and its exit code and stderr say why.
  */
 export function spawnFailure(r: SpawnSyncReturns<string>): NodeJS.ErrnoException | undefined {
   const error = r.error as NodeJS.ErrnoException | undefined;
-  return error?.code === "EPIPE" ? undefined : error;
+  return error?.code && CLOSED_INPUT.has(error.code) ? undefined : error;
 }
 
 /**
