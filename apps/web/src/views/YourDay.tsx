@@ -6,20 +6,42 @@ import { yourDay, yourDayRange, type DayEvent, type YourDayView } from "../your-
 import { clockTime } from "../zoned-time.ts";
 import { Link, TurnOnInSettings } from "../components/ui.tsx";
 
+/** An event's title, linking to it in Google Calendar when the read gave a link, and "Not answered" when it waits for a reply. */
+function EventTitle({ event }: { event: DayEvent }) {
+  return (
+    <>
+      {event.calendarUrl ? (
+        <a href={event.calendarUrl} target="_blank" rel="noopener noreferrer">
+          {event.title}
+        </a>
+      ) : (
+        event.title
+      )}
+      {event.response === "needsAction" && <span className="your-day-response">Not answered</span>}
+    </>
+  );
+}
+
+/** The all-day events on one compact line above the meetings, each with its link and response, so none looks like a meeting. */
+function AllDay({ events }: { events: readonly DayEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <ul className="your-day-all-day" aria-label="All day">
+      {events.map((e) => (
+        <li key={e.id} data-event-id={e.id}>
+          <EventTitle event={e} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Meeting({ event, zone }: { event: DayEvent; zone: string }) {
-  const time = event.allDay ? "All day" : clockTime(Date.parse(event.start), zone);
   return (
     <li className={`your-day-event ${event.phase}`} data-phase={event.phase}>
-      <span className="your-day-time">{event.phase === "in-progress" ? "In progress" : time}</span>
+      <span className="your-day-time">{event.phase === "in-progress" ? "In progress" : clockTime(Date.parse(event.start), zone)}</span>
       <span className="your-day-title">
-        {event.calendarUrl ? (
-          <a href={event.calendarUrl} target="_blank" rel="noopener noreferrer">
-            {event.title}
-          </a>
-        ) : (
-          event.title
-        )}
-        {event.response === "needsAction" && <span className="your-day-response">Not answered</span>}
+        <EventTitle event={event} />
       </span>
       {event.joinable && event.meetLink && (
         <a className="btn small" href={event.meetLink} target="_blank" rel="noopener noreferrer">
@@ -31,11 +53,10 @@ function Meeting({ event, zone }: { event: DayEvent; zone: string }) {
 }
 
 function Meetings({ view, zone }: { view: YourDayView; zone: string }) {
-  const allDay = view.events.filter((e) => e.allDay);
   const timed = view.events.filter((e) => !e.allDay);
   return (
     <>
-      {allDay.length > 0 && <p className="your-day-all-day">{allDay.map((e) => e.title).join(" · ")}</p>}
+      <AllDay events={view.events.filter((e) => e.allDay)} />
       <ul className="your-day-events your-day-wide">
         {timed
           .filter((e) => e.visible)
@@ -91,7 +112,12 @@ function Body({ view, failed, readAt, zone, retry }: { view: YourDayView | null;
     case "empty":
       return <Message>Nothing on your calendar today</Message>;
     case "nothing-more":
-      return <Message>Nothing more today{view!.tomorrow ? ` · Tomorrow ${clockTime(Date.parse(view!.tomorrow.start), zone)} ${view!.tomorrow.title}` : ""}</Message>;
+      return (
+        <>
+          <AllDay events={view!.events.filter((e) => e.allDay)} />
+          <Message>Nothing more today{view!.tomorrow ? ` · Tomorrow ${clockTime(Date.parse(view!.tomorrow.start), zone)} ${view!.tomorrow.title}` : ""}</Message>
+        </>
+      );
     default:
       return <Message>Checking your calendar…</Message>;
   }

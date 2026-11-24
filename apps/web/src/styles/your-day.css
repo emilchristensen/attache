@@ -74,9 +74,26 @@
   color: var(--rust);
   font-weight: 700;
 }
+/* All-day events: one compact line of titles, each with its link and its response, apart by a middle dot. */
 .your-day-all-day {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s-2);
   margin: 0 0 var(--s-2);
+  padding: 0;
+  list-style: none;
   color: var(--ink-2);
+}
+.your-day-all-day li + li::before {
+  content: "·" / "";
+  margin-right: var(--s-2);
+}
+.your-day-all-day a {
+  color: inherit;
+}
+.your-day-all-day .your-day-response {
+  display: inline;
+  margin-left: var(--s-1);
 }
 .your-day-more {
   display: inline-block;
@@ -105,7 +122,8 @@
   .your-day-time {
     grid-column: 1;
   }
-  .your-day-title a {
+  .your-day-title a,
+  .your-day-all-day a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
