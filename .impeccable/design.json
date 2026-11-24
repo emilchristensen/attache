@@ -1,0 +1,1019 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-24T12:02:53.284Z",
+  "title": "Design System: Attache Dashboard",
+  "extensions": {
+    "colorMeta": {
+      "warm-desk-paper": {
+        "role": "neutral",
+        "displayName": "Warm Desk Paper",
+        "canonical": "#f7f6ef",
+        "oklch": "oklch(97.2% 0.009 100.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#252523",
+          "#43423e",
+          "#62615b",
+          "#83827c",
+          "#a6a5a0",
+          "#cac9c6",
+          "#eeeeed"
+        ]
+      },
+      "fresh-sheet": {
+        "role": "neutral",
+        "displayName": "Fresh Sheet",
+        "canonical": "#fffef8",
+        "oklch": "oklch(99.6% 0.008 98.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252523",
+          "#43423e",
+          "#62615c",
+          "#83827d",
+          "#a6a5a1",
+          "#cac9c6",
+          "#eeeeed"
+        ]
+      },
+      "sunken-step": {
+        "role": "neutral",
+        "displayName": "Sunken Step",
+        "canonical": "#ecece6",
+        "oklch": "oklch(94.1% 0.008 106.6)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252523",
+          "#42423e",
+          "#62625c",
+          "#83837d",
+          "#a5a5a1",
+          "#c9c9c6",
+          "#eeeeed"
+        ]
+      },
+      "morning-amber": {
+        "role": "secondary",
+        "displayName": "Morning Amber",
+        "canonical": "#f7dfaf",
+        "oklch": "oklch(91.2% 0.068 84.4)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0d0b07",
+          "#2c2412",
+          "#4f401e",
+          "#735e32",
+          "#957f52",
+          "#b5a37f",
+          "#d3c8b2",
+          "#f2eee7"
+        ]
+      },
+      "blue-black-ink": {
+        "role": "primary",
+        "displayName": "Blue-Black Ink",
+        "canonical": "#192d32",
+        "oklch": "oklch(28.2% 0.027 215.4)",
+        "theme": "light",
+        "tonalRamp": [
+          "#090c0c",
+          "#1e2729",
+          "#354549",
+          "#50656b",
+          "#70878d",
+          "#96a9ae",
+          "#c0cbce",
+          "#ebeff0"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Ink Secondary",
+        "canonical": "#46595b",
+        "oklch": "oklch(44.9% 0.024 204.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#090c0c",
+          "#1f2727",
+          "#374547",
+          "#526567",
+          "#738789",
+          "#98a9aa",
+          "#c1cbcc",
+          "#ecefef"
+        ]
+      },
+      "ink-meta": {
+        "role": "neutral",
+        "displayName": "Ink Meta",
+        "canonical": "#526466",
+        "oklch": "oklch(48.9% 0.022 204.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0c0c",
+          "#1f2727",
+          "#374546",
+          "#536567",
+          "#748689",
+          "#99a8aa",
+          "#c2cbcc",
+          "#ecefef"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#d3d8d0",
+        "oklch": "oklch(87.6% 0.012 133.4)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242623",
+          "#40433e",
+          "#5e635c",
+          "#7f847d",
+          "#a3a6a0",
+          "#c8cac6",
+          "#eeefed"
+        ]
+      },
+      "control-line": {
+        "role": "neutral",
+        "displayName": "Control Line",
+        "canonical": "#798482",
+        "oklch": "oklch(60.4% 0.013 183.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0b",
+          "#222625",
+          "#3c4442",
+          "#596462",
+          "#7a8583",
+          "#9ea7a6",
+          "#c5cac9",
+          "#edefee"
+        ]
+      },
+      "deep-teal-key": {
+        "role": "primary",
+        "displayName": "Deep Teal Key",
+        "canonical": "#204d57",
+        "oklch": "oklch(39.3% 0.052 214.4)",
+        "theme": "light",
+        "tonalRamp": [
+          "#080c0d",
+          "#17282c",
+          "#264850",
+          "#3d6973",
+          "#5e8b96",
+          "#88acb5",
+          "#b8ced3",
+          "#e9f0f2"
+        ]
+      },
+      "focus-blue": {
+        "role": "neutral",
+        "displayName": "Focus Blue",
+        "canonical": "#164d84",
+        "oklch": "oklch(41.5% 0.108 252.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "#070c12",
+          "#11263d",
+          "#1b436e",
+          "#2e639c",
+          "#5085c1",
+          "#7ea9da",
+          "#b2ccea",
+          "#e7eff9"
+        ]
+      },
+      "clasp-brass": {
+        "role": "secondary",
+        "displayName": "Clasp Brass",
+        "canonical": "#a8701f",
+        "oklch": "oklch(59.1% 0.116 70.9)",
+        "theme": "light",
+        "tonalRamp": [
+          "#100a04",
+          "#352002",
+          "#603700",
+          "#895300",
+          "#ad7526",
+          "#ca9b63",
+          "#e0c4a3",
+          "#f6ede2"
+        ]
+      },
+      "clasp-brass-ink": {
+        "role": "secondary",
+        "displayName": "Clasp Brass Ink",
+        "canonical": "#7a4d00",
+        "oklch": "oklch(46.0% 0.099 71.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0f0a05",
+          "#332108",
+          "#5c3a04",
+          "#845611",
+          "#a77839",
+          "#c59d6e",
+          "#ddc5a9",
+          "#f5ede4"
+        ]
+      },
+      "danger-red": {
+        "role": "neutral",
+        "displayName": "Danger Red",
+        "canonical": "#a3261c",
+        "oklch": "oklch(47.2% 0.163 29.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#140706",
+          "#43120d",
+          "#781a13",
+          "#aa2e23",
+          "#d25345",
+          "#eb8475",
+          "#f7b7ad",
+          "#ffe9e5"
+        ]
+      },
+      "hue-blue": {
+        "role": "tertiary",
+        "displayName": "Hue Blue",
+        "canonical": "#164d84",
+        "oklch": "oklch(41.5% 0.108 252.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "#070c12",
+          "#11263d",
+          "#1b436e",
+          "#2e639c",
+          "#5085c1",
+          "#7ea9da",
+          "#b2ccea",
+          "#e7eff9"
+        ]
+      },
+      "hue-blue-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Blue Soft",
+        "canonical": "#e3e9ea",
+        "oklch": "oklch(93.0% 0.007 208.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#232526",
+          "#3f4343",
+          "#5d6263",
+          "#7e8384",
+          "#a1a6a7",
+          "#c7caca",
+          "#eeefef"
+        ]
+      },
+      "hue-rust": {
+        "role": "tertiary",
+        "displayName": "Hue Rust",
+        "canonical": "#8a3d22",
+        "oklch": "oklch(45.7% 0.113 39.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#110906",
+          "#3a1b10",
+          "#692e1a",
+          "#95472c",
+          "#bb694d",
+          "#d6927b",
+          "#e9beb0",
+          "#f9ebe6"
+        ]
+      },
+      "hue-rust-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Rust Soft",
+        "canonical": "#f1e7de",
+        "oklch": "oklch(93.3% 0.016 64.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#282421",
+          "#47413b",
+          "#685f58",
+          "#898178",
+          "#aba49d",
+          "#cdc8c4",
+          "#f0eeed"
+        ]
+      },
+      "hue-plum": {
+        "role": "tertiary",
+        "displayName": "Hue Plum",
+        "canonical": "#713760",
+        "oklch": "oklch(42.7% 0.098 339.5)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0f090d",
+          "#341c2c",
+          "#5d304f",
+          "#854973",
+          "#a96a95",
+          "#c792b5",
+          "#dfbed3",
+          "#f6ebf2"
+        ]
+      },
+      "hue-plum-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Plum Soft",
+        "canonical": "#eee6e6",
+        "oklch": "oklch(93.1% 0.009 17.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0c0b0b",
+          "#272424",
+          "#464141",
+          "#665f5f",
+          "#878080",
+          "#a9a3a3",
+          "#ccc8c8",
+          "#efeeee"
+        ]
+      },
+      "hue-green": {
+        "role": "tertiary",
+        "displayName": "Hue Green",
+        "canonical": "#215b48",
+        "oklch": "oklch(42.7% 0.069 168.4)",
+        "theme": "light",
+        "tonalRamp": [
+          "#070d0a",
+          "#142a22",
+          "#214b3d",
+          "#356e5a",
+          "#57907b",
+          "#84b19f",
+          "#b6d0c5",
+          "#e8f1ed"
+        ]
+      },
+      "hue-green-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Green Soft",
+        "canonical": "#e4eae3",
+        "oklch": "oklch(93.1% 0.011 141.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242623",
+          "#3f433f",
+          "#5e635d",
+          "#7f847e",
+          "#a2a6a1",
+          "#c7cac7",
+          "#eeefee"
+        ]
+      },
+      "hue-amber": {
+        "role": "tertiary",
+        "displayName": "Hue Amber",
+        "canonical": "#7a4d00",
+        "oklch": "oklch(46.0% 0.099 71.2)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0f0a05",
+          "#332108",
+          "#5c3a04",
+          "#845611",
+          "#a77839",
+          "#c59d6e",
+          "#ddc5a9",
+          "#f5ede4"
+        ]
+      },
+      "hue-amber-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Amber Soft",
+        "canonical": "#efe9da",
+        "oklch": "oklch(93.5% 0.021 88.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#272520",
+          "#464238",
+          "#666154",
+          "#878274",
+          "#a9a599",
+          "#ccc9c2",
+          "#efeeec"
+        ]
+      },
+      "hue-red": {
+        "role": "tertiary",
+        "displayName": "Hue Red",
+        "canonical": "#a3261c",
+        "oklch": "oklch(47.2% 0.163 29.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#140706",
+          "#43120d",
+          "#781a13",
+          "#aa2e23",
+          "#d25345",
+          "#eb8475",
+          "#f7b7ad",
+          "#ffe9e5"
+        ]
+      },
+      "hue-red-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Red Soft",
+        "canonical": "#f4e4de",
+        "oklch": "oklch(93.0% 0.019 41.8)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#292422",
+          "#4a3f3c",
+          "#6b5e59",
+          "#8d7f79",
+          "#aea29e",
+          "#cfc7c5",
+          "#f0eeed"
+        ]
+      },
+      "hue-slate": {
+        "role": "tertiary",
+        "displayName": "Hue Slate",
+        "canonical": "#4d5e66",
+        "oklch": "oklch(47.1% 0.025 228.0)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#1f2629",
+          "#37444a",
+          "#53646c",
+          "#74868e",
+          "#99a8af",
+          "#c2cbcf",
+          "#eceff0"
+        ]
+      },
+      "hue-slate-soft": {
+        "role": "tertiary",
+        "displayName": "Hue Slate Soft",
+        "canonical": "#eaebe6",
+        "oklch": "oklch(93.8% 0.007 115.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252523",
+          "#42423f",
+          "#61625d",
+          "#82837e",
+          "#a5a5a2",
+          "#c9c9c7",
+          "#eeeeee"
+        ]
+      },
+      "case-copper": {
+        "role": "neutral",
+        "displayName": "Case Copper",
+        "canonical": "#ba6249",
+        "oklch": "oklch(59.4% 0.120 36.7)",
+        "theme": "light",
+        "tonalRamp": [
+          "#120906",
+          "#3c1a10",
+          "#6b2c1a",
+          "#99442c",
+          "#be664d",
+          "#d9907b",
+          "#ebbdb0",
+          "#faebe6"
+        ]
+      },
+      "logo-brass": {
+        "role": "neutral",
+        "displayName": "Logo Brass",
+        "canonical": "#c38942",
+        "oklch": "oklch(67.4% 0.112 69.3)",
+        "theme": "light",
+        "tonalRamp": [
+          "#100a04",
+          "#352004",
+          "#603700",
+          "#895300",
+          "#ad752b",
+          "#ca9b66",
+          "#e0c4a5",
+          "#f6ede3"
+        ]
+      },
+      "dark-deep-green-slate": {
+        "role": "neutral",
+        "displayName": "Dark Deep Green Slate",
+        "canonical": "#192628",
+        "oklch": "oklch(25.8% 0.018 207.9)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#202627",
+          "#394446",
+          "#566467",
+          "#768688",
+          "#9ba8aa",
+          "#c3cbcc",
+          "#ecefef"
+        ]
+      },
+      "dark-sheet": {
+        "role": "neutral",
+        "displayName": "Dark Sheet",
+        "canonical": "#202f32",
+        "oklch": "oklch(29.3% 0.021 211.3)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#202628",
+          "#384547",
+          "#546568",
+          "#758689",
+          "#9aa8ab",
+          "#c2cbcd",
+          "#eceff0"
+        ]
+      },
+      "dark-sunken-step": {
+        "role": "neutral",
+        "displayName": "Dark Sunken Step",
+        "canonical": "#263233",
+        "oklch": "oklch(30.7% 0.016 202.6)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#212627",
+          "#3a4445",
+          "#576465",
+          "#788587",
+          "#9ca8a8",
+          "#c4cbcb",
+          "#edefef"
+        ]
+      },
+      "dark-morning-amber": {
+        "role": "neutral",
+        "displayName": "Dark Morning Amber",
+        "canonical": "#43351e",
+        "oklch": "oklch(33.8% 0.041 79.1)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0d0b08",
+          "#2a241a",
+          "#4c402e",
+          "#6e5f47",
+          "#908067",
+          "#b0a38e",
+          "#d0c8bb",
+          "#f1eeea"
+        ]
+      },
+      "dark-pale-ink": {
+        "role": "neutral",
+        "displayName": "Dark Pale Ink",
+        "canonical": "#f6f3de",
+        "oklch": "oklch(96.1% 0.028 100.3)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0b0b09",
+          "#26251e",
+          "#444235",
+          "#656250",
+          "#868370",
+          "#a8a696",
+          "#cbc9c0",
+          "#efeeeb"
+        ]
+      },
+      "dark-ink-secondary": {
+        "role": "neutral",
+        "displayName": "Dark Ink Secondary",
+        "canonical": "#c0d0c9",
+        "oklch": "oklch(84.3% 0.020 167.8)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0c0b",
+          "#212724",
+          "#3a4540",
+          "#57655f",
+          "#778680",
+          "#9ca8a3",
+          "#c4cbc8",
+          "#edefee"
+        ]
+      },
+      "dark-ink-meta": {
+        "role": "neutral",
+        "displayName": "Dark Ink Meta",
+        "canonical": "#a9bab4",
+        "oklch": "oklch(77.4% 0.021 172.6)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0c0b",
+          "#202724",
+          "#394541",
+          "#566560",
+          "#768781",
+          "#9ba9a4",
+          "#c3cbc8",
+          "#ecefee"
+        ]
+      },
+      "dark-rule": {
+        "role": "neutral",
+        "displayName": "Dark Rule",
+        "canonical": "#435554",
+        "oklch": "oklch(43.4% 0.022 192.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0a0c0b",
+          "#1f2726",
+          "#374544",
+          "#536564",
+          "#748786",
+          "#99a9a8",
+          "#c2cbcb",
+          "#ecefef"
+        ]
+      },
+      "dark-control-line": {
+        "role": "neutral",
+        "displayName": "Dark Control Line",
+        "canonical": "#91aaa3",
+        "oklch": "oklch(71.7% 0.030 176.7)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#090c0b",
+          "#1e2725",
+          "#354642",
+          "#506761",
+          "#708882",
+          "#96aaa5",
+          "#c0ccc9",
+          "#ebefee"
+        ]
+      },
+      "dark-key": {
+        "role": "neutral",
+        "displayName": "Dark Key",
+        "canonical": "#b4ded9",
+        "oklch": "oklch(86.9% 0.044 187.5)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#080c0c",
+          "#192827",
+          "#2b4845",
+          "#436a66",
+          "#648b87",
+          "#8dada9",
+          "#bbcecb",
+          "#eaf0ef"
+        ]
+      },
+      "dark-focus-blue": {
+        "role": "neutral",
+        "displayName": "Dark Focus Blue",
+        "canonical": "#a1cdff",
+        "oklch": "oklch(83.5% 0.085 252.0)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#070c10",
+          "#162638",
+          "#264465",
+          "#3c6490",
+          "#5c86b4",
+          "#87a8cf",
+          "#b7cbe3",
+          "#e9eff7"
+        ]
+      },
+      "dark-clasp-brass": {
+        "role": "neutral",
+        "displayName": "Dark Clasp Brass",
+        "canonical": "#d9a55a",
+        "oklch": "oklch(75.5% 0.111 74.8)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0f0a04",
+          "#342103",
+          "#5d3900",
+          "#855600",
+          "#a97729",
+          "#c69d64",
+          "#dec5a4",
+          "#f5ede3"
+        ]
+      },
+      "dark-clasp-brass-ink": {
+        "role": "neutral",
+        "displayName": "Dark Clasp Brass Ink",
+        "canonical": "#f3c97a",
+        "oklch": "oklch(85.6% 0.109 82.2)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#0f0b04",
+          "#312203",
+          "#583c00",
+          "#7f5a00",
+          "#a27b29",
+          "#c0a064",
+          "#dac7a4",
+          "#f4eee3"
+        ]
+      },
+      "dark-danger-red": {
+        "role": "neutral",
+        "displayName": "Dark Danger Red",
+        "canonical": "#ffaca3",
+        "oklch": "oklch(82.3% 0.099 26.3)",
+        "theme": "dark",
+        "tonalRamp": [
+          "#110908",
+          "#391c19",
+          "#662f2b",
+          "#914942",
+          "#b66a62",
+          "#d2928b",
+          "#e6beb9",
+          "#f8ebe9"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "\"Attache\" beside the logo in the masthead and Setup."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one page title per screen; 30/36 px at 720 px and below."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings and a lead Heads-up's subject; 26/31 px at 720 px and below."
+      },
+      "headline-detail": {
+        "displayName": "Headline Detail",
+        "purpose": "The title of the one thing a detail pane shows."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Row subjects, card headings, a disclosure's title."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text, field values, a Draft's text."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Buttons, navigation, tabs and chips."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Source lines, help text, lone times and state words."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono kind captions, the Home breadcrumb, results group headings."
+      }
+    },
+    "shadows": [
+      {
+        "name": "float",
+        "value": "0 1px 2px rgba(25, 45, 50, 0.06), 0 16px 40px -8px rgba(25, 45, 50, 0.18)",
+        "purpose": "Every layer that floats above the page: toasts, dialogs, sheets, search results, menus, panels."
+      },
+      {
+        "name": "float-dark",
+        "value": "0 1px 2px rgba(0, 0, 0, 0.4), 0 18px 44px -8px rgba(0, 0, 0, 0.6)",
+        "purpose": "The float shadow in dark mode."
+      },
+      {
+        "name": "ruled-edge",
+        "value": "0 3px 0 var(--rule)",
+        "purpose": "The search field's ruled underline only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0.7, 0.2, 1)",
+        "purpose": "The one easing curve, for the few state transitions there are."
+      },
+      {
+        "name": "chevron-turn",
+        "value": "transform 0.15s ease",
+        "purpose": "A disclosure's chevron rotating 90 degrees as it opens."
+      },
+      {
+        "name": "progress-width",
+        "value": "width 0.4s ease",
+        "purpose": "A job's progress bar filling."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.001ms",
+        "purpose": "Every transition, animation and script-started scroll stops under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "masthead-compact",
+        "value": "1120px"
+      },
+      {
+        "name": "bottom-bar",
+        "value": "960px"
+      },
+      {
+        "name": "narrow",
+        "value": "720px"
+      },
+      {
+        "name": "folded",
+        "value": "319px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink: the one primary action of a decision, such as Approve v1 or Continue.",
+      "html": "<button class=\"ds-btn-primary\">Approve v1</button>",
+      "css": ".ds-btn-primary { font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 7px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--primary, #192d32); color: var(--on-primary, #f7f6ef); border: 1px solid var(--primary, #192d32); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--primary, #192d32) 86%, var(--canvas, #f7f6ef)); } .ds-btn-primary:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined on the sheet: every alternative action, such as Reject or Browse.",
+      "html": "<button class=\"ds-btn-secondary\">Reject</button>",
+      "css": ".ds-btn-secondary { font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 7px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: var(--paper, #fffef8); color: var(--ink, #192d32); border: 1px solid var(--line, #798482); } .ds-btn-secondary:hover { background: var(--sunken, #ecece6); } .ds-btn-secondary:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "No edge or fill: quiet actions such as Got it and Back.",
+      "html": "<button class=\"ds-btn-ghost\">Got it</button>",
+      "css": ".ds-btn-ghost { font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 7px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--ink-2, #46595b); border: 1px solid transparent; } .ds-btn-ghost:hover { background: var(--row-hover, rgba(25, 45, 50, 0.04)); color: var(--ink, #192d32); } .ds-btn-ghost:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Sheet with the Deep Teal Key edge, so the field shows where it is without a tint.",
+      "html": "<label class=\"ds-field\">Research a question<input class=\"ds-input\" placeholder=\"Research a question across your notes\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 5px; font: 500 13px/19px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink-2, #46595b); } .ds-input { font: 400 16px/22px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink, #192d32); background: var(--paper, #fffef8); border: 1px solid var(--key, #204d57); border-radius: 6px; padding: 6px 10px; } .ds-input::placeholder { color: var(--ink-3, #526466); } .ds-input:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; outline-offset: 1px; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "search-field",
+      "description": "The page's first action on Home and the Brain: 54 px, key-coloured edge, ruled underline.",
+      "html": "<div class=\"ds-search\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m16 16 4.5 4.5\"/></svg><input aria-label=\"Search the Brain\" placeholder=\"Search the Brain\"><kbd class=\"ds-kbd\">⌘ K</kbd></div>",
+      "css": ".ds-search { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: 54px; background: var(--paper, #fffef8); color: var(--key, #204d57); border: 1.5px solid var(--key, #204d57); border-radius: 10px; box-shadow: 0 3px 0 var(--rule, #d3d8d0); } .ds-search:focus-within { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; outline-offset: 1px; } .ds-search input { flex: 1; border: none; background: transparent; font: 400 18px/24px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink, #192d32); outline: none; } .ds-kbd { font: 500 12px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; padding: 3px 6px; border-radius: 4px; color: var(--ink-2, #46595b); box-shadow: inset 0 0 0 1px var(--line, #798482); }"
+    },
+    {
+      "name": "Masthead Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Screen links with a solid ink tab for the current screen and a ruled decision count.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Home</a><a href=\"#\">Approvals <span class=\"ds-count\">3</span></a><a href=\"#\">Brain</a><a href=\"#\">Connections</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 4px; padding: 16px; background: var(--paper, #fffef8); border-bottom: 1px solid var(--rule, #d3d8d0); } .ds-nav a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 9px; border-radius: 6px; color: var(--ink-2, #46595b); font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; text-decoration: none; } .ds-nav a:hover { background: var(--row-hover, rgba(25, 45, 50, 0.04)); color: var(--ink, #192d32); } .ds-nav a[aria-current=\"page\"] { background: var(--primary, #192d32); color: var(--on-primary, #f7f6ef); } .ds-nav a:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; } .ds-count { font: 600 12px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; padding: 2px 5px; border: 1px solid currentColor; border-radius: 4px; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Round filter or collection choice; the chosen one is solid ink.",
+      "html": "<div class=\"ds-chips\"><a href=\"#\" aria-current=\"true\">All</a><a href=\"#\">Without review</a><a href=\"#\">Reverted</a></div>",
+      "css": ".ds-chips { display: flex; gap: 8px; } .ds-chips a { display: flex; align-items: center; min-height: 36px; padding: 0 12px; border: 1px solid var(--line, #798482); border-radius: 999px; color: var(--ink-2, #46595b); font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; text-decoration: none; } .ds-chips a:hover { background: var(--row-hover, rgba(25, 45, 50, 0.04)); color: var(--ink, #192d32); } .ds-chips a[aria-current=\"true\"] { background: var(--primary, #192d32); border-color: var(--primary, #192d32); color: var(--on-primary, #f7f6ef); } .ds-chips a:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; }"
+    },
+    {
+      "name": "Tags",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Exception labels only: plain, attention (brass) and hue; a healthy state is a quiet word instead.",
+      "html": "<span class=\"ds-tag\">core</span> <span class=\"ds-tag ds-tag-attn\">unverified</span> <span class=\"ds-tag ds-tag-blue\">Draft waiting</span> <span class=\"ds-state\">All good</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--sunken, #ecece6); color: var(--ink-2, #46595b); font: 600 12px/1 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; } .ds-tag-attn { background: var(--attn-soft, rgba(168, 112, 31, 0.14)); color: var(--attn-ink, #7a4d00); } .ds-tag-blue { background: var(--blue-soft, #e3e9ea); color: var(--blue, #164d84); } .ds-state { font: 400 13px/19px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink-3, #526466); }"
+    },
+    {
+      "name": "Inbox Row",
+      "kind": "custom",
+      "refersTo": "type-stamp",
+      "description": "The signature ruled row: kind stamp and word, subject over its source line, time on the right.",
+      "html": "<div class=\"ds-list\"><a href=\"#\" class=\"ds-row\"><span class=\"ds-kind\"><span class=\"ds-stamp\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"6\" cy=\"6\" r=\"2\"/><circle cx=\"6\" cy=\"18\" r=\"2\"/><circle cx=\"18\" cy=\"8\" r=\"2\"/><path d=\"M6 8v8M18 10c0 4-6 3-12 6\"/></svg></span>Review request</span><span class=\"ds-subject\"><b>Rate limit search</b><span>GitHub · acme/api #7</span></span><time>12:55</time></a></div>",
+      "css": ".ds-list { border-top: 2px solid var(--ink, #192d32); } .ds-row { display: grid; grid-template-columns: 185px minmax(0, 1fr) auto; align-items: center; column-gap: 14px; padding: 14px 4px; border-bottom: 1px solid var(--rule, #d3d8d0); color: var(--ink, #192d32); text-decoration: none; --c: var(--blue, #164d84); --c-soft: var(--blue-soft, #e3e9ea); } .ds-row:hover { background: var(--row-hover, rgba(25, 45, 50, 0.04)); } .ds-row:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; } .ds-kind { display: flex; align-items: center; gap: 10px; color: var(--c); font: 600 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; } .ds-stamp { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--c-soft); color: var(--c); } .ds-subject { display: flex; flex-direction: column; font: 600 16px/22px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; letter-spacing: -0.01em; } .ds-subject b { font-weight: 600; } .ds-subject span { font: 400 13px/19px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink-3, #526466); letter-spacing: 0; } .ds-row time { font: 400 13px/19px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink-2, #46595b); }"
+    },
+    {
+      "name": "Feature Spread",
+      "kind": "card",
+      "refersTo": "feature-spread",
+      "description": "Only a lead morning briefing: Morning Amber with a low rust sun etched into its margin.",
+      "html": "<article class=\"ds-spread\"><p class=\"ds-spread-kind\">The Daily Briefing · Until noon</p><h2>Two deadlines need attention; nothing else changed.</h2><div class=\"ds-spread-actions\"><button>Read briefing</button></div></article>",
+      "css": ".ds-spread { position: relative; isolation: isolate; overflow: hidden; background: var(--feature, #f7dfaf); color: var(--ink, #192d32); border-radius: 10px; padding: 18px 24px; } .ds-spread::after { content: \"\"; position: absolute; right: -26px; bottom: -125px; width: 300px; height: 280px; border-radius: 50%; z-index: -1; background: repeating-radial-gradient(ellipse at center, transparent 0 12px, currentColor 13px 14px, transparent 15px 22px); color: var(--rust, #8a3d22); opacity: 0.28; } .ds-spread > * { max-width: 76%; } .ds-spread-kind { margin: 0 0 6px; font: 500 13px/19px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; color: var(--ink-2, #46595b); } .ds-spread h2 { margin: 0 0 12px; font: 500 29px/35px Georgia, 'Times New Roman', serif; letter-spacing: -0.02em; } .ds-spread button { font: 500 14px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; padding: 7px 12px; border-radius: 6px; background: var(--primary, #192d32); color: var(--on-primary, #f7f6ef); border: 1px solid var(--primary, #192d32); cursor: pointer; } .ds-spread button:focus-visible { outline: 3px solid var(--focus, #164d84); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Reading Desk",
+    "overview": "The Dashboard is a desk laid out for one working day.\nWarm paper sits under blue-black ink, the search field is the first thing within reach, what is timely now gets one sheet of its own, and recurring work reads like a ruled index.\nThe owner should recognise a request from its left edge and decide from its subject whether to read further.\n\nThe mood is calm, exact and literate.\nCalm, because nothing pulses, shimmers, slides or re-sorts on its own, and an empty or healthy state is one quiet line rather than a celebration.\nExact, because every time is in tabular figures, every count is precise or written as a lower bound, and every state is said in words beside its glyph.\nLiterate, because Georgia gives page and section titles an editorial cadence while Inter keeps everything the owner acts on plain.\n\nDensity is that of a well-set index: generous 14 px row padding, 1 px rules between rows, and one 1072 px reading column on every screen.\nDark mode is the same desk at night: the paper becomes deep green slate, the ink becomes pale cream, and the morning spread becomes amber-brown.\nThe theme follows the system and never offers its own toggle.",
+    "keyCharacteristics": [
+      "Warm paper canvas, a slightly brighter sheet for cards and fields, and blue-black ink.",
+      "Georgia for page, section and detail titles; Inter for everything else; system mono for times, keys, paths and kind captions.",
+      "Flat ruled rows on the canvas, square at their ends, separated by 1 px rules and grouped under a 2 px ink rule.",
+      "Colour appears only in a kind's stamp and word, from seven role hues, and never alone.",
+      "The brass Attention dot means one thing: a decision waits.",
+      "Shadow only on what floats above the page."
+    ],
+    "rules": [
+      {
+        "name": "The Brass Means Decide Rule",
+        "body": "The Attention dot follows the Decision count and nothing else. It never means new, unread, changed or offline, and brass is never used as a general accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Colour Lives in the Stamp Rule",
+        "body": "A row's hue appears only in its kind stamp and kind word. Rows keep flat 1 px rules: no tinted group headers, no coloured side bars, no tinted row backgrounds.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Alone Rule",
+        "body": "A hue always comes with a glyph and a word, so every kind stays distinguishable in grayscale and under colour-vision simulation.",
+        "section": "colors"
+      },
+      {
+        "name": "The Healthy Is Quiet Rule",
+        "body": "A working state is a word in Ink Meta and nothing more. Tags are for exceptions only, and there is no green \"OK\" tag.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Georgia names places: the page, its sections, the thing being read. Inter carries everything the owner reads in a row or acts on. Never set a button, row subject or field in Georgia.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Times Rule",
+        "body": "Every `time` and every count uses tabular figures, so times line up down a list and a count never jitters as it changes.",
+        "section": "typography"
+      },
+      {
+        "name": "The Roman Quotes Rule",
+        "body": "The bundled face has no italic, so quotes and emphasis stay roman; a quote is marked by its rule or its label, never by slanting.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Column Rule",
+        "body": "Nothing on any screen leaves the 1072 px column or its gutters, and no screen scrolls sideways.",
+        "section": "layout"
+      },
+      {
+        "name": "The Nothing Jumps Rule",
+        "body": "A place that will fill keeps its height while empty: Show new items holds its row, For you now keeps a quiet line, and an older query's results stay dimmed for their height until the new answer comes.",
+        "section": "layout"
+      },
+      {
+        "name": "The Floating-Only Rule",
+        "body": "A shadow is never decoration. If a layer does not float above the page and leave again, it has no shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every colour from `apps/web/src/styles/tokens.css` and let `contrast.test.ts` prove it: 4.5:1 for text and 3:1 for edges in both themes.",
+      "**Do** use `hueClass(hue)` and `--c` / `--c-soft` for a kind's colour, and pair every hue with its glyph and word.",
+      "**Do** set page, section and detail titles in Georgia, and every row subject, control and field in Inter.",
+      "**Do** put lists on the canvas as square ruled rows under a 2 px ink rule, and put detail on a Fresh Sheet with a 1 px Rule and 10 px corners.",
+      "**Do** show focus as the 3 px Focus Blue outline and selection as an ink fill or inset ink bar, so the two can never be confused.",
+      "**Do** keep the place of anything that will fill, so arrivals never move the list under the pointer.",
+      "**Do** give every control a 44 x 44 px target on a phone or with a coarse pointer, and keep every screen working at 320 px and 200% zoom.",
+      "**Do** stop every transition and animation under reduced motion; the only motion at all is a 0.15 s chevron turn and the progress bar's width."
+    ],
+    "donts": [
+      "**Don't** use the brass dot or brass colour for anything but a waiting decision: not new, unread, changed, offline or decoration.",
+      "**Don't** tint rows, group headers or side bars with a hue, or add a coloured bar to a row.",
+      "**Don't** add a green tag for a healthy state; say the state quietly in words.",
+      "**Don't** use the Morning Amber spread for anything but a lead morning briefing.",
+      "**Don't** add a shadow to anything that does not float above the page.",
+      "**Don't** add shimmer, pulse, auto-advancing cards, sliding transitions or animated re-sorting.",
+      "**Don't** load anything from the internet, including a typeface; Georgia and the mono face are the system's, Inter is bundled.",
+      "**Don't** set text in italic, or use the logo's copper and brass for text.",
+      "**Don't** add a chat box, a conversation surface or a theme toggle."
+    ]
+  }
+}

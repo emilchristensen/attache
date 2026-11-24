@@ -3,9 +3,10 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { startTestService, type TestService } from "./harness.ts";
 import { checkHarnessContract } from "./harness-smoke-contract.ts";
+import { findHarnessExecutable } from "./harness-executable.ts";
 
 /**
  * Smoke test against the real OpenCode executable, in an isolated home: connecting OpenCode through
@@ -23,14 +24,7 @@ import { checkHarnessContract } from "./harness-smoke-contract.ts";
  * for the OpenCode versions it ran against; a failure here withdraws that claim for OpenCode only.
  */
 
-function findOpenCode(): string | null {
-  if (process.env.ATTACHE_OPENCODE_EXECUTABLE) return process.env.ATTACHE_OPENCODE_EXECUTABLE;
-  for (const dir of (process.env.PATH ?? "").split(delimiter).filter(Boolean)) {
-    for (const name of ["opencode", "opencode.cmd", "opencode.exe"]) if (existsSync(join(dir, name))) return join(dir, name);
-  }
-  return null;
-}
-const OPENCODE = findOpenCode();
+const OPENCODE = findHarnessExecutable("opencode", "ATTACHE_OPENCODE_EXECUTABLE");
 
 let svc: TestService;
 let root: string;

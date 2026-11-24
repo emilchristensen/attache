@@ -113,7 +113,11 @@
   color: var(--ink-2);
   font-size: var(--fs-control);
 }
-.settings-back {
+/*
+ * The way back to the list only shows where the list is gone (a narrow window, below). Two classes, so a wide touch
+ * window (a tablet) keeps it hidden too: accessibility.css makes every .back-link an inline-flex target at that weight.
+ */
+.settings .settings-back {
   display: none;
 }
 .settings-missing {

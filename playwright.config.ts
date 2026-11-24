@@ -1,9 +1,11 @@
 import { defineConfig } from "@playwright/test";
+import { chromeEnv } from "./tests/e2e/fonts.ts";
 
 /**
  * Browser journeys run against the real bundled service, the built web client
  * and the TEST-ONLY fixture remotes (see tests/e2e/stack.ts). They use the
- * installed Google Chrome.
+ * installed Google Chrome, which on Linux draws Georgia with the bundled
+ * Gelasio (tests/e2e/fonts.ts).
  */
 export default defineConfig({
   testDir: "tests/e2e",
@@ -18,6 +20,7 @@ export default defineConfig({
   use: {
     channel: "chrome",
     headless: true,
+    launchOptions: { env: chromeEnv() },
     viewport: { width: 1360, height: 900 },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

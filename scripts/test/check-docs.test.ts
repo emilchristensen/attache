@@ -1,7 +1,7 @@
 /**
  * The docs check (`scripts/check-docs.mjs`): one sentence per line in Markdown,
  * no term the glossary says to avoid in user-facing text, and no count written
- * with "(s)".
+ * with "(s)", and every browser spec opening with a comment that says what it covers.
  */
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -118,7 +118,7 @@ describe("counts written with (s)", () => {
 describe("checking a repository", () => {
   const repo = join(FIXTURES, "repo");
 
-  it("checks the repository's own docs, installer, web and service text, and nothing else", () => {
+  it("checks the repository's own docs, installer, web and service text, browser specs' opening comments, and nothing else", () => {
     expect(checkDocs(repo)).toEqual({
       sentences: [{ file: "README.md", line: 4, text: "This line holds two sentences. It is flagged." }],
       terms: [
@@ -131,6 +131,7 @@ describe("checking a repository", () => {
         { file: "apps/web/src/View.tsx", line: 4, found: "note(s)" },
         { file: "apps/service/src/notes.ts", line: 2, found: "event(s)" },
       ],
+      specHeaders: [{ file: "tests/e2e/bare.spec.ts", line: 1 }],
     });
   });
 
@@ -141,7 +142,8 @@ describe("checking a repository", () => {
     expect(run.stdout).toContain('installer/install.sh:2: "Polling" is avoided in GLOSSARY.md; use Source refresh');
     expect(run.stdout).toContain('docs/adr/0001-example.md:3: "sync" is avoided in GLOSSARY.md; use Replication or Source refresh');
     expect(run.stdout).toContain('apps/service/src/notes.ts:2: "event(s)" writes a count with (s); write the noun in its number ("1 event", "2 events"), with plural() from @attache/contracts in code');
-    expect(run.stderr).toContain("Docs check: 1 line with two sentences, 3 avoided glossary terms, 3 counts written with (s).");
+    expect(run.stdout).toContain("tests/e2e/bare.spec.ts:1: a browser spec opens with a /** comment saying what it covers and whether it runs on its own");
+    expect(run.stderr).toContain("Docs check: 1 line with two sentences, 3 avoided glossary terms, 3 counts written with (s), 1 browser spec without its opening comment.");
   });
 
   it("passes from the command line when nothing is found", () => {
