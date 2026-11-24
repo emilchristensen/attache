@@ -116,10 +116,18 @@ test("related notes: the latest briefing's notes for the item, labelled with its
   ]);
   const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "manual" });
-  let written: { createdAt: string } | null = null;
-  await expect.poll(async () => ((written = (await api<{ briefing: { id: string; createdAt: string } | null }>(page, "GET", "/briefings/latest")).briefing), written && (written as { id: string }).id !== before), { timeout: 30_000 }).toBe(true);
-  const when = await clock(page, written!.createdAt);
+  let written!: { id: string; createdAt: string };
+  await expect.poll(async () => {
+    const { briefing } = await api<{ briefing: typeof written | null }>(page, "GET", "/briefings/latest");
+    if (!briefing || briefing.id === before) return false;
+    written = briefing;
+    return true;
+  }, { timeout: 30_000 }).toBe(true);
+  const when = await clock(page, written.createdAt);
   await page.mouse.move(5, 5);
+  // Opening prep holds the slot. Wait for the Dashboard to show the new briefing first.
+  const briefingCard = area(page).locator('[data-heads-up="requested-briefing"]');
+  await expect(briefingCard).toHaveAttribute("data-heads-up-key", `briefing:${written.id}`);
   const handover = meetingHeadsUp(page, "Pilot handover");
   await openPrep(handover);
   const notes = handover.getByRole("group", { name: `Related notes · As the briefing at ${when} found them` });
@@ -137,7 +145,9 @@ test("related notes: the latest briefing's notes for the item, labelled with its
     for (const section of body.briefing.sections) section.items = section.items.map((i) => (i.id === standupId ? { ...i, related: [] } : i));
     await route.fulfill({ response: res, json: body });
   });
+  await page.mouse.move(5, 5);
   await page.reload();
+  await expect(briefingCard).toHaveAttribute("data-heads-up-key", `briefing:${written.id}`);
   const standup = meetingHeadsUp(page, "Kiosk standup");
   await openPrep(standup);
   await expect(standup.locator("[data-meeting-notes]")).toHaveText(`No related notes: the briefing at ${when} found none in your Brain.`);

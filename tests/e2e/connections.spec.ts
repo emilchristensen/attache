@@ -420,7 +420,9 @@ test("Copilot CLI is its own Harness: MCP access, runtime-fresh memory and sessi
   const connected = await openConnection(page, "copilot-cli");
   await connected.getByRole("button", { name: "Disconnect…" }).click();
   await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
-  await expect.poll(() => JSON.parse(readFileSync(config, "utf8"))).toEqual(own);
+  // Disconnect restores the MCP config before it removes Attache's hooks file.
+  await expect(page.getByText("Disconnected; data kept", { exact: true })).toBeVisible();
+  expect(JSON.parse(readFileSync(config, "utf8"))).toEqual(own);
   expect(readdirSync(hooks)).toEqual(["mine.json"]);
   rmSync(join(stack.agentHome, ".copilot"), { recursive: true });
 });
