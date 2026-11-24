@@ -36,6 +36,15 @@ export function areaState(i: { attentionOn: boolean; writing: boolean; failed: b
 }
 
 /**
+ * When the briefings were last read, if a later read failed: what was read stays shown, and the area and For you now
+ * say quietly that it may be out of date, with Retry. Null while reads succeed, and when nothing was ever read (that
+ * is a failure, said as one).
+ */
+export function staleReadAt(read: { failed: boolean; answeredAt: number | null }): number | null {
+  return read.failed ? read.answeredAt : null;
+}
+
+/**
  * Where an entry of the briefing page leads: a Draft waiting for review to its own page, a Proposal to Approvals, and
  * everything else to its Inbox item on Home. `sectionId` is the briefing section the entry is in, when it is in one.
  */

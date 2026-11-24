@@ -202,11 +202,12 @@ Each area responds to the space it is given, so an area in a narrow column looks
   The painting changes each day and is the same on every Machine that day; Attache ships the paintings and never fetches them.
   **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
+  When Attache could not check for a newer briefing after a good read, the area keeps what it showed and a quiet line says from what time, with **Retry**.
   With no Daily Briefing yet today, **Prepare a briefing** writes today's Daily Briefing, so the area fills with its card and its picks reach For you now; once there is one, it writes a briefing you asked for.
   An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**, as a plain card named for what it is; **Read briefing** opens its page under that name, without a painting.
   An Away summary lists only what is new or changed since the time you give, and still names its first item and Top to-dos from the whole Inbox.
 - **For you now** is a short curated list of the Inbox items to act on now.
-  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and this morning's Daily Briefing picks.
+  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and today's Daily Briefing picks.
   A due date without a time of day is never nearly due: it counts as due today on its own day, wherever you are.
   Each row gives its reason, such as "Starts in 12 min, prep not read" or "Nora has waited since Tuesday"; an item appears once under its most urgent reason.
   At most five items show, followed by the count of the rest in the Inbox.
@@ -217,6 +218,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   An entry never moves or leaves while your pointer or keyboard focus is in the list, but it shows what changes at once, such as **In progress**; one whose reason has ended leaves when you move away.
   With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
   When the Daily Briefing could not be read, a quiet line says its picks are missing, with **Retry**, under any entries the list still has.
+  When it could not be read again after a good read, the list keeps the picks it had and the line says from what time they are, also with **Retry**.
   With Attention and briefings switched off, the area says so with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
   It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one compact line above timed meetings.
