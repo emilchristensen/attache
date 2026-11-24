@@ -139,9 +139,10 @@ export function deterministicSummary(b: Omit<Briefing, "summary" | "deliverableP
     ].filter(Boolean);
     // An away summary is measured from the time the owner gave; the others from the last briefing.
     const baseline = b.kind === "away" ? "since the time you gave" : "since the last briefing";
-    const nothingNew = b.kind === "away" && !b.counts.new && !b.counts.changed;
+    // Said only of an Inbox that has open items: with nothing open, the Drafts or Proposals named above are the summary.
+    const nothingNew = b.kind === "away" && b.counts.open > 0 && !b.counts.new && !b.counts.changed;
     if (bits.length) parts.push(`${bits.join(", ")}.`);
-    if (nothingNew) parts.push(`Nothing new or changed ${baseline}; ${b.counts.open} item${b.counts.open === 1 ? " is" : "s are"} still open.`);
+    if (nothingNew) parts.push(`Nothing new or changed in your Inbox ${baseline}; ${b.counts.open} item${b.counts.open === 1 ? " is" : "s are"} still open.`);
     else if (b.counts.new || b.counts.changed) parts.push(`${b.counts.new} new and ${b.counts.changed} changed ${baseline}.`);
   }
   const failed = b.coverage.filter((c) => c.coverage && !["complete", "empty"].includes(c.coverage.state));

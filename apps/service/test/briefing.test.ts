@@ -85,7 +85,13 @@ describe("an away summary", () => {
 
     const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
 
-    expect(deterministicSummary(away)).toBe("Nothing new or changed since the time you gave; 1 item is still open.");
+    expect(deterministicSummary(away)).toBe("Nothing new or changed in your Inbox since the time you gave; 1 item is still open.");
+  });
+
+  it("with only a Draft waiting and nothing open, names the Draft and says nothing about the Inbox", () => {
+    const away = composeBriefing(openDb(":memory:"), { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
+
+    expect(deterministicSummary({ ...away, counts: { ...away.counts, drafts: 1 } })).toBe("1 draft ready for review.");
   });
 
   it("counts a new item of the Other section, and never says nothing is new beside it", () => {
