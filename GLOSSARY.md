@@ -99,7 +99,7 @@ _Avoid_: client, coding agent
 Attache's access to one outside service or Harness, such as Slack, GitHub, a model or Claude Code, with what it may read and write.
 The Dashboard's Connections page lists them, and every place that names the page calls it Connections.
 On that page each Connection is one row in its group (Notes, Work sources, Harnesses, Model) with its account, what it may read and write, and when Attache last read it; one not set up is a small tile, and one that needs sign-in moves to a "Needs you" group at the top, already open.
-The Connection banner shows the first Connection issue under the masthead on every screen except Connections, with the same state word as the page, such as Sign-in needed, Down or Not read yet.
+The Connection banner shows the first Connection issue under the masthead on every screen except Connections, with the same state word as the page, such as Sign-in needed, Down or Not read yet; a check that fails only for a moment never raises it.
 Disabling a Connection takes that access away, sign-in included, until the owner sets it up again.
 _Avoid_: Disconnect
 
@@ -166,7 +166,8 @@ _Avoid_: Outgoing message
 
 **Daily Briefing**:
 The summary Attache writes each morning of what needs the owner, what changed and what the day holds, shown in its own area of Home.
-Every place that shows it titles it "The Daily Briefing".
+Prepare a briefing writes it too when none was written today.
+Every place that shows it titles it "The Daily Briefing"; an Away summary or a briefing the owner asked for is never called that.
 _Avoid_: Wednesday Brief, Morning briefing
 
 **Delivery unconfirmed**:
@@ -186,7 +187,8 @@ A Heads-up is a view of that Inbox item, never a second decision.
 **Meeting prep**:
 An Inbox item for a meeting with other people, open from 24 hours before it starts until its scheduled end, carrying the meeting's start, end, call and attendees.
 From 15 minutes before the start until the meeting ends, prep the owner has not opened shows in For you now, and it remains in the Inbox throughout.
-Open prep, the first step Start working takes for it, shows the meeting's time, the other attendees and the notes the newest briefing related to it, and takes it off For you now.
+Open prep, the first step Start working takes for it, shows the meeting's time, the other attendees and the notes the newest briefing related to it.
+Opening it by any route (its row, Start working or `w`) marks it In progress, which takes it off For you now on every Machine.
 _Avoid_: Occupant, nudge
 
 **For you now**:
@@ -196,7 +198,8 @@ It shares a row with the Inbox at one third on desktop and one half on tablet, a
 _Avoid_: Proactive area
 
 **Your day**:
-The ruled band on Home that shows today's calendar meetings in the browser's current time zone, using the last events the Google Calendar Connection read.
+The ruled band on Home that shows today's calendar meetings in the browser's current time zone, using the last events the Google Calendar Connection read, which reaches back to the start of today.
+All-day events sit on one line above the meetings and never count as a meeting in progress.
 It is a schedule, not an Inbox item, so it never adds to the Decision count.
 Home places it after the Daily Briefing; the phone arrangement moves it between For you now and the Inbox.
 

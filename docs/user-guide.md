@@ -136,6 +136,7 @@ Each issue has an icon and a word: a key for **Sign-in needed** and **Access den
 Sources that could not reach the network at all share one issue, whatever words each one recorded.
 When the Reader has gone silent, the banner says **Not reading** until a Reader is back.
 Having only your notes connected, or Attention and briefings switched off, is how you set Attache up, not a problem, so neither raises the banner.
+A check that fails for only a moment never raises the banner: Attache asks again on its own and says **Could not check** only once the failure has lasted a few seconds, then keeps asking until an answer comes.
 The banner has no close button: it stays while the Inbox may be incomplete, and a screen reader hears a new issue once, not on every refresh.
 On a narrow window it wraps to two lines with the fixing action in view and the other choices behind one menu.
 A healthy setup has no banner, and Connections in the masthead carries a green dot.
@@ -154,6 +155,7 @@ Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
 The decision keys, `w` for Start working, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+`w` does all that **Start working** does, its first step included.
 No single key ever applies, approves, sends, rejects, reverts or disables a Connection.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
@@ -199,24 +201,28 @@ Each area responds to the space it is given, so an area in a narrow column looks
   The painting changes each day and is the same on every Machine that day; Attache ships the paintings and never fetches them.
   **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
   When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
-  An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**.
+  With no Daily Briefing yet today, **Prepare a briefing** writes today's Daily Briefing, so the area fills with its card and its picks reach For you now; once there is one, it writes a briefing you asked for.
+  An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**, as a plain card named for what it is; **Read briefing** opens its page under that name, without a painting.
 - **For you now** is a short curated list of the Inbox items to act on now.
   It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and this morning's Daily Briefing picks.
+  A due date without a time of day is never nearly due: it counts as due today on its own day, wherever you are.
   Each row gives its reason, such as "Starts in 12 min, prep not read" or "Nora has waited since Tuesday"; an item appears once under its most urgent reason.
   At most five items show, followed by the count of the rest in the Inbox.
   Every row has **Start working**, **Snooze** and **Done**, and opens with the same detail as its Inbox row.
   Starting an item keeps it in progress when its reason still applies.
-  Meeting prep leaves the list when **Start working** opens its prep (the meeting's time, the other attendees and the notes the newest briefing related to it); its row stays in the complete Inbox throughout, with **Suggested now** while it is listed here.
+  Opening meeting prep (the meeting's time, the other attendees and the notes the newest briefing related to it) marks it read, whether you open its row, press **Start working** or press `w`: it goes **In progress** and leaves the list on every page and Machine; its row stays in the complete Inbox throughout, with **Suggested now** while it is listed here.
   **Done** or **Snooze** on an entry leaves one line with **Undo** in its place.
-  An entry never moves or leaves while your pointer or keyboard focus is in the list; it changes when you move away.
+  An entry never moves or leaves while your pointer or keyboard focus is in the list, but it shows what changes at once, such as **In progress**; one whose reason has ended leaves when you move away.
   With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
+  When the Daily Briefing could not be read, a quiet line says its picks are missing, with **Retry**, under any entries the list still has.
   With Attention and briefings switched off, the area says so with a link to Settings.
 - **Your day** is the ruled band between Home's upper areas.
-  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one line above timed meetings.
-  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**.
-  Select a meeting to open it in Google Calendar.
+  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one compact line above timed meetings.
+  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**, all-day ones included.
+  Select a meeting or an all-day event to open it in Google Calendar.
   **Join** appears from 15 minutes before its start until its scheduled end when it has a Meet link.
-  Once the day's meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known.
+  Once the day's timed meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known; an all-day event is never a meeting in progress, so it stays on its line above.
+  Google Calendar is read from the start of today, so the meetings that have ended still count as today's.
   It says **Nothing on your calendar today** only after a complete read, and otherwise distinguishes **Checking**, **Could not read**, **No calendar connected** and **Switched off**.
   A failed read keeps the last known meetings and says when they were read.
   The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
@@ -229,7 +235,7 @@ Each area responds to the space it is given, so an area in a narrow column looks
   The actions end the row's line: **Start working** outlined, **Snooze** with a caret and **Done** with a green check.
   On a narrow window the type comes first, then the whole subject, then the source and time.
   Every row offers **Start working**, **Snooze** and **Done** without opening it.
-  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place.
+  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place, except that any of those others Attache can draft a reply to gets a prepared Draft.
   It keeps the item open and marks it **In progress** on every Machine; the button then reads **Continue**.
   Opening the row shows **Not started** to clear the mark.
   A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
