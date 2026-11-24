@@ -186,9 +186,10 @@ function goTo(href: string) {
  * Search the Brain as one field: a combobox whose listbox shows up to six results as the owner types. Arrow keys
  * choose, `Enter` opens the chosen result (or, with none, all results in the Brain), `Esc` closes the results and
  * keeps the text. A memory note opens in the Brain, anything else in the evidence view at the cited lines.
- * Home places it inline; the search palette places the same field in a dialog (`palette`), where `Esc` closes it.
+ * Home places it inline, with Browse inside the field after the keycap (`trailing`); the search palette places the same
+ * field in a dialog (`palette`), where `Esc` closes it.
  */
-export function SearchField({ id, className, palette }: { id: string; className?: string; palette?: PaletteMode }) {
+export function SearchField({ id, className, palette, trailing }: { id: string; className?: string; palette?: PaletteMode; trailing?: ReactNode }) {
   const [text, setText] = useState(palette?.resume?.text ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -356,6 +357,7 @@ export function SearchField({ id, className, palette }: { id: string; className?
             {KEY_LABEL}
           </kbd>
         )}
+        {trailing}
       </div>
       {/* The popup keeps focus in the field: a click on a result or a link still works, but the field stays focused. */}
       <div className="search-popup" hidden={!expanded} onMouseDown={(e) => e.preventDefault()}>

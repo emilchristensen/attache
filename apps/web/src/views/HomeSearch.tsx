@@ -14,7 +14,11 @@ const BROWSE: ReadonlyArray<{ label: string; to: string }> = [
   { label: "Recent saves", to: "/brain/recent" },
 ];
 
-const DATE = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
+const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
+const DAY_MONTH = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" });
+
+/** The full date as the mockups write it beside "Home": "Wednesday, 18 November". */
+const fullDate = (d: Date) => `${WEEKDAY.format(d)}, ${DAY_MONTH.format(d)}`;
 
 /** Today in the browser's zone, read again at local midnight and whenever the page is shown again. */
 function useToday(): Date {
@@ -42,10 +46,10 @@ function isoDay(d: Date): string {
 }
 
 /**
- * Browse: the Brain's collections behind one disclosure beside the field. Open, the links take a line of their own
- * under the field; `Esc` on a link closes them and returns to the button.
+ * Browse: the Brain's collections behind one disclosure inside the search field, after the keycap. Open, the links take
+ * a line of their own under the field; `Esc` on a link closes them and returns to the button.
  */
-function Browse() {
+function useBrowse() {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -55,35 +59,37 @@ function Browse() {
     setOpen(false);
     button.current?.focus();
   };
-  return (
-    <>
-      <button ref={button} type="button" className="browse-toggle" aria-expanded={open} aria-controls={listId} onClick={() => setOpen(!open)}>
-        Browse
-        <Icon name="chevron" size={16} />
-      </button>
-      <ul id={listId} className="browse-links" hidden={!open} aria-label="Browse the Brain" onKeyDown={onKeyDown}>
-        {BROWSE.map((b) => (
-          <li key={b.to}>
-            <Link to={b.to}>{b.label}</Link>
-          </li>
-        ))}
-      </ul>
-    </>
+  const toggle = (
+    <button ref={button} type="button" className="browse-toggle" aria-expanded={open} aria-controls={listId} onClick={() => setOpen(!open)}>
+      Browse
+      <Icon name="chevron" size={12} />
+    </button>
   );
+  const links = (
+    <ul id={listId} className="browse-links" hidden={!open} aria-label="Browse the Brain" onKeyDown={onKeyDown}>
+      {BROWSE.map((b) => (
+        <li key={b.to}>
+          <Link to={b.to}>{b.label}</Link>
+        </li>
+      ))}
+    </ul>
+  );
+  return { toggle, links };
 }
 
 /**
- * Home's first area: a compact heading and today's date over Search the Brain and Browse. The field is not focused
- * on arrival; `Ctrl K`, `Cmd K` and `/` focus it. `recall` is the Search and recall feature, unknown while loading.
+ * Home's first area: "Home" with today's full date beside it on one line, over Search the Brain with Browse inside
+ * the field. The field is not focused on arrival; `Ctrl K`, `Cmd K` and `/` focus it. `recall` is the Search and
+ * recall feature, unknown while loading.
  */
 export function HomeSearch({ recall }: { recall: boolean | undefined }) {
   const today = useToday();
+  const browse = useBrowse();
   return (
     <div className="home-search">
       <div className="home-head">
         <h1 className="home-title">Home</h1>
-        <span aria-hidden="true">/</span>
-        <time dateTime={isoDay(today)}>{DATE.format(today)}</time>
+        <time dateTime={isoDay(today)}>{fullDate(today)}</time>
       </div>
       {recall === false ? (
         <p className="home-search-off">
@@ -91,8 +97,8 @@ export function HomeSearch({ recall }: { recall: boolean | undefined }) {
         </p>
       ) : (
         <div className="home-search-row">
-          <SearchField id={HOME_SEARCH_ID} className="search-home" />
-          <Browse />
+          <SearchField id={HOME_SEARCH_ID} className="search-home" trailing={browse.toggle} />
+          {browse.links}
         </div>
       )}
     </div>
