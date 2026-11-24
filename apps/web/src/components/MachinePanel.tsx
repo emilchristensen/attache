@@ -110,7 +110,7 @@ export function MachineDisclosure() {
     <div className="machine" ref={root} data-lost={lost || undefined}>
       <button ref={button} className="machine-trigger" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
         <span className="sr-only">This Machine: </span>
-        <Icon name={lost ? "warning" : "machine"} />
+        <Icon name={lost ? "warning" : "machine"} className="machine-trigger-icon" />
         <span className="machine-trigger-name">{name}</span>
         {lost && <span className="machine-trigger-live">{status === "closed" ? "Offline" : "Reconnecting"}</span>}
         <Icon name="chevron" className="machine-trigger-chevron" />

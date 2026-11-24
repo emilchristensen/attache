@@ -69,9 +69,6 @@ const WORDS: Record<"home" | "approvals" | "connections", (n: number) => string>
   connections: (n) => (n === 1 ? "sign-in needed" : "sign-ins needed"),
 };
 
-/** The total as a screen reader hears it after the mark's name: "14 need you", "at least 12 need you". */
-export const spokenTotal = (total: Tally) => spokenCount(total, needYou);
-
 /**
  * A list as the count reads it. `on` is the feature switch from `/config`: null while that has not answered, false
  * when the feature is off (the list is not asked for). A `feature_disabled` refusal is off too, not a failure.
