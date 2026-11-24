@@ -317,6 +317,10 @@ test("heavy mixed day: thirty typed rows, 38 decisions and a source that failed 
   await expect(page.locator("#inbox .inbox-kind-word", { hasText: "Review request" }).first()).toBeVisible();
   await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
   await expectFold(page, 2, "the heavy day's complete Inbox rows", { forYouNow: true });
+  // An entry whose reason is "Due today" says it once, not again as its time.
+  const dueToday = forYouNow(page).locator("[data-inbox-row]").first();
+  await expect(dueToday.locator(".inbox-source")).toContainText("Due today");
+  expect((await dueToday.innerText()).match(/Due today/g)).toHaveLength(1);
   await captureDay(page, "heavy");
   // Every heavy-day type is in "All types" with its count (after the captures, which the menu's focus would mark).
   expect(await typeChoices(page)).toEqual(expect.arrayContaining(["Deadline 8", "Review request 8", "Meeting prep 4", "Pending reply 6", "Fact to check 4"]));

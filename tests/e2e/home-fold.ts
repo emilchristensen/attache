@@ -4,8 +4,9 @@
  */
 import { expect, type Page } from "@playwright/test";
 
-function countComplete(page: Page, selector: string, parts: readonly string[], heading: string): Promise<number> {
-  return page.evaluate(({ selector, parts, heading }) => {
+/** `parts` must each be drawn in full; `optional` parts must be drawn in full when the row has them. */
+function countComplete(page: Page, selector: string, parts: readonly string[], heading: string, optional: readonly string[] = []): Promise<number> {
+  return page.evaluate(({ selector, parts, heading, optional }) => {
     const scroller = document.querySelector(".page")!;
     scroller.scrollTo(0, 0);
     const fold = window.innerHeight;
@@ -22,8 +23,9 @@ function countComplete(page: Page, selector: string, parts: readonly string[], h
     };
     const drawn = (el: HTMLElement | null) =>
       el !== null && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && el.getBoundingClientRect().bottom <= fold && insideClips(el);
-    return rows.filter((row) => row.getBoundingClientRect().bottom <= fold && parts.every((part) => drawn(row.querySelector<HTMLElement>(part)))).length;
-  }, { selector, parts, heading });
+    const optionalDrawn = (row: HTMLElement) => optional.every((part) => { const el = row.querySelector<HTMLElement>(part); return el === null || drawn(el); });
+    return rows.filter((row) => row.getBoundingClientRect().bottom <= fold && parts.every((part) => drawn(row.querySelector<HTMLElement>(part))) && optionalDrawn(row)).length;
+  }, { selector, parts, heading, optional });
 }
 
 /** The fold criterion for the two complete rows in the Inbox. */
@@ -35,7 +37,8 @@ export async function completeRows(page: Page): Promise<number> {
 /** The fold criterion for the two complete entries in For you now. */
 export async function completeForYouNow(page: Page): Promise<number> {
   await expect(page.locator(".for-you-now [data-inbox-row]").first()).toBeVisible();
-  return countComplete(page, ".for-you-now [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"], ".for-you-now h2");
+  // The time is left out of an entry whose reason already says it.
+  return countComplete(page, ".for-you-now [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source"], ".for-you-now h2", [".inbox-time"]);
 }
 
 /** How far above the fold at 1280 x 800 the fold criterion's rows end: room left for a taller system font. */

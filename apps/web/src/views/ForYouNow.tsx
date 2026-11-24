@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
-import { staleReadAt } from "../briefing-area.ts";
+import { staleReadAt, staleReadText } from "../briefing-area.ts";
 import { useSignals } from "../nav-signals.ts";
 import { clockTime } from "../zoned-time.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
@@ -34,10 +34,10 @@ function useHeldResult(live: ForYouNowResult, items: readonly AttentionItemView[
  * How the Daily Briefing's picks were read, when it was not well: never read (the list may lack them) or not read
  * again after a good read (the list keeps the picks as last read). Never left unsaid.
  */
-function PicksNote({ staleAt, timeZone, retry }: { staleAt: number | null; timeZone: string; retry: () => void }) {
+function PicksNote({ staleAt, picksShown, timeZone, retry }: { staleAt: number | null; picksShown: boolean; timeZone: string; retry: () => void }) {
   return (
     <>
-      {staleAt === null ? "Could not read the Daily Briefing, so its picks are missing." : `Could not check the Daily Briefing again, so its picks are as read at ${clockTime(staleAt, timeZone)}.`}{" "}
+      {staleAt === null ? "Could not read the Daily Briefing, so its picks are missing." : staleReadText({ where: "picks", showing: picksShown, at: clockTime(staleAt, timeZone) })}{" "}
       <button className="small" onClick={retry}>
         Retry
       </button>
@@ -108,10 +108,11 @@ export function ForYouNow({ attentionOn, draftsOn, clock, onShown }: { attention
   // The Daily Briefing could not be read (its picks are missing) or not read again (its picks are as last read): said
   // quietly under the entries, or beside the quiet line.
   const picksFailed = !!briefings.error && !briefings.data;
+  const picksShown = shown.entries.some((e) => e.reason === "picked-this-morning");
   const picksStale = staleReadAt({ failed: !!briefings.error, answeredAt: briefings.answeredAt });
   const picksNote = (picksFailed || picksStale !== null) && (
     <p className="for-you-now-quiet-text" role="status" {...(picksFailed ? { "data-picks-failed": "" } : { "data-picks-stale": "" })}>
-      <PicksNote staleAt={picksFailed ? null : picksStale} timeZone={clock.timeZone} retry={briefings.reload} />
+      <PicksNote staleAt={picksFailed ? null : picksStale} picksShown={picksShown} timeZone={clock.timeZone} retry={briefings.reload} />
     </p>
   );
   return (

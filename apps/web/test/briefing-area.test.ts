@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BriefingView } from "@attache/contracts";
-import { areaState, entryTarget, leadWords, requestedShown, staleReadAt, todaysDaily } from "../src/briefing-area.ts";
+import { areaState, entryTarget, leadWords, requestedShown, staleReadAt, staleReadText, todaysDaily } from "../src/briefing-area.ts";
 
 const CPH = "Europe/Copenhagen";
 const NOW = Date.parse("2026-11-18T12:00:00Z");
@@ -47,6 +47,15 @@ describe("The Daily Briefing area", () => {
     ["read, then a later read failed: stale since that read", { failed: true, answeredAt: NOW }, NOW],
   ])("keeps what was read when %s", (_, input, expected) => {
     expect(staleReadAt(input)).toBe(expected);
+  });
+
+  it.each<[string, Parameters<typeof staleReadText>[0], string]>([
+    ["the area with a briefing on screen", { where: "area", showing: true, at: "09:12" }, "Could not check for a newer briefing; this is the one read at 09:12."],
+    ["the area with nothing read on screen", { where: "area", showing: false, at: "09:12" }, "Could not check for a briefing since 09:12."],
+    ["For you now with picks shown", { where: "picks", showing: true, at: "09:12" }, "Could not check the Daily Briefing again, so its picks are as read at 09:12."],
+    ["For you now with no picks shown", { where: "picks", showing: false, at: "09:12" }, "Could not check the Daily Briefing since 09:12."],
+  ])("says a failed re-read honestly for %s", (_, input, expected) => {
+    expect(staleReadText(input)).toBe(expected);
   });
 
   it.each<[string, string, { kind: string; id: string }]>([

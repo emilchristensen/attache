@@ -73,9 +73,6 @@
   .for-you-now .inbox-time {
     grid-area: time;
   }
-  .for-you-now .inbox-source .tag {
-    display: none;
-  }
   .for-you-now .inbox-subject {
     grid-area: subject;
     min-height: 24px;

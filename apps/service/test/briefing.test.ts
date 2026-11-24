@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BRIEFING_HEADLINE_MAX, BRIEFING_TEXT_MAX, BriefingViewSchema } from "@attache/contracts";
 import { openDb } from "../src/core/db.ts";
-import { composeBriefing } from "../src/attention/briefing.ts";
+import { composeBriefing, deterministicSummary } from "../src/attention/briefing.ts";
 import { applyModelWords, askForBriefingWords, BRIEFING_MODEL_UPDATES } from "../src/attention/briefing-words.ts";
 import type { ModelProvider, StreamRequest } from "../src/models/providers.ts";
 
@@ -67,6 +67,16 @@ describe("an away summary", () => {
     expect(entries.find((e) => e.id === "one")).toMatchObject({ title: "Title one", summary: "Summary one", isNew: false, changed: false });
     expect(entries.find((e) => e.id === "arrived")).toMatchObject({ isNew: true });
     expect(away.updates.map((u) => u.itemId)).toEqual(["arrived"]);
+  });
+
+  it("counts in its summary only what is new or changed, not the unchanged picks it keeps", () => {
+    const db = openDb(":memory:");
+    for (const [id, priority] of [["one", 90], ["two", 80], ["three", 70], ["four", 60], ["five", 50]] as Array<[string, number]>) addItem(db, id, priority);
+    addItem(db, "arrived", 20, {}, "2026-01-03T08:00:00.000Z");
+
+    const away = composeBriefing(db, { kind: "away", since: "2026-01-02T00:00:00.000Z", coverage: [] });
+
+    expect(deterministicSummary(away)).toMatch(/^1 deadline\. 1 new and 0 changed/);
   });
 });
 

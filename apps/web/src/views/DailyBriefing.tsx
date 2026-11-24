@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import type { BriefingView } from "@attache/contracts";
-import { areaState, BRIEFING_NAME, leadWords, requestedShown, settledKey, staleReadAt, todaysDaily } from "../briefing-area.ts";
+import { areaState, BRIEFING_NAME, leadWords, requestedShown, settledKey, staleReadAt, staleReadText, todaysDaily } from "../briefing-area.ts";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
 import { useSettledHeadsUps } from "../heads-up-memory.ts";
 import { paintingForDate } from "../paintings.ts";
@@ -140,7 +140,7 @@ export function DailyBriefing({ attentionOn, clock }: { attentionOn: boolean; cl
       {state === "card" && daily && <DailyCard briefing={daily} timeZone={clock.timeZone} onGotIt={() => settle(settledKey(daily))} />}
       {staleAt !== null && (
         <p className="briefing-stale" role="status" data-briefing-stale>
-          Could not check for a newer briefing; this is the one read at {clockTime(staleAt, clock.timeZone)}.{" "}
+          {staleReadText({ where: "area", showing: state === "card" || state === "folded" || !!requested, at: clockTime(staleAt, clock.timeZone) })}{" "}
           <button className="small" onClick={briefings.reload}>
             Retry
           </button>

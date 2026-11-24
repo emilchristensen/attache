@@ -49,7 +49,8 @@ test("meeting prep appears at 15 minutes, stays in the Inbox, and Open prep remo
   await (await rowAction(suggested, "Start working")).click();
   await expect(suggested.locator("[data-meeting-detail]")).toBeVisible();
   // Held under the pointer and focus, the entry keeps its place but shows the item as it is now: In progress, Continue.
-  await expect(suggested.locator(".inbox-source")).toContainText("In progress");
+  // The tag is drawn, not only present in the text.
+  await expect(suggested.locator(".inbox-source .tag", { hasText: "In progress" })).toBeVisible();
   // Its reason has ended, so the words "prep not read" are gone while it holds its place.
   await expect(suggested.locator(".inbox-source")).not.toContainText("prep not read");
   await expect(suggested.getByRole("button", { name: "Continue: Pilot handover" })).toHaveCount(1);
@@ -58,7 +59,7 @@ test("meeting prep appears at 15 minutes, stays in the Inbox, and Open prep remo
   await api(page, "POST", `/attention/${id}/decision`, { decision: "reopen" });
   await expect(suggested.locator(".inbox-source")).not.toContainText("In progress");
   await api(page, "POST", `/attention/${id}/decision`, { decision: "start" });
-  await expect(suggested.locator(".inbox-source")).toContainText("In progress");
+  await expect(suggested.locator(".inbox-source .tag", { hasText: "In progress" })).toBeVisible();
   // Once the pointer and focus leave the list, the entry whose reason has ended leaves.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.mouse.move(2, 2);

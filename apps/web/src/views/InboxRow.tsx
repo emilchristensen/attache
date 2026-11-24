@@ -272,12 +272,15 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reaso
             <span>{reason ?? text.source}</span>
             {suggested && <Tag tone="outline">Suggested now</Tag>}
             <Labels item={item} clock={clock} />
-            <span className="sr-only">, {time.label}</span>
+            {reason !== time.text && <span className="sr-only">, {time.label}</span>}
           </p>
         </div>
-        <time className="inbox-time" dateTime={time.iso} title={time.label}>
-          {time.text}
-        </time>
+        {/* An entry whose reason already says it ("Due today") does not say it twice, on screen or to a screen reader. */}
+        {reason !== time.text && (
+          <time className="inbox-time" dateTime={time.iso} title={time.label}>
+            {time.text}
+          </time>
+        )}
         <RowQuickActions item={item} actions={actions} row={{ open, openRow: () => !open && onToggle() }} />
       </div>
       {open && (

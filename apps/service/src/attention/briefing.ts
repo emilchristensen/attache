@@ -122,7 +122,9 @@ function relatedNotes(db: Db, item: AttentionItemView) {
 
 export function deterministicSummary(b: Omit<Briefing, "summary" | "deliverablePath">): string {
   const parts: string[] = [];
-  const count = (id: string) => b.sections.find((s) => s.id === id)?.items.length ?? 0;
+  // An away summary keeps entries for its unchanged lead and picks; it counts only what is new or changed.
+  const counted = (i: BriefingSection["items"][number]) => b.kind !== "away" || i.isNew || i.changed;
+  const count = (id: string) => b.sections.find((s) => s.id === id)?.items.filter(counted).length ?? 0;
   if (!b.counts.open && !b.counts.drafts && !b.counts.proposals) parts.push("Nothing needs your attention right now.");
   else {
     const bits = [

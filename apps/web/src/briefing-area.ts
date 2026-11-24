@@ -45,6 +45,16 @@ export function staleReadAt(read: { failed: boolean; answeredAt: number | null }
 }
 
 /**
+ * The quiet line for a failed re-read, in The Daily Briefing area (`area`) or under For you now (`picks`). `showing`:
+ * something from the earlier read is on screen (a briefing card, or picks among the entries), so the line can point at
+ * it; otherwise it says only since when nothing could be checked. `at` is the earlier read's clock time.
+ */
+export function staleReadText(i: { where: "area" | "picks"; showing: boolean; at: string }): string {
+  if (i.where === "area") return i.showing ? `Could not check for a newer briefing; this is the one read at ${i.at}.` : `Could not check for a briefing since ${i.at}.`;
+  return i.showing ? `Could not check the Daily Briefing again, so its picks are as read at ${i.at}.` : `Could not check the Daily Briefing since ${i.at}.`;
+}
+
+/**
  * Where an entry of the briefing page leads: a Draft waiting for review to its own page, a Proposal to Approvals, and
  * everything else to its Inbox item on Home. `sectionId` is the briefing section the entry is in, when it is in one.
  */
