@@ -40,7 +40,7 @@ pnpm build              # contracts, service bundle, Dashboard
 pnpm test               # Vitest: unit, adapter contract and HTTP integration tests
 pnpm e2e                # Playwright journeys (builds as needed)
 pnpm lint               # docs check, then ESLint
-pnpm typecheck
+pnpm typecheck          # every workspace package, then tests/e2e and playwright.config.ts
 ```
 
 Run the service against a scratch profile while developing:
