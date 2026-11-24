@@ -15,6 +15,9 @@ They add to the skill; the skill itself stays as installed.
 
 - Keep a cross-ticket decision log outside the repo (new modules, interfaces, tables, file layouts, contract fields), and point every worker at it.
   Each worker reads it first and adds its own entry.
+- Organise the log by area (service, contracts, web, e2e), not by ticket, so a worker reads only the areas its ticket touches.
+  An entry is a pointer of at most ten lines: what exists now, where, and what to reuse.
+  Field-by-field detail belongs in code comments and `docs/architecture.md`, where the log points to it; a log that every worker reads whole costs every worker its length.
 - When a worker fixes something outside its ticket, it records the fix in the log, so a parallel worker merges the same fix instead of writing a second one.
   A merger that finds two copies of one fix keeps one, with one regression test.
 - When one ticket supersedes another's helper or interface, the merger writes a superseding entry in the log naming what no longer exists.
@@ -23,4 +26,6 @@ They add to the skill; the skill itself stays as installed.
 
 - A ticket that needs a platform this machine lacks (Windows, Linux) tests on GitHub Actions: the worker pushes only its own branch and reports the passing run URL.
 - Read a failed run with `node scripts/ci-failures.mjs <run-id>`.
+- After the last ticket merges, and before the integration PR is marked ready, review where tickets meet: every guard, state machine and shared record that two or more tickets touched, checked against the operations the others added.
+  Per-ticket reviews see one side of such a seam each; this is where a guard from one ticket and an operation from another miss each other.
 - Close a ticket only when every acceptance criterion holds; one that still waits on CI or the owner stays open, with a comment naming what is left.
