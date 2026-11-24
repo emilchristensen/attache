@@ -526,13 +526,13 @@ Every Harness Connection goes through one boundary, `HarnessAdapter` (`agents/ha
 Each adapter reports MCP access, memory (`none`, `runtime-fresh`, `managed-file`) and session capture (`none`, `with-final-event`, `without-final-event`) separately, and whether a running Harness must restart before a change takes effect.
 Status is `current`, `stale`, `missing` or `failed`; uninstall reports each part it could not remove with its file.
 Pi, OpenCode and Copilot CLI record their installed locations and names in this instance's local state.
-Disconnect revokes their memory and capture before removing their configuration, so a plugin or hook already loaded in a running Harness cannot keep saving.
+Disable revokes their memory and capture before removing their configuration, so a plugin or hook already loaded in a running Harness cannot keep saving.
 Attache keeps completed snapshots already in the spool and records each break in capture so a later resume cannot import turns written while the Connection was off.
 After a pause, an unrecognised format still appears on the Connection, and Attache discards the raw copy because it could include conversation from the pause.
 The command-line uninstaller uses those recorded locations even when its environment differs from the service's.
 Claude Code, Codex, Antigravity and Claude Desktop sit behind `legacyHarnessAdapter`, which delegates to `AgentHooks` (`agents/install.ts`), so their installation is unchanged.
 The Connection flow is adapter-driven: `connectors/agent.ts` builds each Harness Connection from its adapter (`ConnectorAdapter.harness`).
-`GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disconnecting returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
+`GET /connections/:kind/harness-preview` returns every file connecting would create or change, with backups and restart, and refuses (409) a file Attache cannot parse; connecting applies, connecting again is the refresh, `ConnectionStatus.harness` carries the adapter's status, and disabling (`POST /connections/:id/disconnect`) returns the adapter's uninstall result as `harness`, keeping what remains as the Connection's last error.
 `ConnectionDefinition.harness` gives the Dashboard each capability and the restart requirement.
 An adapter with `manualSetup` (Pi) can be connected even when `detect` finds nothing, since Attache cannot see every folder the Harness installs to.
 
@@ -556,7 +556,7 @@ The hook script is loaded only when a model call needs memory, so a missing scri
 Memory follows the Agent sessions feature: while it is off the service removes the context files and the extension adds nothing.
 The file's first line starts with `// Managed by Attache: ` and its ownership line names its state folder; a file in its place without them is left alone, and a file an earlier version wrote is still recognised and upgraded.
 A running Pi needs `/reload` (or a new session) to load a change, so the adapter reports a restart.
-`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, that every model call carries the Brain's current memory after a Brain change, a compaction and a resume while the session file never contains it, that a session with a tool call, a compaction, a quit and a resume is archived as the owner's and Pi's words only, and that MCP, memory and saving are all gone after disconnecting.
+`test/integration/pi-smoke.test.ts` runs the real `pi` (skipped where it is not on PATH or in `ATTACHE_PI_EXECUTABLE`) to check that the MCP server is registered and connected, that every model call carries the Brain's current memory after a Brain change, a compaction and a resume while the session file never contains it, that a session with a tool call, a compaction, a quit and a resume is archived as the owner's and Pi's words only, and that MCP, memory and saving are all gone after disabling.
 It answers model calls from a local stand-in model the test starts, so it needs no model account.
 
 ### OpenCode
@@ -595,8 +595,8 @@ If that state is lost, Attache preserves the archive and reports that it could n
 Fully summarised sessions from other sources lose their local cache after seven quiet days.
 A cache that no longer parses is removed and logged once.
 The marker and ownership rules are Pi's (owner recognised by the `// Managed by Attache: ` prefix plus the instance line, so the MCP-only file an earlier version wrote is refreshed or removed); a running OpenCode (or OpenCode 2's background service) must restart to load a change.
-`test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disconnecting.
-It also drives a private `opencode serve` against a local stand-in model (no credentials) to check that every agent-loop call carries the Brain's current memory after a Brain change, a compaction and a resume (a new server continuing the session), that compaction requests carry none, that OpenCode's database and data folder never contain it, and that none is sent after disconnecting.
+`test/integration/opencode-smoke.test.ts` runs the real `opencode` in an isolated home (skipped where it is not on PATH or in `ATTACHE_OPENCODE_EXECUTABLE`): OpenCode 1 through `opencode mcp list`, OpenCode 2 through a private `opencode serve`, checking that the plugin is active, the MCP server connected, and both gone after disabling.
+It also drives a private `opencode serve` against a local stand-in model (no credentials) to check that every agent-loop call carries the Brain's current memory after a Brain change, a compaction and a resume (a new server continuing the session), that compaction requests carry none, that OpenCode's database and data folder never contain it, and that none is sent after disabling.
 It also checks session capture against the stand-in (which calls OpenCode's read tool on a file holding a secret and returns a compaction summary): every owner turn is archived once and in order across a compaction and a resume, and neither the archive nor the summariser's input holds tool output, the secret, memory or the summary; OpenCode exits when stopped.
 It passed against `opencode-ai` 1.19.6 and `@opencode/cli` 2.3.2 on macOS.
 
@@ -613,16 +613,16 @@ A running session must start again, or run `/mcp reload`; a repository's own `.m
 `test/integration/copilot-cli-smoke.test.ts` runs the real `copilot` in an isolated home with no GitHub sign-in.
 It runs when `copilot` is on PATH or `ATTACHE_COPILOT_EXECUTABLE` names it.
 `copilot mcp list --json` and `copilot mcp get --json` show a user server next to the owner's, and a live session starts it and saves to the Brain as Copilot CLI.
-After disconnecting, only the owner's server is listed.
+After disabling, only the owner's server is listed.
 It passed against `@github/copilot` 1.0.114 on macOS.
 Memory comes from one personal hooks file per instance, `<Copilot home>/hooks/<owner key>.json` (`{ version: 1, hooks: { sessionStart: [{ type: "command", bash, powershell, timeoutSec: 10 }] } }`), which runs `attache-agent-hook copilot-cli session-start`.
 The hook prints `{"additionalContext": "<attache-memory>…</attache-memory>"}` from the session's folder's context file (`hook-profiles.ts` `copilot-cli`), or nothing when there is no memory.
-Copilot CLI combines every file in its hooks folder, so the owner's own hooks files and other instances' are never opened; a file at Attache's path that is not this instance's (no hook command running `attache-agent-hook` with this state folder) is refused and left on disconnect.
+Copilot CLI combines every file in its hooks folder, so the owner's own hooks files and other instances' are never opened; a file at Attache's path that is not this instance's (no hook command running `attache-agent-hook` with this state folder) is refused and left when the Connection is disabled.
 Connecting also refuses a personal `settings.json` with `disableAllHooks: true`, and a Copilot CLI older than 1.0.22 (`agents/copilot-cli-version.ts`; before 1.0.11 `additionalContext` was ignored, before 1.0.22 session-start hooks ran on every prompt); a version Attache cannot read does not stop it, since Copilot CLI updates itself.
 No instruction file is written: the hook path passed the smoke test.
 Seen with 1.0.114 against a stand-in model: the memory reaches the model as a user message of its own in a new (`source: "new"`), resumed (`"resume"`, fresh memory and no old copy) and `/clear`ed session; `events.jsonl` keeps it only in the `hook.end` event's `data.output.additionalContext`, never as a `user.message`; `/compact` drops it and session-start does not run again, so a compacted session has no memory until it is cleared, resumed or started anew.
 A repository whose `.github/copilot/settings.json` sets `disableAllHooks` turns the hook off for its sessions; Attache cannot see that.
-The smoke test also runs real sessions with no GitHub sign-in through Copilot CLI's offline mode with a custom provider (`COPILOT_OFFLINE`, `COPILOT_PROVIDER_BASE_URL`) and a local stand-in model, checking the memory in new, resumed and (with python3 driving the interactive terminal) `/clear`ed sessions, that `events.jsonl` holds it only on `hook.end`, and that none reaches a session after disconnecting.
+The smoke test also runs real sessions with no GitHub sign-in through Copilot CLI's offline mode with a custom provider (`COPILOT_OFFLINE`, `COPILOT_PROVIDER_BASE_URL`) and a local stand-in model, checking the memory in new, resumed and (with python3 driving the interactive terminal) `/clear`ed sessions, that `events.jsonl` holds it only on `hook.end`, and that none reaches a session after disabling.
 A separate offline probe with 1.0.114 observed `clientInfo.name` as `copilot-cli`, which Attache maps to Copilot CLI in `mcp/harness.ts`.
 
 Session capture adds `agentStop` (`turn-end`), `preCompact` (`pre-compact`) and `sessionEnd` (`session-end`) command hooks to the same hooks file (`hook-profiles.ts` `COPILOT_HOOK_EVENTS`); each copies the session's `events.jsonl` into the spool like the other hook Harnesses' transcripts.
