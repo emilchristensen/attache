@@ -120,6 +120,21 @@ _Avoid_: Disconnect
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
 The Harness is the application; the agent is what runs in it.
 
+### Keeping Attache current
+
+**Update**:
+A newer release of Attache that a Machine can install.
+_Avoid_: Upgrade, patch, new build
+
+**Automatic updates**:
+How a Machine handles Updates: install them on its own, ask the owner before installing, or never look for them.
+_Avoid_: Auto-upgrade, auto-install
+
+**Update channel**:
+Which releases a Machine takes Updates from: Stable, or Beta, which also takes each Stable release that is newer.
+A Machine never moves to an older version, so switching from Beta to Stable waits until Stable passes it.
+_Avoid_: Track, ring, prerelease
+
 ### Keeping the Brain true
 
 **Proposal**:
