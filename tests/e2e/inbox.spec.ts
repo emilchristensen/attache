@@ -6,7 +6,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames } from "./browser.ts";
 import { inboxRow, inboxType, inboxView, openRow, typeChoices } from "./inbox.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
@@ -284,7 +284,6 @@ async function itemId(page: Page, titleEnd: string): Promise<string> {
   return items.find((i) => i.title.endsWith(titleEnd))!.id;
 }
 
-const nextFrame = (page: Page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
 test("decided rows: a refresh that lands while the decision is sent keeps the receipt and its Undo", async () => {
   const page = await journeys.open("/");
@@ -313,7 +312,7 @@ test("decided rows: a refresh that lands while the decision is sent keeps the re
     await expect(row).toHaveAttribute("data-decided", "dismiss");
     // The answer after the decision leaves the item out; the receipt and Undo stay in its place.
     await after;
-    await nextFrame(page);
+    await nextFrames(page);
     await expect(row).toHaveAttribute("data-decided", "dismiss");
     await row.getByRole("button", { name: "Undo" }).click();
     await expect(row).not.toHaveAttribute("data-decided");
@@ -364,7 +363,7 @@ test("decided rows: an older answer Home publishes after a failed reload keeps t
     await expect(page.getByRole("alert").filter({ hasText: "busy" })).toBeVisible();
     // The older answer is published once the other dismissed row has left the list.
     await expect(inboxRow(page, "Prepare release note 22")).toHaveCount(0);
-    await nextFrame(page);
+    await nextFrames(page);
     await expect(row).toHaveAttribute("data-decided", "dismiss");
     await expect(row.getByRole("button", { name: "Undo" })).toBeVisible();
     await page.unrouteAll({ behavior: "ignoreErrors" });

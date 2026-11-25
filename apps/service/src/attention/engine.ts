@@ -287,10 +287,14 @@ export function passTime(db: Db, now: string): string[] {
   return rederive(db, due, now);
 }
 
-/** The soonest end, after `now`, of a meeting whose prep item has not been resolved; null when there is none. */
-export function nextMeetingEnd(db: Db, now: string): Date | null {
+/**
+ * The soonest end of a meeting whose prep item has not been resolved; null when there is none. An end already past
+ * counts: its item is waiting for `passTime`, which happens when a timer runs a moment before the wall clock reaches
+ * the end and the end passes before the next run is planned.
+ */
+export function nextMeetingEnd(db: Db): Date | null {
   const rows = db.prepare("select meeting from attention_items where meeting is not null and state != 'resolved'").all() as Array<{ meeting: string }>;
-  const ends = rows.map((r) => Date.parse(json<{ end?: string }>(r.meeting, {}).end ?? "")).filter((t) => Number.isFinite(t) && t > Date.parse(now));
+  const ends = rows.map((r) => Date.parse(json<{ end?: string }>(r.meeting, {}).end ?? "")).filter((t) => Number.isFinite(t));
   return ends.length ? new Date(Math.min(...ends)) : null;
 }
 

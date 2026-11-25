@@ -118,4 +118,30 @@ describe("the calendar Connection's meeting prep window", () => {
     await moveTo(end);
     expect((await meetingItem(undefined, "gcal:standup"))!.state).toBe("resolved");
   });
+
+  it("resolves a meeting at its end when housekeeping's timer runs a moment early and the end passes while it runs", async () => {
+    const now = clock.now().getTime();
+    const end = now + 5_000;
+    scenario.gcal.events = [
+      ...scenario.gcal.events,
+      {
+        id: "sync",
+        summary: "Billing sync",
+        start: { dateTime: new Date(now - 10 * MINUTE).toISOString() },
+        end: { dateTime: new Date(end).toISOString() },
+        attendees: [{ email: "alex@example.com", self: true, responseStatus: "accepted" }, { email: "nora@client.example", displayName: "Nora Lind", responseStatus: "accepted" }],
+      },
+    ];
+    await refresh();
+    expect((await meetingItem(undefined, "gcal:sync"))!.state).toBe("open");
+    // As on Windows CI: the timer set for the end runs while the wall clock is still short of it, so that run finds
+    // nothing ended, and the end has passed by the time it works out when to run next.
+    clock.skewTimers({ leadMs: 2, readStepMs: 1 });
+    try {
+      await moveTo(end + 1_000);
+    } finally {
+      clock.skewTimers({ leadMs: 0, readStepMs: 0 });
+    }
+    expect((await meetingItem(undefined, "gcal:sync"))!.state).toBe("resolved");
+  });
 });

@@ -288,6 +288,44 @@ test("skip link: the first Tab offers Skip to content, which moves focus to the 
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
+/** The font files Chrome drew `selector`'s text with, by family, as DevTools names them. */
+async function renderedFamilies(page: Page, selector: string): Promise<string[]> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send("DOM.enable");
+    await cdp.send("CSS.enable");
+    const { root } = await cdp.send("DOM.getDocument");
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector });
+    const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+    return fonts.map((f) => f.familyName);
+  } finally {
+    await cdp.detach();
+  }
+}
+
+test("type: serif headings are drawn in Georgia, by the bundled Gelasio on Linux, so they lay out as on macOS and Windows", async () => {
+  const page = await journeys.open("/jobs");
+  await expect(page.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  // Linux has no Georgia: the e2e fontconfig (tests/e2e/fonts/fonts.conf) maps it to Gelasio, which has Georgia's metrics.
+  const linux = process.platform === "linux";
+  expect(await renderedFamilies(page, "h1"), "the page title's font").toEqual([linux ? "Gelasio" : "Georgia"]);
+  // Layout sees the same widths: the heading's own font as "Georgia" and as "Gelasio", against a family no computer has.
+  const widths = await page.locator("h1").evaluate((h1) => {
+    const style = getComputedStyle(h1);
+    const context = document.createElement("canvas").getContext("2d")!;
+    const width = (family: string) => {
+      context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${family}`;
+      return context.measureText("Hamburgefonstiv Quizzical Jobs 0123").width;
+    };
+    return { serif: style.fontFamily, heading: width(style.fontFamily), georgia: width("Georgia"), gelasio: width("Gelasio"), missing: width('"Attache No Such Font"') };
+  });
+  expect(widths.serif, "headings use --serif").toMatch(/^Georgia,/);
+  expect(widths.heading, "the heading measures as Georgia").toBe(widths.georgia);
+  expect(widths.georgia, "Georgia is a real face, not a fallback").not.toBe(widths.missing);
+  if (linux) expect(widths.georgia, "Georgia measures as Gelasio").toBe(widths.gelasio);
+});
+
 test("routes: Home, Approvals and Brain live at their new addresses, and the old Memory and Drafts routes are gone", async () => {
   const page = await journeys.open("/brain");
   await expect(page.getByRole("heading", { level: 1, name: "Brain" })).toBeVisible();

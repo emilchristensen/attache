@@ -4,7 +4,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 import type { ConnectionStatus } from "../../packages/contracts/src/features.ts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { SELF, setCalendar } from "./meetings.ts";
 
@@ -146,7 +146,7 @@ test("at 375px the fixing action stays visible and secondary choices use one men
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.waitForTimeout(200);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/${scheme}-connection-banner-narrow.png` });
   }
 });
@@ -181,7 +181,7 @@ test("a screen reader hears each new issue once: the shell's live region is ther
   let answered = asked();
   await api(page, "PATCH", "/config", { schedules: { refreshEveryMinutes: 30, briefingAt: "08:00", briefingEnabled: false } });
   await answered;
-  await page.waitForTimeout(300);
+  await nextFrames(page);
   expect(await announced()).toEqual({ texts: [expect.stringMatching(/^GitHub · Sign-in needed/)], before: true });
   // A new issue is heard once.
   signedOut = "gcal";
@@ -214,7 +214,7 @@ test("a failure that lasts only a moment never raises the banner; one that lasts
   await page.reload();
   await recovered;
   await expect(page.locator(".masthead-nav").getByRole("link", { name: "Connections" }).locator(".connection-healthy-dot")).toBeVisible();
-  await page.waitForTimeout(500);
+  await nextFrames(page);
   expect(await bannerStates()).toEqual([]);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 

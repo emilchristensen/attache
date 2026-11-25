@@ -6,7 +6,7 @@
  * service's own end of it.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 import { rowAction } from "./inbox.ts";
@@ -63,13 +63,12 @@ async function advanceTo(page: Page, at: number): Promise<void> {
   await page.clock.fastForward(Math.max(0, Math.round(at - now)));
 }
 
-const settle = (page: Page) => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
 
 /** Captures the page as it is, light and dark, for the visual review. */
 async function shoot(page: Page, name: string): Promise<void> {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await settle(page);
+    await nextFrames(page);
     await page.screenshot({ path: `test-results/screens/${scheme}-${name}.png` });
   }
   await page.emulateMedia({ colorScheme: null });
@@ -125,7 +124,7 @@ test("back to back: each prep comes 15 minutes before its meeting, the next one 
   await start.focus();
   const at = (await start.boundingBox())!.y;
   await advanceTo(page, ends - 15 * MINUTE + 1_000);
-  await settle(page);
+  await nextFrames(page);
   const second = meetingHeadsUp(page, "Billing triage");
   await expect(second).toHaveCount(0);
   await expect(start).toBeFocused();
@@ -157,10 +156,11 @@ test("back to back: each prep comes 15 minutes before its meeting, the next one 
   await expectCount(page, base, 0);
 
   // The first meeting really ends, half a minute past the minute. The browser's clock stands still two seconds before
-  // while the service's catches up, then runs past the end: the prep leaves For you now and the Inbox at that instant,
-  // and once the service has ended the item it counts no more.
+  // while the service's catches up and resolves its item, then runs past the end: the prep leaves For you now and the
+  // Inbox at that instant, and once the Dashboard has heard of the end the item counts no more.
   await page.clock.pauseAt(ends - 2_000);
-  await page.waitForTimeout(Math.max(0, ends + 1_000 - Date.now()));
+  const resolved = async () => (await api<{ items: Array<{ key: string }> }>(page, "GET", "/attention?state=resolved")).items.map((i) => i.key);
+  await expect.poll(resolved, { timeout: Math.max(0, ends - Date.now()) + 30_000 }).toContain("gcal:handover");
   await page.clock.runFor(3_000);
   await page.clock.resume();
   await expect(first).toHaveCount(0);

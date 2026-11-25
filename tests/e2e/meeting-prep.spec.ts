@@ -5,7 +5,7 @@
  * the meeting prep items with their start, end and Meet link, and For you now lists them on the real clock.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames, settled } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
 import { openRow, rowAction } from "./inbox.ts";
@@ -294,7 +294,7 @@ test("insertion on a phone: prep arriving in For you now above the Inbox keeps t
       { id: `soon-${safari}`, summary: `${safari ? "Vendor" : "Partner"} sync`, start: 10, end: 40 },
     ]);
     await expect(meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync`)).toHaveCount(1);
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    await nextFrames(page);
     expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
     await page.close();
   }
@@ -329,11 +329,11 @@ test("captures: overlapping meetings and an open prep, light, dark and narrow", 
     for (const scheme of ["light", "dark"] as const) {
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.emulateMedia({ colorScheme: scheme });
-      await page.waitForTimeout(400);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${scheme}-home-meetings${name}.png` });
     }
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.waitForTimeout(400);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-home-meetings${name}.png` });
   };
   await shoot("");

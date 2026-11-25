@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { connection, connectionToggle, openConnection } from "./connections.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
@@ -248,12 +248,12 @@ test("captures: the page in light, dark and narrow, with a row open and with a s
   const shoot = async (name: string) => {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.waitForTimeout(250);
+      await settled(page);
       await page.screenshot({ path: `test-results/screens/${scheme}-connections-${name}.png` });
     }
     await page.emulateMedia({ colorScheme: "light" });
     await page.setViewportSize({ width: 375, height: 812 });
-    await page.waitForTimeout(250);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-connections-${name}.png` });
     await page.setViewportSize({ width: 1360, height: 900 });
   };

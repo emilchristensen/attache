@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { win32 } from "node:path";
 import type { Env } from "./locations.ts";
 import { launchTool } from "./launch.ts";
-import { run } from "./run.ts";
+import { run, spawnFailure } from "./run.ts";
 
 /**
  * Windows PowerShell 5.1, which every Windows 10 and 11 installation has, so
@@ -102,11 +102,11 @@ export function runPowerShellSync(script: string, request: PowerShellRequest, op
     return { ok: false, why: (e as Error).message };
   }
   const r = spawnSync(launch.command, launch.args, { encoding: "utf8", input: asciiJson(request), timeout: opts.timeoutMs, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-  const code = (r.error as NodeJS.ErrnoException | undefined)?.code;
+  const failure = spawnFailure(r);
   return interpret({
     stdout: r.stdout ?? "",
     stderr: r.stderr ?? "",
     code: r.status,
-    ...(code === "ETIMEDOUT" ? { timedOutAfterMs: opts.timeoutMs } : r.error ? { error: r.error.message } : {}),
+    ...(failure?.code === "ETIMEDOUT" ? { timedOutAfterMs: opts.timeoutMs } : failure ? { error: failure.message } : {}),
   });
 }

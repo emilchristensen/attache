@@ -5,7 +5,7 @@
  * and the TEST-ONLY fixtures, with two overlapping meetings on the fixture calendar and a mixed Connections answer.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { meetingHeadsUp, openPrep, SELF, setCalendar } from "./meetings.ts";
 import { openRecentlyAdded, openRow } from "./inbox.ts";
@@ -210,16 +210,16 @@ test("captures: Home's meeting prep and Connections rows on a phone, light and d
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize(PHONE);
     await page.locator(".page").evaluate((el) => el.scrollTo(0, 0));
-    await page.waitForTimeout(300);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-${scheme}-home-targets.png` });
     await connections(page).evaluate((el) => el.scrollIntoView({ block: "start" }));
-    await page.waitForTimeout(300);
+    await settled(page);
     await page.screenshot({ path: `test-results/screens/narrow-${scheme}-home-targets-connections.png` });
   }
   await page.emulateMedia({ colorScheme: null });
   await page.setViewportSize({ width: 320, height: PHONE.height });
   await page.locator(".page").evaluate((el) => el.scrollTo(0, 0));
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.screenshot({ path: "test-results/screens/narrow-320-home-targets.png" });
   await page.setViewportSize(PHONE);
 });

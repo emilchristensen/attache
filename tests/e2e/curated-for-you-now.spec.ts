@@ -4,7 +4,7 @@
  * Briefing's picks when it could not be read. It sets itself up through the API, so it runs on its own.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, nextFrames } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 import { setCalendar as setFixtureCalendar, type Meeting } from "./meetings.ts";
 import { rowAction } from "./inbox.ts";
@@ -79,7 +79,7 @@ test("Done from an entry leaves one line with Undo in its place; the list holds 
   await expect(first).toBeVisible();
   const before = await first.getAttribute("data-item-id");
   await first.getByRole("button").first().focus();
-  await page.waitForTimeout(250);
+  await nextFrames(page);
   await expect(first).toHaveAttribute("data-item-id", before!);
   await (await rowAction(first, "Done")).click();
   const line = forYou(page).locator(`[data-item-id="${before}"][data-decided="done"]`);

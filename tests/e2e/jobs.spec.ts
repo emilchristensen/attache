@@ -5,7 +5,7 @@
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { JobView } from "@attache/contracts";
-import { api, JourneyBrowser } from "./browser.ts";
+import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -20,7 +20,7 @@ async function createJob(page: Page, body: Record<string, unknown>): Promise<Job
   return (await api<{ job: JobView }>(page, "POST", "/jobs", body)).job;
 }
 
-async function settled(page: Page, id: string, status: JobView["status"]): Promise<void> {
+async function jobReaches(page: Page, id: string, status: JobView["status"]): Promise<void> {
   await expect.poll(async () => (await api<{ job: JobView }>(page, "GET", `/jobs/${id}`)).job.status, { timeout: 30_000 }).toBe(status);
 }
 
@@ -51,13 +51,13 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/setup/identity", { name: "Test User", email: "alex@example.com", confirm: true });
   await api(page, "POST", "/setup/complete");
   research = await createJob(page, { kind: "research", input: { question: "What is the state of the Orion migration?" } });
-  await settled(page, research.id, "succeeded");
+  await jobReaches(page, research.id, "succeeded");
   failed = await createJob(page, { kind: "demo-long", title: "Diagnostics: a failing run", input: { steps: 1, stepMs: 10, failUntilAttempt: 1, maxAttempts: 1 } });
-  await settled(page, failed.id, "failed");
+  await jobReaches(page, failed.id, "failed");
   blocked = await createJob(page, { kind: "draft", title: "Draft for a removed item", input: { attentionItemId: "removed-item" } });
-  await settled(page, blocked.id, "blocked");
+  await jobReaches(page, blocked.id, "blocked");
   running = await createJob(page, LONG);
-  await settled(page, running.id, "running");
+  await jobReaches(page, running.id, "running");
   await page.close();
 });
 
@@ -149,7 +149,7 @@ test("jobs: Cancel says the job had already finished when the request arrives af
   await expect(detail(page)).toHaveAttribute("data-status", "running");
   // Hold the cancel request until the work has finished, as a slow network would.
   await page.route(`**/api/v1/jobs/${short.id}/cancel`, async (route) => {
-    await settled(page, short.id, "succeeded");
+    await jobReaches(page, short.id, "succeeded");
     await route.continue();
   });
   await detail(page).getByRole("button", { name: "Cancel" }).click();
@@ -198,18 +198,18 @@ test("jobs captures: the table with every state, a failure open, light, dark and
   const page = await journeys.open("/jobs");
   const shots = "test-results/screens";
   const long = await createJob(page, LONG);
-  await settled(page, long.id, "running");
+  await jobReaches(page, long.id, "running");
   for (const [scheme, viewport] of [["light", { width: 1280, height: 800 }], ["dark", { width: 1280, height: 800 }], ["narrow", { width: 390, height: 844 }]] as const) {
     await page.emulateMedia({ colorScheme: scheme === "dark" ? "dark" : "light" });
     await page.setViewportSize(viewport);
     await page.goto(`${stack.url}/jobs`);
     await expect(detail(page)).toHaveAttribute("data-job-id", long.id);
-    await page.waitForTimeout(400);
+    await settled(page);
     await page.screenshot({ path: `${shots}/${scheme}-jobs-table.png` });
     await page.goto(`${stack.url}/jobs?id=${blocked.id}`);
     await expect(detail(page)).toHaveAttribute("data-status", "blocked");
     await detail(page).scrollIntoViewIfNeeded();
-    await page.waitForTimeout(400);
+    await settled(page);
     await page.screenshot({ path: `${shots}/${scheme}-jobs-blocked.png` });
   }
   await api(page, "POST", `/jobs/${long.id}/cancel`);
@@ -257,7 +257,7 @@ test("jobs: Cancel says the job was already cancelled when an earlier cancel sto
   await other.goto(`${stack.url}/jobs`);
   await page.route(`**/api/v1/jobs/${long.id}/cancel`, async (route) => {
     await api(other, "POST", `/jobs/${long.id}/cancel`);
-    await settled(other, long.id, "cancelled");
+    await jobReaches(other, long.id, "cancelled");
     await route.continue();
   });
   await detail(page).getByRole("button", { name: "Cancel" }).click();

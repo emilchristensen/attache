@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Env } from "../locations.ts";
-import { launchTool } from "../launch.ts";
+import { runSync } from "../run.ts";
 import { locateTool } from "../tools.ts";
 import { FileSecretStore } from "./file.ts";
 import { secretServiceBackend } from "./secret-service.ts";
@@ -24,12 +23,10 @@ const STORE_TIMEOUT_MS = 30_000;
 const READ_TIMEOUT_MS = 10_000;
 
 function secretTool(tool: string, args: string[], opts: { input?: string; timeoutMs: number }) {
-  const launch = launchTool(tool, args);
-  const r = spawnSync(launch.command, launch.args, { encoding: "utf8", input: opts.input ?? "", timeout: opts.timeoutMs, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-  const stderr = (r.stderr ?? "").trim().split("\n")[0] ?? "";
-  if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") return { ok: false, stdout: "", why: `the Secret Service did not answer within ${opts.timeoutMs / 1000} seconds` };
-  if (r.error) return { ok: false, stdout: "", why: r.error.message };
-  return { ok: r.status === 0, stdout: r.stdout ?? "", why: stderr || `secret-tool exited with ${r.status ?? r.signal}` };
+  const r = runSync(tool, args, { input: opts.input ?? "", timeoutMs: opts.timeoutMs });
+  if (r.timedOut) return { ok: false, stdout: "", why: `the Secret Service did not answer within ${opts.timeoutMs / 1000} seconds` };
+  const stderr = r.stderr.trim().split("\n")[0] ?? "";
+  return { ok: r.code === 0, stdout: r.stdout, why: stderr || `secret-tool exited with ${r.code}` };
 }
 
 /**
