@@ -8,6 +8,11 @@ const RENAME_MESSAGE = "Replace files with replaceWith() from apps/service/src/p
 const WAIT_FOR_TIMEOUT_MESSAGE =
   "Wait for what the journey needs, not for a fixed time: a web-first assertion (expect(locator).toBeVisible(), toHaveText(), toHaveCount()), expect.poll(), page.waitForResponse() or dashboardAnswer(), page.waitForFunction(), settled() or nextFrames() from tests/e2e/browser.ts before a capture or a measurement, or the browser clock (page.clock) when the app waits for time to pass.";
 
+const EM_DASH_MESSAGE = "Write a plain dash (-) or two sentences: text the owner reads or a model is prompted with carries no em dash.";
+/** Strings, template text and JSX text with an em dash: what the Dashboard shows and what a briefing prompt says. */
+const emDash = () => ["Literal[value=/\u2014/]", "TemplateElement[value.raw=/\u2014/]", "JSXText[value=/\u2014/]"].map((selector) => ({ selector, message: EM_DASH_MESSAGE }));
+const CHILD_PROCESS_IMPORT = { selector: "ImportExpression[source.value=/^(node:)?child_process$/]", message: CHILD_PROCESS_MESSAGE };
+
 /** Service code starts no process itself; a type import (e.g. ChildProcess) starts nothing. */
 const processModules = () => ["node:child_process", "child_process"].map((name) => ({ name, message: CHILD_PROCESS_MESSAGE, allowTypeImports: true }));
 
@@ -38,8 +43,17 @@ export default tseslint.config(
     ignores: ["apps/service/src/platform/**"],
     rules: {
       "@typescript-eslint/no-restricted-imports": ["error", { paths: [...processModules(), ...fileRenames()] }],
-      "no-restricted-syntax": ["error", { selector: "ImportExpression[source.value=/^(node:)?child_process$/]", message: CHILD_PROCESS_MESSAGE }],
+      "no-restricted-syntax": ["error", CHILD_PROCESS_IMPORT],
     },
+  },
+  {
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", ...emDash()] },
+  },
+  {
+    // A later block's no-restricted-syntax replaces an earlier one's, so the briefing's prompts repeat the import rule.
+    files: ["apps/service/src/attention/**/*.ts"],
+    rules: { "no-restricted-syntax": ["error", CHILD_PROCESS_IMPORT, ...emDash()] },
   },
   {
     files: ["**/test/**", "tests/**", "scripts/**", "**/*.mjs"],

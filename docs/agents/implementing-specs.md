@@ -10,6 +10,7 @@ They add to the skill; the skill itself stays as installed.
 - Write every merge message with `-m` (`Merge #<n>: <ticket title>` plus the co-author line), so it carries no `# Conflicts:` lines.
 - Merge finished tickets in batches, ordered by how many tickets each one unblocks.
   Run lint, typecheck and Vitest after each merge, and the e2e suite once per batch.
+- Merge `origin/main` into the integration branch after each batch and before each review round, so main's new checks reach the work in progress and conflicts stay small.
 
 ## Briefing workers
 
@@ -26,6 +27,7 @@ They add to the skill; the skill itself stays as installed.
 
 - A ticket that needs a platform this machine lacks (Windows, Linux) tests on GitHub Actions: the worker pushes only its own branch and reports the passing run URL.
 - Read a failed run with `node scripts/ci-failures.mjs <run-id>`.
+  For a failed journey, read what the page asked and heard with `node scripts/trace-requests.mjs <trace.zip> [path filter]` (the trace is in the job's uploaded results).
 - After the last ticket merges, and before the integration PR is marked ready, review where tickets meet: every guard, state machine and shared record that two or more tickets touched, checked against the operations the others added.
   Per-ticket reviews see one side of such a seam each; this is where a guard from one ticket and an operation from another miss each other.
 - Close a ticket only when every acceptance criterion holds; one that still waits on CI or the owner stays open, with a comment naming what is left.

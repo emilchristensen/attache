@@ -1,7 +1,7 @@
 # The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
 # on macOS, Linux and Windows on the minimum supported Node (engines.node in package.json),
 # on Linux also on the current Node release, and the install test on Linux and Windows.
-# `checks (<os>)`, the jobs on the minimum Node, are the required status checks on `main`.
+# `checks (<os>)` and `journeys (<os>)`, the jobs on the minimum Node, are the required status checks on `main`.
 #
 # The jobs split by event, so a branch with a pull request runs each job once:
 # - every push runs the Linux jobs;
@@ -40,53 +40,39 @@ jobs:
           - { os: macos-latest, node: current }
           - { os: windows-latest, node: current }
     runs-on: ${{ matrix.os }}
-    # A healthy Windows run takes 26 to 29 minutes (unit tests 8 to 13, journeys 13 to 15), so the limit leaves room
-    # for a slow runner and still stops a hung job.
-    timeout-minutes: 45
+    # A healthy Windows run takes about 16 minutes (unit tests 8 to 13), so the limit leaves room for a slow runner.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
-      # Read with the runner's own Node, before setup-node.
-      - name: Minimum supported Node
-        id: minimum
-        run: node scripts/node-minimum.mjs
-
-      # The current release is the newest stable Node: `*` with check-latest, because the `current` alias
-      # takes the first version nodejs.org lists, which can be an alpha, and `*` alone takes the runner's cached one.
-      - uses: actions/setup-node@v4
+      - name: Set up the workspace
+        id: setup
+        uses: ./.github/actions/setup
         with:
-          node-version: ${{ matrix.node == 'minimum' && steps.minimum.outputs.version || '*' }}
-          check-latest: ${{ matrix.node == 'current' }}
-          cache: pnpm
-
-      - name: Install dependencies
-        id: install
-        run: pnpm install --frozen-lockfile
+          node: ${{ matrix.node }}
 
       # Each check runs even when an earlier one failed, so one run shows every failure.
       - name: Lint
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm lint --max-warnings 0
 
       - name: Typecheck
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm typecheck
 
       - name: Unit and integration tests
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: pnpm test
 
       # The Linux secret store and notifications against GNOME Keyring and dunst in a throwaway desktop session.
       - name: Linux desktop session tests
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Linux' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && runner.os == 'Linux' }}
         # A mirror outage must fail this step, not hang the job until its own timeout.
         timeout-minutes: 10
         env:
           ATTACHE_TEST_REAL_DESKTOP: "1"
         # apt-get runs under its own time limit: the step's limit stops the shell but not a sudo apt-get,
-        # which then holds the package lock and fails the Google Chrome step after it.
+        # which then holds the package lock and fails the next apt-get or Chrome install on this runner.
         run: |
           sudo timeout 3m apt-get -o Acquire::Retries=3 update
           sudo timeout 5m apt-get -o Acquire::Retries=3 install -y --no-install-recommends dbus dbus-x11 gnome-keyring libsecret-tools libnotify-bin dunst xvfb xauth
@@ -94,21 +80,11 @@ jobs:
 
       # The Windows secret store and notifications against Credential Manager and Windows notifications.
       - name: Windows desktop tests
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && runner.os == 'Windows' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && runner.os == 'Windows' }}
         timeout-minutes: 10
         env:
           ATTACHE_TEST_REAL_DESKTOP: "1"
         run: pnpm vitest run apps/service/test/windows-desktop-real.test.ts
-
-      # The journeys use the installed Google Chrome channel (playwright.config.ts).
-      - name: Google Chrome
-        id: chrome
-        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npx playwright install chrome
-
-      - name: Browser journeys
-        if: ${{ !cancelled() && steps.chrome.outcome == 'success' }}
-        run: pnpm e2e
 
       # The logs the test services wrote in their temporary state folders.
       - name: Collect service logs
@@ -120,6 +96,50 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}-node-${{ matrix.node }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The browser journeys in their own job, beside `checks` on the same machines, so neither job runs near its limit.
+  journeys:
+    name: ${{ matrix.node == 'minimum' && format('journeys ({0})', matrix.os) || format('journeys ({0}, current Node)', matrix.os) }}
+    if: ${{ !github.event.pull_request.draft }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'push' || github.event_name == 'schedule') && '["ubuntu-latest"]' || github.event_name == 'pull_request' && '["macos-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        node: [minimum, current]
+        exclude:
+          - { os: macos-latest, node: current }
+          - { os: windows-latest, node: current }
+    runs-on: ${{ matrix.os }}
+    # A healthy Windows run takes about 19 minutes (the journeys 13 to 15), so the limit leaves room for a slow runner.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
+        with:
+          node: ${{ matrix.node }}
+
+      # The journeys use the installed Google Chrome channel (playwright.config.ts).
+      - name: Google Chrome
+        run: npx playwright install chrome
+
+      - name: Browser journeys
+        run: pnpm e2e
+
+      # The logs the test services wrote in their temporary state folders.
+      - name: Collect service logs
+        if: failure()
+        run: node scripts/collect-service-logs.mjs
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeys-results-${{ matrix.os }}-node-${{ matrix.node }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
@@ -138,19 +158,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
-      - name: Minimum supported Node
-        id: minimum
-        run: node scripts/node-minimum.mjs
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ steps.minimum.outputs.version }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
 
       # The test opens the installer's pairing link in the installed Google Chrome channel.
       - name: Google Chrome

@@ -5,7 +5,7 @@
 const MAX_FAILURES = 8;
 
 function stepLines(job, step) {
-  const lines = [`${job.name}: ${step.name} failed`];
+  const lines = [`${job.name}: ${step.name} ${job.stopped ? "cancelled" : "failed"}`];
   for (const f of step.failures.slice(0, MAX_FAILURES)) lines.push(`  ${f.test}`, ...f.errors.map((e) => `    ${e}`));
   if (step.failures.length > MAX_FAILURES) lines.push(`  … and ${step.failures.length - MAX_FAILURES} more`);
   lines.push(...step.output.map((o) => `    ${o}`));
@@ -13,8 +13,9 @@ function stepLines(job, step) {
 }
 
 function jobLines(job) {
-  if (!job.steps.length) return [`${job.name}: ${job.conclusion}, but no step failed`, ""];
-  return job.steps.flatMap((step) => [...stepLines(job, step), ""]);
+  const stopped = job.stopped ? [`${job.name}: ${job.stopped}`] : [];
+  if (!job.steps.length) return [...(stopped.length ? stopped : [`${job.name}: ${job.conclusion}, but no step failed`]), ""];
+  return [...stopped, ...job.steps.flatMap((step) => [...stepLines(job, step), ""])];
 }
 
 /**

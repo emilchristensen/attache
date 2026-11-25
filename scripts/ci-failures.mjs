@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * What failed in a GitHub Actions run, in a few lines per job: the failed step, the failing tests
- * and their first error lines, or why a job never started (billing, cancelled).
+ * and their first error lines, why GitHub stopped a job (its time limit, a newer run), or why a job
+ * never started (billing, cancelled).
  * Uses the GitHub CLI (`gh`), signed in to an account that can read the repository.
  * Usage: node scripts/ci-failures.mjs <run-id|run-url>
  */
@@ -15,7 +16,7 @@ const NOT_FAILED = new Set(["success", "skipped", "neutral"]);
 function summarize(repo, job) {
   if (!job.steps.length) return summarizeJob({ job, log: "", annotations: fetchAnnotations(repo, job.databaseId) });
   try {
-    return summarizeJob({ job, log: fetchJobLog(repo, job.databaseId), annotations: [] });
+    return summarizeJob({ job, log: fetchJobLog(repo, job.databaseId), annotations: fetchAnnotations(repo, job.databaseId) });
   } catch (e) {
     const summary = summarizeJob({ job, log: "", annotations: [] });
     return { ...summary, steps: summary.steps.map((s) => ({ ...s, output: [`(no log: ${e.message})`] })) };

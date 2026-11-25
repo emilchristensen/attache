@@ -225,6 +225,29 @@ describe("summarizeJob", () => {
     expect(summarizeJob({ job, log, annotations: [] }).steps[0].output[0]).toBe("Process completed with exit code 124: a command hit its `timeout` limit.");
   });
 
+  it("says a job was stopped at its time limit, after how long and in which step, with that step's last lines", () => {
+    const steps = checksSteps([], ["Upload test results"]).map((s) => (s.name === "Browser journeys" ? { ...s, conclusion: "cancelled" } : s));
+    const job = { name: "checks (windows-latest)", conclusion: "cancelled", status: "completed", startedAt: "2026-11-24T15:45:26Z", completedAt: "2026-11-24T16:15:37Z", steps };
+    const annotations = [
+      { annotation_level: "failure", message: "The job has exceeded the maximum execution time of 30m0s" },
+      { annotation_level: "failure", message: "The operation was canceled." },
+    ];
+    const log = checksLog({ e2e: ["  ✓  73 tests/e2e/home-days.spec.ts:94:1 › arrangement (777ms)", "##[error]The operation was canceled."] });
+
+    const summary = summarizeJob({ job, log, annotations });
+    expect(summary.stopped).toBe("stopped at its 30m0s time limit after 30 min, during Browser journeys");
+    expect(summary.steps.map((s) => s.name)).toEqual(["Browser journeys"]);
+    expect(summary.steps[0].output).toContain("  ✓  73 tests/e2e/home-days.spec.ts:94:1 › arrangement (777ms)");
+  });
+
+  it("says a cancelled job was replaced by a newer run, with no step to read", () => {
+    const steps = checksSteps([], ["Browser journeys", "Upload test results"]).map((s) => (s.name === "Unit and integration tests" ? { ...s, conclusion: "cancelled" } : s));
+    const job = { name: "checks (macos-latest)", conclusion: "cancelled", status: "completed", steps };
+    const annotations = [{ annotation_level: "failure", message: "Canceling since a higher priority waiting request for ci-pull_request-refs/pull/118/merge exists" }];
+
+    expect(summarizeJob({ job, log: checksLog({}), annotations })).toEqual({ name: "checks (macos-latest)", conclusion: "cancelled", stopped: "cancelled: a newer run for the same branch replaced it", steps: [] });
+  });
+
   it("says why a job never started, from its annotations", () => {
     const job = { name: "checks (macos-latest)", conclusion: "failure", status: "completed", steps: [] };
     const annotations = [
@@ -306,6 +329,22 @@ describe("formatRun", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  it("prints why a job was stopped before the step it was stopped in", () => {
+    const text = formatRun(run, [
+      { name: "checks (windows-latest)", conclusion: "cancelled", stopped: "stopped at its 30m0s time limit after 30 min, during Browser journeys", steps: [{ name: "Browser journeys", failures: [], output: ["✓ a journey"] }] },
+      { name: "checks (macos-latest)", conclusion: "cancelled", stopped: "cancelled: a newer run for the same branch replaced it", steps: [] },
+    ]);
+
+    expect(text.split("\n").slice(3)).toEqual([
+      "checks (windows-latest): stopped at its 30m0s time limit after 30 min, during Browser journeys",
+      "checks (windows-latest): Browser journeys cancelled",
+      "    ✓ a journey",
+      "",
+      "checks (macos-latest): cancelled: a newer run for the same branch replaced it",
+      "",
+    ]);
   });
 
   it("says so when no job failed", () => {
