@@ -183,8 +183,8 @@ Artifacts are unsigned; notarisation is an external step (see the acceptance rep
 ## Install test
 
 `node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source.
-It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
-It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Attache as it was.
+It then installs, reinstalls, installs a newer release over the old one, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
+It checks that the service starts at login and comes back after a crash, that hooks keep working across the newer release's install, and that uninstall leaves every file the owner had before Attache as it was.
 What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
 The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
 On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.

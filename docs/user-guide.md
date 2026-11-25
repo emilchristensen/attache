@@ -57,12 +57,12 @@ The service stops when you log off, and starts again at your next logon.
 Task Scheduler → Task Scheduler Library → `Attache` shows the task, and its output goes to `logs` in the state folder.
 Claude Code runs Attache's hooks through Git Bash, as it runs every hook on Windows, and Codex through cmd.exe; both work with the paths Attache writes, including a user folder with letters such as æ, ø and å.
 
-### Repair and upgrade
+### Repair and install a newer release
 
 Running the installer again repairs the installation without touching your data.
-Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
+Running a newer installer installs it in place: it backs up first, switches versions and keeps your settings and knowledge.
 On Windows, repairing the version you already run replaces its files, so close each Harness that has Attache's MCP server open first; the installer says so if one still holds them.
-Harness hooks and the MCP server run Attache through a stable `current` link, so they keep working across upgrades.
+Harness hooks and the MCP server run Attache through a stable `current` link, so they keep working when a newer release is installed.
 Attache no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
 ## First-run setup
@@ -167,8 +167,8 @@ The Dashboard follows your system's light or dark setting: warm paper with dark 
 Headings are set in Georgia, and The Daily Briefing leads Home in its own painting card.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
-The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
-With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
+The keyboard focus is a blue outline around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
+With a high-contrast theme (Windows contrast themes and other forced colours) the outline takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
 
 Every screen works in a window 320 px wide and at 200% zoom without scrolling sideways.
 On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
@@ -497,7 +497,7 @@ What they have in common:
   A file Attache creates has no earlier version to back up; disabling it removes the file.
 - **Out of date.**
   When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
-  Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
+  Attache repairs its files, with a backup, each time it starts, so after installing a newer release only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
 - **Saves through MCP.**
   Like every connected Harness, each saves without asking while its auto-accept switch in Settings is on, which it is when you connect it; with the switch off, a save asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
 - **What is saved.**
@@ -577,7 +577,7 @@ If the Harness already lists a server named `attache` that Attache did not add (
 
 Earlier versions installed two skills, `attache-save` and `attache-audit`, and a `attache save` command.
 The MCP tools and prompts replace both, because a Harness with auto-accept off asks you to confirm a save through the MCP server, which a shell command cannot do.
-When Attache starts after the upgrade, it removes the skill folders it installed (the ones with its `.attache-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
+When Attache starts after that release is installed, it removes the skill folders it installed (the ones with its `.attache-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.

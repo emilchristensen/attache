@@ -20,7 +20,7 @@ A Machine never moves to an older version, so an old release with a known flaw c
 ## Consequences
 
 - Releases are published only by the release workflow in CI, from a tag; the signing key lives in a protected GitHub Actions environment, with an offline backup, and never on a laptop.
-- The release workflow publishes only a commit that passed the full CI run, the install and upgrade test included, since a broken release would otherwise reach every Machine on its own.
+- The release workflow publishes only a commit that passed the full CI run, the install test included, since a broken release would otherwise reach every Machine on its own.
 - The public key is built into every installed copy.
   It is rotated by a manifest, signed with the current key, that names the next one.
   If the key is lost or leaked, every Machine needs one manual install to take a new key.
