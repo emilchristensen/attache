@@ -1,10 +1,9 @@
-import { draftHref } from "../routes.ts";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from "react";
-import { plural, type AttentionDraftBody, type AttentionItemView, type JobView } from "@attache/contracts";
-import { post } from "../api.ts";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { plural, type AttentionItemView } from "@attache/contracts";
 import { useResource } from "../live.ts";
-import { Empty, Link, Loading, navigate, TurnOnInSettings, useAction } from "../components/ui.tsx";
+import { Empty, Link, Loading, TurnOnInSettings } from "../components/ui.tsx";
 import { GroupFailure } from "../components/GroupFailure.tsx";
+import { ChoiceMenu } from "../components/ChoiceMenu.tsx";
 import { Logo } from "../components/Logo.tsx";
 import type { ConnectionsStatus } from "../connection-status.ts";
 import { emptyInbox, inboxReach, type EmptyInbox } from "../inbox-empty.ts";
@@ -14,12 +13,13 @@ import { homeLine } from "../count.ts";
 import { useSignals } from "../nav-signals.ts";
 import { AttentionDot } from "../components/AttentionDot.tsx";
 import type { HeadsUpClock } from "../heads-up-clock.ts";
-import { ALL_TYPES, backFromAbove, groupRows, listedBelow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
-import { rowText, snoozeChoices } from "../inbox-rows.ts";
-import { INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
+import { ALL_TYPES, groupRows, listedNow, PAGE_SIZE, pageLabel, revealRow, typeOptions, withType } from "../inbox-view.ts";
+import { snoozeChoices } from "../inbox-rows.ts";
+import { DEFAULT_PLACE, INBOX_VIEWS, useInboxPlace, type InboxViewId } from "../inbox-place.ts";
 import { moveAmongRows, useRowKeys, type RowKey } from "../shortcuts.ts";
-import { DecidedRow, InboxRow, MovedUpRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
+import { DecidedRow, InboxRow, type RowActions, type RowDecision } from "./InboxRow.tsx";
 import { useInboxList, type ListEntry } from "./inbox-list.ts";
+import { useRowActions } from "./row-actions.ts";
 
 /**
  * The empty open list: exactly what is known (`inbox-empty.ts`), with the logo without its dot only beside "Nothing
@@ -47,19 +47,19 @@ function InboxEmpty({ empty, retry }: { empty: EmptyInbox; retry: (() => void) |
 }
 
 /** What each decision key decides on the focused row. */
-const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { done: "done", snooze: "snooze", dismiss: "dismiss" };
+const KEY_DECISION: Readonly<Partial<Record<RowKey, RowDecision>>> = { start: "start", done: "done", snooze: "snooze", dismiss: "dismiss" };
 
 /**
  * The Inbox heading with Home's decision count beside it ("4 need you here"), while the navigation leaves Home's
  * number out, the line that relates the rows to the decisions when they differ, and the view controls. Neither the
  * number nor the line shows while the open list failed (`failed`).
  */
-function InboxHeading({ id, children, open, failed = false, above }: { id: string; children?: ReactNode; open: boolean; failed?: boolean; above: ReadonlySet<string> }) {
+function InboxHeading({ id, children, open, failed = false }: { id: string; children?: ReactNode; open: boolean; failed?: boolean }) {
   const signals = useSignals();
   const home = signals.count.home;
   // While the open list itself failed the heading makes no claim beside it; the total stays in the shell.
   const needYou = home.count > 0 && !failed ? `${home.exact ? "" : "At least "}${home.count} ${home.count === 1 && home.exact ? "needs" : "need"} you here` : null;
-  const line = open && !failed ? homeLine(signals.inbox, above, home) : null;
+  const line = open && !failed ? homeLine(signals.inbox, home) : null;
   return (
     <>
       <div className="inbox-head">
@@ -94,7 +94,7 @@ interface ToolsProps {
   onShowNew: () => void;
 }
 
-/** The view controls: Show new items in a place kept for it, the one type picker with counts, and the view. */
+/** The view controls: Show new items in a place kept for it, then the "All types" and "View options" menus. */
 function InboxTools({ items, type, view, arrivals, range, onType, onView, onShowNew }: ToolsProps) {
   // Nothing to count (no answer yet, a failed one, or an empty list with no type chosen): no "All types (0)".
   const options = useMemo(() => (items && (items.length > 0 || type !== ALL_TYPES) ? typeOptions(items, type) : null), [items, type]);
@@ -108,22 +108,8 @@ function InboxTools({ items, type, view, arrivals, range, onType, onView, onShow
       <button className="inbox-show-new" data-show-new data-waiting={arrivals > 0 || undefined} disabled={arrivals === 0} aria-hidden={arrivals === 0 || undefined} tabIndex={arrivals === 0 ? -1 : undefined} onClick={onShowNew}>
         Show {plural(arrivals, "new item")}
       </button>
-      {options && (
-        <select className="inbox-picker" aria-label="Type" value={type} onChange={(e) => onType(e.target.value)}>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label} ({o.count})
-            </option>
-          ))}
-        </select>
-      )}
-      <select className="inbox-picker" aria-label="View" value={view} onChange={(e) => onView(e.target.value as InboxViewId)}>
-        {INBOX_VIEWS.map((v) => (
-          <option key={v.id} value={v.id}>
-            {v.label}
-          </option>
-        ))}
-      </select>
+      {options && <ChoiceMenu name="Type" shown={options.find((o) => o.id === type)!.label} choices={options} chosen={type} onChoose={onType} />}
+      <ChoiceMenu name="View options" shown={view === DEFAULT_PLACE.view ? "View options" : INBOX_VIEWS.find((v) => v.id === view)!.label} choices={INBOX_VIEWS} chosen={view} onChoose={onView} />
     </div>
   );
 }
@@ -136,20 +122,16 @@ interface RowsProps {
   actions: RowActions;
   draftsOn: boolean;
   onUndo: (entry: ListEntry) => void;
-  /** The row the keyboard is on whose meeting moved up into For you now, drawn in its place at its height. */
-  movedUp: { id: string; height: number | undefined } | null;
 }
 
-function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo, movedUp }: RowsProps) {
+function Rows({ entries, clock, openId, onToggle, actions, draftsOn, onUndo, suggested }: RowsProps & { suggested: ReadonlySet<string> }) {
   return (
     <ul className="inbox-rows">
       {entries.map((e) =>
-        e.item.id === movedUp?.id && !e.decided ? (
-          <MovedUpRow key={e.item.id} item={e.item} height={movedUp.height} />
-        ) : e.decided ? (
+        e.decided ? (
           <DecidedRow key={e.item.id} item={e.item} decision={e.decided.decision} until={e.decided.until} onUndo={e.decided.decision === "reopen" ? null : () => onUndo(e)} busy={actions.busy} clock={clock} />
         ) : (
-          <InboxRow key={e.item.id} item={e.item} open={openId === e.item.id} onToggle={() => onToggle(e.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} />
+          <InboxRow key={e.item.id} item={e.item} open={openId === e.item.id} onToggle={() => onToggle(e.item.id)} actions={actions} draftsOn={draftsOn} clock={clock} suggested={suggested.has(e.item.id)} />
         ),
       )}
     </ul>
@@ -172,8 +154,12 @@ function useFocusAfter(): (id: string, target: "undo" | "row") => void {
   }, []);
 }
 
-/** `j`/`k` move between rows; the decision keys, once switched on, decide on the focused row. */
-function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActions["decide"], busy: boolean): void {
+/**
+ * `j`/`k` move between rows; the decision keys, once switched on, decide on the focused row, and `w` takes Start
+ * working's first step as the button does (`openRow` opens a row in place).
+ */
+function useInboxKeys(live: readonly AttentionItemView[] | null, actions: RowActions, openId: string | null, openRow: (id: string) => void): void {
+  const { decide, start, busy } = actions;
   const onRowKey = useCallback(
     (key: RowKey): boolean => {
       if (key === "next" || key === "previous") return moveAmongRows([...document.querySelectorAll<HTMLElement>("#inbox [data-row-toggle]")], key);
@@ -181,77 +167,26 @@ function useInboxKeys(live: readonly AttentionItemView[] | null, decide: RowActi
       const decision = KEY_DECISION[key];
       const item = live?.find((i) => i.id === row?.dataset.itemId);
       if (!decision || !item || item.state !== "open" || busy) return false;
-      decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
+      if (decision === "start") void start(item, { open: openId === item.id, openRow: () => openRow(item.id) });
+      else void decide(item, decision, decision === "snooze" ? snoozeChoices(new Date())[1]!.iso : undefined);
       return true;
     },
-    [live, busy, decide],
+    [live, busy, decide, start, openId, openRow],
   );
   useRowKeys(onRowKey);
 }
 
 /**
- * The row the keyboard is on (its item id), and each row's height as last drawn while it had the focus. Spread
- * `focusProps` on the Inbox.
+ * The Inbox list: every open item, For you now's included. `attentionOn` is null until the feature switches are known.
+ * `connections` is the shell's Connections status: an empty list says nothing needs the owner only when the count is
+ * exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed request
+ * shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the rows it
+ * keeps and their time. `suggested` holds the items For you now shows: their rows carry "Suggested now". Meeting prep
+ * whose meeting has ended leaves at that instant, until the service resolves it. `clock` is Home's, shared with For
+ * you now, so a meeting leaves both at the same instant. `after` closes the area (Home's Recently added), whatever
+ * state the list is in.
  */
-function useFocusedRow() {
-  const [id, setId] = useState<string | null>(null);
-  const height = useRef<{ id: string; height: number } | null>(null);
-  useLayoutEffect(() => {
-    const row = id ? document.querySelector<HTMLElement>(`#inbox [data-inbox-row][data-item-id="${CSS.escape(id)}"]:not([data-moved-up])`) : null;
-    if (row && id) height.current = { id, height: row.offsetHeight };
-  });
-  const rowOf = (target: EventTarget | null) => (target instanceof Element ? (target.closest<HTMLElement>("[data-inbox-row]")?.dataset.itemId ?? null) : null);
-  return {
-    id,
-    heightOf: (of: string) => (height.current?.id === of ? height.current.height : undefined),
-    focusProps: {
-      onFocus: (e: FocusEvent<HTMLElement>) => setId(rowOf(e.target)),
-      onBlur: (e: FocusEvent<HTMLElement>) => {
-        if (!rowOf(e.relatedTarget)) setId(null);
-      },
-    },
-  };
-}
-
-/**
- * The item whose row the keyboard is on (`focusedId`) when its meeting moves up into For you now (`above`), as it was
- * then; null otherwise. It stays while the keyboard does, even once the meeting ends or leaves the open list, until
- * the row is listed here again (Not now).
- */
-function useMovedUp(focusedId: string | null, above: ReadonlySet<string>, answered: readonly AttentionItemView[] | null, live: readonly AttentionItemView[] | null): AttentionItemView | null {
-  const [standing, setStanding] = useState<AttentionItemView | null>(null);
-  const promoted = focusedId && above.has(focusedId) ? (answered?.find((i) => i.id === focusedId) ?? null) : null;
-  useEffect(() => {
-    if (promoted && promoted !== standing) setStanding(promoted);
-  }, [promoted, standing]);
-  if (promoted) return promoted;
-  return standing && standing.id === focusedId && !live?.some((i) => i.id === focusedId) ? standing : null;
-}
-
-/**
- * The meeting prep items that left For you now while still open (Not now) come back into their places, not behind
- * Show new items.
- */
-function useBackFromAbove(above: ReadonlySet<string>, live: readonly AttentionItemView[] | null, now: number, welcomeBack: (ids: readonly string[]) => void): void {
-  const before = useRef(above);
-  useEffect(() => {
-    if (before.current === above) return;
-    const back = live ? backFromAbove(before.current, above, live, now) : [];
-    before.current = above;
-    welcomeBack(back);
-  });
-}
-
-/**
- * The Inbox list. `attentionOn` is null until the feature switches are known. `connections` is Home's Connections area: an empty list says nothing needs the owner only when the
- * count is exactly zero and every source was read, and names what was read otherwise (`inbox-empty.ts`). A failed
- * request shows as a failure row with Retry, never as an empty list: on first load alone, after a good load above the
- * rows it keeps and their time. `above` holds the items For you now shows as
- * meeting prep: the open list leaves them out, and meeting prep whose meeting has ended, until the service resolves it.
- * `clock` is Home's, shared with For you now, so a meeting leaves both at the same instant. `after` closes the area
- * (Home's Recently added), whatever state the list is in.
- */
-export function Inbox({ attentionOn, draftsOn, connections, above, clock, after }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; above: ReadonlySet<string>; clock: HeadsUpClock; after?: ReactNode }) {
+export function Inbox({ attentionOn, draftsOn, connections, suggested, clock, after }: { attentionOn: boolean | null; draftsOn: boolean; connections: ConnectionsStatus; suggested: ReadonlySet<string>; clock: HeadsUpClock; after?: ReactNode }) {
   const [place, setPlace] = useInboxPlace();
   const [said, setSaid] = useState("");
   const heading = useId();
@@ -266,32 +201,17 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   // A switched-off feature is not a failure: Home says the Inbox is off instead.
   const failure = source.error && source.error.code !== "feature_disabled" ? source.error : null;
   const answered = source.data?.items ?? null;
-  const live = useMemo(() => (answered && !hiddenView ? listedBelow(answered, above, clock.now) : answered), [answered, hiddenView, above, clock.now]);
-  // A meeting that moves up while the keyboard is on its row keeps that row's place until the keyboard moves on.
-  const focused = useFocusedRow();
-  const keptItem = useMovedUp(hiddenView ? null : focused.id, above, answered, live);
-  const kept = keptItem?.id ?? null;
-  const rows = useMemo(() => {
-    if (!keptItem || !answered) return live;
-    const listed = listedBelow(answered, new Set([...above].filter((id) => id !== keptItem.id)), clock.now);
-    return listed.some((i) => i.id === keptItem.id) ? listed : [...listed, keptItem];
-  }, [keptItem, answered, above, clock.now, live]);
-  const list = useInboxList(rows, source.askedAt, hiddenView ? "hidden" : order, order);
-  const keptSubject = keptItem ? rowText(keptItem).subject : null;
-  useEffect(() => {
-    if (keptSubject) setSaid(`${keptSubject} moved up to For you now.`);
-  }, [keptSubject]);
-  useBackFromAbove(above, open.data?.items ?? null, clock.now, list.welcomeBack);
-  const { busy, run } = useAction();
+  const live = useMemo(() => (answered && !hiddenView ? listedNow(answered, clock.now) : answered), [answered, hiddenView, clock.now]);
+  const list = useInboxList(live, source.askedAt, hiddenView ? "hidden" : order, order);
   const focusAfter = useFocusAfter();
 
   const typed = useMemo(() => list.entries.filter((e) => withType([e.item], place.type).length > 0), [list.entries, place.type]);
   const arrivals = useMemo(() => withType(list.arrivals, place.type), [list.arrivals, place.type]);
   const expanded = useMemo(() => new Set(place.expanded), [place.expanded]);
-  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded, kept) : null;
+  const grouped = place.view === "grouped" ? groupRows(typed.map((e) => e.item), expanded, null) : null;
   const shown = grouped ? typed : typed.slice(0, place.shown);
   // The range counts items listed here: a row standing in for a meeting that moved up is not one.
-  const listedCount = (entries: readonly ListEntry[]) => entries.filter((e) => e.item.id !== kept).length;
+  const listedCount = (entries: readonly ListEntry[]) => entries.length;
 
   // A decision moves an item between the open list and Hidden, so both are asked again.
   const reloadOpen = open.reload;
@@ -301,43 +221,23 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
     if (hiddenView) reloadHidden();
   }, [reloadOpen, reloadHidden, hiddenView]);
   const { decided } = list;
-  const decide = useCallback(
-    (item: AttentionItemView, decision: RowDecision, until?: string) =>
-      void run(`decide:${item.id}`, async () => {
-        await post(`/attention/${item.id}/decision`, { decision, ...(until ? { until } : {}) });
-        decided(item, decision, until ?? null);
-        focusAfter(item.id, "undo");
-        reload();
-      }),
-    [run, decided, focusAfter, reload],
-  );
-  const undo = (e: ListEntry) =>
-    void run(`undo:${e.item.id}`, async () => {
-      await post(`/attention/${e.item.id}/decision`, { decision: "reopen" });
-      focusAfter(e.item.id, "row");
-      reload();
-    });
-  const prepare = (item: AttentionItemView, body: AttentionDraftBody) =>
-    void run(
-      "draft",
-      async () => {
-        await post<{ job: JobView }>(`/attention/${item.id}/draft`, body);
-        reload();
-      },
-      body.replaceUnconfirmed ? "Preparing a replacement Draft in the background" : "Preparing a draft in the background",
-    );
-  const actions: RowActions = {
-    decide,
-    busy: busy !== null,
-    prepareDraft: (item) => prepare(item, {}),
-    prepareReplacement: (item, draftId) => prepare(item, { replaceUnconfirmed: draftId }),
-    viewDraft: (draftId) => {
-      // Coming back from the Draft finds the open row where it stood.
-      setPlace({ anchor: place.openId ? anchorOf(place.openId) : null });
-      navigate(draftHref(draftId));
+  const onDecided = useCallback(
+    (item: AttentionItemView, decision: RowDecision, until: string | null) => {
+      decided(item, decision, until);
+      focusAfter(item.id, "undo");
     },
-  };
-  useInboxKeys(live, decide, busy !== null);
+    [decided, focusAfter],
+  );
+  const { actions, undo } = useRowActions({
+    reload,
+    onDecided,
+    onUndone: (item) => focusAfter(item.id, "row"),
+    // Coming back from the Draft finds the open row where it stood.
+    beforeViewDraft: () => setPlace({ anchor: place.openId ? anchorOf(place.openId) : null }),
+    draftsOn,
+  });
+  const openRow = useCallback((id: string) => setPlace({ openId: id }), [setPlace]);
+  useInboxKeys(live, actions, place.openId, openRow);
 
   const showNew = () => {
     const first = arrivals[0]?.id;
@@ -355,14 +255,14 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   useReturnToAnchor(section, place.anchor, attentionOn === true && list.entries.length > 0 && reveal === null, settled);
   const empty =
     live && !failure && !hiddenView && list.entries.length === 0 && arrivals.length === 0
-      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), above: above.size, failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
+      ? emptyInbox({ count: signals.count, reach: inboxReach(connections), failed: signals.countFailures, now: clock.now, timeZone: clock.timeZone })
       : null;
-  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: undo, movedUp: kept ? { id: kept, height: focused.heightOf(kept) } : null };
+  const rowsProps = { clock, openId: place.openId, onToggle: toggle, actions, draftsOn, onUndo: (e: ListEntry) => undo(e.item), suggested };
 
   if (attentionOn === null)
     return (
       <section id="inbox" className="inbox" aria-labelledby={heading}>
-        <InboxHeading id={heading} open={false} above={above} />
+        <InboxHeading id={heading} open={false} />
         <Loading label="Loading the Inbox" />
         {after}
       </section>
@@ -370,7 +270,7 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
   if (!attentionOn)
     return (
       <section id="inbox" className="inbox" aria-labelledby={heading}>
-        <InboxHeading id={heading} open={false} above={above} />
+        <InboxHeading id={heading} open={false} />
         <div className="inbox-empty" data-inbox-empty="off" role="status">
           <div className="inbox-empty-words">
             <p className="inbox-empty-title">Attention and briefings is off.</p>
@@ -383,8 +283,8 @@ export function Inbox({ attentionOn, draftsOn, connections, above, clock, after 
     );
 
   return (
-    <section ref={section} id="inbox" className="inbox" aria-labelledby={heading} {...focused.focusProps}>
-      <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null} above={above}>
+    <section ref={section} id="inbox" className="inbox" aria-labelledby={heading}>
+      <InboxHeading id={heading} open={!hiddenView} failed={!hiddenView && failure !== null}>
         <InboxTools
           items={live}
           type={place.type}

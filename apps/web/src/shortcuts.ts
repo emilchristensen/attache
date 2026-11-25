@@ -33,12 +33,12 @@ export interface ShortcutGroup {
 }
 
 /** What a row key asks the listed rows to do. Moving changes nothing; a decision has Undo in its row. */
-export type RowKey = "next" | "previous" | "done" | "snooze" | "dismiss";
+export type RowKey = "next" | "previous" | "start" | "done" | "snooze" | "dismiss";
 
 /** Keys that move between rows and open one; they change nothing. */
 export const MOVE_KEYS: Readonly<Record<string, RowKey>> = { j: "next", k: "previous" };
 /** The Inbox's decision keys, off until switched on. */
-export const DECISION_KEYS: Readonly<Record<string, RowKey>> = { d: "done", s: "snooze", x: "dismiss" };
+export const DECISION_KEYS: Readonly<Record<string, RowKey>> = { w: "start", d: "done", s: "snooze", x: "dismiss" };
 
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   { title: "Go to", rows: SCREENS.map((s) => ({ keys: [JUMP_KEY, s.key], does: s.label })) },
@@ -61,6 +61,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     title: "Inbox decisions",
     switchable: true,
     rows: [
+      { keys: ["w"], does: "Start working" },
       { keys: ["d"], does: "Done" },
       { keys: ["s"], does: "Snooze until tomorrow 09:00" },
       { keys: ["x"], does: "Dismiss" },

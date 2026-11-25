@@ -29,10 +29,15 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
   The Brain screen reads them side by side with their collections, opens each fact's source in place, and lists every recent save with its origin and one-click Revert.
 - **Attention and briefings.**
   Deadlines, review queues, meeting prep and pending replies from your sources, with dismiss and snooze that stick until the evidence changes.
-  Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, keeps still while new items wait behind "Show new items", and offers Newest first, Group by type and Hidden one choice away.
+  Home's Inbox is one list in priority order where every row names its type with a word, a glyph and a colour, offers Start working, Snooze and Done without opening the row, keeps started work marked In progress across Machines, and keeps still while new items wait behind "Show new items".
   It says "Nothing needs you." only when that is known: when nothing waits anywhere and every source was read; otherwise an empty Inbox says what was read, and a request that failed shows as a failure with Retry, never as an empty list.
-  Home's For you now brings the daily briefing forward in the morning, meeting prep from 15 minutes before a meeting until it ends (with Join first once it starts, who is invited and the notes your briefing found), and the briefings you ask for, each saying why it is there and when it leaves.
-  Home says in one line when every source was read, and otherwise names each Connection that needs you, what may be missing and the one thing to do.
+  Home keeps The Daily Briefing in its own area all day, over a public-domain painting Attache ships itself, and Read briefing opens it as a page whose entries lead to what they come from.
+  For you now curates at most five open Inbox items by urgency: unread meeting prep from 15 minutes before a meeting until it ends, replies or items nearly late, items due today and the Daily Briefing's picks, each with a short reason and the same row actions as the Inbox, Undo included.
+  Every open item stays in the Inbox, with a Suggested now tag when it is also curated.
+  Your day shows today's calendar meetings in the browser's time zone, with the meeting in progress marked, ended meetings dimmed, unanswered invitations named, and Join from 15 minutes before a meeting through its scheduled end.
+  Home gives the search, briefing and day full rows; For you now sits beside the Inbox at one third and two thirds on desktop, half and half on tablet, or in the full-width phone reading order.
+  Only that arrangement follows the window; every Home area responds to its own column width, so the narrow view stays the same wherever the area is placed.
+  A full-width Connection banner under the masthead names the issue that most needs you, what may be missing and the one thing to do; when everything works, Connections carries a green dot.
 - **Approvals.**
   Drafts of PR review comments, Jira and Confluence comments, Slack replies and Gmail drafts, with server-enforced approval and verified receipts, and Proposals to apply to the Brain, together on one page.
   Waiting shows Drafts to send and Changes to the Brain in their own sections, each row naming where a Draft goes or what a Proposal changes; Finished shows what happened.
@@ -46,13 +51,14 @@ You can read and edit the notes in Obsidian or any other Markdown editor.
 Attache has no chat box of its own; you ask the Brain from your Harness.
 Its Dashboard runs on your computer, in light or dark to match your system, and loads nothing from the internet, not even its typeface.
 It works at 320 px and 200% zoom, with a screen reader, with forced colours and reduced motion, and with 44 px touch targets on a phone.
-Home, Approvals, Brain, Connections, Jobs and Settings sit in one masthead, or in a bottom bar on a narrow window, and `g` then a letter jumps to each (`?` lists the shortcuts).
+Home, Approvals, Brain, Connections, Jobs and Settings sit in one masthead with the total of waiting decisions raised beside the mark, or in a bottom bar on a narrow window, and `g` then a letter jumps to each (`?` lists the shortcuts).
 Settings keeps its choices in sections, each at its own address, and a feature switch speaks up only when the feature is on but not fully working.
 The logo's dot, the tab's icon and its title, such as "(14) Attache", show how many decisions wait for you, counted once each across the Inbox, Approvals and sign-ins, and exact however many there are.
 
 Connections: local Markdown and Obsidian folders, GitHub, Jira, Confluence, Slack, Gmail, Google Calendar, and a model provider (Claude Code, Anthropic or OpenAI-compatible).
 Each one is optional and starts read-only.
-The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect on Home lands on it.
+The Connections page shows each one as a row with its account, what Attache may read and write there and when it was last read, opening in place for every control; one that needs you to sign in again comes first, already open, and Reconnect in the banner lands on it.
+Disable asks what it affects before Attache takes the Connection's access away.
 
 ## Install
 

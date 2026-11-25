@@ -41,6 +41,6 @@ describe("HARNESS_STATE_TEXT", () => {
 describe("uninstallProblem", () => {
   it("is null when everything was removed, and names what remains otherwise", () => {
     expect(uninstallProblem({ removed: [], failures: [] })).toBeNull();
-    expect(uninstallProblem({ removed: [], failures: ["/h/.claude/settings.json is not valid JSON; Attache will not change it."] })).toBe("Disconnected, but some of Attache's entries remain: /h/.claude/settings.json is not valid JSON; Attache will not change it.");
+    expect(uninstallProblem({ removed: [], failures: ["/h/.claude/settings.json is not valid JSON; Attache will not change it."] })).toBe("Disabled, but some of Attache's entries remain: /h/.claude/settings.json is not valid JSON; Attache will not change it.");
   });
 });

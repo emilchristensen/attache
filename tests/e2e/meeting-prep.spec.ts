@@ -1,23 +1,23 @@
 /**
- * Meeting prep Heads-ups (#26 of spec #14), driven through the Dashboard against the real bundled service and the
- * TEST-ONLY fixtures. Google Calendar is connected through the fixture claude.ai connector; each journey sets the
- * calendar to meetings at times relative to now (`setCalendar`) and runs a Source refresh, so the service raises the
- * meeting prep items with their start, end and Meet link, and For you now promotes them on the real clock.
+ * Meeting prep in For you now and the Inbox (spec #82), driven through the Dashboard against the real bundled service
+ * and the TEST-ONLY fixtures. Google Calendar is connected through the fixture claude.ai connector; each journey sets
+ * the calendar to meetings at times relative to now (`setCalendar`) and runs a Source refresh, so the service raises
+ * the meeting prep items with their start, end and Meet link, and For you now lists them on the real clock.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { api, JourneyBrowser, nextFrames, settled } from "./browser.ts";
 import { buildAll, harnessSave, startStack, type Stack } from "./stack.ts";
 import { completeRows, routeSignIn } from "./home-fold.ts";
-import { openRow } from "./inbox.ts";
-import { area, clock, inboxRowFor, meetingHeadsUp, MINUTE, needYou, openPrep, rowFor, SELF, setCalendar as setFixtureCalendar, type Meeting } from "./meetings.ts";
+import { openRow, rowAction } from "./inbox.ts";
+import { area, clock, inboxRowFor, meetingHeadsUp, needYou, openPrep, rowFor, SELF, setCalendar as setFixtureCalendar, type Meeting } from "./meetings.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
 
-
 test.describe.configure({ mode: "serial" });
 
 const setCalendar = (page: Page, meetings: readonly Meeting[]) => setFixtureCalendar(page, stack, meetings);
+const isOpenList = (url: URL) => url.pathname === "/api/v1/attention" && url.searchParams.get("state") === "open";
 
 test.beforeAll(async ({ browser }) => {
   buildAll();
@@ -31,10 +31,10 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${stack.fixtureUrl}/model`, model: "fixture-model" } });
   await api(page, "POST", "/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678" } });
   await api(page, "POST", "/connections/gcal/configure", { method: "claude-ai", fields: {} });
-  // A Harness too, so every feature is ready and Home's Connections area is the one green line of a healthy day.
+  // A Harness too, so every feature is ready and no Connection banner shows on a healthy day.
   await api(page, "POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
   await api(page, "POST", "/setup/complete");
-  // No daily briefing is due while the journeys run, so the quiet line speaks of meeting prep alone.
+  // No daily briefing is due while the journeys run, so only a briefing a journey asks for can name related notes.
   await api(page, "PATCH", "/config", { schedules: { refreshEveryMinutes: 30, briefingAt: "08:00", briefingEnabled: false } });
   await api(page, "POST", "/import", { path: stack.vaultDir });
   await api(page, "POST", "/connections/github/refresh");
@@ -45,68 +45,124 @@ test.afterAll(async () => {
   await stack?.stop();
 });
 
-test("before: a meeting hours away is an Inbox row, and the quiet line says when its Heads-up comes", async () => {
+test("before: a meeting hours away is an Inbox row, and an otherwise quiet For you now says when its prep comes", async () => {
   const page = await journeys.open("/");
   const times = await setCalendar(page, [{ id: "design", summary: "Design review", start: 180, end: 240, meetLink: "https://meet.google.com/des-ign-rev" }]);
+  // Only the meeting is open, so nothing else is timely and the quiet line speaks of meeting prep alone.
+  await page.route(isOpenList, async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { items: Array<{ kind: string }> };
+    await route.fulfill({ response: res, json: { ...body, items: body.items.filter((i) => i.kind === "meeting_prep") } });
+  });
   await page.reload();
   await expect(rowFor(page, "design")).toContainText("Design review");
   await expect(rowFor(page, "design")).toHaveAttribute("data-type", "meeting_prep");
-  const showsAt = new Date(Date.parse(times.design!.start) - 15 * MINUTE).toISOString();
-  const shows = await clock(page, showsAt);
+  await expect(meetingHeadsUp(page, "Design review")).toHaveCount(0);
+  const starts = await clock(page, times.design!.start);
   // Three hours ahead can be past midnight, where the line names tomorrow, as the browser's own day says.
-  const tomorrow = await page.evaluate((v) => new Date(v).toDateString() !== new Date().toDateString(), showsAt);
-  await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing timely right now. Prep for Design review shows here ${tomorrow ? "tomorrow " : ""}at ${shows}.`);
+  const tomorrow = await page.evaluate((v) => new Date(v).toDateString() !== new Date().toDateString(), times.design!.start);
+  await expect(area(page).locator(".for-you-now-quiet-text")).toHaveText(`Nothing right now. Next: prep for Design review ${tomorrow ? "tomorrow " : ""}at ${starts}`);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("failure: open Inbox items that could not be read say so with Try again, never that nothing is timely", async () => {
+test("failure: an Inbox that could not be read says so with Retry, never that nothing is timely", async () => {
   const page = await journeys.newPage();
   for (const p of journeys.context.pages()) if (p !== page) await p.close();
-  await page.route("**/api/v1/attention?state=open*", (route) => route.abort());
+  await page.route(isOpenList, (route) => route.abort());
   await page.goto(stack.url);
   const forYou = area(page);
-  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Could not check your meetings.");
-  await expect(forYou).not.toContainText("Nothing timely");
-  await page.unroute("**/api/v1/attention?state=open*");
-  await forYou.getByRole("button", { name: "Try again" }).click();
-  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Nothing timely right now.");
-  // A refresh that fails after a good answer says so too, rather than that nothing is timely.
-  await page.route("**/api/v1/attention?state=open*", (route) => route.abort());
-  await api(page, "POST", "/connections/gcal/refresh");
-  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Could not check your meetings.");
-  await page.unroute("**/api/v1/attention?state=open*");
-  await forYou.getByRole("button", { name: "Try again" }).click();
-  await expect(forYou.locator(".for-you-now-quiet-text")).toContainText("Nothing timely right now.");
+  await expect(forYou).toContainText("Could not read the Inbox.");
+  await expect(forYou).not.toContainText("Nothing right now");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await forYou.getByRole("button", { name: "Retry" }).click();
+  await expect(forYou).not.toContainText("Could not read the Inbox.");
   await page.close();
 });
 
-test("upcoming: 15 minutes before the start the meeting leads, leaves the Inbox, and the count stays the same", async () => {
+test("upcoming: 15 minutes before the start its prep is in For you now and stays in the Inbox; Open prep takes it off, and In progress survives a reload", async () => {
   const page = await journeys.open("/");
   await expect(needYou(page)).toBeVisible();
   const counted = await needYou(page).textContent();
   const times = await setCalendar(page, [{ id: "handover", summary: "Pilot handover", start: 10, end: 40, meetLink: "https://meet.google.com/abc-defg-hij", attendees: ["Nora Lind", "Sam Berg"] }]);
-  const lead = meetingHeadsUp(page, "Pilot handover");
-  await expect(lead).toBeVisible();
-  const [from, to] = [await clock(page, times.handover!.start), await clock(page, times.handover!.end)];
-  await expect(lead).toHaveAttribute("data-meeting-phase", "upcoming");
-  await expect(lead.locator(".heads-up-eyebrow")).toHaveText(`Meeting prep · On your calendar · Starts ${from}`);
-  await expect(lead.getByRole("heading", { level: 3 })).toHaveText("Pilot handover");
-  await expect(lead.locator(".heads-up-why")).toHaveText(new RegExp(`^A meeting with other people starts at ${from}\\. It is here from \\d\\d:\\d\\d until it ends at ${to}, or until Done or Not now\\.$`));
-  // Before the start, preparing comes first; the real event and call are there too.
-  await expect(lead.locator(".heads-up-foot .heads-up-actions > *")).toHaveText(["Open prep", "Open in Google Calendar", "Join", "Done", "Not now"]);
-  await expect(lead.getByRole("link", { name: "Open in Google Calendar" })).toHaveAttribute("href", "https://calendar.google.com/event?eid=handover");
-  await expect(lead.getByRole("link", { name: "Join" })).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
-  // Shown above, it is not listed below, and it is still one decision: the count is unchanged.
-  await expect(rowFor(page, "handover")).toHaveCount(0);
+  // Loaded afresh, so the new item is an Inbox row rather than waiting behind Show new items.
+  await page.reload();
+  const entry = meetingHeadsUp(page, "Pilot handover");
+  await expect(entry.locator(".inbox-source")).toContainText(/Starts in (9|10|11) min, prep not read/);
+  // The Inbox lists it too, marked as suggested, and it is still one decision: the count is unchanged and the count
+  // line has no meetings above.
+  await expect(rowFor(page, "handover")).toContainText("Suggested now");
   await expect(needYou(page)).toHaveText(counted!);
-  await expect(page.locator("#inbox .count-line")).toHaveText(/^1 meeting above · \d+ items below need you$/);
-  // Open prep: the attendees, and no related notes yet, said in words rather than an empty row.
-  await lead.getByRole("button", { name: "Open prep" }).click();
-  const detail = lead.locator("[data-meeting-detail]");
+  await expect(page.locator("#inbox .count-line", { hasText: "above" })).toHaveCount(0);
+  // Open prep: the interval, the attendees, and no related notes yet, said in words rather than an empty row.
+  const [from, to] = [await clock(page, times.handover!.start), await clock(page, times.handover!.end)];
+  await (await rowAction(entry, "Start working")).click();
+  const detail = entry.locator("[data-meeting-detail]");
   await expect(detail.locator(".meeting-prep-who")).toHaveText(`${from} to ${to} · With Nora Lind, Sam Berg`);
   await expect(detail.locator("[data-meeting-notes]")).toHaveText("No briefing has looked at this meeting yet, so there are no related notes. Prepare a briefing to find some.");
+  // Once the pointer and focus leave, it is off the list; its row is in progress, here and after a reload.
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(entry).toHaveCount(0);
+  await expect(rowFor(page, "handover")).toContainText("In progress");
+  await expect(rowFor(page, "handover")).not.toContainText("Suggested now");
+  await page.reload();
+  await expect(rowFor(page, "handover")).toContainText("In progress");
+  await expect(meetingHeadsUp(page, "Pilot handover")).toHaveCount(0);
+  await expect(needYou(page)).toHaveText(counted!);
+  // Not started takes the tag back, and the prep is due again.
+  await openRow(rowFor(page, "handover"));
+  await rowFor(page, "handover").getByRole("button", { name: "Not started: Pilot handover" }).click();
+  await expect(rowFor(page, "handover")).not.toContainText("In progress");
+  await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
 });
 
-test("related notes: the latest briefing's notes for the item, labelled with its time, or that it found none", async () => {
+test("read by opening: opening unread prep from its Inbox row takes it off For you now on another page too, and marks it In progress", async () => {
+  const page = await journeys.open("/");
+  await setCalendar(page, [{ id: "retro", summary: "Sprint retro", start: 8, end: 38 }]);
+  await page.reload();
+  // A second page stands in for another Machine's Dashboard: it hears the decision as a live event.
+  const other = await journeys.newPage();
+  await other.goto(stack.url);
+  await expect(meetingHeadsUp(other, "Sprint retro")).toBeVisible();
+  await expect(meetingHeadsUp(page, "Sprint retro")).toBeVisible();
+  // The row's subject, not Start working: reading the prep is what counts.
+  await openRow(rowFor(page, "retro"));
+  await expect(rowFor(page, "retro").locator("[data-meeting-detail]")).toBeVisible();
+  await expect(meetingHeadsUp(other, "Sprint retro")).toHaveCount(0);
+  await expect(rowFor(other, "retro").locator(".inbox-source")).toContainText("In progress");
+  await expect(rowFor(page, "retro").locator(".inbox-source")).toContainText("In progress");
+  await other.close();
+});
+
+test("read by opening, after a failure: prep opened while its start could not be recorded is recorded on the next try", async () => {
+  const page = await journeys.open("/");
+  await setCalendar(page, [{ id: "vendor", summary: "Vendor check-in", start: 9, end: 39 }]);
+  await page.reload();
+  const startedAt = async () => (await api<{ items: Array<{ key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.key === "gcal:vendor")?.startedAt ?? null;
+  // The decisions the Dashboard sends fail for a while, as when the service is briefly away.
+  let away = true;
+  let failures = 0;
+  await page.route("**/api/v1/attention/*/decision", (route) => {
+    if (!away) return route.fallback();
+    failures++;
+    return route.fulfill({ status: 503, json: { error: "unavailable" } });
+  });
+  await openRow(rowFor(page, "vendor"));
+  await expect(rowFor(page, "vendor").locator("[data-meeting-detail]")).toBeVisible();
+  await expect.poll(() => failures).toBeGreaterThan(0);
+  expect(await startedAt()).toBeNull();
+  away = false;
+  // The owner keeps reading; the next time the list is read again (here after another item changed elsewhere), the
+  // open prep is recorded as read.
+  const elsewhere = (await api<{ items: Array<{ id: string; key: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items.find((i) => !i.key.startsWith("gcal:") && !i.startedAt)!;
+  await api(page, "POST", `/attention/${elsewhere.id}/decision`, { decision: "start" });
+  await expect.poll(startedAt, { timeout: 15_000 }).not.toBeNull();
+  await expect(rowFor(page, "vendor").locator(".inbox-source")).toContainText("In progress");
+  await api(page, "POST", `/attention/${elsewhere.id}/decision`, { decision: "reopen" });
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("related notes: the newest briefing's notes for the meeting, labelled with its time, or that it found none", async () => {
   const page = await journeys.open("/");
   // A person note the briefing can relate to the meeting, saved as a Harness saves (the Dashboard never writes the Brain).
   await harnessSave(stack, [{ action: "create", type: "person", title: "Nora Lind", facts: [{ subject: "Role", value: "Pilot lead at the client; owns the handover" }] }], { agent: "claude-code", session: "meeting-prep" });
@@ -114,21 +170,22 @@ test("related notes: the latest briefing's notes for the item, labelled with its
     { id: "handover", summary: "Pilot handover", start: 10, end: 40, meetLink: "https://meet.google.com/abc-defg-hij", attendees: ["Nora Lind"] },
     { id: "standup", summary: "Kiosk standup", start: 12, end: 20, attendees: ["Quill Ostrander"] },
   ]);
-  const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+  const before = (await api<{ requested: { id: string } | null }>(page, "GET", "/briefings")).requested?.id ?? null;
   await api(page, "POST", "/briefings", { kind: "manual" });
   let written!: { id: string; createdAt: string };
   await expect.poll(async () => {
-    const { briefing } = await api<{ briefing: typeof written | null }>(page, "GET", "/briefings/latest");
-    if (!briefing || briefing.id === before) return false;
-    written = briefing;
+    const { requested } = await api<{ requested: typeof written | null }>(page, "GET", "/briefings");
+    if (!requested || requested.id === before) return false;
+    written = requested;
     return true;
   }, { timeout: 30_000 }).toBe(true);
   const when = await clock(page, written.createdAt);
   await page.mouse.move(5, 5);
-  // Opening prep holds the slot. Wait for the Dashboard to show the new briefing first.
-  const briefingCard = area(page).locator('[data-heads-up="requested-briefing"]');
-  await expect(briefingCard).toHaveAttribute("data-heads-up-key", `briefing:${written.id}`);
-  const handover = meetingHeadsUp(page, "Pilot handover");
+  await page.reload();
+  // Prep names the related notes of the briefing Home has read. Wait for Home to show the new briefing first.
+  const briefingCard = page.getByRole("article", { name: "Briefing you asked for" }).getByRole("link", { name: "Read briefing" });
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
+  const handover = rowFor(page, "handover");
   await openPrep(handover);
   const notes = handover.getByRole("group", { name: `Related notes · As the briefing at ${when} found them` });
   await expect(notes.getByRole("button", { name: "Nora Lind" })).toBeVisible();
@@ -139,193 +196,74 @@ test("related notes: the latest briefing's notes for the item, labelled with its
   // A meeting the briefing looked at and found nothing for says so. The fixture search relates something to every
   // meeting, so the briefing's answer for this one is routed to the empty list a real search can give.
   const standupId = (await api<{ items: Array<{ id: string; key: string }> }>(page, "GET", "/attention?state=open")).items.find((i) => i.key === "gcal:standup")!.id;
-  await page.route("**/api/v1/briefings/latest", async (route) => {
+  await page.route("**/api/v1/briefings", async (route) => {
     const res = await route.fetch();
-    const body = (await res.json()) as { briefing: { sections: Array<{ id: string; items: Array<{ id: string; related?: unknown[] }> }> } };
-    for (const section of body.briefing.sections) section.items = section.items.map((i) => (i.id === standupId ? { ...i, related: [] } : i));
+    type Body = Record<"daily" | "requested", { sections: Array<{ id: string; items: Array<{ id: string; related?: unknown[] }> }> } | null>;
+    const body = (await res.json()) as Body;
+    for (const b of [body.daily, body.requested]) for (const section of b?.sections ?? []) section.items = section.items.map((i) => (i.id === standupId ? { ...i, related: [] } : i));
     await route.fulfill({ response: res, json: body });
   });
   await page.mouse.move(5, 5);
   await page.reload();
-  await expect(briefingCard).toHaveAttribute("data-heads-up-key", `briefing:${written.id}`);
-  const standup = meetingHeadsUp(page, "Kiosk standup");
+  await expect(briefingCard).toHaveAttribute("href", `/briefing/${encodeURIComponent(written.id)}`);
+  const standup = rowFor(page, "standup");
   await openPrep(standup);
   await expect(standup.locator("[data-meeting-notes]")).toHaveText(`No related notes: the briefing at ${when} found none in your Brain.`);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("in progress: overlapping meetings lead with Join, the next one follows as a compact line, then the briefing", async () => {
+test("in progress: For you now says the meeting started, Your day offers Join, no Not now anywhere, and the first Inbox row is whole with a sign-in problem", async () => {
   const page = await journeys.open("/");
   await page.setViewportSize({ width: 1280, height: 800 });
-  const times = await setCalendar(page, [
+  await setCalendar(page, [
     { id: "handover", summary: "Pilot handover", start: -10, end: 10, meetLink: "https://meet.google.com/abc-defg-hij" },
     { id: "triage", summary: "Billing triage", start: 10, end: 40, meetLink: "https://meet.google.com/bil-ling-tri" },
   ]);
-  const lead = meetingHeadsUp(page, "Pilot handover");
-  await expect(lead).toHaveAttribute("data-meeting-phase", "in-progress");
-  await expect(page.locator("article.heads-up-lead")).toHaveCount(1);
-  await expect(page.locator("article.heads-up-lead .heads-up-title")).toHaveText("Pilot handover");
-  await expect(lead.locator(".heads-up-eyebrow")).toHaveText(`Meeting prep · On your calendar · In progress, ends ${await clock(page, times.handover!.end)}`);
-  // Join first during the meeting.
-  const actions = lead.locator(".heads-up-foot .heads-up-actions > *");
-  await expect(actions.first()).toHaveText("Join");
-  await expect(actions).toHaveText(["Join", "Open in Google Calendar", "Done", "Not now", "Open prep"]);
-  // The next meeting: one line with its subject, "On your calendar", its interval and Open prep, below the one in progress.
-  const next = meetingHeadsUp(page, "Billing triage");
-  await expect(next).toHaveJSProperty("tagName", "LI");
-  await expect(next.locator(".heads-up-line-head")).toHaveText(`Billing triage · On your calendar · ${await clock(page, times.triage!.start)} to ${await clock(page, times.triage!.end)}`);
-  await expect(next.locator(".heads-up-actions").getByRole("button")).toHaveText(["Open prep"]);
-  // Then the briefing the journey before asked for, as a follower line.
-  const briefing = area(page).locator(".heads-up-lines > li").nth(1);
-  await expect(briefing).toHaveAttribute("data-heads-up", "requested-briefing");
-  // One line under both meetings: its why opens with Read briefing.
-  await expect(briefing.locator(".heads-up-why")).toHaveCount(0);
-  await briefing.getByRole("button", { name: "Read briefing" }).click();
-  await expect(briefing.locator(".briefing-detail .heads-up-why")).toHaveText(/^You asked for it at \d\d:\d\d\. It leaves at \d\d:\d\d, or when you press Got it\.$/);
-  await briefing.getByRole("button", { name: "Read briefing" }).click();
-  // Its destinations and decisions are inside Open prep.
-  await openPrep(next);
-  await expect(next.locator("[data-meeting-detail] .heads-up-actions > *")).toHaveText(["Open in Google Calendar", "Join", "Done", "Not now"]);
-  // Its why is inside too, so the line stays one line.
-  await expect(next.locator("[data-meeting-detail] .heads-up-why")).toHaveText(/^A meeting with other people starts at \d\d:\d\d\. It is here from \d\d:\d\d until it ends at \d\d:\d\d, or until Done or Not now\.$/);
-  await expect(next.getByRole("link", { name: "Join" })).toHaveAttribute("href", "https://meet.google.com/bil-ling-tri");
-  await next.getByRole("button", { name: "Open prep" }).click();
-  // Neither meeting is listed below; each is one decision.
-  await expect(rowFor(page, "handover")).toHaveCount(0);
-  await expect(rowFor(page, "triage")).toHaveCount(0);
-  await expect(page.locator("#inbox .count-line")).toHaveText(/^2 meetings above · \d+ items below need you$/);
-  // The fold: with both meetings, the briefing follower and one sign-in problem, the first Inbox row is still whole.
+  await page.reload();
+  await expect(meetingHeadsUp(page, "Pilot handover").locator(".inbox-source")).toContainText("Meeting started, prep not read");
+  await expect(meetingHeadsUp(page, "Billing triage").locator(".inbox-source")).toContainText(/Starts in (9|10|11) min, prep not read/);
+  const running = page.getByRole("region", { name: "Your day" }).locator('.your-day-wide [data-phase="in-progress"]');
+  await expect(running).toContainText("Pilot handover");
+  await expect(running.getByRole("link", { name: "Join" })).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
+  // Opened in the Inbox, its prep has Join too, while the meeting runs.
+  await openPrep(rowFor(page, "handover"));
+  await expect(rowFor(page, "handover").locator("[data-meeting-detail]").getByRole("link", { name: "Join" })).toHaveAttribute("href", "https://meet.google.com/abc-defg-hij");
+  // Opening it read the prep, so it is In progress; Not started makes it unread again, back in For you now.
+  await expect(rowFor(page, "handover").locator(".inbox-source")).toContainText("In progress");
+  await rowFor(page, "handover").getByRole("button", { name: "Not started: Pilot handover" }).click();
+  await expect(rowFor(page, "handover").locator(".inbox-source")).not.toContainText("In progress");
+  // Snooze is the one way to put something off.
+  await expect(page.getByRole("button", { name: /Not now/ })).toHaveCount(0);
+  await rowFor(page, "handover").locator("[data-row-toggle]").click();
+  // The fold: with both meetings in For you now and one sign-in problem in the banner, the first Inbox row is whole.
   await routeSignIn(page);
   await page.reload();
-  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
+  await expect(page.locator('[data-connection-banner][data-state="sign_in"]')).toBeVisible();
   await expect(meetingHeadsUp(page, "Billing triage")).toBeVisible();
   expect(await completeRows(page), "complete Inbox rows during overlapping meetings").toBeGreaterThanOrEqual(1);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
-test("Not now hides only the Heads-up: the item is back in the flat Inbox and its type, and the count does not change", async () => {
+test("Done from the Inbox row decides the item everywhere: it leaves For you now and the count; a moved meeting opens it again", async () => {
   const page = await journeys.open("/");
-  await expect(meetingHeadsUp(page, "Billing triage")).toBeVisible();
-  const counted = await needYou(page).textContent();
-  const next = meetingHeadsUp(page, "Billing triage");
-  await openPrep(next);
-  await next.getByRole("button", { name: "Not now" }).click();
-  await expect(next).toHaveCount(0);
-  await expect(area(page).getByRole("heading", { name: "For you now" })).toBeFocused();
-  await expect(area(page).getByRole("status").last()).toHaveText("Billing triage moved to the Inbox. It stays open there.");
-  // Back in the Inbox at once, in its place (not behind Show new items), and still one decision.
-  await expect(rowFor(page, "triage")).toContainText("Billing triage");
-  await expect(page.locator("#inbox [data-show-new]")).toBeDisabled();
-  // Opened, the row says why it is here and when it leaves, for the meeting's phase (it has not started yet).
-  await openRow(rowFor(page, "triage"));
-  await expect(rowFor(page, "triage").locator(".inbox-why")).toHaveText(/^Why it is here: A meeting with other people starts (tomorrow )?at \d\d:\d\d\. It leaves the Inbox when it ends (tomorrow )?at \d\d:\d\d\.$/);
-  await rowFor(page, "triage").locator("[data-row-toggle]").click();
-  await expect(needYou(page)).toHaveText(counted!);
-  await expect(page.locator("#inbox .count-line")).toHaveText(/^1 meeting above · \d+ items below need you$/);
-  // In the Meeting prep type too.
-  const type = page.locator("#inbox").getByRole("combobox", { name: "Type" });
-  await expect(type.locator("option", { hasText: /^Meeting prep \(1\)$/ })).toHaveCount(1);
-  await type.selectOption({ label: "Meeting prep (1)" });
-  await expect(page.locator("#inbox [data-inbox-row]")).toHaveCount(1);
-  await expect(rowFor(page, "triage")).toBeVisible();
-  await type.selectOption({ index: 0 });
-  // Remembered in this browser: a reload keeps it in the Inbox and out of For you now.
-  await page.reload();
-  await expect(rowFor(page, "triage")).toBeVisible();
-  await expect(meetingHeadsUp(page, "Billing triage")).toHaveCount(0);
-  await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
-});
-
-test("Done clears the Heads-up and decides the Inbox item, which no longer counts", async () => {
-  const page = await journeys.open("/");
-  const lead = meetingHeadsUp(page, "Pilot handover");
-  await expect(lead).toBeVisible();
+  const entry = meetingHeadsUp(page, "Pilot handover");
+  await expect(entry).toBeVisible();
   const count = async () => Number((await needYou(page).textContent())!.match(/\d+/)![0]);
   const before = await count();
-  await lead.getByRole("button", { name: "Done" }).click();
-  await expect(lead).toHaveCount(0);
-  await expect(area(page).getByRole("heading", { name: "For you now" })).toBeFocused();
-  await expect(area(page).getByRole("status").last()).toHaveText("Pilot handover marked done, on every Machine.");
-  // The Inbox item is decided Done in the service (its record replicates to every Machine), so it is listed nowhere.
-  await expect(rowFor(page, "handover")).toHaveCount(0);
+  const row = rowFor(page, "handover");
+  await (await rowAction(row, "Done")).click();
+  await expect(row).toHaveAttribute("data-decided", "done");
+  await expect(entry).toHaveCount(0);
   await expect.poll(count).toBe(before - 1);
   const resolved = (await api<{ items: Array<{ key: string; state: string }> }>(page, "GET", "/attention?state=resolved")).items;
   expect(resolved.find((i) => i.key === "gcal:handover")?.state).toBe("resolved");
-  // The meeting moves, so its evidence changes and the service opens the item again: its Heads-up comes back, and
-  // stays while the pointer is on it (Done here applied to the item as it was, not to this one).
+  // The meeting moves, so its evidence changes and the service opens the item again: its prep is due again.
   await page.mouse.move(5, 5);
   await setCalendar(page, [{ id: "handover", summary: "Pilot handover", start: -10, end: 25, meetLink: "https://meet.google.com/abc-defg-hij" }]);
-  const back = meetingHeadsUp(page, "Pilot handover");
-  await expect(back).toBeVisible();
-  await back.hover();
-  await back.getByRole("button", { name: "Open prep" }).focus();
-  await nextFrames(page);
-  await expect(back).toBeVisible();
-  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
 });
 
-test("hold: with focus on Join, the next meeting still comes in on time below it, and Join keeps its meeting", async ({ browser }) => {
-  // The browser clock is the whole context's, so this journey has a paired context of its own.
-  const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: "Europe/Copenhagen", storageState: await journeys.context.storageState() });
-  const page = await own.newPage();
-  await page.clock.install({ time: new Date() });
-  await page.goto(stack.url);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await setCalendar(page, [
-    { id: "crit", summary: "Design crit", start: -10, end: 20, meetLink: "https://meet.google.com/cri-tic-now" },
-    { id: "hiring", summary: "Hiring sync", start: 20, end: 50, meetLink: "https://meet.google.com/hir-ing-syn" },
-    { id: "budget", summary: "Budget sync", start: 35, end: 60 },
-  ]);
-  // Loaded afresh, so the new items are rows, not behind Show new items.
-  await page.reload();
-  const join = meetingHeadsUp(page, "Design crit").getByRole("link", { name: "Join" });
-  await join.focus();
-  // Twenty minutes before its start the next meeting is still an Inbox row.
-  await expect(rowFor(page, "hiring")).toBeVisible();
-  await expect(meetingHeadsUp(page, "Hiring sync")).toHaveCount(0);
-  // Six minutes on it is due: it comes in below the meeting the focus is on, on time, and leaves the Inbox.
-  await page.clock.fastForward("06:00");
-  const next = meetingHeadsUp(page, "Hiring sync");
-  await expect(next).toBeVisible();
-  await expect(next).toHaveJSProperty("tagName", "LI");
-  await expect(rowFor(page, "hiring")).toHaveCount(0);
-  // The focused Join is the same element, still the current meeting's call.
-  await expect(join).toBeFocused();
-  await expect(join).toHaveAttribute("href", "https://meet.google.com/cri-tic-now");
-  // It stays where it came in for the rest of the hold: the pointer moves onto it and the focus leaves.
-  const lines = area(page).locator(".heads-up-lines").first().locator(":scope > li");
-  await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
-  await next.hover();
-  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-  await nextFrames(page);
-  await expect(lines.first()).toHaveAttribute("data-heads-up", "meeting-prep");
-  await expect(lines.first()).toContainText("Hiring sync");
-  // Still held (the pointer stays in the Heads-ups), Not now on the arrived meeting takes it out at once, back to the Inbox.
-  await openPrep(next);
-  await next.getByRole("button", { name: "Not now" }).click();
-  await expect(next).toHaveCount(0);
-  await expect(rowFor(page, "hiring")).toBeVisible();
-  // The next one comes due, still held, and Done takes it out at once.
-  await page.clock.fastForward("15:00");
-  const budget = meetingHeadsUp(page, "Budget sync");
-  await expect(budget).toBeVisible();
-  await openPrep(budget);
-  await budget.getByRole("button", { name: "Done" }).click();
-  await expect(budget).toHaveCount(0);
-  await expect(rowFor(page, "budget")).toHaveCount(0);
-  expect(own.consoleErrors).toEqual([]);
-  await own.close();
-});
-
-test("no call: without a Meet link the meeting in progress leads with Open in Google Calendar", async () => {
-  const page = await journeys.open("/");
-  await setCalendar(page, [{ id: "walk", summary: "Site walk", start: -5, end: 25 }]);
-  const lead = meetingHeadsUp(page, "Site walk");
-  await expect(lead.locator(".heads-up-foot .heads-up-actions > *")).toHaveText(["Open in Google Calendar", "Done", "Not now", "Open prep"]);
-  await expect(lead.getByRole("link", { name: "Join" })).toHaveCount(0);
-});
-
-test("insertion: a meeting Heads-up arriving above keeps the reader's place in the Inbox, with and without the browser's scroll anchoring", async () => {
+test("insertion on a phone: prep arriving in For you now above the Inbox keeps the reader's place, with and without the browser's scroll anchoring", async () => {
   for (const safari of [false, true]) {
     const page = await journeys.newPage();
     for (const p of journeys.context.pages()) if (p !== page) await p.close();
@@ -336,64 +274,28 @@ test("insertion: a meeting Heads-up arriving above keeps the reader's place in t
         CSS.supports = ((a: string, b?: string) => (/overflow-anchor/.test(a) ? false : b === undefined ? supports(a) : supports(a, b))) as typeof CSS.supports;
       });
     }
+    await page.setViewportSize({ width: 375, height: 700 });
     await page.goto(stack.url);
     await setCalendar(page, [{ id: `later-${safari}`, summary: "Quarterly planning", start: 180, end: 240 }]);
-    await page.setViewportSize({ width: 1280, height: 600 });
     await page.reload();
     if (safari) await page.addStyleTag({ content: ".page, .page * { overflow-anchor: none !important; }" });
+    await page.addStyleTag({ content: "#inbox { padding-bottom: 1200px; }" });
     const row = inboxRowFor(page, "Send the cutover plan to finance");
     await expect(row).toBeVisible();
-    await expect(area(page)).toHaveAttribute("data-for-you-now", /quiet|timely/);
-    // The owner reads the Inbox: scrolled so this row is near the top, then so the Inbox heading is a little below the
-    // top, with the Connections line above it in view and For you now out of sight.
-    const scrollTo = (selector: string, below: number) =>
-      page.evaluate(
-        ([sel, gap]) => {
-          const el = sel === "row" ? [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")].find((r) => r.textContent!.includes("Send the cutover plan to finance"))! : document.querySelector<HTMLElement>(sel as string)!;
-          const scroller = document.querySelector<HTMLElement>(".page")!;
-          scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - (gap as number);
-        },
-        [selector, below] as const,
-      );
-    for (const [step, [place, below]] of ([["row", 40], ["#inbox", 60]] as const).entries()) {
-      await scrollTo(place, below);
-      const before = (await row.boundingBox())!.y;
-      // A meeting comes within 15 minutes of its start: its Heads-up arrives above.
-      const subject = `${safari ? "Vendor" : "Partner"} sync ${step + 1}`;
-      await setCalendar(page, [
-        { id: `later-${safari}`, summary: "Quarterly planning", start: 180, end: 240 },
-        ...Array.from({ length: step + 1 }, (_, n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
-      ]);
-      await expect(meetingHeadsUp(page, subject)).toHaveCount(1);
-      await nextFrames(page);
-      expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring, reading at ${place}`).toBeLessThanOrEqual(1);
-    }
-    // The first row in view is a meeting that comes due: it moves up into For you now, and the row after it stays put.
-    // Room below the Inbox, so the page can scroll that row to the top edge.
-    await page.addStyleTag({ content: "#inbox { padding-bottom: 1200px; }" });
-    await scrollTo(`#inbox [data-item-key="gcal:later-${safari}"]`, -2);
-    const after = page.locator(`#inbox [data-item-key="gcal:later-${safari}"] + [data-inbox-row]`);
-    const afterKey = await after.getAttribute("data-item-key");
-    const kept = page.locator(`#inbox [data-item-key="${afterKey}"]`);
-    const was = (await kept.boundingBox())!.y;
-    await setCalendar(page, [
-      { id: `later-${safari}`, summary: "Quarterly planning", start: 12, end: 40 },
-      ...[0, 1].map((n) => ({ id: `soon-${safari}-${n}`, summary: `${safari ? "Vendor" : "Partner"} sync ${n + 1}`, start: 10 + n, end: 40 })),
-    ]);
-    await expect(meetingHeadsUp(page, "Quarterly planning")).toHaveCount(1);
-    await nextFrames(page);
-    expect(Math.abs((await kept.boundingBox())!.y - was), `${safari ? "without" : "with"} scroll anchoring, the row after the promoted one`).toBeLessThanOrEqual(1);
-    // With the Heads-up in view above the Inbox rows, opening its prep moves nothing above it: the clicked control stays put.
-    const prep = meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync 1`).getByRole("button", { name: "Open prep" });
-    await prep.evaluate((el) => {
+    // The owner reads the Inbox, scrolled so this row is near the top and For you now is out of sight above.
+    await row.evaluate((el) => {
       const scroller = el.closest<HTMLElement>(".page")!;
       scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 40;
     });
-    const at = (await prep.boundingBox())!.y;
-    await prep.click();
-    await expect(prep).toHaveAttribute("aria-expanded", "true");
+    const before = (await row.boundingBox())!.y;
+    // A meeting comes within 15 minutes of its start: its prep arrives in For you now, above.
+    await setCalendar(page, [
+      { id: `later-${safari}`, summary: "Quarterly planning", start: 180, end: 240 },
+      { id: `soon-${safari}`, summary: `${safari ? "Vendor" : "Partner"} sync`, start: 10, end: 40 },
+    ]);
+    await expect(meetingHeadsUp(page, `${safari ? "Vendor" : "Partner"} sync`)).toHaveCount(1);
     await nextFrames(page);
-    expect(Math.abs((await prep.boundingBox())!.y - at), `Open prep ${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
+    expect(Math.abs((await row.boundingBox())!.y - before), `${safari ? "without" : "with"} scroll anchoring`).toBeLessThanOrEqual(1);
     await page.close();
   }
 });
@@ -416,6 +318,11 @@ test("narrow: meeting prep fits a phone with no sideways scrolling and no clippe
 
 test("captures: overlapping meetings and an open prep, light, dark and narrow", async () => {
   const page = await journeys.open("/");
+  // Fresh meetings: the narrow journey opened its prep, which read it and took it off For you now.
+  await setCalendar(page, [
+    { id: "handover3", summary: "Steering group handover with the client", start: -10, end: 10, meetLink: "https://meet.google.com/abc-defg-hij" },
+    { id: "triage3", summary: "Billing triage for the invoice fallback", start: 10, end: 40, meetLink: "https://meet.google.com/bil-ling-tri" },
+  ]);
   await expect(meetingHeadsUp(page, "Billing triage for the invoice fallback")).toBeVisible();
   await page.mouse.move(5, 5);
   const shoot = async (name: string) => {
@@ -431,13 +338,43 @@ test("captures: overlapping meetings and an open prep, light, dark and narrow", 
   };
   await shoot("");
   await page.setViewportSize({ width: 1280, height: 800 });
-  await meetingHeadsUp(page, "Steering group handover with the client").getByRole("button", { name: "Open prep" }).click();
   await openPrep(meetingHeadsUp(page, "Billing triage for the invoice fallback"));
   await page.mouse.move(5, 5);
   await shoot("-prep-open");
   await page.emulateMedia({ colorScheme: null });
 });
 
+test("your day after the last meeting: it stays read, an unanswered all-day invitation keeps its link and Not answered, and the day says Nothing more today", async () => {
+  const page = await journeys.open("/");
+  // Today in the browser's zone: a meeting that has already ended (read for the first time only now, after its end) and
+  // an all-day offsite the owner has not answered.
+  const day = await page.evaluate(() => {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const date = (d: Date) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
+    const span = now.getTime() - midnight;
+    return { today: date(now), tomorrow: date(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)), from: new Date(midnight).toISOString(), to: new Date(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).getTime()).toISOString(), endedStart: new Date(midnight + span / 4).toISOString(), endedEnd: new Date(midnight + span / 2).toISOString() };
+  });
+  const events = [
+    { id: "sync", summary: "Morning sync", start: { dateTime: day.endedStart }, end: { dateTime: day.endedEnd }, attendees: [{ email: SELF, self: true, responseStatus: "accepted" }, { email: "nora@client.example", displayName: "Nora Lind", responseStatus: "accepted" }] },
+    { id: "offsite", summary: "Team offsite", start: { date: day.today }, end: { date: day.tomorrow }, attendees: [{ email: SELF, self: true, responseStatus: "needsAction" }, { email: "mia@client.example", displayName: "Mia Jensen", responseStatus: "accepted" }] },
+  ];
+  expect((await page.request.post(`${stack.fixtureUrl}/__control/gcal-events`, { data: { events } })).ok()).toBe(true);
+  await api(page, "POST", "/connections/gcal/refresh");
+  // The read starts at the start of today, so the meeting that ended is still on the agenda.
+  const agenda = `/agenda?from=${encodeURIComponent(day.from)}&to=${encodeURIComponent(day.to)}`;
+  await expect.poll(async () => (await api<{ events: Array<{ id: string }> }>(page, "GET", agenda)).events.map((e) => e.id).sort(), { timeout: 30_000 }).toEqual(["offsite", "sync"]);
+  await page.reload();
+  const yourDay = page.getByRole("region", { name: "Your day" });
+  const allDay = yourDay.getByRole("list", { name: "All day" });
+  await expect(allDay.getByRole("link", { name: "Team offsite" })).toHaveAttribute("href", "https://calendar.google.com/event?eid=offsite");
+  await expect(allDay.getByRole("listitem").filter({ hasText: "Team offsite" })).toContainText("Not answered");
+  // The all-day event is never a meeting in progress: with the last meeting over, nothing more comes today.
+  await expect(yourDay.locator(".your-day-message")).toHaveText("Nothing more today");
+  await expect(yourDay).not.toContainText("Nothing on your calendar today");
+});
+
 test("no console errors during the meeting prep journeys", () => {
   expect(journeys.consoleErrors).toEqual([]);
 });
+

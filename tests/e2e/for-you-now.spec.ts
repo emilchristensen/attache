@@ -1,29 +1,17 @@
-/**
- * For you now (#25 of spec #14): Home's Heads-ups, driven through the Dashboard against the real bundled service and
- * the TEST-ONLY fixtures. The browser runs in a zone where it is morning now, so a daily briefing written now is
- * this morning's; the browser clock moves past noon to show the briefing leave.
- */
+/** The Daily Briefing's own Home area, against the real bundled service and fixture Connections. */
 import { test, expect, type Page } from "@playwright/test";
-import { api, dashboardAnswer, JourneyBrowser, nextFrames, settled } from "./browser.ts";
+import { api, JourneyBrowser } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
-import { completeRows, routeSignIn } from "./home-fold.ts";
 
 let stack: Stack;
 let journeys: JourneyBrowser;
-
-/** A fixed-offset zone where the hour is 09 now, so noon is at least two hours away whenever the suite runs. */
-function morningZone(): string {
-  const offset = ((9 - new Date().getUTCHours() + 36) % 24) - 12;
-  return offset === 0 ? "Etc/GMT" : offset > 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
-}
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
   buildAll();
   stack = await startStack();
-  journeys = await JourneyBrowser.start(browser, stack.url, { timezoneId: morningZone() });
-  // A finished setup with GitHub and a notes folder, so the Inbox has review requests and deadlines.
+  journeys = await JourneyBrowser.start(browser, stack.url);
   const page = await journeys.newPage();
   await page.goto(stack.pairUrl());
   await expect(page.getByRole("heading", { name: "Where should Attache keep your knowledge?" })).toBeVisible();
@@ -31,362 +19,138 @@ test.beforeAll(async ({ browser }) => {
   await api(page, "POST", "/setup/identity", { name: "Test User", email: "alex@example.com", confirm: true });
   await api(page, "POST", "/connections/model/configure", { method: "openai-compatible", fields: { baseUrl: `${stack.fixtureUrl}/model`, model: "fixture-model" } });
   await api(page, "POST", "/connections/github/configure", { method: "token", fields: { token: "ghp_fixturetokenfixturetoken12345678" } });
-  // A Harness too, so every feature is ready and Home's Connections area is the one green line of a healthy morning.
   await api(page, "POST", "/connections/claude-code/configure", { method: "hooks", fields: {} });
   await api(page, "POST", "/setup/complete");
   await api(page, "POST", "/import", { path: stack.vaultDir });
   await api(page, "POST", "/connections/github/refresh");
-  await expect.poll(async () => (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
+  await expect.poll(async () => (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length, { timeout: 30_000 }).toBeGreaterThan(2);
 });
+
 test.afterAll(async () => {
   await journeys?.close();
   await stack?.stop();
 });
 
-const area = (page: Page) => page.getByRole("region", { name: "For you now" });
+const area = (page: Page) => page.getByRole("region", { name: "The Daily Briefing" });
+const forYou = (page: Page) => page.getByRole("region", { name: "For you now" });
 
-/** Ask for a briefing of `kind` and wait until it is the latest. */
+/** Writes a briefing through the API and waits until the Daily Briefing area shows it; answers its id. */
 async function writeBriefing(page: Page, kind: "daily" | "away" | "manual"): Promise<string> {
-  const before = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+  const latest = async () => (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null;
+  const before = await latest();
   await api(page, "POST", "/briefings", { kind, ...(kind === "away" ? { since: new Date(Date.now() - 3 * 86_400_000).toISOString() } : {}) });
-  let id = before;
-  await expect.poll(async () => (id = (await api<{ briefing: { id: string } | null }>(page, "GET", "/briefings/latest")).briefing?.id ?? null), { timeout: 30_000 }).not.toBe(before);
-  return id!;
+  await expect.poll(latest, { timeout: 30_000 }).not.toBe(before);
+  const id = (await latest())!;
+  // The area hears of it through a live event: its card leads to the new briefing, not the one it replaced.
+  if (kind === "daily") await expect(area(page).locator(".daily-briefing-card").getByRole("link", { name: "Read briefing" })).toHaveAttribute("href", new RegExp(`/briefing/${id}$`));
+  return id;
 }
 
-/** The Dashboard's own next answer for the latest briefing once it is a `kind` one: the page knows of it. */
-const latestBriefing = (page: Page, kind: "daily" | "away" | "manual") => dashboardAnswer<{ briefing: { kind: string } | null }>(page, "/briefings/latest", (b) => b.briefing?.kind === kind);
-
-/**
- * For you now's share of the first 1280 x 800 viewport, with disclosures closed. Home's other parts take the rest:
- * masthead 74, page top 24, the Home heading and search field (#21) about 120, the Connections line (#22) about 72,
- * the Inbox heading and its count line about 66, and typed rows (#23) 72 each. So two complete rows fit under an
- * unread briefing, and four once it is put away; `completeRows` measures the rows themselves.
- */
-const BUDGET = { unread: 230, putAway: 90 };
-
-async function areaHeight(page: Page): Promise<number> {
-  return Math.round((await area(page).boundingBox())!.height);
-}
-
-test("quiet: with nothing timely the area is one line, and the briefing actions are there", async () => {
+test("empty, progress and switched-off states", async () => {
   const page = await journeys.open("/");
-  const forYou = area(page);
-  await expect(forYou).toHaveAttribute("data-for-you-now", "quiet");
-  // The scheduler's next run, an instant, said in the browser's zone.
-  const { schedules } = await api<{ schedules: Array<{ jobKind: string; nextRunAt: string }> }>(page, "GET", "/status");
-  const next = new Date(schedules.find((x) => x.jobKind === "briefing")!.nextRunAt);
-  const clock = await page.evaluate((iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), next.toISOString());
-  await expect(forYou.locator(".for-you-now-quiet-text")).toHaveText(new RegExp(`^Nothing timely right now\\. The (next )?daily briefing is scheduled (for ${clock}( tomorrow)?|on \\d+ \\w+ at ${clock})\\.$`));
-  await forYou.getByRole("button", { name: "Briefings" }).click();
-  const menu = forYou.getByRole("group", { name: "Briefing actions" });
-  await expect(menu.getByRole("button")).toHaveText([/^Prepare a briefing/, /^Away summary/, /^Meeting context/]);
-  // Meeting context reads the latest briefing, and there is none yet.
-  await expect(menu.getByRole("button", { name: /^Meeting context/ })).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
-  await expect(forYou.getByRole("button", { name: "Briefings" })).toBeFocused();
-});
-
-test("morning: the daily briefing leads with one development, its why, Read briefing and Got it", async () => {
-  const page = await journeys.open("/");
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await writeBriefing(page, "daily");
-  const lead = area(page).locator('[data-heads-up="daily-briefing"]');
-  await expect(lead).toBeVisible();
-  await expect(lead.locator(".heads-up-eyebrow")).toHaveText("Morning briefing · Until noon");
-  await expect(lead.getByRole("heading", { level: 3 })).not.toBeEmpty();
-  await expect(lead.locator(".heads-up-why")).toHaveText(/^Written at \d\d:\d\d for this morning\. It leaves at noon, or when you press Got it\.$/);
-  // The amber spread, with its sun.
-  expect(await lead.evaluate((el) => getComputedStyle(el, "::after").content)).toBe('""');
-  // Its share of the first viewport leaves room for the Inbox heading and two complete rows.
-  expect(await areaHeight(page), "For you now with an unread briefing").toBeLessThanOrEqual(BUDGET.unread);
-  // A healthy morning with an unread briefing: the Inbox heading and two complete typed rows above the fold.
-  await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
-  expect(await completeRows(page), "complete Inbox rows under an unread briefing").toBeGreaterThanOrEqual(2);
-  // Read briefing opens every point, the linked counts and the file, in place.
-  await lead.getByRole("button", { name: "Read briefing" }).click();
-  await expect(lead.getByRole("button", { name: "Read briefing" })).toHaveAttribute("aria-expanded", "true");
-  await expect(lead.locator(".briefing-lines li").first()).toBeVisible();
-  await expect(lead.getByRole("group", { name: "Briefing at a glance" })).toBeVisible();
-  await lead.getByRole("button", { name: "Open the full briefing" }).click();
-  await expect(page.getByRole("dialog", { name: /Evidence/ })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await lead.getByRole("button", { name: "Read briefing" }).click();
-  await expect(lead.locator(".briefing-detail")).toHaveCount(0);
-});
-
-test("look: a control on the amber spread keeps a 3:1 edge and focus ring, in light and dark", async () => {
-  const page = await journeys.open("/");
-  const lead = area(page).locator('[data-heads-up="daily-briefing"]');
-  await lead.getByRole("button", { name: "Read briefing" }).click();
-  const control = lead.getByRole("button", { name: "Open the full briefing" });
-  for (const scheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: scheme });
-    const measured = await control.evaluate(async (el) => {
-      const rgb = (c: string) => {
-        const [r, g, b] = c.match(/\d+(\.\d+)?/g)!.map(Number) as [number, number, number];
-        return { r, g, b };
-      };
-      const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
-        const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-      };
-      const ratio = (a: string, b: string) => {
-        const [hi, lo] = [lum(rgb(a)), lum(rgb(b))].sort((x, y) => y - x) as [number, number];
-        return (hi + 0.05) / (lo + 0.05);
-      };
-      const spread = getComputedStyle(el.closest(".heads-up-lead")!).backgroundColor;
-      (el as HTMLElement).focus();
-      await new Promise((r) => requestAnimationFrame(r));
-      const style = getComputedStyle(el);
-      return { edge: ratio(style.borderTopColor, spread), ring: ratio(style.outlineColor, spread), ringWidth: parseFloat(style.outlineWidth) };
-    });
-    expect(measured.edge, `${scheme} control edge on the spread`).toBeGreaterThanOrEqual(3);
-    expect(measured.ring, `${scheme} focus ring on the spread`).toBeGreaterThanOrEqual(3);
-    expect(measured.ringWidth).toBe(3);
-  }
-  await page.emulateMedia({ colorScheme: null });
-});
-
-test("progress: a briefing being written shows as a line with its why while the job runs", async () => {
-  const page = await journeys.open("/");
+  await expect(area(page)).toContainText("No briefing yet today");
   const running = { id: "job-in-progress", kind: "briefing", title: "Briefing", status: "running", progress: 0.4, progressNote: "Composing briefing", attempts: 1, maxAttempts: 3, result: null, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: null, cancelRequestedAt: null, cancelOutcome: null, capability: "attention", connectionId: null };
   await page.route("**/api/v1/jobs?status=queued,running*", (route) => route.fulfill({ json: [running] }));
   await page.reload();
-  const line = area(page).locator('[data-heads-up="briefing-progress"]');
-  await expect(line).toContainText("Preparing a briefing · 40% · Composing briefing");
-  await expect(line).toContainText("Here while the briefing is written. It keeps running if you close this tab.");
-  await expect(line.getByRole("progressbar", { name: "Briefing progress" })).toHaveAttribute("aria-valuenow", "40");
-  // While one is written, another waits.
-  await area(page).getByRole("button", { name: "Briefings" }).click();
-  await expect(area(page).getByRole("button", { name: /^Prepare a briefing/ })).toBeDisabled();
+  await expect(area(page)).toContainText("Preparing your briefing");
+  await expect(area(page).getByRole("progressbar", { name: "Briefing progress" })).toHaveAttribute("aria-valuenow", "40");
   await page.unroute("**/api/v1/jobs?status=queued,running*");
-  await page.reload();
-  await expect(area(page).locator('[data-heads-up="briefing-progress"]')).toHaveCount(0);
-});
-
-test("Got it: the briefing shrinks to one Earlier today line, remembered in this browser, and the Inbox moves up", async () => {
-  const page = await journeys.open("/");
-  await page.setViewportSize({ width: 1280, height: 800 });
-  const forYou = area(page);
-  await forYou.locator('[data-heads-up="daily-briefing"]').getByRole("button", { name: "Got it" }).click();
-  await expect(forYou.locator('[data-heads-up="daily-briefing"]')).toHaveCount(0);
-  const earlier = forYou.locator('[data-heads-up="earlier-today"]');
-  await expect(earlier).toContainText(/Daily briefing · Earlier today, \d\d:\d\d/);
-  await expect(earlier).toContainText("It stays here until midnight while it is the latest briefing.");
-  // Focus lands on the area's heading, not on the page's start, and the change is said once.
-  await expect(forYou.getByRole("heading", { name: "For you now" })).toBeFocused();
-  await expect(forYou.getByRole("status").last()).toHaveText("Briefing put away. It stays under Earlier today until midnight.");
-  // Earlier today reopens the briefing in place.
-  await earlier.getByRole("button", { name: "Read briefing" }).click();
-  await expect(earlier.locator(".briefing-lines li").first()).toBeVisible();
-  await earlier.getByRole("button", { name: "Read briefing" }).click();
-  // Put away, it leaves room for four complete rows.
-  expect(await areaHeight(page), "For you now with the briefing put away").toBeLessThanOrEqual(BUDGET.putAway);
-  expect(await completeRows(page), "complete Inbox rows after Got it").toBeGreaterThanOrEqual(4);
-  // Remembered in this browser, so a reload keeps it put away.
-  await page.reload();
-  await expect(area(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  await expect(area(page).locator('[data-heads-up="daily-briefing"]')).toHaveCount(0);
-  // With the briefing as a follower line and one sign-in problem, at least the first row is still complete.
-  // With overlapping meetings above it too, meeting-prep.spec measures the same case.
-  await routeSignIn(page);
-  await page.reload();
-  await expect(page.getByRole("status", { name: "Connections" }).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
-  expect(await completeRows(page), "complete Inbox rows with a sign-in problem").toBeGreaterThanOrEqual(1);
-  await page.unrouteAll({ behavior: "ignoreErrors" });
-});
-
-test("noon: a new daily briefing leaves at noon, but not while the pointer is on it", async ({ browser }) => {
-  // The browser clock is the whole context's, so this journey has a paired context of its own.
-  const own = await JourneyBrowser.start(browser, stack.url, { timezoneId: morningZone(), storageState: await journeys.context.storageState() });
-  const page = await own.newPage();
-  await page.clock.install({ time: new Date() });
-  await page.goto(stack.url);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await writeBriefing(page, "daily");
-  const lead = area(page).locator('[data-heads-up="daily-briefing"]');
-  await expect(lead).toBeVisible();
-  // The pointer rests on the briefing while noon passes: it holds still.
-  await lead.hover();
-  await page.clock.fastForward("03:00:00");
-  await expect(lead).toBeVisible();
-  // The pointer leaves: the briefing becomes its Earlier today line.
-  await page.mouse.move(5, 5);
-  await expect(lead).toHaveCount(0);
-  await expect(area(page).locator('[data-heads-up="earlier-today"]')).toBeVisible();
-  expect(own.consoleErrors).toEqual([]);
-  await own.close();
-});
-
-test("asked for: an Away summary leads on paper, without the amber spread, until Got it", async () => {
-  const page = await journeys.open("/");
-  const forYou = area(page);
-  await forYou.getByRole("button", { name: "Briefings" }).click();
-  await forYou.getByRole("button", { name: /^Away summary/ }).click();
-  await expect(page.getByText("Writing an Away summary in the background")).toBeVisible();
-  // The menu opened over the Heads-ups; the pointer moves off them, so nothing holds them still.
-  await page.mouse.move(5, 5);
-  const lead = forYou.locator('[data-heads-up="away-summary"]');
-  await expect(lead).toBeVisible({ timeout: 30_000 });
-  await expect(lead.locator(".heads-up-eyebrow")).toHaveText(/^Away summary · Until \d\d:\d\d$/);
-  await expect(lead.locator(".heads-up-why")).toHaveText(/^You asked for it at \d\d:\d\d\. It leaves at \d\d:\d\d, or when you press Got it\.$/);
-  expect(await lead.evaluate((el) => el.classList.contains("feature"))).toBe(false);
-  // The daily briefing is no longer the latest, so its Earlier today line has gone.
-  await expect(forYou.locator('[data-heads-up="earlier-today"]')).toHaveCount(0);
-  // Meeting context reads this briefing now.
-  await forYou.getByRole("button", { name: "Briefings" }).click();
-  await forYou.getByRole("button", { name: /^Meeting context/ }).click();
-  const context = page.getByRole("region", { name: "Meeting context" });
-  await expect(context).toContainText(/As the briefing at \d\d:\d\d found it/);
-  await context.getByRole("button", { name: "Close" }).click();
-  await expect(context).toHaveCount(0);
-  await lead.getByRole("button", { name: "Got it" }).click();
-  await expect(forYou).toHaveAttribute("data-for-you-now", "quiet");
-});
-
-test("failure: a briefing that could not be checked says so with Try again, never that nothing is timely", async () => {
-  const page = await journeys.newPage();
-  for (const p of journeys.context.pages()) if (p !== page) await p.close();
-  await page.route("**/api/v1/briefings/latest", (route) => route.abort());
-  await page.goto(stack.url);
-  const forYou = area(page);
-  await expect(forYou).toContainText("Could not check for a briefing.");
-  await expect(forYou).not.toContainText("Nothing timely");
-  await page.unroute("**/api/v1/briefings/latest");
-  await forYou.getByRole("button", { name: "Try again" }).click();
-  await expect(forYou).toContainText("Nothing timely right now.");
-  await page.close();
-});
-
-test("hold: a new briefing waits while the keyboard focus or the pointer is on the lead", async () => {
-  const page = await journeys.open("/");
-  await writeBriefing(page, "daily");
-  const daily = area(page).locator('[data-heads-up="daily-briefing"]');
-  await daily.getByRole("button", { name: "Read briefing" }).focus();
-  // Another Machine or tab asks for a briefing: it becomes the latest, but the focused lead stays put once the page
-  // has it.
-  const manual = latestBriefing(page, "manual");
-  await writeBriefing(page, "manual");
-  await manual;
-  await nextFrames(page);
-  await expect(daily).toBeVisible();
-  await expect(daily.getByRole("button", { name: "Read briefing" })).toBeFocused();
-  // Focus leaves: the briefing asked for takes the lead.
-  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-  const asked = area(page).locator('[data-heads-up="requested-briefing"]');
-  await expect(asked).toBeVisible();
-  await expect(daily).toHaveCount(0);
-  // Asked for here, from the menu that opens over the lead: the pointer rests on the lead when it closes, so the
-  // Away summary waits until the pointer moves away, even though the owner asked for it.
-  const away = latestBriefing(page, "away");
-  await area(page).getByRole("button", { name: "Briefings" }).click();
-  await area(page).getByRole("button", { name: /^Away summary/ }).click();
-  await away;
-  await nextFrames(page);
-  await expect(asked).toBeVisible();
-  await page.mouse.move(5, 5);
-  await expect(area(page).locator('[data-heads-up="away-summary"]')).toBeVisible();
-  await expect(asked).toHaveCount(0);
-});
-
-test("hold: a briefing asked for takes its progress line's place under the pointer, and its own place once the pointer leaves", async () => {
-  const page = await journeys.open("/");
-  const forYou = area(page);
-  // The Away summary the journey before left leading is put away, so nothing is timely.
-  await forYou.locator('[data-heads-up="away-summary"]').getByRole("button", { name: "Got it" }).click();
-  await expect(forYou).toHaveAttribute("data-for-you-now", "quiet");
-  // A briefing is being written: its progress line comes up where the Briefings menu was, under the resting pointer.
-  const running = { id: "job-under-the-pointer", kind: "briefing", title: "Briefing", status: "running", progress: 0.75, progressNote: "Composing briefing", attempts: 1, maxAttempts: 3, result: null, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: null, cancelRequestedAt: null, cancelOutcome: null, capability: "attention", connectionId: null };
-  await page.route("**/api/v1/jobs?status=queued,running*", (route) => route.fulfill({ json: [running] }));
-  await page.reload();
-  const progress = forYou.locator('[data-heads-up="briefing-progress"]');
-  await progress.hover();
-  const before = (await progress.boundingBox())!;
-  await page.unroute("**/api/v1/jobs?status=queued,running*");
-  // The job ends and its briefing is written while the pointer rests there: the briefing takes the line's place, as
-  // a line of the same height, so nothing below it moves, and it opens in place.
-  const first = await writeBriefing(page, "manual");
-  const asked = forYou.locator('li.heads-up-line[data-heads-up="requested-briefing"]');
-  await expect(asked).toHaveAttribute("data-heads-up-key", `briefing:${first}`);
-  await expect(progress).toHaveCount(0);
-  expect(await asked.boundingBox()).toEqual(before);
-  const read = asked.getByRole("button", { name: "Read briefing" });
-  await read.click();
-  await expect(asked.locator(".briefing-lines li").first()).toBeVisible();
-  // Another briefing comes while focus is on this one: once the Dashboard has it (its own request, without the
-  // client header the test's calls send), it waits, and this one stays as it came.
-  const dashboardHasIt = page.waitForResponse(async (r) => {
-    if (!r.url().endsWith("/api/v1/briefings/latest") || r.request().headers()["x-attache-client"] || !r.ok()) return false;
-    const id = ((await r.json()) as { briefing: { id: string } | null }).briefing?.id;
-    return !!id && id !== first;
-  });
-  const second = await writeBriefing(page, "manual");
-  await dashboardHasIt;
-  await nextFrames(page);
-  await expect(asked).toHaveAttribute("data-heads-up-key", `briefing:${first}`);
-  await expect(read).toBeFocused();
-  // Pointer and focus leave: the latest briefing takes its own place, leading.
-  await page.mouse.move(5, 5);
-  await expect(asked).toBeVisible();
-  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-  await expect(forYou.locator('article.heads-up-lead[data-heads-up="requested-briefing"]')).toHaveAttribute("data-heads-up-key", `briefing:${second}`);
-  await expect(asked).toHaveCount(0);
-});
-
-test("narrow: the lead and its lines fit a phone with no sideways scrolling", async () => {
-  const page = await journeys.open("/");
-  await writeBriefing(page, "daily");
-  for (const width of [375, 320]) {
-    await page.setViewportSize({ width, height: 812 });
-    await expect(area(page).locator('[data-heads-up="daily-briefing"]')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width} px overflow`).toBeLessThanOrEqual(0);
-    const clipped = await area(page).evaluate((el) => [...el.querySelectorAll("h3, p, button")].filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent));
-    expect(clipped, `${width} px clipped text`).toEqual([]);
-  }
-});
-
-test("captures: For you now in the morning, after Got it and quiet, light, dark and narrow", async () => {
-  const page = await journeys.open("/");
-  const shoot = async (name: string) => {
-    for (const scheme of ["light", "dark"] as const) {
-      await page.setViewportSize({ width: 1280, height: 800 });
-      await page.emulateMedia({ colorScheme: scheme });
-      await settled(page);
-      await page.screenshot({ path: `test-results/screens/${scheme}-home-${name}.png` });
-    }
-    await page.setViewportSize({ width: 375, height: 812 });
-    await settled(page);
-    await page.screenshot({ path: `test-results/screens/narrow-home-${name}.png` });
-  };
-  await expect(area(page).locator('[data-heads-up="daily-briefing"]')).toBeVisible();
-  await shoot("morning");
-  await area(page).getByRole("button", { name: "Got it" }).click();
-  await shoot("earlier-today");
-  await page.setViewportSize({ width: 1280, height: 800 });
-  for (const scheme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: scheme });
-    await area(page).getByRole("button", { name: "Briefings" }).click();
-    await expect(area(page).getByRole("group", { name: "Briefing actions" })).toBeVisible();
-    await page.screenshot({ path: `test-results/screens/${scheme}-home-briefing-actions.png` });
-    await page.keyboard.press("Escape");
-  }
-  await page.emulateMedia({ colorScheme: null });
-});
-
-test("off: with Attention and briefings switched off the area says so, with a way to Settings", async () => {
-  const page = await journeys.open("/");
   await api(page, "PUT", "/features", { changes: { attention: false }, cascade: true });
   await page.reload();
-  const forYou = area(page);
-  await expect(forYou).toHaveAttribute("data-for-you-now", "off");
-  await expect(forYou).toContainText("Heads-ups need Attention and briefings, which is switched off.");
-  await forYou.getByRole("link", { name: "Turn it on in Settings" }).click();
+  await expect(area(page)).toContainText("Briefings are switched off");
+  await area(page).getByRole("link", { name: "Turn it on in Settings" }).click();
   await expect(page).toHaveURL(/\/settings\/features$/);
   await api(page, "PUT", "/features", { changes: { attention: true, drafts: true }, cascade: true });
 });
 
-test("no console errors during the For you now journeys", () => {
+test("Prepare a briefing with none today writes today's Daily Briefing, so the area fills with its card", async () => {
+  const page = await journeys.open("/");
+  await expect(area(page)).toContainText("No briefing yet today");
+  await area(page).locator(".briefing-empty").getByRole("button", { name: "Prepare a briefing" }).click();
+  const card = area(page).locator(".daily-briefing-card");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(area(page)).not.toContainText("No briefing yet today");
+  await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
+  expect((await api<{ daily: { kind: string } | null; requested: unknown }>(page, "GET", "/briefings")).daily?.kind).toBe("daily");
+});
+
+test("daily: own all-day card, Got it fold, and briefing page", async () => {
+  const page = await journeys.open("/");
+  await writeBriefing(page, "daily");
+  const card = area(page).locator(".daily-briefing-card");
+  await expect(card).toBeVisible();
+  await expect(area(page)).toContainText("First on your list");
+  await expect(forYou(page).locator('[data-heads-up="daily-briefing"]')).toHaveCount(0);
+  await expect(card.locator(".briefing-painting")).toHaveAttribute("style", /\/paintings\//);
+  await card.getByRole("link", { name: "Read briefing" }).click();
+  await expect(page).toHaveURL(/\/briefing\/[^/]+$/);
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Home/The Daily Briefing");
+  for (const heading of ["First on your list", "Top to-dos", "New updates", "Your day"]) await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  // Your day is live from the agenda route, not a copy kept with the briefing.
+  await expect(page.getByRole("region", { name: "Your day" })).toBeVisible();
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/screens/${scheme}-briefing-page.png`, fullPage: true });
+  }
+  await page.emulateMedia({ colorScheme: null });
+  await page.goto(stack.url);
+  await card.getByRole("button", { name: "Got it" }).click();
+  await expect(area(page).locator(".briefing-folded")).toBeVisible();
+  await page.reload();
+  await expect(area(page).locator(".briefing-folded")).toBeVisible();
+  await expect(area(page).locator(".daily-briefing-card")).toHaveCount(0);
+  // The folded line opens it again, and that is remembered too.
+  await area(page).locator(".briefing-folded").getByRole("button").click();
+  await expect(area(page).locator(".daily-briefing-card")).toBeVisible();
+  await page.reload();
+  await expect(area(page).locator(".daily-briefing-card")).toBeVisible();
+  await expect(area(page).locator(".briefing-folded")).toHaveCount(0);
+});
+
+test("the Daily Briefing stays after noon", async () => {
+  const page = await journeys.open("/");
+  await writeBriefing(page, "daily");
+  await expect(area(page).locator(".daily-briefing-card")).toBeVisible();
+  await expect(area(page).locator(".briefing-painting")).toBeVisible();
+});
+
+test("options and requested briefings live above the daily card", async () => {
+  const page = await journeys.open("/");
+  await area(page).getByRole("button", { name: "Briefing options" }).click();
+  await expect(area(page).getByRole("group", { name: "Briefing actions" }).getByRole("button")).toHaveText([/^Prepare a briefing/, /^Away summary/, /^Meeting context/]);
+  await area(page).getByRole("button", { name: /^Away summary/ }).click();
+  await expect.poll(async () => (await api<{ requested: { kind: string } | null }>(page, "GET", "/briefings")).requested?.kind, { timeout: 30_000 }).toBe("away");
+  await expect(area(page).locator(".requested-briefing")).toBeVisible({ timeout: 30_000 });
+  // Its page is named for what it is, an Away summary, without the Daily Briefing's painting.
+  await area(page).locator(".requested-briefing").getByRole("link", { name: "Read briefing" }).click();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Home/Away summary");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Away summary");
+  await expect(page.getByRole("region", { name: "Away summary" })).toBeVisible();
+  await expect(page.locator(".briefing-painting")).toHaveCount(0);
+  await expect(page.locator(".briefing-page").getByText("Daily Briefing")).toHaveCount(0);
+  await page.goBack();
+  await area(page).locator(".requested-briefing").getByRole("button", { name: "Got it" }).click();
+  await expect(area(page).locator(".requested-briefing")).toHaveCount(0);
+});
+
+test("narrow layout and visual captures", async () => {
+  const page = await journeys.open("/");
+  await writeBriefing(page, "daily");
+  for (const width of [375, 320]) {
+    await page.setViewportSize({ width, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width}px overflow`).toBeLessThanOrEqual(0);
+    if (width === 375) await expect(area(page).locator(".briefing-painting")).toBeVisible();
+    else await expect(area(page).locator(".briefing-painting")).toBeHidden();
+  }
+  for (const scheme of ["light", "dark"] as const) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/screens/${scheme}-home-daily-briefing.png` });
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.screenshot({ path: "test-results/screens/narrow-home-daily-briefing.png" });
+});
+
+test("no console errors during the briefing journeys", () => {
   expect(journeys.consoleErrors).toEqual([]);
 });

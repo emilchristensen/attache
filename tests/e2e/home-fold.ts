@@ -4,21 +4,14 @@
  */
 import { expect, type Page } from "@playwright/test";
 
-/**
- * The fold criterion, measured: at scroll position zero, with the Inbox heading on screen, how many Inbox rows end
- * (bottom edge, not top) inside the viewport, with their whole type word, subject, source line and time drawn: each
- * one rendered, cut off neither sideways nor below, and inside every ancestor that clips it. -1 when the Inbox
- * heading itself is below the fold.
- */
-export async function completeRows(page: Page): Promise<number> {
-  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
-  return page.evaluate(() => {
+/** `parts` must each be drawn in full; `optional` parts must be drawn in full when the row has them. */
+function countComplete(page: Page, selector: string, parts: readonly string[], heading: string, optional: readonly string[] = []): Promise<number> {
+  return page.evaluate(({ selector, parts, heading, optional }) => {
     const scroller = document.querySelector(".page")!;
     scroller.scrollTo(0, 0);
     const fold = window.innerHeight;
-    if (document.querySelector("#inbox h2")!.getBoundingClientRect().bottom > fold) return -1;
-    const rows = [...document.querySelectorAll<HTMLElement>("#inbox [data-inbox-row]")];
-    const PARTS = [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"];
+    if (document.querySelector(heading)!.getBoundingClientRect().bottom > fold) return -1;
+    const rows = [...document.querySelectorAll<HTMLElement>(selector)];
     const insideClips = (el: Element) => {
       const box = el.getBoundingClientRect();
       for (let p = el.parentElement; p; p = p.parentElement) {
@@ -30,9 +23,47 @@ export async function completeRows(page: Page): Promise<number> {
     };
     const drawn = (el: HTMLElement | null) =>
       el !== null && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) && el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1 && el.getBoundingClientRect().bottom <= fold && insideClips(el);
-    const whole = (row: HTMLElement) => row.getBoundingClientRect().bottom <= fold && PARTS.every((s) => drawn(row.querySelector<HTMLElement>(s)));
-    return rows.filter(whole).length;
+    const optionalDrawn = (row: HTMLElement) => optional.every((part) => { const el = row.querySelector<HTMLElement>(part); return el === null || drawn(el); });
+    return rows.filter((row) => row.getBoundingClientRect().bottom <= fold && parts.every((part) => drawn(row.querySelector<HTMLElement>(part))) && optionalDrawn(row)).length;
+  }, { selector, parts, heading, optional });
+}
+
+/** The fold criterion for the two complete rows in the Inbox. */
+export async function completeRows(page: Page): Promise<number> {
+  await expect(page.locator("#inbox [data-inbox-row]").first()).toBeVisible();
+  return countComplete(page, "#inbox [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source", ".inbox-time"], "#inbox h2");
+}
+
+/** The fold criterion for the two complete entries in For you now. */
+export async function completeForYouNow(page: Page): Promise<number> {
+  await expect(page.locator(".for-you-now [data-inbox-row]").first()).toBeVisible();
+  // The time is left out of an entry whose reason already says it.
+  return countComplete(page, ".for-you-now [data-inbox-row]", [".inbox-kind-word", ".inbox-subject", ".inbox-source"], ".for-you-now h2", [".inbox-time"]);
+}
+
+/** How far above the fold at 1280 x 800 the fold criterion's rows end: room left for a taller system font. */
+export const FOLD_MARGIN = 24;
+
+/**
+ * The bottom edge of the second Inbox row and of For you now's second entry, scroll position zero, null where the
+ * list has fewer than two: the fold criterion measured with the room it leaves under them.
+ */
+export function secondBottoms(page: Page): Promise<{ inbox: number | null; forYouNow: number | null; fold: number }> {
+  return page.evaluate(() => {
+    document.querySelector(".page")!.scrollTo(0, 0);
+    const second = (selector: string) => document.querySelectorAll<HTMLElement>(selector)[1]?.getBoundingClientRect().bottom ?? null;
+    return { inbox: second("#inbox [data-inbox-row]"), forYouNow: second(".for-you-now [data-inbox-row]"), fold: window.innerHeight };
   });
+}
+
+/** The second Inbox row and For you now's second entry (where it has two) end FOLD_MARGIN px or more above the fold. */
+export async function expectFoldMargin(page: Page, what: string, forYouNow: boolean) {
+  const { inbox, forYouNow: entry, fold } = await secondBottoms(page);
+  expect(inbox, `${what}: the second Inbox row`).not.toBeNull();
+  expect(inbox!, `${what}: the second Inbox row ends at ${inbox}`).toBeLessThanOrEqual(fold - FOLD_MARGIN);
+  if (!forYouNow) return;
+  expect(entry, `${what}: For you now's second entry`).not.toBeNull();
+  expect(entry!, `${what}: For you now's second entry ends at ${entry}`).toBeLessThanOrEqual(fold - FOLD_MARGIN);
 }
 
 /** A sign-in problem on Home's Connections area: GitHub's answer says it needs a new sign-in. */

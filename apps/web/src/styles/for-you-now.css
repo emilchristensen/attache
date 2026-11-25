@@ -1,0 +1,92 @@
+/*
+ * For you now: the short curated list, as Inbox rows in their narrow form (`inbox.css`) with the reason in place of the
+ * source line. It answers its own width: in a narrow space it shows the view it shows on a phone.
+ */
+
+.for-you-now {
+  margin-bottom: var(--s-5);
+  container-type: inline-size;
+}
+.for-you-now-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.for-you-now h2:focus {
+  outline: none;
+}
+.for-you-now h2:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Nothing timely: one quiet line between rules, so the page does not jump when an entry arrives or leaves. */
+.for-you-now.quiet {
+  padding: 7px 0;
+  border-block: 1px solid var(--rule);
+}
+.for-you-now.quiet .for-you-now-head {
+  gap: var(--s-1) var(--s-2);
+  margin-bottom: 0;
+}
+.for-you-now-quiet-text {
+  margin: 0;
+  flex: 1 1 16em;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-2);
+}
+.for-you-now-failed {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.for-you-now-more {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-meta);
+}
+/* The note about the Daily Briefing's picks, under the entries or under the quiet line. */
+.for-you-now-rows ~ .for-you-now-quiet-text,
+.for-you-now-quiet-text + .for-you-now-quiet-text {
+  margin-top: var(--s-2);
+}
+
+/* A narrow space: kind and actions on one line, the subject under them, then the reason and the time. */
+@container (max-width: 600px) {
+  .for-you-now .inbox-rows {
+    margin-top: var(--s-1);
+  }
+  .for-you-now .inbox-line {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "kind actions"
+      "subject subject"
+      "source time";
+    row-gap: 1px;
+    padding: 4px 2px;
+  }
+  .for-you-now .inbox-kind {
+    grid-area: kind;
+  }
+  .for-you-now .inbox-time {
+    grid-area: time;
+  }
+  .for-you-now .inbox-subject {
+    grid-area: subject;
+    min-height: 24px;
+  }
+  .for-you-now .inbox-source {
+    grid-area: source;
+  }
+  .for-you-now .inbox-row-actions {
+    grid-area: actions;
+    justify-self: end;
+    min-height: 28px;
+    margin-top: 0;
+  }
+  .for-you-now .inbox-row-actions button {
+    min-height: 24px;
+  }
+}

@@ -1,34 +1,48 @@
-import { useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState, type ReactNode } from "react";
 import { useReadingPlace } from "../reading-place.ts";
 import { useHomeClock } from "../heads-up-clock.ts";
 import { useResource } from "../live.ts";
+import { useConnections } from "../connections-view.ts";
 import { HomeSearch } from "./HomeSearch.tsx";
 import { ForYouNow } from "./ForYouNow.tsx";
+import { DailyBriefing } from "./DailyBriefing.tsx";
 import { Inbox } from "./Inbox.tsx";
-import { HomeConnections, useConnectionsStatus } from "./HomeConnections.tsx";
 import { RecentlyAdded } from "./RecentlyAdded.tsx";
+import { YourDay } from "./YourDay.tsx";
+import { homeAreaOrder, usePhoneWindow, type HomeArea } from "../home-arrangement.ts";
 
-const NOTHING_ABOVE: ReadonlySet<string> = new Set();
+const NOTHING_SUGGESTED: ReadonlySet<string> = new Set();
+
+/** The same items, in any order: a new set only when what For you now shows changed. */
+const sameItems = (a: ReadonlySet<string>, b: readonly string[]) => a.size === b.length && b.every((id) => a.has(id));
 
 /**
- * Home's four areas: Search the Brain, For you now (the Heads-ups), then Connections (can the owner trust what is
- * below?), then the Inbox, which closes with what reached the Brain without review (Recently added). Questions to the Brain happen in the owner's Harness (ADR 0003).
- * A meeting prep item shown in For you now is not listed in the Inbox (`above`): it is one item, shown once.
+ * Home's areas: Search the Brain, The Daily Briefing, then Your day, For you now and the Inbox in the order the window
+ * draws them (`home-arrangement.ts`; `styles/home.css` places them), with one clock for their time-dependent views.
  */
 export function Home() {
   const cfg = useResource<{ features: Record<string, boolean> }>("/config", ["config.changed"]);
   const f = cfg.data?.features ?? {};
-  const connections = useConnectionsStatus();
-  const [above, setAbove] = useState<ReadonlySet<string>>(NOTHING_ABOVE);
+  const connections = useConnections();
+  const [suggested, setSuggested] = useState<ReadonlySet<string>>(NOTHING_SUGGESTED);
+  const onShown = useCallback((ids: readonly string[]) => setSuggested((prev) => (sameItems(prev, ids) ? prev : new Set(ids))), []);
   const page = useRef<HTMLElement>(null);
   const clock = useHomeClock();
   useReadingPlace(page);
+  const attentionOn = f.attention ?? false;
+  const order = homeAreaOrder(usePhoneWindow());
+  const areas: Record<HomeArea, ReactNode> = {
+    "your-day": cfg.data && <YourDay clock={clock} enabled={attentionOn} />,
+    "for-you-now": cfg.data && <ForYouNow attentionOn={attentionOn} draftsOn={f.drafts ?? false} clock={clock} onShown={onShown} />,
+    inbox: <Inbox attentionOn={cfg.data ? attentionOn : null} draftsOn={f.drafts ?? false} connections={connections.status} suggested={suggested} clock={clock} after={f.capture && <RecentlyAdded />} />,
+  };
   return (
     <section ref={page} className="page page-inbox" aria-label="Home">
       <HomeSearch recall={f.recall} />
-      {cfg.data && <ForYouNow attentionOn={f.attention ?? false} clock={clock} onAbove={setAbove} />}
-      <HomeConnections view={connections} />
-      <Inbox attentionOn={cfg.data ? (f.attention ?? false) : null} draftsOn={f.drafts ?? false} connections={connections.status} above={above} clock={clock} after={f.capture && <RecentlyAdded />} />
+      {cfg.data && <DailyBriefing attentionOn={attentionOn} clock={clock} />}
+      <div className="home-areas">
+        {order.map((area) => <Fragment key={area}>{areas[area]}</Fragment>)}
+      </div>
     </section>
   );
 }

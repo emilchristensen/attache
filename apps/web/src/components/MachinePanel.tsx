@@ -23,7 +23,7 @@ const LIVE_TEXT: Record<ReturnType<typeof useLiveConnection>["status"], string> 
   connecting: "Connecting to live updates…",
   open: "Live updates are connected.",
   reconnecting: "Reconnecting to the Attache service… Work in progress continues in the service.",
-  closed: "Disconnected from the Attache service. Retrying.",
+  closed: "Live updates are unavailable. Retrying.",
 };
 
 /** The live connection in a sentence: what the owner needs to know when it drops. */
@@ -110,9 +110,9 @@ export function MachineDisclosure() {
     <div className="machine" ref={root} data-lost={lost || undefined}>
       <button ref={button} className="machine-trigger" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>
         <span className="sr-only">This Machine: </span>
-        <Icon name={lost ? "warning" : "machine"} />
+        <Icon name={lost ? "warning" : "machine"} className="machine-trigger-icon" />
         <span className="machine-trigger-name">{name}</span>
-        {lost && <span className="machine-trigger-live">{status === "closed" ? "Disconnected" : "Reconnecting"}</span>}
+        {lost && <span className="machine-trigger-live">{status === "closed" ? "Offline" : "Reconnecting"}</span>}
         <Icon name="chevron" className="machine-trigger-chevron" />
       </button>
       {open && (

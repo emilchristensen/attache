@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ActionStatus } from "./actions.ts";
+import { Coverage } from "./features.ts";
 
 /** API contract: Attention. */
 
@@ -61,6 +62,7 @@ export interface AttentionItemView {
   priority: number;
   state: "open" | "dismissed" | "snoozed" | "resolved";
   snoozeUntil: string | null;
+  startedAt: string | null;
   evidence: Array<{ label: string; url?: string; relPath?: string; lines?: [number, number]; observedAt: string }>;
   firstSeenAt: string;
   updatedAt: string;
@@ -75,7 +77,7 @@ export interface AttentionItemView {
 }
 
 export const AttentionDecision = z.object({
-  decision: z.enum(["dismiss", "snooze", "reopen", "done"]),
+  decision: z.enum(["start", "dismiss", "snooze", "reopen", "done"]),
   until: z.string().datetime().optional(),
 });
 
@@ -90,3 +92,70 @@ export const AttentionDraftInput = z.object({
 });
 
 export type AttentionDraftBody = z.infer<typeof AttentionDraftInput>;
+
+/** The longest headline a briefing stores for its lead or an update, in characters. */
+export const BRIEFING_HEADLINE_MAX = 160;
+/** The longest explanation or update text a briefing stores, in characters. */
+export const BRIEFING_TEXT_MAX = 500;
+/** How many open Inbox items a briefing picks, in the Inbox's order. */
+export const BRIEFING_TOP_PICKS = 5;
+
+/** One line of words a model may write: no line breaks, within the stored limit. */
+const line = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .regex(/^[^\n]*$/u);
+
+/** The lead: the first of the top picks, with a headline and a short explanation. */
+export const BriefingLead = z.object({ itemId: z.string().min(1), headline: line(BRIEFING_HEADLINE_MAX), explanation: line(BRIEFING_TEXT_MAX) });
+export type BriefingLead = z.infer<typeof BriefingLead>;
+/** An update text: for an item the briefing flags as new or changed, a headline and one or two sentences. */
+export const BriefingUpdate = z.object({ itemId: z.string().min(1), headline: line(BRIEFING_HEADLINE_MAX), text: line(BRIEFING_TEXT_MAX) });
+export type BriefingUpdate = z.infer<typeof BriefingUpdate>;
+
+/**
+ * What a model returns for a briefing: words only. The lead's item and the update items are chosen by fixed rules
+ * before the model is asked, so the model names no lead item; it may only word the updates for the items it was given.
+ */
+export const BriefingModelWords = z.object({
+  summary: z.string().trim().min(1).max(BRIEFING_TEXT_MAX * 2),
+  lead: z.object({ headline: line(BRIEFING_HEADLINE_MAX), explanation: line(BRIEFING_TEXT_MAX) }).nullable(),
+  updates: z.array(BriefingUpdate),
+});
+export type BriefingModelWords = z.infer<typeof BriefingModelWords>;
+
+const BriefingRelated = z.object({ title: z.string(), relPath: z.string(), lines: z.tuple([z.number(), z.number()]) });
+export type BriefingRelatedNote = z.infer<typeof BriefingRelated>;
+const BriefingItem = z.object({ id: z.string().min(1), title: z.string(), summary: z.string(), url: z.string().nullable(), isNew: z.boolean(), changed: z.boolean(), related: z.array(BriefingRelated).optional() });
+const BriefingSection = z.object({ id: z.string(), title: z.string(), items: z.array(BriefingItem) });
+const BriefingCounts = z.object({ open: z.number().int().nonnegative(), new: z.number().int().nonnegative(), changed: z.number().int().nonnegative(), drafts: z.number().int().nonnegative(), proposals: z.number().int().nonnegative(), failedSources: z.number().int().nonnegative() });
+
+/** What a briefing knew of one source when it was written. */
+export const BriefingSourceCoverage = z.object({ id: z.string(), label: z.string(), kind: z.string(), coverage: Coverage.nullable(), lastSuccessAt: z.string().nullable(), status: z.string() });
+export type BriefingSourceCoverage = z.infer<typeof BriefingSourceCoverage>;
+
+export const BriefingViewSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["daily", "away", "manual"]),
+  createdAt: z.iso.datetime(),
+  since: z.string().nullable(),
+  summary: z.string(),
+  sections: z.array(BriefingSection),
+  lead: BriefingLead.nullable(),
+  topPicks: z.array(z.string().min(1)).max(BRIEFING_TOP_PICKS),
+  updates: z.array(BriefingUpdate),
+  coverage: z.array(BriefingSourceCoverage),
+  counts: BriefingCounts,
+  deliverablePath: z.string().nullable(),
+});
+
+export type BriefingView = z.infer<typeof BriefingViewSchema>;
+
+/** `GET /briefings`: the latest Daily Briefing, and the latest away summary or briefing the owner asked for. */
+export interface BriefingsResponse {
+  daily: BriefingView | null;
+  requested: BriefingView | null;
+}

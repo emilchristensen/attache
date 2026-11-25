@@ -40,10 +40,8 @@ export function ConnectionCard(props: Props) {
 
 /**
  * Everything the owner can see and do for one Connection: its details, last Source refresh, setup form, sign-in,
- * Test, Refresh now, Reconfigure, Disconnect, what it reads and what it may write. `inRow`: the Connections page's
+ * Test, Refresh now, Reconfigure, Disable, what it reads and what it may write. `inRow`: the Connections page's
  * row already shows the account and what it reads and writes in its columns, so they are not repeated.
- */
-/**
  * `testResult`: the Connections page keeps the last Test or connect result by Connection, since a row is drawn anew
  * when it moves between a tile, its group and "Needs you"; without it the controls keep their own.
  */
@@ -190,7 +188,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
                     Reconfigure
                   </button>
                   <button className="ghost danger" onClick={() => run("preview", async () => setPreview(await api<DisconnectEffects>(`/connections/${status.id}/disconnect-preview`)))}>
-                    Disconnect…
+                    Disable…
                   </button>
                 </>
               )}
@@ -228,7 +226,7 @@ export function ConnectionControls({ status, definition, onChanged, compact, rep
               // A Harness part that could not be removed is named, so the owner knows what remains.
               const problem = r.harness ? uninstallProblem(r.harness) : null;
               if (problem) throw new Error(problem);
-            }, deleteData ? "Disconnected; data deleted" : "Disconnected; data kept")
+            }, deleteData ? "Disabled; data deleted" : "Disabled; data kept")
           }
           onCancel={() => setPreview(null)}
         />

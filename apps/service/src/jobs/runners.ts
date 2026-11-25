@@ -2,7 +2,8 @@ import type { App } from "../app.ts";
 import { SOURCE_REFRESH_EVENT, type SourceRefreshEvent } from "@attache/contracts";
 import type { JobContext } from "./queue.ts";
 import { EffectCheckError, JobBlockedError } from "./queue.ts";
-import { composeBriefing, deterministicSummary, modelSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
+import { composeBriefing, deterministicSummary, renderBriefingMarkdown, saveBriefing, type Briefing, type SourceCoverage } from "../attention/briefing.ts";
+import { applyModelWords, askForBriefingWords } from "../attention/briefing-words.ts";
 import { briefingFrontmatter } from "../attention/replicated-briefing.ts";
 import { getItem } from "../attention/engine.ts";
 import { RECALL_EXCLUDE, search, type SearchHit } from "../memory/search.ts";
@@ -80,16 +81,8 @@ async function runBriefing(app: App, ctx: JobContext) {
   }
   ctx.progress(0.75, "Composing briefing");
   const base = composeBriefing(app.db, { kind, since: typeof ctx.input.since === "string" ? ctx.input.since : null, coverage: coverageList(app) });
-  let summary = deterministicSummary(base);
-  const model = await app.model();
-  if (model) {
-    try {
-      summary = await modelSummary(model, base, ctx.signal);
-    } catch (e) {
-      ctx.event("model_unavailable", { error: (e as Error).message });
-    }
-  }
-  const briefing: Briefing = { ...base, summary, deliverablePath: null };
+  const words = await modelWords(app, ctx, base);
+  const briefing: Briefing = { ...base, lead: words.lead, updates: words.updates, summary: words.summary ?? deterministicSummary(base), deliverablePath: null };
   const saved = await ctx.effect(`briefing:${ctx.job.id}`, async () => {
     const title = kind === "away" ? `Away summary since ${String(base.since ?? "").slice(0, 10)}` : `Briefing ${base.createdAt.slice(0, 10)}`;
     const { relPath } = app.memory.writeDeliverable("briefings", title, renderBriefingMarkdown(briefing), { briefing_kind: kind, ...briefingFrontmatter(briefing) });
@@ -100,6 +93,23 @@ async function runBriefing(app: App, ctx: JobContext) {
   app.bus.emit("event", { type: "briefing.created", id: briefing.id });
   app.bus.emit("event", { type: "attention.changed" });
   return { briefingId: briefing.id, relPath: saved.relPath, counts: briefing.counts };
+}
+
+/**
+ * The briefing's words from the model when there is one, validated part by part (`applyModelWords`); without a model,
+ * or when it fails, each item's own title and summary and the written summary. What the model got wrong is logged.
+ */
+async function modelWords(app: App, ctx: JobContext, base: ReturnType<typeof composeBriefing>): Promise<Pick<Briefing, "lead" | "updates"> & { summary: string | null }> {
+  const model = await app.model();
+  if (!model) return { lead: base.lead, updates: base.updates, summary: null };
+  try {
+    const words = applyModelWords(base, await askForBriefingWords(model, base, ctx.signal));
+    if (words.rejected.length) ctx.event("model_words_rejected", { rejected: words.rejected });
+    return words;
+  } catch (e) {
+    ctx.event("model_unavailable", { error: (e as Error).message });
+    return { lead: base.lead, updates: base.updates, summary: null };
+  }
 }
 
 async function runResearch(app: App, ctx: JobContext) {

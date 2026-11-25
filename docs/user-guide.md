@@ -113,23 +113,34 @@ Attache has no chat box: you ask the Brain from your Harness (see Using the Brai
 ### Getting around
 
 On a desktop window the masthead runs along the top: the Attache mark, then **Home**, **Approvals**, **Brain**, **Connections**, **Jobs** and **Settings** on one line, with the page below in a centred reading column.
-The screen you are on is filled in ink.
-A number beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
+The total of every decision that waits sits as a small raised number beside the word Attache.
+The screen you are on is a solid ink pill.
+A number in an outlined box beside a screen counts the decisions waiting there: Inbox items beside Home, Drafts and Proposals beside Approvals, and Connections that need you to sign in again beside Connections.
 Each decision counts once: an Inbox item whose Draft waits is counted as the Draft, in Approvals, and a Draft that is being sent or is finished is not counted.
 On Home itself Home carries no number; instead the Inbox heading says how many need you there, such as "4 need you here", and it shows beside Home again from every other screen.
-When the rows and the decisions differ, a line under the heading relates them, such as "1 meeting above · 3 items below need you · 1 Draft in Approvals": a meeting shown above in For you now is still one of Home's decisions, and an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
+When the rows and the decisions differ, a line under the heading relates them, such as "3 items need you here · 1 Draft in Approvals": an item whose Draft waits is counted in Approvals; with nothing to relate the line is not there.
 The logo shows its brass dot while any decision waits, and so does the browser tab's icon; the tab's title carries the total, such as "(14) Attache".
-The numbers beside Home, Approvals and Connections always add up to the one in the tab title.
+The numbers beside Home, Approvals and Connections always add up to the one in the tab title and beside the word Attache.
 The count is exact however many decisions wait.
 When the count could not be read, the Dashboard counts the lists it shows instead, and a list that stops at its limit makes the number a lower bound, such as "200+".
 A part that could not be read at all adds nothing: the dot then stays as it was rather than claim that nothing waits.
 When Replication is blocked or the repository refused this Machine, Settings carries a brass dot named "Replication blocked" or "Replication unauthorized"; in Settings the same words sit under **Machines and Replication**, which says why and what to do.
 
 Off Home, **Search** in the masthead opens the search palette; on Home the search field is the first thing on the page.
-At the right of the masthead, the button with this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
-When the live connection to the service drops, the button itself says **Reconnecting** or **Disconnected** until it is back; work in progress carries on in the service meanwhile.
-When the Reader has gone silent, so no Machine reads your sources on a schedule, a red line under the masthead says so on every screen until a Reader is back.
-**Connections** also opens with the Reader and its last Source refresh, and Home's Connections area turns red with **Not reading** while no Machine reads.
+At the far right of the masthead, this Machine's name opens a short panel: this Machine, which Machine is the Reader and when it last refreshed every source, whether live updates are connected, and a link to Machines and Replication in Settings.
+When live updates to the service drop, the button itself says **Reconnecting** or **Offline** until they are back; work in progress carries on in the service meanwhile.
+A full-width Connection banner sits directly under the masthead on every screen except **Connections**.
+It names the issue that most needs you with its source, state and what may be missing, for example "Gmail · Sign-in needed · Replies may be missing", counts any others as more connection issues, and offers the fixing action (**Reconnect**, **Retry now**, **Refresh now**, or **Machines and Replication** for a silent Reader), **Disable** for a problem owned by one Connection, and **Go to Connections**.
+**Disable** asks first and shows what disabling affects.
+Only a Connection that needs you to sign in again counts toward the dot, and a disabled Connection leaves the count.
+Each issue has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet** and **Could not check**; amber means you can act or part was read, red means nothing was read or it cannot run.
+Sources that could not reach the network at all share one issue, whatever words each one recorded.
+When the Reader has gone silent, the banner says **Not reading** until a Reader is back.
+Having only your notes connected, or Attention and briefings switched off, is how you set Attache up, not a problem, so neither raises the banner.
+A check that fails for only a moment never raises the banner: Attache asks again on its own and says **Could not check** only once the failure has lasted a few seconds, then keeps asking until an answer comes.
+The banner has no close button: it stays while the Inbox may be incomplete, and a screen reader hears a new issue once, not on every refresh.
+On a narrow window it wraps to two lines with the fixing action in view and the other choices behind one menu.
+A healthy setup has no banner, and Connections in the masthead carries a green dot.
 
 On a narrow window a bar along the bottom holds **Home**, **Approvals**, **Search**, **Brain** and **More**.
 **More** opens a sheet with **Jobs**, **Connections**, **Settings** and the same lines about this Machine; it carries the brass dot when a sign-in or Replication needs you.
@@ -144,15 +155,16 @@ Arrow keys move through places and passages, `Enter` opens the chosen one, and *
 Searching from the palette only reads: it starts no job and changes nothing.
 Press `?` for the list of keyboard shortcuts.
 `j` and `k` move between the rows of the Inbox, Approvals, Jobs, Connections and the Brain's note list, and `Enter` opens one; they change nothing.
-The decision keys, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
-No single key ever applies, approves, sends, rejects, reverts or disconnects.
+The decision keys, `w` for Start working, `d` for Done, `s` for Snooze until tomorrow at 09:00 and `x` for Dismiss on the row you are on, are off until you switch them on with **Use the decision keys** in the shortcut list, and each decision keeps its Undo.
+`w` does all that **Start working** does, its first step included.
+No single key ever applies, approves, sends, rejects, reverts or disables a Connection.
 Shortcuts do nothing while a dialog is open, nor while you type in a field, except `Ctrl K` and `Cmd K`.
 The old Memory and Drafts addresses are gone: the Brain lives at `/brain` and Approvals at `/approvals`.
 
 ### Look
 
 The Dashboard follows your system's light or dark setting: warm paper with dark blue-black ink in light, deep green slate with pale ink in dark.
-Headings are set in Georgia, and the morning briefing leads Home on an amber page of its own.
+Headings are set in Georgia, and The Daily Briefing leads Home in its own painting card.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
 The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
@@ -162,14 +174,19 @@ Every screen works in a window 320 px wide and at 200% zoom without scrolling si
 On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
 With reduced motion switched on in your system, nothing glides or turns: the Dashboard jumps straight to where a link takes you.
 Type is never told by colour alone, so the stamps stay apart in grayscale and with colour blindness, and a failure keeps its warning triangle.
-A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a Heads-up put away.
+A screen reader hears each screen's areas by name, a count with its words, such as "Approvals, 2 waiting", and what changed, such as a decided row or a new Connection issue, once.
 When a Source refresh changes how many decisions wait, it hears the new total once, such as "4 need you now."; opening the Dashboard, your own decisions and other live updates stay quiet.
 
 ### Home
 
-Home holds four areas: Search the Brain, For you now, Connections and the Inbox, which ends with Recently added.
+Home holds Search the Brain, The Daily Briefing, For you now, Your day and the Inbox, which ends with Recently added.
+At 960 px and wider, Search the Brain, The Daily Briefing and Your day span the reading column; For you now uses one third beside the Inbox at two thirds.
+From 600 to 959 px, the shared row splits in half.
+Below 600 px, the areas stack as Search the Brain, The Daily Briefing, For you now, Your day and Inbox.
+Each area responds to the space it is given, so an area in a narrow column looks and behaves as it does on a phone.
 
-- **Search the Brain** sits under a short line with the word Home and today's date.
+- **Search the Brain** sits under the heading Home, with today's full date beside it on the same line, such as "Wednesday, 18 November".
+  It is one tall field with the search icon, the `Ctrl K` keycap and **Browse**.
   The field waits until you click it or press `Ctrl K`, `Cmd K` or `/`; it is not focused when Home opens.
   As you type, up to six passages show under it (session summaries, not raw session transcripts), each with its title, a snippet, its kind (person, project, decision, note, imported note, evidence or deliverable, and *Current state* or *History* when it comes from one), and its file and lines.
   The arrow keys choose a passage and `Enter` opens it: a memory note opens in the Brain, anything else in the evidence view at the cited lines, and closing the evidence view brings you back to the field with your words still in it.
@@ -177,54 +194,67 @@ Home holds four areas: Search the Brain, For you now, Connections and the Inbox,
   A line under the results says whether they are ranked by meaning and keywords or by keywords only, and why.
   **All results in Brain** opens the Brain with your words in its search field and in its address (`/brain?q=…`), so you can bookmark or share the search; `Enter` with no passage chosen does the same.
   Searching starts no job and changes nothing.
-- **Browse**, beside the field, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain.
-- **For you now** shows Heads-ups, the things you need before you know it: the most urgent one whole, and the rest as one line each.
-  Every Heads-up says why it is here and when it leaves.
-  - The daily briefing leads from when it is written until noon, with its most concrete point and a short explanation.
-    **Read briefing** opens every point, one per line, with counts that jump to the Inbox or open Approvals, and the full briefing in the Brain.
-    **Got it** puts it away; it stays as one **Earlier today** line until midnight, so you can read it again, as long as it is the latest briefing.
-    Yesterday's briefing never shows as today's.
-  - **Meeting prep** for a meeting with other people shows from 15 minutes before it starts until its scheduled end.
-    Before the start it reads "Starts 14:00"; during the meeting it reads "In progress, ends 15:00" and leads with **Join**, the meeting's call.
-    **Open in Google Calendar** opens the event, **Done** closes its Inbox item on every Machine, and **Not now** hides the Heads-up while the item stays open in the Inbox.
-    **Open prep** shows who is invited and the notes from your Brain the latest briefing found for this meeting, labelled with when it looked, or says that it found none or that no briefing has looked yet.
-    With back-to-back meetings, the next one appears 15 minutes before its start, as one line below the meeting in progress with its time and **Open prep**; meetings come first, then briefings.
-    While a meeting shows here it is not listed in the Inbox below, and it is counted once ("1 meeting above · 3 items below need you").
-    A meeting without a call has no **Join** and leads with **Open in Google Calendar**.
-  - An Away summary or a briefing you asked for leads for four hours, or until **Got it**.
-  - Under a meeting a briefing is one line, the Earlier today line too, and **Read briefing** opens why it is there with the briefing, so the Inbox's first row still shows above the fold during back-to-back meetings.
-  - While a briefing is written, a line shows its progress; it keeps running if you close the tab.
-  - When nothing is timely, the area is one quiet line that says what comes next: when a meeting's prep shows, or when the Reader's next daily briefing is scheduled.
-  - **Briefings** is always there: **Prepare a briefing**, **Away summary** (the last three days) and **Meeting context**, the notes from your Brain the latest briefing found for your meetings, labelled with when it looked.
-  - Got it and Not now are remembered in this browser only, so another browser or Machine still shows the Heads-up.
-  - When a Heads-up arrives while you read further down, the page keeps your place.
-  - Times are shown in your computer's current time zone, and noon is noon where you are now: after travel or waking the laptop, For you now catches up within a minute.
-  - A Heads-up never moves or leaves while your pointer or keyboard focus is on it; it changes when you move away.
-  - With Attention and briefings switched off, the area says so, with a link to Settings.
-- **Connections** says whether you can trust the list below it.
-  When every source was read and every Connection works, it is one green line, **All good**, with how many sources were read, when and by which Machine, and a link to the details.
-  Otherwise it lists one row per problem and never the Connections that work, for example "Gmail · Sign-in needed · Replies may be missing".
-  Each row has an icon and a word: a key for **Sign-in needed** and **Access denied**, a warning triangle for **Not reading**, **Down**, **Offline**, **Partly read** and **Cannot run**, and a question mark for **Not read yet**, **Checking** and **Could not check**.
-  Amber means you can act or part was read, red means nothing was read or it cannot run, and grey means nothing is known yet.
-  Features that are switched on but not ready show as **Partly working** or **Needs setup**, and Home says **Notes only** when no work source is connected and **Switched off** when Attention and briefings is off.
-  Select a row, or press Enter or Space on it, to open it in place: what may be missing, what failed, when each source was last read, and the next automatic read when one is really scheduled on this Machine; the row and the page stay where they were.
-  Each row has at most one button: **Reconnect**, **Retry now**, **Refresh now**, **Open in Connections**, **Open Settings** or **Machines and Replication**.
-  Sources that could not reach the network at all (offline: no connection, no name lookup, refused), whatever words each one recorded, share one row; a source whose service answered with an error or did not answer in time has its own row, unless another failed with the same message.
-  At most three rows show, and the rest wait behind one line that still names each of them, such as "1 more: Jira (not read yet)", so no affected source is hidden while the area is closed.
-  Only a Connection that needs you to sign in again counts toward the dot.
-  An item list is never shown as "nothing to do" while this area shows a problem.
+- **Browse**, inside the field at its right end, opens direct links to People, Projects, Decisions, Notes and Recent saves in the Brain on a line under it.
+- **The Daily Briefing** is its own Home area for the whole day.
+  It shows the latest briefing written today, its time, a locally shipped public-domain painting, credit, and **First on your list**.
+  **Read briefing** opens the briefing page, under "Home / The Daily Briefing": First on your list with the briefing's points, Top to-dos as they were when it was written, New updates, and Your day as it stands now; every entry opens the Inbox item, Draft or Proposal it comes from, and its source.
+  **Got it** folds the card to one line; select the line to open it again.
+  The painting changes each day and is the same on every Machine that day; Attache ships the paintings and never fetches them.
+  **Briefing options** holds **Prepare a briefing**, **Away summary** and **Meeting context**.
+  When none exists it says **No briefing yet today**; a running briefing shows progress, and switched-off briefings link to Settings.
+  When Attache could not check for a newer briefing after a good read, the area keeps what it showed and a quiet line says from what time, with **Retry**.
+  With nothing from that read on screen, the line says only since when it could not check.
+  With no Daily Briefing yet today, **Prepare a briefing** writes today's Daily Briefing, so the area fills with its card and its picks reach For you now; once there is one, it writes a briefing you asked for.
+  An Away summary or a briefing you asked for appears above the Daily Briefing for four hours or until **Got it**, as a plain card named for what it is; **Read briefing** opens its page under that name, without a painting.
+  An Away summary counts and marks only what is new or changed since the time you give.
+  It still names its first item and Top to-dos from the whole Inbox, and lists them even when they have not changed.
+- **For you now** is a short curated list of the Inbox items to act on now.
+  It orders unread meeting prep from 15 minutes before a meeting, replies that have waited a working day or are nearly due, items due today, and today's Daily Briefing picks.
+  A due date without a time of day is never nearly due: it counts as due today on its own day, wherever you are.
+  Each row gives its reason, such as "Starts in 12 min, prep not read" or "Nora has waited since Tuesday"; an item appears once under its most urgent reason.
+  At most five items show, followed by the count of the rest in the Inbox.
+  Every row has **Start working**, **Snooze** and **Done**, and opens with the same detail as its Inbox row.
+  Starting an item keeps it in progress when its reason still applies.
+  Opening meeting prep (the meeting's time, the other attendees and the notes the newest briefing related to it) marks it read, whether you open its row, press **Start working** or press `w`: it goes **In progress** and leaves the list on every page and Machine; its row stays in the complete Inbox throughout, with **Suggested now** while it is listed here.
+  **Done** or **Snooze** on an entry leaves one line with **Undo** in its place, and **Undo** puts the entry back in that place, even while your pointer or focus is in the list.
+  An entry never moves or leaves while your pointer or keyboard focus is in the list, but it shows what changes at once, such as **In progress**; one whose reason has ended leaves when you move away.
+  With nothing timely the area says what comes next, and a failed Inbox request shows an error with **Retry** rather than an empty list.
+  When the Daily Briefing could not be read, a quiet line says its picks are missing, with **Retry**, under any entries the list still has.
+  When it could not be read again after a good read, the list keeps the picks it had and the line says from what time they are, also with **Retry**.
+  With Attention and briefings switched off, the area says so with a link to Settings.
+- **Your day** is the ruled band between Home's upper areas.
+  It shows today's calendar meetings in start order in your computer's current time zone, with all-day events on one compact line above timed meetings.
+  The meeting in progress is marked, ended meetings are dimmed, declined meetings are left out, and an invitation you have not answered says **Not answered**, all-day ones included.
+  Select a meeting or an all-day event to open it in Google Calendar.
+  **Join** appears from 15 minutes before its start until its scheduled end when it has a Meet link.
+  Once the day's timed meetings have ended, the band says **Nothing more today** and names tomorrow's first meeting when one is known; an all-day event is never a meeting in progress, so it stays on its line above.
+  Google Calendar is read from the start of today, so the meetings that have ended still count as today's.
+  It says **Nothing on your calendar today** only after a complete read, and otherwise distinguishes **Checking**, **Could not read**, **No calendar connected** and **Switched off**.
+  A failed read keeps the last known meetings and says when they were read.
+  The band follows the one-minute clock, refreshes when the page becomes visible and changes with the computer's time zone.
+  On a wide window extra meetings sit behind **N more**; in a narrow space every meeting is a list.
+  Your day is a schedule and never adds to the Attention dot's count.
 - **Inbox** is one ruled list of what may need you, the most important first: the service's priority, then the earliest due time, items with no due time last.
   Each row says what it is with a coloured stamp, a glyph and a word, such as **Review request** (blue, a branch fork), **Pending reply** (rust, an envelope), **Slack DM** (plum, a speech bubble), **Deadline** (rust, a clock), **Jira work item** (blue, a ticket) or **Fact to check** (green, a dated page), so two kinds never look alike even without colour.
   A kind Attache does not know yet still shows, under its own readable word with a plain document glyph.
   Beside the type is the subject, with where it comes from on the line below (for example "GitHub · acme/web #42" or "Gmail · Nora Lind"), and on the right when it is due or when it arrived.
+  The actions end the row's line: **Start working** outlined, **Snooze** with a caret and **Done** with a green check.
   On a narrow window the type comes first, then the whole subject, then the source and time.
-  Select a row to open it in place: the summary, why it is here (for meeting prep, when the meeting starts or that it is running, and that it leaves the Inbox at its end), its evidence, the main action first (**Prepare draft** for a review, reply or mention, **Done** for a deadline), then **Done**, **Snooze** and **Dismiss**.
+  Every row offers **Start working**, **Snooze** and **Done** without opening it.
+  **Start working** takes the item's first step: prepare a Draft for a reply, open a review or work item at its source, open meeting prep or the calendar event, or open other items in place, except that any of those others Attache can draft a reply to gets a prepared Draft.
+  It keeps the item open and marks it **In progress** on every Machine; the button then reads **Continue**.
+  Opening the row shows **Not started** to clear the mark.
+  A row with a waiting Draft keeps **Draft waiting · View draft**, and **Start working** opens that Draft.
+  **Snooze** opens the same return times as an opened row.
+  In a two-thirds space, as the Inbox has beside For you now on a desktop window, Snooze and Done become a clock and a check with their full names for a screen reader and on hover, and the time moves under them; in a half or narrower space, all three sit behind **Actions** and remain in the opened row.
+  Select a row to open it in place for the summary, why it is here, evidence, the main action and every decision, including **Dismiss**.
   **Dismiss** hides an item until its evidence changes; **Snooze** hides it until a time; **Done** closes it.
   A decided row stays where it was as one line with **Undo**, so nothing below it moves.
-  The list does not reorder itself while you read: new items wait behind **Show 1 new item** at the top of the Inbox until you press it, and the page does not scroll or close the row you have open.
+  The list does not reorder itself while you read: new items wait behind **Show 1 new item** in the Inbox heading until you press it, and the page does not scroll or close the row you have open.
   Up to 20 rows show at a time, with the range ("1–20 of 34") and **Load more**.
-  The **Type** menu lists every type with its count and shows one type at a time.
-  The **View** menu offers **Priority order**, **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
+  Two menus sit at the right of the Inbox heading.
+  **All types** lists every type with its count and shows one type at a time; the button then names the type.
+  **View options** offers **Priority order** (the default), **Newest first**, **Group by type** (Deadlines, Reviews, Replies, Mentions, Meetings, Work items, Facts to check, System and Other, three rows each with **Show all**) and **Hidden**, the snoozed and dismissed items, where **Reopen** brings one back.
   The view, the type and the open row are kept for the tab, so they are as you left them when you come back from a Draft, and the row you opened the Draft from stands where it stood on screen.
   When the list could not be loaded, the Inbox says so with **Retry** where the rows would be; it never shows that as an empty list.
   When it could not be refreshed after a good load, it keeps the rows it had and says from what time they are, also with **Retry**.
@@ -344,7 +374,7 @@ Whatever you press, the page stays on the same Draft.
 - **Send** works only when the connection is authorised to write that kind of action.
   Until then the page says "Cannot send yet." with the reason, and **Open Connections** when the fix is there.
   Attache rechecks everything on the service immediately before sending and marks the Draft sent only after the other service confirms it.
-- **Revoke approval** takes an approval back; Attache also revokes one itself when the connection is disconnected, its write permission is removed or Drafts are switched off, and says which.
+- **Revoke approval** takes an approval back; Attache also revokes one itself when its Connection is disabled, its write permission is removed or Drafts are switched off, and says which.
 - **Reject** locks the Draft, and nothing is sent.
   Until the Draft expires, **Restore as vN+1** brings the same text back as a new version, waiting for your approval again; nothing else undoes a rejection, so typing cannot undo it by accident.
   Restore is refused while a newer Draft for the same item waits, was sent, or has an unknown outcome.
@@ -361,7 +391,7 @@ Drafts expire after 48 business hours.
 Below it each Connection you set up is one row in its group: **Notes**, **Work sources**, **Harnesses** and **Model**.
 A row shows the Connection's name, its account (or folder, or the settings file a Harness was installed in), what Attache may read and write there, and when Attache last read it, each in its own column.
 A Connection that works carries no state word; one with a problem says so under its name in the same words Home uses, such as **Down**, **Offline**, **Partly read** or **Not read yet**.
-Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disconnect…**, what Attache reads and its write permissions.
+Select a row to open it in place: its description, last success and last error, the last Source refresh scope by scope, and **Test**, **Refresh now**, **Reconfigure**, **Disable…**, what Attache reads and its write permissions.
 Connections you have not set up are small tiles under their group; a tile opens across the group into its setup form.
 The Notes group also has **Import a folder**, which reads a Markdown folder or Obsidian vault without changing it.
 
@@ -409,7 +439,7 @@ This section describes Claude Code, Codex and Antigravity; Pi, OpenCode and Copi
 
 - **What changes in the Harness:** connecting adds Attache's MCP server (see the next section) and Attache's own hooks, in one step.
   The hooks go into `~/.claude/settings.json`, `~/.codex/hooks.json` or `~/.gemini/config/hooks.json`; the MCP server into `~/.claude.json`, `~/.codex/config.toml` or `~/.gemini/config/mcp_config.json`.
-  Your other settings, hooks and MCP servers are kept, each file is backed up to Attache's `backups/` folder first, and **Disconnect** removes exactly what Attache added.
+  Your other settings, hooks and MCP servers are kept, each file is backed up to Attache's `backups/` folder first, and **Disable** removes exactly what Attache added.
   A file Attache cannot read (for example JSON with comments, or TOML that does not parse) is refused with a message that names it, and nothing is changed.
 - **Saving a session:** when a session ends or its context is compacted, the conversation is saved to `evidence/sessions/transcripts/` in your data folder, without tool output or injected context, and with secrets redacted.
   Antigravity has no end-of-session event, so its conversations are saved after every turn and summarised once they have been quiet for 15 minutes.
@@ -439,16 +469,16 @@ This section describes Claude Code, Codex and Antigravity; Pi, OpenCode and Copi
   Antigravity gets the same block from an always-on rule, `~/.gemini/config/rules/attache-memory.md`.
 - **Codex asks first:** Codex runs new hooks only after you approve them.
   The next time Codex starts it shows *Hooks need review*; choose **Review hooks** and trust the three Attache hooks.
-  Codex remembers trust by position, so after you disconnect it may ask you to review hooks listed after Attache's again; reconnecting updates Attache's hooks in place and leaves yours where they are.
+  Codex remembers trust by position, so after you disable it you may need to review hooks listed after Attache's again; connecting it again updates Attache's hooks in place and leaves yours where they are.
 - **If Attache is not running,** sessions are queued on your computer and saved the next time it starts.
 
-Turning *Agent sessions* off in Settings disconnects Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI and removes Attache's hooks, extension, plugin and MCP server from them; Claude Desktop stays connected.
+Turning *Agent sessions* off in Settings disables Claude Code, Codex, Antigravity, Pi, OpenCode and Copilot CLI and removes Attache's hooks, extension, plugin and MCP server from them; Claude Desktop stays connected.
 Connect them again after you turn the feature back on.
 Uninstalling Attache removes them all.
 
 ## Pi, OpenCode and Copilot CLI
 
-Pi, OpenCode and Copilot CLI are Harnesses of their own under Connections → *Harnesses*, each connected and disconnected on its own.
+Pi, OpenCode and Copilot CLI are Harnesses of their own under Connections → *Harnesses*, each connected and disabled on its own.
 Each connects through the product's own extension, plugin or hooks system, and its tile lists three capabilities on their own: MCP access, memory and session capture.
 MCP access never implies the other two; each is listed only because Attache's tests show it working with the real program (see `docs/harness-support.md` for the versions and what each test covers).
 All three get MCP access, memory read fresh from your Brain, and session capture, and all three must restart, or start a new session, before a change takes effect.
@@ -458,13 +488,13 @@ You can connect each one even when Attache did not find it on this computer.
 What they have in common:
 
 - **Only Attache's own files and entries change.**
-  Each file Attache writes names this Attache install inside it, so a second Attache install on the same computer gets its own file (`attache-<code>`) and disconnecting one leaves the other.
+  Each file Attache writes names this Attache install inside it, so a second Attache install on the same computer gets its own file (`attache-<code>`) and disabling one leaves the other.
   Your own settings, MCP servers, extensions, plugins and hooks are never changed.
 - **A file Attache cannot read stops the change.**
   If the Harness's own settings file does not parse, or it already lists a server under Attache's name, or it turns Attache's extension, plugin or hooks off, connecting stops with a message that names the file, and nothing is written.
 - **Backups and recovery.**
   Before Attache changes a file that already exists, it copies it to the `backups/` folder in Attache's state folder, named after the file's path and the time, so you can copy it back.
-  A file Attache creates has no earlier version to back up; disconnecting removes it.
+  A file Attache creates has no earlier version to back up; disabling it removes the file.
 - **Out of date.**
   When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
   Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
@@ -571,7 +601,7 @@ When Attache starts after the upgrade, it removes the skill folders it installed
   With it on, a save from that Harness is written without asking; switch it off and that Harness asks you to confirm every save.
   A Harness that is not connected, and an unknown MCP client (an agent application that is not a Harness Attache knows), always ask, because the Dashboard has no switch for them.
   The setting belongs to this Machine only: it is kept in Attache's local state, not in your Brain, so switching a Harness off on one Machine leaves it on elsewhere.
-  Disconnecting a Harness forgets its setting, so connecting it again starts with auto-accept on.
+  Disabling a Harness forgets its setting, so connecting it again starts with auto-accept on.
   A save written without review still records the Harness and session, and Recent saves on the Brain screen marks it **auto-accepted**, so you can see and revert it.
   Your identity record is never changed this way.
 - **audit** lists every current fact with its date, Review date, age, source and flags, plus newer passages that name the note, where a contradiction would show up.

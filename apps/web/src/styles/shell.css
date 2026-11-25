@@ -1,5 +1,5 @@
 /*
- * The frame around every screen: the masthead, the silent-Reader banner, the page in its centred reading column,
+ * The frame around every screen: the masthead, the Connection banner, the page in its centred reading column,
  * the narrow bottom bar, and the More and shortcut sheets.
  *
  * The masthead, the banner and the page share one column: 1072 px at most inside 36 px gutters (16 px on a phone).
@@ -57,7 +57,7 @@
 }
 .masthead-inner {
   overflow: hidden;
-  min-height: 74px;
+  min-height: 58px;
   display: flex;
   align-items: center;
   gap: var(--s-6);
@@ -75,6 +75,15 @@
   font-size: 27px;
   color: var(--ink);
   text-decoration: none;
+}
+/* The total, raised beside the wordmark like a footnote's number; the link's name says it in words. */
+.brand-total {
+  margin-top: -14px;
+  margin-left: -4px;
+  font: 600 13px/1 var(--font);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
 
 .masthead-nav {
@@ -122,6 +131,13 @@
   align-items: center;
   gap: 6px;
 }
+.connection-healthy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: none;
+}
 
 .masthead-tools {
   margin-left: auto;
@@ -146,8 +162,15 @@
   display: flex;
   min-width: 0;
 }
+/* As the mockups draw it: this Machine's name and a caret, without an edge, at the far right of the masthead. */
 .machine-trigger {
   min-width: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-2);
+}
+.machine:not([data-lost]) .machine-trigger-icon {
+  display: none;
 }
 .machine-trigger-name,
 .machine-trigger-live {
@@ -261,7 +284,7 @@
   font-size: var(--fs-control);
 }
 
-/* A notice under the masthead that stays in view on every screen (the silent Reader). */
+/* A notice under the masthead that stays in view on every screen (the Connection banner). */
 .banner {
   flex: none;
   overflow: hidden;
@@ -282,7 +305,7 @@
   flex: none;
   margin-top: 2px;
 }
-.banner a {
+.banner a:not(.btn) {
   color: inherit;
   text-decoration: underline;
 }
@@ -293,6 +316,106 @@
 .banner.danger {
   background: var(--red-soft);
   color: var(--danger);
+}
+.connection-banner {
+  position: relative;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.connection-banner-copy {
+  display: flex;
+  flex: 1 1 360px;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.connection-banner-line,
+.connection-banner-more {
+  overflow-wrap: anywhere;
+}
+.connection-banner-more {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.connection-banner-primary,
+.connection-banner-secondary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: none;
+}
+.connection-banner .btn,
+.connection-banner button {
+  min-height: 44px;
+}
+/* The banner's own buttons take its colour; the solid fixing button keeps its ink and paper. */
+.connection-banner .btn:not(.primary),
+.connection-banner button:not(.primary) {
+  color: inherit;
+  border-color: currentColor;
+}
+.connection-banner > .state {
+  flex: 1 0 100%;
+  background: var(--paper);
+}
+.connection-banner-menu {
+  display: none;
+  position: relative;
+}
+.connection-banner-menu-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--s-1));
+  display: grid;
+  min-width: 180px;
+  max-width: calc(100vw - 2 * var(--gutter));
+  gap: var(--s-1);
+  background: var(--paper);
+  padding: var(--s-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+/*
+ * A narrow window: the issue's words take the whole first line and wrap there; the fixing button and the one menu
+ * of other choices sit on the line under them, then "N more connection issues".
+ */
+@media (max-width: 720px) {
+  .connection-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .connection-banner > .icon {
+    grid-area: 1 / 1;
+  }
+  .connection-banner-copy {
+    display: block;
+    grid-area: 1 / 2 / 2 / -1;
+  }
+  .connection-banner-line span {
+    display: block;
+  }
+  .connection-banner-primary {
+    grid-area: 2 / 2;
+  }
+  .connection-banner-menu {
+    grid-area: 2 / 3;
+  }
+  .connection-banner-more {
+    grid-area: 3 / 2 / 4 / -1;
+  }
+  .connection-banner-secondary {
+    display: none;
+  }
+  .connection-banner-menu {
+    display: block;
+  }
+  .connection-banner > .state {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ---- the sheets: More and the keyboard shortcuts ------------------------------------------------ */
@@ -407,6 +530,9 @@
   .machine-trigger-name {
     display: none;
   }
+  .machine:not([data-lost]) .machine-trigger-icon {
+    display: block;
+  }
 }
 
 /* A narrow window: the bottom bar takes the screens; the masthead keeps the mark, and this Machine only while the live connection is lost. */
@@ -502,10 +628,11 @@
 }
 
 /*
- * The narrowest phones (a folded phone's 280 px): while the live connection is lost, the briefcase alone is the mark
- * and the state keeps its words. "Attache" stays the link's name for a screen reader.
+ * Narrow phones (below 360 px, down to a folded phone's 280 px): while the live connection is lost, the briefcase
+ * alone is the mark and the state keeps its words with room to spare for wider fonts. "Attache" stays the link's name
+ * for a screen reader.
  */
-@media (max-width: 319px) {
+@media (max-width: 359px) {
   .masthead-inner:has(.machine[data-lost]) .brand-name {
     position: absolute;
     width: 1px;

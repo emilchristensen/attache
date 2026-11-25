@@ -1,7 +1,8 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useState } from "react";
 import type { AttentionItemView } from "@attache/contracts";
 import { TypeIcon } from "../components/TypeIcon.tsx";
 import { Icon } from "../components/icons.tsx";
+import { usePopover } from "../components/menu.ts";
 import { Tag } from "../components/Tag.tsx";
 import { useOpenEvidence } from "../components/Evidence.tsx";
 import { hueClass } from "../theme/hues.ts";
@@ -10,12 +11,23 @@ import { draftTag, rowText, rowTime, rowWhy, snoozeChoices, untilText } from "..
 import { openDraftId } from "../linked-draft.ts";
 import { DELIVERY_UNCONFIRMED, unconfirmedDraftId } from "../delivery.ts";
 import { DeliveryUnconfirmed } from "./InboxDelivery.tsx";
+import { MeetingPrepDetail } from "./MeetingPrepDetail.tsx";
+import { useReadPrep } from "./row-actions.ts";
 
 /** What the owner decided in a row; Undo reopens the item. */
-export type RowDecision = "done" | "dismiss" | "snooze" | "reopen";
+export type RowDecision = "start" | "done" | "dismiss" | "snooze" | "reopen";
+
+/** Where a row stands, for Start working: whether it is open, and how to open it in place. */
+export interface RowPlace {
+  open: boolean;
+  openRow: () => void;
+}
 
 export interface RowActions {
-  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => void;
+  /** Records a decision; answers whether it was recorded (a failure is already said in a notification). */
+  decide: (item: AttentionItemView, decision: RowDecision, until?: string) => Promise<boolean>;
+  /** Start working: the item in progress and the first step for its kind, from the button or the `w` key. */
+  start: (item: AttentionItemView, row: RowPlace) => Promise<void>;
   prepareDraft: (item: AttentionItemView) => void;
   /** The owner's explicit choice to replace `draftId`, the item's Draft whose send has an unknown outcome. */
   prepareReplacement: (item: AttentionItemView, draftId: string) => void;
@@ -74,9 +86,26 @@ function Evidence({ item }: { item: AttentionItemView }) {
   );
 }
 
+/**
+ * The snooze times, the same choice wherever Snooze opens them: in place under an open row, or as the row action's
+ * popover (`popover`, from `usePopover`), a plain group that Escape or a pointer outside closes.
+ */
+function SnoozeTimes({ item, actions, id, popover }: { item: AttentionItemView; actions: RowActions; id?: string; popover?: ReturnType<typeof usePopover>["listProps"] }) {
+  return (
+    <div className="inbox-snooze" id={id} role="group" aria-label={popover ? `Snooze: ${rowText(item).subject}` : "Snooze until"} {...popover}>
+      {snoozeChoices(new Date()).map((t) => (
+        <button key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The decisions under an open row: Snooze opens its times in place. */
 function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; actions: RowActions; primaryDone: boolean }) {
   const [snoozing, setSnoozing] = useState(false);
+  const subject = rowText(item).subject;
   const times = useId();
   if (item.state !== "open")
     return (
@@ -87,25 +116,17 @@ function Decisions({ item, actions, primaryDone }: { item: AttentionItemView; ac
   return (
     <>
       {!primaryDone && (
-        <button onClick={() => actions.decide(item, "done")} disabled={actions.busy}>
+        <button aria-label={`Done: ${subject}`} onClick={() => actions.decide(item, "done")} disabled={actions.busy}>
           Done
         </button>
       )}
-      <button aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
+      <button aria-label={`Snooze: ${subject}`} aria-expanded={snoozing} aria-controls={times} onClick={() => setSnoozing(!snoozing)}>
         Snooze
       </button>
-      <button onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
+      <button aria-label={`Dismiss: ${subject}`} onClick={() => actions.decide(item, "dismiss")} disabled={actions.busy}>
         Dismiss
       </button>
-      {snoozing && (
-        <div className="inbox-snooze" id={times} role="group" aria-label="Snooze until">
-          {snoozeChoices(new Date()).map((t) => (
-            <button key={t.label} className="small" disabled={actions.busy} onClick={() => actions.decide(item, "snooze", t.iso)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {snoozing && <SnoozeTimes item={item} actions={actions} id={times} />}
     </>
   );
 }
@@ -141,6 +162,7 @@ function Detail({ item, id, actions, draftsOn, clock }: { item: AttentionItemVie
   return (
     <div className="inbox-detail" id={id}>
       {context}
+      <MeetingPrepDetail item={item} clock={clock} />
       <MainActions item={item} canDraft={canDraft} actions={actions} />
     </div>
   );
@@ -166,7 +188,7 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
         </button>
       )}
       {primary === "done" && (
-        <button className="primary" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+        <button aria-label={`Done: ${rowText(item).subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
           Done
         </button>
       )}
@@ -180,6 +202,36 @@ function MainActions({ item, canDraft, actions }: { item: AttentionItemView; can
   );
 }
 
+function RowQuickActions({ item, actions, row }: { item: AttentionItemView; actions: RowActions; row: RowPlace }) {
+  const snooze = usePopover();
+  const [compactMenu, setCompactMenu] = useState(false);
+  const subject = rowText(item).subject;
+  const menu = useId();
+  if (item.state !== "open") return null;
+  return (
+    <div className="inbox-row-actions">
+      <button className="inbox-start" aria-label={`${item.startedAt ? "Continue" : "Start working"}: ${subject}`} disabled={actions.busy} onClick={() => void actions.start(item, row)}>
+        {item.startedAt ? "Continue" : "Start working"}
+      </button>
+      <button className="inbox-actions-menu" aria-label={`Actions: ${subject}`} aria-expanded={compactMenu} aria-controls={menu} onClick={() => setCompactMenu(!compactMenu)}>
+        Actions
+      </button>
+      <div className="inbox-row-secondary" id={menu} data-open={compactMenu || undefined}>
+        <button className="inbox-snooze-button" aria-label={`Snooze: ${subject}`} title="Snooze" {...snooze.buttonProps}>
+          <Icon name="clock" size={16} className="inbox-action-icon" />
+          <span className="inbox-action-word">Snooze</span>
+          <Icon name="chevron" size={12} className="inbox-snooze-caret" />
+        </button>
+        <button className="inbox-done-button" aria-label={`Done: ${subject}`} title="Done" disabled={actions.busy} onClick={() => actions.decide(item, "done")}>
+          <Icon name="check" size={14} />
+          <span className="inbox-action-word">Done</span>
+        </button>
+      </div>
+      {snooze.open && <SnoozeTimes item={item} actions={actions} popover={snooze.listProps} />}
+    </div>
+  );
+}
+
 /** Plain exception labels on the source line: a Draft that stands for the item, a send of unknown outcome, a change since a decision, a hidden state. */
 function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
   const draft = draftTag(item.actionStatus);
@@ -188,6 +240,7 @@ function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
       {draft && <Tag hue="blue">{draft}</Tag>}
       {unconfirmedDraftId(item) && <Tag tone="attention">{DELIVERY_UNCONFIRMED}</Tag>}
       {item.changedSinceDecision && item.state === "open" && <Tag tone="attention">Changed since your decision</Tag>}
+      {item.startedAt && item.state === "open" && <Tag tone="outline">In progress</Tag>}
       {item.state === "snoozed" && item.snoozeUntil && <Tag tone="outline">Snoozed until {untilText(item.snoozeUntil, clock.now, clock.timeZone)}</Tag>}
       {item.state === "dismissed" && <Tag tone="outline">Dismissed</Tag>}
     </>
@@ -196,14 +249,16 @@ function Labels({ item, clock }: { item: AttentionItemView; clock: Clock }) {
 
 /**
  * One Inbox row: kind (stamp and word), the subject with its source line, and the time. The subject is the button
- * that opens the row in place; the whole line is its click target.
+ * that opens the row in place; the whole line is its click target. In For you now the entry's `reason` takes the
+ * source line's place; in the Inbox a row whose item is also in For you now carries "Suggested now" (`suggested`).
  */
-export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { item: AttentionItemView; open: boolean; onToggle: () => void; actions: RowActions; draftsOn: boolean; clock: Clock }) {
+export function InboxRow({ item, open, onToggle, actions, draftsOn, clock, reason, suggested = false }: { item: AttentionItemView; open: boolean; onToggle: () => void; actions: RowActions; draftsOn: boolean; clock: Clock; reason?: string; suggested?: boolean }) {
   const detail = useId();
   const described = useId();
   const text = rowText(item);
   const time = rowTime(item, clock.now, clock.timeZone);
   const type = inboxType(item);
+  useReadPrep(item, open, actions.decide);
   return (
     <li className={open ? "inbox-row open" : "inbox-row"} data-inbox-row data-item-id={item.id} data-item-key={item.key} data-type={type.id}>
       <div className="inbox-line">
@@ -214,21 +269,35 @@ export function InboxRow({ item, open, onToggle, actions, draftsOn, clock }: { i
           </button>
           <p className="inbox-source" id={described}>
             <span className="sr-only">{type.word}, </span>
-            <span>{text.source}</span>
+            <span>{reason ?? text.source}</span>
+            {suggested && <Tag tone="outline">Suggested now</Tag>}
             <Labels item={item} clock={clock} />
-            <span className="sr-only">, {time.label}</span>
+            {reason !== time.text && <span className="sr-only">, {time.label}</span>}
           </p>
         </div>
-        <time className="inbox-time" dateTime={time.iso} title={time.label}>
-          {time.text}
-        </time>
+        {/* An entry whose reason already says it ("Due today") does not say it twice, on screen or to a screen reader. */}
+        {reason !== time.text && (
+          <time className="inbox-time" dateTime={time.iso} title={time.label}>
+            {time.text}
+          </time>
+        )}
+        <RowQuickActions item={item} actions={actions} row={{ open, openRow: () => !open && onToggle() }} />
       </div>
-      {open && <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} clock={clock} />}
+      {open && (
+        <>
+          {item.startedAt && (
+            <button className="small inbox-not-started" aria-label={`Not started: ${text.subject}`} disabled={actions.busy} onClick={() => actions.decide(item, "reopen")}>
+              Not started
+            </button>
+          )}
+          <Detail item={item} id={detail} actions={actions} draftsOn={draftsOn} clock={clock} />
+        </>
+      )}
     </li>
   );
 }
 
-const DECIDED_WORDS: Readonly<Record<RowDecision, string>> = { done: "Done", dismiss: "Dismissed", snooze: "Snoozed", reopen: "Back in the Inbox" };
+const DECIDED_WORDS: Readonly<Record<RowDecision, string>> = { start: "In progress", done: "Done", dismiss: "Dismissed", snooze: "Snoozed", reopen: "Back in the Inbox" };
 
 /** A decided row stays in its place as one line with Undo, so nothing below it moves. */
 export function DecidedRow({ item, decision, until, onUndo, busy, clock }: { item: AttentionItemView; decision: RowDecision; until: string | null; onUndo: (() => void) | null; busy: boolean; clock: Clock }) {
@@ -250,27 +319,6 @@ export function DecidedRow({ item, decision, until, onUndo, busy, clock }: { ite
             Undo
           </button>
         )}
-      </div>
-    </li>
-  );
-}
-
-/**
- * A meeting prep row the keyboard was on when its meeting moved up into For you now: its place keeps the row's size
- * and says so, with nothing to press, and the focus stays here, until the keyboard moves on. Then the row goes, as
- * every promoted meeting does: it is one item, shown once.
- */
-export function MovedUpRow({ item, height }: { item: AttentionItemView; height: number | undefined }) {
-  const ref = useRef<HTMLLIElement>(null);
-  // The row's controls went with it: the focus they had stays in its place.
-  useLayoutEffect(() => ref.current?.focus({ preventScroll: true }), []);
-  return (
-    <li ref={ref} tabIndex={-1} className="inbox-row decided" style={height ? { height } : undefined} data-inbox-row data-row-toggle data-item-id={item.id} data-item-key={item.key} data-type={inboxType(item).id} data-moved-up>
-      <div className="inbox-line">
-        <Kind item={item} />
-        <p className="inbox-decided">
-          <strong>Moved up to For you now:</strong> <span>{rowText(item).subject}</span>
-        </p>
       </div>
     </li>
   );

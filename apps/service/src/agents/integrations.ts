@@ -78,7 +78,7 @@ export const codex: AgentIntegration = {
     parseTranscript: parseCodex,
   },
   detect: installed("codex"),
-  setupNote: `Adds Attache's MCP server to ~/.codex/config.toml and three hooks to ~/.codex/hooks.json: SessionStart gives each new session your Attache memory, PreCompact and SessionEnd save the conversation. ${MCP_NOTE} ${KEPT_NOTE} Codex runs new hooks only after you approve them: the next time Codex starts, choose Review hooks and trust the three Attache hooks. Codex remembers that trust by position, so after you disconnect it may ask you to review hooks that came after Attache's again.`,
+  setupNote: `Adds Attache's MCP server to ~/.codex/config.toml and three hooks to ~/.codex/hooks.json: SessionStart gives each new session your Attache memory, PreCompact and SessionEnd save the conversation. ${MCP_NOTE} ${KEPT_NOTE} Codex runs new hooks only after you approve them: the next time Codex starts, choose Review hooks and trust the three Attache hooks. Codex remembers that trust by position, so after you disable it it may ask you to review hooks that came after Attache's again.`,
 };
 
 export const antigravity: AgentIntegration = {

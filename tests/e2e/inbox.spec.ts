@@ -7,7 +7,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { api, JourneyBrowser, nextFrames } from "./browser.ts";
-import { inboxRow, inboxView, openRow } from "./inbox.ts";
+import { inboxRow, inboxType, inboxView, openRow, typeChoices } from "./inbox.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
 
 let stack: Stack;
@@ -60,7 +60,6 @@ test.afterAll(async () => {
 });
 
 const rows = (page: Page) => page.locator("#inbox [data-inbox-row]");
-const typePicker = (page: Page) => page.locator("#inbox").getByRole("combobox", { name: "Type" });
 
 /** What tells a row's type apart: the word, the glyph's drawing and the word's colour. */
 async function typeOf(row: Locator) {
@@ -83,9 +82,9 @@ test("rows: kind stamp and word, subject, source line and time; a review request
   // The subject is the row's own words, without the verb the kind word already says.
   await expect(review.locator("[data-row-toggle]")).toHaveText("Add checkout retry");
   await expect(review.locator(".inbox-time")).toHaveText(/^\d\d:\d\d$|^Yesterday$|^\d+ \w{3}$/);
-  // The kind column is about 185 px, with a 34 px stamp and a 19 px glyph.
+  // The kind column is 150 px in the Inbox's two thirds (185 px at full width), with a 34 px stamp and a 19 px glyph.
   const kind = (await review.locator(".inbox-kind").boundingBox())!;
-  expect(Math.round(kind.width)).toBe(185);
+  expect(Math.round(kind.width)).toBe(150);
   const stamp = (await review.locator(".type-icon").boundingBox())!;
   expect([Math.round(stamp.width), Math.round(stamp.height)]).toEqual([34, 34]);
   expect(Math.round((await review.locator(".type-icon svg").boundingBox())!.width)).toBe(19);
@@ -101,6 +100,53 @@ test("rows: kind stamp and word, subject, source line and time; a review request
     }
   }
   await page.emulateMedia({ colorScheme: null });
+  await page.close();
+});
+
+test("row actions: Start working stays open and becomes Continue, then Not started clears progress; Snooze and Done decide in place", async () => {
+  const page = await journeys.open("/");
+  const row = inboxRow(page, "Add checkout retry");
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Snooze: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Done: Add checkout retry" })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 780 });
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeHidden();
+  await row.getByRole("button", { name: "Actions: Add checkout retry" }).click();
+  await expect(row.getByRole("button", { name: "Start working: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Snooze: Add checkout retry" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Done: Add checkout retry" })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await row.getByRole("button", { name: "Start working: Add checkout retry" }).click();
+  await expect(row.getByRole("button", { name: "Continue: Add checkout retry" })).toBeVisible();
+  await expect(row).toContainText("In progress");
+  await page.reload();
+  await expect(row).toContainText("In progress");
+  await openRow(row);
+  await row.getByRole("button", { name: "Not started: Add checkout retry" }).click();
+  await expect(row).not.toContainText("In progress");
+
+  // Snooze's times are a plain list under the button: Escape and a click outside close it, focus back on Snooze.
+  const snooze = row.locator(".inbox-row-actions").getByRole("button", { name: "Snooze: Add checkout retry" });
+  const times = row.getByRole("group", { name: "Snooze: Add checkout retry" });
+  await snooze.click();
+  await expect(snooze).toHaveAttribute("aria-expanded", "true");
+  await expect(times).toBeVisible();
+  await expect(row.getByRole("menu")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(times).toHaveCount(0);
+  await expect(snooze).toBeFocused();
+  await expect(snooze).toHaveAttribute("aria-expanded", "false");
+  await snooze.click();
+  await expect(times).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(times).toHaveCount(0);
+  await snooze.click();
+  await times.getByRole("button").first().click();
+  await expect(row).toHaveAttribute("data-decided", "snooze");
+  await row.getByRole("button", { name: "Undo" }).click();
+  await row.getByRole("button", { name: "Done: Add checkout retry" }).first().click();
+  await expect(row).toHaveAttribute("data-decided", "done");
+  await row.getByRole("button", { name: "Undo" }).click();
   await page.close();
 });
 
@@ -138,13 +184,13 @@ test("order and pages: service priority by default, twenty rows with a range and
 test("type picker and views: counts in the options, one type, Newest first, Group by type with three previews and Show all, and Hidden", async () => {
   const page = await journeys.open("/");
   await expect(rows(page).first()).toBeVisible();
-  const options = await typePicker(page).locator("option").allTextContents();
-  expect(options[0]).toMatch(/^All types \(\d+\)$/);
-  expect(options).toEqual(expect.arrayContaining([`Deadline (${RELEASE_TASKS.length + 3})`, "Review request (2)", "Pending reply (1)"]));
-  await typePicker(page).selectOption({ label: "Pending reply (1)" });
+  const options = await typeChoices(page);
+  expect(options[0]).toMatch(/^All types \d+$/);
+  expect(options).toEqual(expect.arrayContaining([`Deadline ${RELEASE_TASKS.length + 3}`, "Review request 2", "Pending reply 1"]));
+  await inboxType(page, "Pending reply");
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page)).toContainText("Contract renewal");
-  await typePicker(page).selectOption({ index: 0 });
+  await inboxType(page, "All types");
 
   // Newest first keeps every type: the same total, newest first seen at the top.
   const total = (await api<{ items: unknown[] }>(page, "GET", "/attention?state=open")).items.length;
@@ -372,9 +418,11 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await expect(toggles.nth(0)).toBeFocused();
   const first = rows(page).first();
   const subject = await toggles.nth(0).textContent();
-  // Off by default: d changes nothing.
+  // Off by default: w and d change nothing.
+  await page.keyboard.press("w");
   await page.keyboard.press("d");
   await expect(first).not.toHaveAttribute("data-decided");
+  await expect(first).not.toContainText("In progress");
   // Enter opens the row in place.
   await page.keyboard.press("Enter");
   await expect(toggles.nth(0)).toHaveAttribute("aria-expanded", "true");
@@ -387,7 +435,8 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await sheet.getByRole("checkbox", { name: "Use the decision keys" }).check();
   await expect(sheet.getByRole("table", { name: "Inbox decisions, on" })).toBeVisible();
   // Nothing irreversible ever has a single key.
-  await expect(sheet).not.toContainText(/\b(Apply|Approve|Send|Reject|Revert|Disconnect)\b/);
+  await expect(sheet).not.toContainText(/\b(Apply|Approve|Send|Reject|Revert|Disable)\b/);
+  await expect(sheet).toContainText("Start working");
   await page.keyboard.press("Escape");
   await toggles.nth(0).focus();
   await page.keyboard.press("d");
@@ -396,6 +445,26 @@ test("keys: j and k move between rows; Done, Snooze and Dismiss keys are off unt
   await expect(decided.getByRole("button", { name: "Undo" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(decided).not.toHaveAttribute("data-decided");
+
+  // w is Start working, first step included: a deadline opens in place, a review request opens its source in a new tab.
+  const deadline = inboxRow(page, LONG);
+  await deadline.locator("[data-row-toggle]").focus();
+  await page.keyboard.press("w");
+  await expect(deadline.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(deadline.locator(".inbox-source")).toContainText("In progress");
+  await deadline.getByRole("button", { name: `Not started: ${LONG}` }).click();
+  await expect(deadline.locator(".inbox-source")).not.toContainText("In progress");
+  await journeys.context.route("https://github.com/**", (r) => r.fulfill({ contentType: "text/html", body: "<title>acme/web #42</title>" }));
+  const review = inboxRow(page, "Add checkout retry");
+  await review.locator("[data-row-toggle]").focus();
+  const [tab] = await Promise.all([page.waitForEvent("popup"), page.keyboard.press("w")]);
+  await expect(tab).toHaveURL(/^https:\/\/github\.com\/acme\/web\/pull\/42/);
+  await tab.close();
+  await expect(review.locator(".inbox-source")).toContainText("In progress");
+  await openRow(review);
+  await review.getByRole("button", { name: "Not started: Add checkout retry" }).click();
+  await expect(review.locator(".inbox-source")).not.toContainText("In progress");
+  await journeys.context.unroute("https://github.com/**");
 
   // Off again, and it stays off after a reload.
   await page.keyboard.press("?");
@@ -417,15 +486,14 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   await page.screenshot({ path: "test-results/screens/narrow-home-inbox-head.png" });
   // On a narrow window Show new items' place shows the range while nothing waits, at the button's height.
   await expect(page.locator(".inbox-tools-range")).toHaveText(/^1–20 of \d+$/);
-  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
-  const deadline = (await typePicker(page).locator("option").allTextContents()).find((o) => o.startsWith("Deadline ("))!;
-  await typePicker(page).selectOption({ label: deadline });
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(44);
+  await inboxType(page, "Deadline");
   await expect(rows(page).first()).toHaveAttribute("data-type", "deadline");
   await inboxView(page, "Newest first");
   // Group by type keeps Show new items' place too, with the count in it.
   await inboxView(page, "Group by type");
   await expect(page.locator(".inbox-tools-range")).toHaveText(/^\d+ items$/);
-  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(36);
+  expect(Math.round((await page.locator(".inbox-tools-range").boundingBox())!.height)).toBe(44);
   await inboxView(page, "Priority order");
   const long = inboxRow(page, LONG);
   await long.scrollIntoViewIfNeeded();
@@ -441,7 +509,7 @@ test("narrow: at 360 px the pickers work, the stamp and kind come first, the who
   expect(text).toBeLessThan(source!);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
   // The last row and its actions stay above the bottom bar.
-  await typePicker(page).selectOption({ index: 0 });
+  await inboxType(page, "All types");
   await page.getByRole("button", { name: "Load more" }).click();
   const last = rows(page).last();
   await openRow(last);
@@ -468,7 +536,7 @@ test("captures: Home's first viewport, an open row, a decided row and Group by t
     await review.locator("[data-row-toggle]").click();
     const cutover = inboxRow(page, "Send the cutover plan to finance");
     await openRow(cutover);
-    await cutover.getByRole("button", { name: "Done" }).click();
+    await cutover.locator(".inbox-detail").getByRole("button", { name: "Done" }).click();
     await expect(cutover).toHaveAttribute("data-decided", "done");
     await page.locator("#inbox").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/screens/${scheme}-home-inbox-decided.png` });

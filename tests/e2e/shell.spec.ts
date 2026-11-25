@@ -445,13 +445,16 @@ async function mastheadFits(page: Page): Promise<string[]> {
   });
 }
 
+/** What a narrow masthead keeps free between the mark and the Machine button, for fonts wider than Linux's. */
+const NARROW_MASTHEAD_SPARE_PX = 16;
+
 /**
  * A narrow masthead holds the mark and, while the live connection is lost, this Machine's button: neither is cut short,
  * they do not overlap, and the button stays inside the column. Measured rather than assumed: the mark is set in the
  * system's Georgia, which is wider on macOS and Windows than Linux's stand-in.
  */
 async function narrowMastheadFits(page: Page): Promise<string[]> {
-  return page.locator(".masthead-inner").evaluate((inner) => {
+  return page.locator(".masthead-inner").evaluate((inner, NARROW_MASTHEAD_SPARE_PX) => {
     const brand = inner.querySelector<HTMLElement>(".brand")!;
     const button = inner.querySelector(".machine-trigger")!.getBoundingClientRect();
     const live = inner.querySelector<HTMLElement>(".machine-trigger-live")!;
@@ -460,10 +463,13 @@ async function narrowMastheadFits(page: Page): Promise<string[]> {
     const problems: string[] = [];
     if (button.right > edge + 1) problems.push(`the Machine button leaves the column (${button.right} > ${edge})`);
     if (brand.getBoundingClientRect().right > button.left) problems.push("the mark runs under the Machine button");
+    // Room to spare, so the slightly wider fonts of macOS and Windows still fit the state.
+    const spare = button.left - brand.getBoundingClientRect().right - parseFloat(getComputedStyle(inner).columnGap || "0");
+    if (spare < NARROW_MASTHEAD_SPARE_PX) problems.push(`only ${Math.round(spare)} px to spare beside the mark`);
     if (brand.scrollWidth > brand.clientWidth) problems.push("the mark is cut short");
     if (live.scrollWidth > live.clientWidth) problems.push(`the state "${live.textContent}" is cut short`);
     return problems;
-  });
+  }, NARROW_MASTHEAD_SPARE_PX);
 }
 
 test("this Machine: the masthead disclosure names this Machine and the Reader, and reports a lost live connection", async () => {
@@ -505,9 +511,9 @@ test("this Machine: the masthead disclosure names this Machine and the Reader, a
   await trigger.click();
   await expect(panel).toContainText(/Reconnecting to the Attache service|Disconnected from the Attache service/);
   await page.keyboard.press("Escape");
-  // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. On
-  // the narrowest phones (280 px) the briefcase alone is the mark, and the link is still named Attache, with the
-  // decisions that wait.
+  // On a phone the button shows the whole state without the Machine's name, beside the mark and inside the window. Below
+  // 360 px (320 and a folded phone's 280) the briefcase alone is the mark, and the link is still named Attache, with
+  // the decisions that wait.
   for (const width of [320, 280]) {
     await page.setViewportSize({ width, height: 800 });
     await expect(trigger.locator(".machine-trigger-live")).toBeVisible();
@@ -632,7 +638,10 @@ test("sheets: a close the browser reports late gives focus back only where the o
   await expect(page).toHaveURL(`${stack.url}/jobs`);
 });
 
-test("Reader: a silent Reader stays in view on every screen and size without opening anything, and Connections names the Reader at once", async () => {
+/** The Connection banner while no Machine reads the sources: the Reader went silent. */
+const NOT_READING = '[data-connection-banner][data-state="not_reading"]';
+
+test("Reader: a silent Reader is the Connection banner's Not reading on every screen and size, and Connections names the Reader at once", async () => {
   const page = await journeys.open("/connections");
   // The Reader line opens the Connections page, before any card.
   await expect(page.locator(".page .reader-line").first()).toContainText("This Machine runs Source refresh and briefings.");
@@ -644,10 +653,10 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
       await page.setViewportSize(viewport);
       for (const path of ["/", "/jobs", "/brain"]) {
         await page.goto(`${stack.url}${path}`);
-        const warning = page.locator("[data-reader-warning]");
+        const warning = page.locator(NOT_READING);
         await expect(warning, `${path} at ${viewport.width}px`).toBeVisible();
         await expect(warning).toContainText("Work Mac");
-        await expect(warning).toContainText(/silent/);
+        await expect(warning).toContainText("Not reading");
         await expect(warning).toBeInViewport();
       }
     }
@@ -657,14 +666,14 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   }
   await page.goto(`${stack.url}/jobs`);
   await expect(page.locator(".page").first()).toBeVisible();
-  await expect(page.locator("[data-reader-warning]")).toHaveCount(0);
+  await expect(page.locator(NOT_READING)).toHaveCount(0);
 
-  // A long Machine name with no break in it wraps inside the banner on a phone.
+  // A long Machine name with no break in it wraps inside the banner on a phone, with its way to fix it in view.
   const unbroken = "W".repeat(64);
   await page.route("**/api/v1/reader", (route) => route.fulfill({ json: { ...silent, machine: { ...silent.machine, name: unbroken } } }));
   await page.setViewportSize({ width: 360, height: 800 });
   await page.reload();
-  const banner = page.locator("[data-reader-warning]");
+  const banner = page.locator(NOT_READING);
   await expect(banner).toContainText(unbroken);
   expect(await banner.evaluate((el) => el.scrollWidth <= el.clientWidth), "the banner's words stay inside it at 360 px").toBe(true);
   await expect(banner.getByRole("link", { name: "Machines and Replication" })).toBeInViewport();
@@ -681,25 +690,28 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await tab.route("**/api/v1/reader", (route) => (answer === "failing" ? route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "busy" } } }) : route.fulfill({ json: answer === "lapsed" ? { ...renewed, silent: true } : renewed })));
   await tab.goto(`${stack.url}/jobs`);
   await expect(tab.getByRole("heading", { level: 1, name: "Jobs" })).toBeVisible();
-  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  await expect(tab.locator(NOT_READING)).toHaveCount(0);
   // The check at the lease's end fails; the Dashboard asks again until it gets an answer.
   answer = "failing";
   await tab.clock.runFor(2 * 60_000);
-  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  await expect(tab.locator(NOT_READING)).toHaveCount(0);
   answer = "lapsed";
   await tab.clock.runFor(60_000);
-  await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
-  // The Reader comes back, but the answer to the event that says so fails: the warning still goes, once an answer arrives.
+  await expect(tab.locator(NOT_READING)).toContainText("Work Mac");
+  // The Reader comes back, but the answer to the event that says so fails: Not reading goes once an answer arrives.
   answer = "failing";
   const name = (await api<{ name: string }>(tab, "GET", "/machine")).name;
   const failed = tab.waitForResponse((r) => r.url().endsWith("/api/v1/reader") && r.status() === 503);
   await api(tab, "PATCH", "/machine", { name });
   await tab.clock.runFor(500);
   await failed;
-  await expect(tab.locator("[data-reader-warning]")).toBeVisible();
+  // A failure counts once it has lasted (CHECK_GRACE_MS, five seconds); the Dashboard asks again meanwhile, still failing.
+  await tab.clock.runFor(5_000);
+  // A failed answer is said as such (Could not check, with Retry), never taken for the Reader being back.
+  await expect(tab.locator('[data-connection-banner][data-state="could_not_check"]')).toContainText("Reader · Could not check");
   answer = "renewed";
   await tab.clock.runFor(31_000);
-  await expect(tab.locator("[data-reader-warning]")).toHaveCount(0);
+  await expect(tab.locator(NOT_READING)).toHaveCount(0);
   // A first answer that fails is asked again: the warning arrives once the service says the Reader is silent.
   answer = "failing";
   const firstFailed = tab.waitForResponse((r) => r.url().endsWith("/api/v1/reader") && r.status() === 503);
@@ -717,7 +729,7 @@ test("Reader: a silent Reader stays in view on every screen and size without ope
   await settle();
   answer = "lapsed";
   await tab.clock.runFor(31_000);
-  await expect(tab.locator("[data-reader-warning]")).toContainText("Work Mac");
+  await expect(tab.locator(NOT_READING)).toContainText("Work Mac");
   await tab.close();
 });
 

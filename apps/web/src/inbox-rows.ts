@@ -1,5 +1,5 @@
 import type { ActionStatus, AttentionItemView } from "@attache/contracts";
-import { clockTime, sameDay, startOfDay, wallTime } from "./zoned-time.ts";
+import { clockTime, dueDayKey, sameDay, startOfDay, wallTime } from "./zoned-time.ts";
 
 /**
  * What an Inbox row's middle and trailing columns say. The subject is the item's own words; where a connector's
@@ -127,6 +127,11 @@ export function rowText(item: RowItem): RowText {
   return { subject: split.subject, source: split.context ? `${source} · ${split.context}` : source };
 }
 
+/** Who or where the item names beside its source, such as the sender of a reply ("Nora Lind"); null when none. */
+export function rowContext(item: RowItem): string | null {
+  return own(RULES, item.kind)?.(item)?.context ?? null;
+}
+
 export interface RowTime {
   /** The instant behind the time, for `<time dateTime>`. */
   iso: string;
@@ -136,13 +141,9 @@ export interface RowTime {
   label: string;
 }
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
 /** The local calendar day a due value falls on, as days since the epoch: a bare date is that date wherever the owner is. */
 function dueDay(dueAt: string, timeZone: string): number {
-  if (DAY.test(dueAt)) return Date.parse(`${dueAt}T00:00:00Z`) / 86_400_000;
-  const w = wallTime(Date.parse(dueAt), timeZone);
-  return Date.UTC(w.year, w.month - 1, w.day) / 86_400_000;
+  return Date.parse(`${dueDayKey(dueAt, timeZone)}T00:00:00Z`) / 86_400_000;
 }
 
 function today(now: number, timeZone: string): number {

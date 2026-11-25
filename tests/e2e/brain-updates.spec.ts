@@ -56,8 +56,11 @@ test("home: Recently added says in one line that nothing reached the Brain witho
   await expect(section.getByRole("listitem")).toHaveCount(0);
   // It closes the Inbox area, the last of Home's four, rather than standing as a fifth.
   await expect(page.locator("#inbox > [data-recently-added]")).toBeVisible();
-  // With no work source only the notes are read: Connections says Notes only, the empty Inbox says what was read, and the logo shows no dot.
-  await expect(page.getByRole("status", { name: "Connections" }).locator('[data-state="notes_only"] .conn-row-line')).toHaveText("Notes · Notes only · Only your notes are read");
+  // With no work source only the notes are read: that is how it was set up, not a problem, so the Connection banner
+  // never says Notes only (it names the Harness that is not set up); the empty Inbox says what was read, and the logo
+  // shows no dot.
+  await expect(page.locator("[data-connection-banner]")).toHaveAttribute("data-state", "needs_setup");
+  await expect(page.locator('[data-connection-banner][data-state="notes_only"]')).toHaveCount(0);
   const empty = page.locator("#inbox [data-inbox-empty]");
   await expect(empty.locator(".inbox-empty-title")).toHaveText("Nothing found in your notes.");
   await expect(empty).toContainText("No work source is connected, so only your notes were read.");

@@ -86,5 +86,5 @@ export interface HarnessUninstallResult {
 
 /** What a disconnect left in the Harness, in the owner's words, or null when it removed everything. */
 export function uninstallProblem(r: HarnessUninstallResult): string | null {
-  return r.failures.length ? `Disconnected, but some of Attache's entries remain: ${r.failures.join(" ")}` : null;
+  return r.failures.length ? `Disabled, but some of Attache's entries remain: ${r.failures.join(" ")}` : null;
 }

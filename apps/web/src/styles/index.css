@@ -16,6 +16,9 @@
 @import "./search.css";
 @import "./shell.css";
 @import "./home.css";
+@import "./for-you-now.css";
+@import "./your-day.css";
+@import "./briefing.css";
 @import "./inbox.css";
 @import "./approvals.css";
 @import "./brain.css";

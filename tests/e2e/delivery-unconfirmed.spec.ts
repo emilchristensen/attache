@@ -210,7 +210,8 @@ test("from Home after the send: Check destination opens the destination and chan
   await expectCount(page, { total: count.total, home: count.home - 1, approvals: count.approvals + 1 }, "after the replacement");
 
   // Done resolves the item; its replacement Draft still waits in Approvals, so the total does not move.
-  await row.getByRole("button", { name: "Done", exact: true }).click();
+  // The opened row's Done, named for its item like every row action.
+  await row.locator(".inbox-detail").getByRole("button", { name: `Done: ${SUBJECT}` }).click();
   await expect(page.locator('#inbox [data-decided="done"]', { hasText: SUBJECT })).toBeVisible();
   expect((await reviewItem(page)).state).toBe("resolved");
   await expectCount(page, { total: count.total, home: count.home - 1, approvals: count.approvals + 1 }, "after Done");

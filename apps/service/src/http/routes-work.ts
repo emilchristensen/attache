@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { ActionApproveInput, ActionEditInput, ActionExecuteInput, ActionRestoreInput, AttentionDraftInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
+import { ActionApproveInput, AgendaQuery, ActionEditInput, ActionExecuteInput, ActionRestoreInput, AttentionDraftInput, ConnectionKind, JobCreateInput, API_PREFIX, type JobKind } from "@attache/contracts";
 import type { Router } from "./router.ts";
 import { HttpError } from "./router.ts";
 import type { App } from "../app.ts";
@@ -11,6 +11,7 @@ import { FEATURES } from "../capabilities/registry.ts";
 import type { SignInState } from "../connectors/manager.ts";
 import { createBackup, listBackups } from "../backup.ts";
 import { expandHome, folderName } from "../platform/locations.ts";
+import { agenda } from "../attention/agenda.ts";
 
 /** Sign-ins in progress. Settings learned when starting (a newly registered client) are kept here and saved only when sign-in completes. */
 const oauthPending = new Map<string, { kind: ConnectionKind; verifier: string; redirectUri: string; expires: number; settings: Record<string, unknown> }>();
@@ -181,6 +182,12 @@ export function registerWorkRoutes(r: Router, app: App, port: () => number) {
 
   // ---- connections ------------------------------------------------------------------------
   r.get("/connections", () => app.connections.statuses());
+  r.get("/agenda", (c) => {
+    requireFeature(app, "attention");
+    const range = AgendaQuery.safeParse({ from: c.query("from"), to: c.query("to") });
+    if (!range.success) throw new HttpError(400, "invalid_request", `The agenda needs from and to as ISO instants, from before to: ${range.error.issues[0]?.message ?? "invalid range"}`);
+    return agenda(app.db, app.connections, range.data.from, range.data.to);
+  });
   r.post("/connections/:kind/configure", async (c) => {
     const kind = ConnectionKind.parse(c.params.kind);
     const body = await c.body(z.object({ method: z.string().max(50), fields: z.record(z.string(), z.string().max(10_000)).default({}), readScopes: z.array(z.string()).optional() }));

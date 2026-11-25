@@ -303,49 +303,33 @@ test("home: search and the inbox, with no chat box or chat shortcut", async () =
   await expect(page).toHaveURL(`${stack.url}/`);
 });
 
-test("connections on Home: one green line when all is read, Checking and Could not check when an answer is missing, and Not reading beside the warning", async () => {
+test("Connections: healthy has a green dot, a failed check shows Retry, and a silent Reader shows one banner", async () => {
   const page = await journeys.open("/");
-  const area = page.getByRole("status", { name: "Connections" });
-  // Healthy: one line, nothing listed, a link to the details.
-  await expect(area).toContainText("All good");
-  await expect(area).toContainText(/\d+ sources? read .* by this Machine/);
-  await expect(area.locator(".conn-row")).toHaveCount(0);
-  expect((await area.boundingBox())!.height).toBeLessThan(64);
-  await area.getByRole("link", { name: "View details" }).click();
+  const banner = page.locator("[data-connection-banner]");
+  await expect(banner).toHaveCount(0);
+  await expect(page.locator(".masthead-nav").getByRole("link", { name: "Connections" }).locator(".connection-healthy-dot")).toBeVisible();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Connections" }).click();
   await expect(page).toHaveURL(`${stack.url}/connections`);
-  // A row's link into Connections lands on that Connection with the keyboard in it.
   await page.goto(`${stack.url}/connections?open=github`);
   await expect(page.locator('[data-connection="github"] :focus')).toHaveCount(1);
 
-  // While the Reader has not answered the area claims nothing; when it fails it says so and offers Retry.
-  let release: () => void = () => {};
-  const held = new Promise<void>((r) => (release = r));
-  await page.route("**/api/v1/reader", async (route) => {
-    await held;
-    await route.abort();
-  });
+  await page.route("**/api/v1/reader", (route) => route.abort());
   await page.goto(`${stack.url}/`);
-  await expect(area.locator(".conn-row")).toHaveText(["Every Connection · Checking · Nothing is known yet"]);
-  release();
-  const failed = area.locator('.conn-row[data-state="could_not_check"]');
+  const failed = page.locator('[data-connection-banner][data-state="could_not_check"]');
   await expect(failed).toContainText("Could not check");
-  await expect(area).not.toContainText("All good");
   await page.unroute("**/api/v1/reader");
   await failed.getByRole("button", { name: "Retry" }).click();
-  await expect(area).toContainText("All good");
+  await expect(banner).toHaveCount(0);
 
-  // A silent Reader: Not reading in red with Machines and Replication, and the warning under the masthead stays.
   await page.route("**/api/v1/reader", async (route) => {
     const res = await route.fetch();
     const reader = await res.json();
     await route.fulfill({ response: res, json: { ...reader, replicated: true, silent: true, thisMachine: false, machine: { id: "other", name: "Home PC" }, heartbeatAt: new Date(Date.now() - 2 * 3_600_000).toISOString() } });
   });
   await page.reload();
-  const notReading = area.locator('.conn-row[data-state="not_reading"]');
-  await expect(notReading.locator(".conn-row-line")).toHaveText("Home PC · Not reading · New items may be missing");
-  await expect(page.locator("[data-reader-warning]")).toBeVisible();
-  await notReading.locator(".conn-row-line").click();
-  await expect(notReading).toContainText("Nothing is read again by itself.");
+  const notReading = page.locator('[data-connection-banner][data-state="not_reading"]');
+  await expect(notReading).toContainText("Home PC · Not reading · New items may be missing");
+  await expect(page.locator("[data-reader-warning]")).toHaveCount(0);
   await expect(notReading.getByRole("link", { name: "Machines and Replication" })).toHaveAttribute("href", "/settings/machines");
   await page.unroute("**/api/v1/reader");
   await page.close();
@@ -402,13 +386,12 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    // The amber briefing's controls are measured in for-you-now.spec.ts, where a morning briefing leads.
     // Opened from the keyboard, as a mouse click would leave the next focus without its ring (`:focus-visible`).
     const first = page.locator("#inbox [data-inbox-row]").first();
     if ((await first.locator("[data-row-toggle]").getAttribute("aria-expanded")) !== "true") await first.locator("[data-row-toggle]").press("Enter");
-    const onCard = first.getByRole("button", { name: "Snooze" });
-    const onCanvas = page.locator("#inbox").getByRole("combobox", { name: "View" });
-    const onQuiet = page.getByRole("region", { name: "For you now" }).getByRole("button", { name: "Briefings" });
+    const onCard = first.locator(".inbox-row-actions").getByRole("button", { name: /^(Start working|Continue):/ });
+    const onCanvas = page.locator("#inbox").getByRole("button", { name: /^View options/ });
+    const onQuiet = page.getByRole("region", { name: "The Daily Briefing" }).getByRole("button", { name: "Briefing options" });
     // Control edges: a secondary button on a card and on the canvas.
     for (const control of [onCard, onQuiet, onCanvas]) {
       const edge = await measure(control, "border");
@@ -422,10 +405,9 @@ test("look: focus rings, control edges and healthy states, measured on the surfa
       expect(ring, `${scheme} focus ring`).toMatchObject({ width: 3, style: "solid" });
       expect(ring.ratio, `${scheme} focus ring`).toBeGreaterThanOrEqual(3);
     }
-    // A healthy state is plain words, never a coloured pill.
-    const healthy = page.getByRole("status", { name: "Connections" }).getByText("All good", { exact: true });
-    await expect(healthy).toBeVisible();
-    expect(await healthy.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+    // A healthy state is the green masthead dot and no banner, never a coloured pill.
+    await expect(page.locator("[data-connection-banner]")).toHaveCount(0);
+    await expect(page.locator(".masthead-nav .connection-healthy-dot")).toBeVisible();
   }
   await page.close();
 });
@@ -466,18 +448,24 @@ test("attention: a decided row stays in place with Undo; dismiss and snooze pers
   await expect(runbook).toHaveAttribute("data-decided", "dismiss");
   const cutover = inboxRow(page, "Send the cutover plan to finance");
   await openRow(cutover);
-  await cutover.getByRole("button", { name: "Snooze" }).click();
-  await cutover.getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
+  await cutover.locator(".inbox-detail").getByRole("button", { name: "Snooze" }).click();
+  await cutover.locator(".inbox-detail").getByRole("group", { name: "Snooze until" }).getByRole("button", { name: "1 hour" }).click();
   await expect(cutover).toHaveAttribute("data-decided", "snooze");
-  const forYou = page.getByRole("region", { name: "For you now" });
-  await forYou.getByRole("button", { name: "Briefings" }).click();
-  await forYou.getByRole("button", { name: /^Prepare a briefing/ }).click();
-  // The briefing asked for shows in For you now (in its progress line's place while the pointer rests there, else
-  // leading); Read briefing opens its points and linked counts, which jump to the Inbox.
-  await forYou.locator('[data-heads-up="requested-briefing"]').getByRole("button", { name: "Read briefing" }).click({ timeout: 30_000 });
+  const briefing = page.getByRole("region", { name: "The Daily Briefing" });
+  await briefing.getByRole("button", { name: "Briefing options" }).click();
+  await briefing.getByRole("group", { name: "Briefing actions" }).getByRole("button", { name: /^Prepare a briefing/ }).click();
+  // With no Daily Briefing yet today, Prepare a briefing writes it: its card fills the area, Read briefing opens it as a
+  // page with its points, and a Top to-do there opens its Inbox item in place on Home.
+  await briefing.locator(".daily-briefing-card").getByRole("link", { name: "Read briefing" }).click({ timeout: 30_000 });
+  await expect(page).toHaveURL(/\/briefing\/[^/]+$/);
   await expect(page.locator(".briefing-lines li").first()).toBeVisible();
-  await page.getByRole("group", { name: "Briefing at a glance" }).getByRole("button", { name: /Review queue/ }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeInViewport();
+  const todo = page.locator(".briefing-page-section", { has: page.getByRole("heading", { name: "Top to-dos" }) }).locator("[data-briefing-entry=inbox]").first();
+  const todoId = await todo.getAttribute("data-item-id");
+  await todo.locator(".briefing-item-title").click();
+  await expect(page).toHaveURL(`${stack.url}/`);
+  const opened = page.locator(`#inbox [data-inbox-row][data-item-id="${todoId}"]`);
+  await expect(opened.locator("[data-row-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(opened).toBeInViewport();
   await page.reload();
   await expect(inboxRow(page, "Add checkout retry")).toBeVisible();
   // The logo's dot says something needs attention.
@@ -488,7 +476,7 @@ test("attention: a decided row stays in place with Undo; dismiss and snooze pers
   await expect(inboxRow(page, "Review rollback runbook")).toContainText("Dismissed");
   await expect(inboxRow(page, "Send the cutover plan to finance")).toContainText("Snoozed until");
   await inboxView(page, "Priority order");
-  await expect(page.getByRole("status", { name: "Connections" })).toContainText("All good");
+  await expect(page.locator("[data-connection-banner]")).toHaveCount(0);
 });
 
 test("drafts: a rejected draft frees its item to be drafted again and stays listed as finished", async () => {
@@ -513,6 +501,11 @@ test("drafts: a rejected draft frees its item to be drafted again and stays list
   await expect(countLine).toHaveText(/Draft in Approvals$/);
   // The row stays in the list with its Draft's state and View draft.
   await expect(pr).toContainText("Draft waiting");
+  await openRow(pr);
+  await pr.getByRole("button", { name: "Start working: Add checkout retry" }).click();
+  await expect(page.locator("[data-action-id]")).toHaveAttribute("data-status", "draft");
+  await page.goBack();
+  await expect(pr).toContainText("In progress");
   await openRow(pr);
   await pr.getByRole("button", { name: "View draft" }).click();
   const draft = page.locator("[data-action-id]");
@@ -694,8 +687,8 @@ test("wording: counts read as words in the right number, never with (s)", async 
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Reads 2 Markdown files · changes 0 files")).toBeVisible();
 
-  await (await openConnection(page, "github")).getByRole("button", { name: "Disconnect…" }).click();
-  const disconnect = page.getByRole("alertdialog", { name: "Disconnect" });
+  await (await openConnection(page, "github")).getByRole("button", { name: "Disable…" }).click();
+  const disconnect = page.getByRole("alertdialog", { name: "Disable" });
   await expect(disconnect).toContainText("Attache deletes the stored credentials and stops all requests.");
   await expect(disconnect).toContainText(/\d+ queued jobs? will be cancelled and approvals for \d+ drafts? revoked\./);
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?\./);
@@ -703,7 +696,7 @@ test("wording: counts read as words in the right number, never with (s)", async 
   // A notes folder has no credentials to delete, and its indexed files are counted too.
   const notes = page.locator('[data-group="notes"] .connection-row', { has: page.getByRole("button", { name: basename(stack.vaultDir), exact: true }) });
   await notes.getByRole("button", { name: basename(stack.vaultDir), exact: true }).click();
-  await notes.getByRole("button", { name: "Disconnect…" }).click();
+  await notes.getByRole("button", { name: "Disable…" }).click();
   await expect(disconnect).toContainText("Attache stops reading from it.");
   await expect(disconnect).not.toContainText("credentials");
   await expect(disconnect).toContainText(/Retained data: \d+ observations?, \d+ open Inbox items?, 2 indexed files\./);
@@ -1270,14 +1263,11 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
   await expect(page.getByText(/Still not signed in: Slack is not connected in claude.ai/)).toBeVisible(cliRun);
   await expect(needsYou.locator('[data-connection="slack"]')).toBeVisible();
 
-  // Home names the sign-in in one amber line with its impact and Reconnect, and no green line.
+  // Home names the sign-in in one amber banner with its impact and Reconnect.
   await page.goto(`${stack.url}/`);
-  const area = page.getByRole("status", { name: "Connections" });
-  const row = area.locator('.conn-row[data-state="sign_in"]');
-  await expect(row.locator(".conn-row-line")).toHaveText("Slack · Sign-in needed · Replies and mentions may be missing");
-  await expect(area).not.toContainText("All good");
-  // Amber: the owner can act. The colour repeats the word; it never carries it alone.
-  const amber = await row.locator(".conn-word").evaluate((el) => {
+  const area = page.locator('[data-connection-banner][data-state="sign_in"]');
+  await expect(area).toContainText("Slack · Sign-in needed · Replies and mentions may be missing");
+  const amber = await area.evaluate((el) => {
     const probe = document.body.appendChild(document.createElement("span"));
     probe.style.color = "var(--amber)";
     const expected = getComputedStyle(probe).color;
@@ -1285,19 +1275,10 @@ test("reconnect: a claude.ai connector that loses sign-in offers Reconnect, whic
     return getComputedStyle(el).color === expected;
   });
   expect(amber).toBe(true);
-  // The line opens in place for the sentence, what failed and when it was last read; the button stays outside it.
-  const line = row.getByRole("button", { name: /^Slack · Sign-in needed/ });
-  await expect(line).toHaveAttribute("aria-expanded", "false");
-  await line.click();
-  await expect(line).toHaveAttribute("aria-expanded", "true");
-  await expect(row).toContainText("Slack signed you out, so Slack replies and mentions may be missing below.");
-  await expect(row).toContainText("Slack is not connected in claude.ai");
-  // Reconnect from Home tests the sign-in again, as the card does.
   await setServer("connected");
-  await row.getByRole("button", { name: "Reconnect" }).click();
-  // The toast lasts a few seconds from the moment the test passes, which can be before Home has reloaded, so it is checked first.
+  await area.getByRole("button", { name: "Reconnect" }).click();
   await expect(page.getByText("Reconnected")).toBeVisible(cliRun);
-  await expect(area).toContainText("All good");
+  await expect(area).toHaveCount(0);
   await expect(connectionsLink).toHaveAccessibleName("Connections");
   await page.goto(`${stack.url}/connections`);
   await expect(page.locator('[data-group="work"] [data-connection="slack"]')).toBeVisible(cliRun);

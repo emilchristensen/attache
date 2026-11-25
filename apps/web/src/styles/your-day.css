@@ -1,0 +1,144 @@
+/*
+ * Your day: one band between two rules, the serif heading in a left column and today's meetings side by side, each
+ * behind a short vertical rule with its time in monospace and its title in bold; a list in a narrow space.
+ */
+
+.your-day {
+  container-type: inline-size;
+  padding: 12px 0;
+  margin-bottom: var(--s-4);
+  border-block: 1px solid var(--rule);
+}
+.your-day-band {
+  display: grid;
+  grid-template-columns: 185px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s-4);
+}
+.your-day h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 500;
+}
+.your-day-body {
+  min-width: 0;
+}
+.your-day-message {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+.your-day-events {
+  display: flex;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+/* One line per meeting, as the mockups draw it: the time in monospace, the title in bold, and Join at the end. */
+.your-day-event {
+  min-width: 0;
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px var(--s-3);
+  min-height: 30px;
+  padding-left: var(--s-4);
+  border-left: 2px solid var(--rule);
+}
+.your-day-time {
+  font-family: var(--mono);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.your-day-title {
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.your-day-title a {
+  color: var(--ink);
+}
+.your-day-response {
+  display: block;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.your-day-event.ended {
+  opacity: 0.6;
+}
+.your-day-event.in-progress .your-day-time {
+  color: var(--rust);
+  font-weight: 700;
+}
+/* All-day events: one compact line of titles, each with its link and its response, apart by a middle dot. */
+.your-day-all-day {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--s-2);
+  margin: 0 0 var(--s-2);
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+}
+.your-day-all-day li + li::before {
+  content: "·" / "";
+  margin-right: var(--s-2);
+}
+.your-day-all-day a {
+  color: inherit;
+}
+.your-day-all-day .your-day-response {
+  display: inline;
+  margin-left: var(--s-1);
+}
+.your-day-more {
+  display: inline-block;
+  margin-top: var(--s-2);
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.your-day-narrow {
+  display: none;
+}
+
+@container (max-width: 600px) {
+  .your-day-band {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-2);
+  }
+  .your-day-events {
+    display: grid;
+    gap: var(--s-2);
+  }
+  .your-day-event {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    padding: 8px 0 8px var(--s-3);
+  }
+  .your-day-time {
+    grid-column: 1;
+  }
+  .your-day-title a,
+  .your-day-all-day a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .your-day-event .btn {
+    grid-column: 1;
+    justify-self: start;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .your-day-wide,
+  .your-day-more {
+    display: none;
+  }
+  .your-day-narrow {
+    display: grid;
+  }
+}

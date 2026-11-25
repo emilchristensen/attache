@@ -54,7 +54,7 @@ const inbox = (page: Page) => page.locator("#inbox");
 const emptyState = (page: Page) => page.locator("#inbox [data-inbox-empty]");
 const failure = (page: Page) => page.locator("#inbox [data-group-failure]");
 const rows = (page: Page) => page.locator("#inbox [data-inbox-row]");
-const connectionsArea = (page: Page) => page.getByRole("status", { name: "Connections" });
+const connectionsArea = (page: Page) => page.locator("[data-connection-banner]");
 
 /** The open Inbox list as the shell asks for it (`/attention?state=open&limit=200`), not Hidden's request. */
 const isOpenList = (url: URL) => url.pathname === "/api/v1/attention" && url.searchParams.get("state") === "open";
@@ -82,7 +82,7 @@ test("empty: Nothing needs you. only from an exact zero with every source read, 
   await routeOpen(page);
   await routeCount(page, NONE);
   await page.goto(stack.url);
-  await expect(connectionsArea(page)).toHaveAttribute("data-connections", "all_good");
+  await expect(connectionsArea(page)).toHaveCount(0);
   const empty = emptyState(page);
   await expect(empty).toHaveAttribute("data-inbox-empty", "clear");
   await expect(empty.locator(".inbox-empty-title")).toHaveText("Nothing needs you.");
@@ -208,7 +208,7 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await expect(failure(page)).toContainText("The Inbox could not be loaded. This is not an empty list: Attache does not know what is here. The Inbox store is locked");
   await expect(emptyState(page)).toHaveCount(0);
   await expect(rows(page)).toHaveCount(0);
-  await expect(inbox(page).getByRole("combobox", { name: "Type" })).toHaveCount(0);
+  await expect(inbox(page).getByRole("button", { name: /^Type:/ })).toHaveCount(0);
   await expect(page.locator(".count-line")).toHaveCount(0);
   // The count route still answers, and the total stays on the tab; beside a failed list the heading claims nothing.
   await expect(page).toHaveTitle(/^\(\d+\) Attache$/);
@@ -217,7 +217,7 @@ test("failed: on first load the Inbox shows the failure with Retry in the rows' 
   await failure(page).getByRole("button", { name: "Retry" }).click();
   await expect(rows(page).first()).toBeVisible();
   await expect(failure(page)).toHaveCount(0);
-  await expect(inbox(page).getByRole("combobox", { name: "Type" })).toBeVisible();
+  await expect(inbox(page).getByRole("button", { name: /^Type:/ })).toBeVisible();
   await expect(page.locator("[data-need-you]")).toBeVisible();
   await page.close();
 });

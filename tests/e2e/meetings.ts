@@ -56,20 +56,18 @@ export async function setCalendar(page: Page, stack: Stack, meetings: readonly M
 export const clock = (page: Page, iso: string) => page.evaluate((v) => new Date(v).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }), iso);
 
 export const area = (page: Page) => page.getByRole("region", { name: "For you now" });
-/** The meeting prep Heads-up (lead or line) whose subject is exactly `subject`. */
+/** The curated meeting-prep row whose subject is exactly `subject`. */
 export const meetingHeadsUp = (page: Page, subject: string) =>
-  area(page)
-    .locator('[data-heads-up="meeting-prep"]')
-    .filter({ has: page.locator(".heads-up-title, .heads-up-line-head strong").getByText(subject, { exact: true }) });
+  area(page).locator('[data-inbox-row][data-type="meeting_prep"]', { has: page.locator(".inbox-subject").getByText(subject, { exact: true }) });
 /** The Inbox heading's count: "4 need you here", or "At least 4 need you here". */
 export const needYou = (page: Page) => page.locator("#inbox [data-need-you]");
 export const inboxRowFor = (page: Page, subject: string) => page.locator("#inbox [data-inbox-row]", { hasText: subject });
 /** The Inbox row of the fixture event `id`. */
 export const rowFor = (page: Page, id: string) => page.locator(`#inbox [data-inbox-row][data-item-key="gcal:${id}"]`);
 
-/** Opens a Heads-up's prep in place. */
+/** Opens a curated row's meeting prep in place. */
 export async function openPrep(headsUp: Locator): Promise<void> {
-  const toggle = headsUp.getByRole("button", { name: "Open prep" });
+  const toggle = headsUp.locator("[data-row-toggle]");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  await expect(headsUp.locator("[data-meeting-detail]")).toBeVisible();
+  await expect(headsUp.locator(".inbox-detail")).toBeVisible();
 }

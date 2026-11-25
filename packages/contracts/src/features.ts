@@ -15,14 +15,19 @@ export type ReadinessState = z.infer<typeof ReadinessState>;
 export const CoverageState = z.enum(["complete", "partial", "empty", "denied", "unauthorized", "offline", "error", "not_configured", "never_run"]);
 export type CoverageState = z.infer<typeof CoverageState>;
 
-export interface Coverage {
-  state: CoverageState;
+export const Coverage = z.object({
+  state: CoverageState,
   /** Human-readable scope that was queried, e.g. "review requests for @me". */
-  scopes: Array<{ scope: string; state: CoverageState; items: number; pages: number; note?: string }>;
-  items: number;
-  at: string;
-  note?: string;
-}
+  scopes: z.array(z.object({ scope: z.string(), state: CoverageState, items: z.number(), pages: z.number(), note: z.string().optional() })),
+  items: z.number(),
+  at: z.string(),
+  note: z.string().optional(),
+});
+export type Coverage = z.infer<typeof Coverage>;
+
+/** Where a Connection stands: set up and working, signed out, failing, disconnected by the owner, or never set up. */
+export const ConnectionStatusState = z.enum(["connected", "needs_auth", "error", "disconnected", "not_configured"]);
+export type ConnectionStatusState = z.infer<typeof ConnectionStatusState>;
 
 export interface FeatureStatus {
   id: FeatureId;
@@ -40,7 +45,7 @@ export interface ConnectionStatus {
   id: string;
   kind: ConnectionKind;
   label: string;
-  status: "connected" | "needs_auth" | "error" | "disconnected" | "not_configured";
+  status: ConnectionStatusState;
   account: string | null;
   readScopes: string[];
   writeActions: string[];

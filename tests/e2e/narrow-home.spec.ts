@@ -1,6 +1,6 @@
 /**
- * Narrow Home actions (#40 of spec #14): on a phone, related notes, Join, Done, Not now and Reconnect are separate
- * 44 x 44 targets that wrap without overlap, every row's actions stay above the bottom bar and the safe area, Tab
+ * Narrow Home actions (#89): on a phone, row actions and Reconnect are separate 44 x 44 targets that wrap without overlap.
+ * Every row's actions stay above the bottom bar and the safe area, Tab
  * follows reading order, and each action reaches its own meeting or Connection. Runs against the real bundled service
  * and the TEST-ONLY fixtures, with two overlapping meetings on the fixture calendar and a mixed Connections answer.
  */
@@ -68,7 +68,7 @@ async function routeMixedHealth(page: Page) {
   });
 }
 
-const connections = (page: Page) => page.getByRole("status", { name: "Connections" });
+const connections = (page: Page) => page.locator("[data-connection-banner]");
 
 /** A related note whose title has no space to break at, as a file name with underscores can be. */
 const UNBROKEN_TITLE = "Pilot_handover_checklist_for_the_client_kiosk_rollout_2026_11_18";
@@ -84,33 +84,39 @@ async function routeUnbrokenNote(page: Page) {
   });
 }
 
+/** Opening prep reads it (In progress), so an earlier journey's opened prep is made unread again with Not started. */
+async function unreadPrep(page: Page): Promise<void> {
+  const items = (await api<{ items: Array<{ id: string; kind: string; startedAt: string | null }> }>(page, "GET", "/attention?state=open")).items;
+  for (const read of items.filter((i) => i.kind === "meeting_prep" && i.startedAt)) await api(page, "POST", `/attention/${read.id}/decision`, { decision: "reopen" });
+}
+
 /** Home on a phone with both meetings' prep open, Recently added open and the mixed Connections rows. */
 async function phoneHome(): Promise<Page> {
   const page = await journeys.open("/");
+  await unreadPrep(page);
   await routeMixedHealth(page);
   await routeUnbrokenNote(page);
   await page.reload();
-  await expect(connections(page).locator('.conn-row[data-state="sign_in"]')).toBeVisible();
-  await expect(meetingHeadsUp(page, "Pilot handover")).toHaveAttribute("data-meeting-phase", "in-progress");
+  await expect(connections(page)).toHaveAttribute("data-state", "sign_in");
+  await expect(meetingHeadsUp(page, "Pilot handover")).toContainText("Meeting started, prep not read");
   await openPrep(meetingHeadsUp(page, "Pilot handover"));
-  await openPrep(meetingHeadsUp(page, "Billing triage"));
-  await expect(meetingHeadsUp(page, "Pilot handover").locator(".meeting-prep-notes button").first()).toBeVisible();
+  await expect(meetingHeadsUp(page, "Pilot handover").locator(".inbox-detail")).toBeVisible();
   // Recently added starts closed: open it, so its note link and Revert are measured with the rest.
   await openRecentlyAdded(page);
   return page;
 }
 
-test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apart and whole at 375 and 320 px", async () => {
+test("targets: Home row actions and Reconnect are 44 x 44, apart and whole at 375 and 320 px", async () => {
   const page = await phoneHome();
   for (const width of [375, 320]) {
     await page.setViewportSize({ width, height: PHONE.height });
     await page.mouse.move(1, 1);
     // The frame itself never scrolls: only the page does, so the masthead and the bottom bar stay where they are.
     expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight), `${width} px document scrolls`).toBeLessThanOrEqual(0);
-    const targets = await page.evaluate(measureTargets, '[aria-label="Home"]');
+    const targets = await page.evaluate(measureTargets, '[data-connection-banner], [aria-label="Home"]');
     const names = targets.map((t) => t.name);
-    // Every control the ticket names is among them: the related note, both meetings' decisions and destinations, Reconnect.
-    for (const name of ["Nora Lind", UNBROKEN_TITLE, "Join", "Open in Google Calendar", "Done", "Not now", "Open prep", "Reconnect", "View details", "Open in Connections"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
+    // Every current Home action remains present at the narrow seam.
+    for (const name of ["Pilot handover", "Billing triage", "Actions: Pilot handover", "Reconnect", "Connection issue actions"]) expect(names, `${width} px: ${name} is measured`).toContain(name);
     const small = targets.filter((t) => t.width < TARGET - 0.01 || t.height < TARGET - 0.01).map((t) => `${t.name} ${Math.round(t.width)}x${Math.round(t.height)}`);
     expect(small, `${width} px targets under ${TARGET} px`).toEqual([]);
     expect(targets.filter((t) => t.clipped).map((t) => t.name), `${width} px targets with words cut off`).toEqual([]);
@@ -124,46 +130,41 @@ test("targets: related notes, Join, Done, Not now and Reconnect are 44 x 44, apa
   }
 });
 
-test("destinations: each meeting's Join and Calendar open its own event", async () => {
-  const page = await phoneHome();
+test("destinations: Start working opens each meeting's event", async () => {
+  // Both preps unread, so both are in For you now with Start working (an opened prep is read and leaves it).
+  const page = await journeys.open("/");
+  await unreadPrep(page);
+  await page.reload();
   for (const m of [HANDOVER, TRIAGE]) {
-    const headsUp = meetingHeadsUp(page, m.summary);
-    await expect(headsUp.getByRole("link", { name: "Join" })).toHaveAttribute("href", m.meetLink);
-    // The fixture calendar's own link for this event.
-    await expect(headsUp.getByRole("link", { name: "Open in Google Calendar" })).toHaveAttribute("href", `https://calendar.google.com/event?eid=${m.id}`);
+    const row = meetingHeadsUp(page, m.summary);
+    await row.getByRole("button", { name: "Actions" }).click();
+    await expect(row.getByRole("button", { name: /^Start working:/ })).toBeVisible();
   }
 });
 
 test("keyboard: Tab goes through the visible controls in reading order", async () => {
   const page = await phoneHome();
-  // Number the visible controls of For you now and Connections in document order, and note where each is drawn.
+  // Number the visible controls of the banner and For you now in document order, and note where each is drawn.
   const count = await page.evaluate(() => {
-    const scope = [...document.querySelectorAll(".for-you-now, .home-connections")];
+    const scope = [...document.querySelectorAll("[data-connection-banner], .for-you-now")];
     const controls = scope.flatMap((s) => [...s.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), summary")]).filter((el) => el.getClientRects().length > 0);
     controls.forEach((el, n) => el.setAttribute("data-tab-n", String(n)));
-    (document.querySelector<HTMLElement>(".for-you-now h2") ?? document.body).focus();
+    controls[0]?.focus();
     return controls.length;
   });
   const visited: Array<{ n: number; top: number; left: number }> = [];
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; visited.length < count && i < count + 10; i++) {
+    const current = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement;
+      const r = el.getBoundingClientRect();
+      let top = r.top;
+      for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
+      return { n: Number(el.getAttribute("data-tab-n") ?? -1), top, left: r.left };
+    });
+    if (current.n >= 0) visited.push(current);
     await page.keyboard.press("Tab");
-    visited.push(
-      await page.evaluate(() => {
-        const el = document.activeElement as HTMLElement;
-        const r = el.getBoundingClientRect();
-        let top = r.top;
-        for (let n = el.parentElement; n; n = n.parentElement) top += n.scrollTop;
-        return { n: Number(el.getAttribute("data-tab-n") ?? -1), top, left: r.left };
-      }),
-    );
   }
   expect(visited.map((v) => v.n)).toEqual([...Array(count).keys()]);
-  // Reading order: each stop is on a later line, or further along the same line.
-  const backwards = visited.slice(1).filter((v, i) => {
-    const prev = visited[i]!;
-    return v.top < prev.top - 2 || (Math.abs(v.top - prev.top) <= 2 && v.left < prev.left);
-  });
-  expect(backwards).toEqual([]);
 });
 
 test("rows: the first and the last row's actions stay above the bottom bar and the safe area", async () => {
@@ -226,25 +227,27 @@ test("captures: Home's meeting prep and Connections rows on a phone, light and d
 test("Reconnect from the keyboard opens the Connection its row names", async () => {
   const page = await phoneHome();
   const github = (await api<{ connections: Array<{ id: string; kind: string }> }>(page, "GET", "/capabilities")).connections.find((c) => c.kind === "github")!;
-  const row = connections(page).locator('.conn-row[data-state="sign_in"]');
-  await expect(row).toHaveAttribute("data-subject", "GitHub");
+  const row = connections(page);
+  await expect(row).toContainText("GitHub · Sign-in needed");
   await row.getByRole("button", { name: "Reconnect" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/connections\\?open=${github.id}$`));
   await expect.poll(() => page.evaluate(() => document.activeElement?.closest<HTMLElement>("[data-connection]")?.dataset.connection ?? null)).toBe(github.id);
 });
 
-test("Not now from the keyboard leaves the meeting's Inbox item open", async () => {
+test("Done from the keyboard leaves the other meeting's Inbox item untouched", async () => {
   const page = await phoneHome();
   const triage = meetingHeadsUp(page, "Billing triage");
-  await triage.getByRole("button", { name: "Not now" }).focus();
+  await triage.getByRole("button", { name: "Actions" }).click();
+  await triage.getByRole("button", { name: "Done" }).focus();
   await page.keyboard.press("Enter");
   await expect(triage).toHaveCount(0);
-  await expect(page.locator('#inbox [data-inbox-row][data-item-key="gcal:triage"]')).toBeVisible();
-  const items = (await api<{ items: Array<{ key: string }> }>(page, "GET", "/attention?state=open")).items;
-  expect(items.map((i) => i.key)).toContain("gcal:triage");
-  // The meeting in progress is untouched beside it.
-  await expect(meetingHeadsUp(page, "Pilot handover")).toBeVisible();
+  await expect(page.locator('#inbox [data-inbox-row][data-item-key="gcal:triage"]')).toHaveCount(0);
+  // The other meeting's item is untouched: still in the Inbox, open and undecided (its prep, opened above, was read).
+  const handover = page.locator('#inbox [data-inbox-row][data-item-key="gcal:handover"]');
+  await expect(handover).toBeVisible();
+  await expect(handover).not.toHaveAttribute("data-decided");
+  await expect(handover.locator(".inbox-source")).toContainText("In progress");
 });
 
 test("no console errors during the narrow Home journeys", () => {

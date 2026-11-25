@@ -68,6 +68,25 @@ function load(): InboxPlace {
   }
 }
 
+function store(place: InboxPlace): void {
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(place));
+  } catch {
+    // Blocked storage: the place lasts until the page closes.
+  }
+}
+
+/** How far below the top of Home's scroller an Inbox item opened from another screen stands. */
+const OPENED_ELSEWHERE_TOP = 96;
+
+/**
+ * Opens Inbox item `id` on Home's next visit, from another screen (the briefing page): in the default view with every
+ * type, open in place, and scrolled to where it can be read (`views/inbox-return.ts`).
+ */
+export function openOnHome(id: string): void {
+  store({ ...load(), view: DEFAULT_PLACE.view, type: ALL_TYPES, openId: id, anchor: { id, top: OPENED_ELSEWHERE_TOP } });
+}
+
 /**
  * The place and a way to change part of it. A change is stored at once, not when React next renders: View draft
  * changes the place and leaves Home in the same moment, and an update queued for a screen that is leaving never runs.
@@ -78,11 +97,7 @@ export function useInboxPlace(): [InboxPlace, (change: Partial<InboxPlace>) => v
   const update = useCallback((change: Partial<InboxPlace>) => {
     const next = { ...current.current, ...change };
     current.current = next;
-    try {
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Blocked storage: the place lasts until the page closes.
-    }
+    store(next);
     setPlace(next);
   }, []);
   return [place, update];

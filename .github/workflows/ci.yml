@@ -40,7 +40,9 @@ jobs:
           - { os: macos-latest, node: current }
           - { os: windows-latest, node: current }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # A healthy Windows run takes 26 to 29 minutes (unit tests 8 to 13, journeys 13 to 15), so the limit leaves room
+    # for a slow runner and still stops a hung job.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

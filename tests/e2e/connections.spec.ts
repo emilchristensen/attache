@@ -148,10 +148,10 @@ test("a row opens in place with every action the card had: Test, Refresh now, wh
   await expect(detail.getByRole("combobox", { name: "How to connect" })).toHaveValue("token");
   await detail.getByRole("button", { name: "Cancel" }).click();
 
-  await detail.getByRole("button", { name: "Disconnect…" }).click();
-  const confirm = detail.getByRole("alertdialog", { name: "Disconnect" });
-  await expect(confirm).toContainText("Disconnect GitHub?");
-  await expect(confirm.getByRole("button", { name: "Disconnect, keep data" })).toBeVisible();
+   await detail.getByRole("button", { name: "Disable…" }).click();
+   const confirm = detail.getByRole("alertdialog", { name: "Disable" });
+   await expect(confirm).toContainText("Disable GitHub?");
+   await expect(confirm.getByRole("button", { name: "Disable, keep data" })).toBeVisible();
   await confirm.getByRole("button", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
 
@@ -177,10 +177,10 @@ test("a tile opens in place across its group into the setup form, and the Notes 
   await expect(page.locator('[data-group="work"] .connection-row[data-connection="slack"]')).toBeVisible({ timeout: 30_000 });
   await expect(slack.locator(".connection-detail")).toContainText("Test: Slack answered through claude.ai");
   // Disconnected, it is a tile again, and its setup form no longer shows the old test result.
-  await slack.getByRole("button", { name: "Disconnect…" }).click();
-  await slack.getByRole("button", { name: "Disconnect, keep data" }).click();
+   await slack.getByRole("button", { name: "Disable…" }).click();
+   await slack.getByRole("button", { name: "Disable, keep data" }).click();
   await expect(page.locator('[data-group="work"] .connection-tile[data-connection="slack"]')).toBeVisible();
-  await expect(slack.locator(".connection-tile-meta")).toHaveText("Disconnected");
+   await expect(slack.locator(".connection-tile-meta")).toHaveText("Disabled");
   await expect(slack.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
   await expect(slack.locator(".connection-detail")).not.toContainText("Test:");
 
@@ -208,9 +208,9 @@ test("Needs you: a revoked token signs GitHub out, Home's Reconnect opens its ro
   await page.goto(`${stack.url}/`);
 
   // Home: one amber sign-in row; its Reconnect needs a new token, so it opens GitHub's own row on Connections.
-  const area = page.getByRole("status", { name: "Connections" });
-  const signIn = area.locator('.conn-row[data-state="sign_in"]');
-  await expect(signIn.locator(".conn-row-line")).toHaveText("GitHub · Sign-in needed · Reviews may be missing");
+  const area = page.locator("[data-connection-banner]");
+  const signIn = area;
+  await expect(signIn).toContainText("GitHub · Sign-in needed · Reviews may be missing");
   await signIn.getByRole("button", { name: "Reconnect" }).click();
   await expect(page).toHaveURL(`${stack.url}/connections?open=github`);
 
@@ -336,9 +336,9 @@ test("a Harness shows its capabilities and every file it will change before conn
   await page.reload();
   const broken = await openConnection(page, "codex");
   await expect(broken.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "failed");
-  await broken.getByRole("button", { name: "Disconnect…" }).click();
-  await broken.getByRole("button", { name: "Disconnect, keep data" }).click();
-  await expect(page.getByText(/Disconnected, but some of Attache's entries remain: .*hooks\.json/).first()).toBeVisible();
+  await broken.getByRole("button", { name: "Disable…" }).click();
+  await broken.getByRole("button", { name: "Disable, keep data" }).click();
+  await expect(page.getByText(/Disabled, but some of Attache's entries remain: .*hooks\.json/).first()).toBeVisible();
   expect(readFileSync(join(stack.agentHome, ".codex", "config.toml"), "utf8")).not.toContain("--state-dir");
   rmSync(join(stack.agentHome, ".codex"), { recursive: true });
 });
@@ -361,8 +361,8 @@ test("Pi is its own Harness: MCP access, memory and session capture, its one ext
   await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
   expect(readdirSync(extensions)).toHaveLength(1);
   const connected = await openConnection(page, "pi");
-  await connected.getByRole("button", { name: "Disconnect…" }).click();
-  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await connected.getByRole("button", { name: "Disable…" }).click();
+  await connected.getByRole("button", { name: "Disable, keep data" }).click();
   await expect.poll(() => readdirSync(extensions)).toEqual([]);
   rmSync(join(stack.agentHome, ".pi"), { recursive: true });
 });
@@ -385,8 +385,8 @@ test("OpenCode is its own Harness: MCP access, memory and session capture at eac
   await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
   expect(readdirSync(plugins)).toHaveLength(1);
   const connected = await openConnection(page, "opencode");
-  await connected.getByRole("button", { name: "Disconnect…" }).click();
-  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await connected.getByRole("button", { name: "Disable…" }).click();
+  await connected.getByRole("button", { name: "Disable, keep data" }).click();
   await expect.poll(() => readdirSync(plugins)).toEqual([]);
   rmSync(join(stack.agentHome, ".config"), { recursive: true });
 });
@@ -418,10 +418,10 @@ test("Copilot CLI is its own Harness: MCP access, runtime-fresh memory and sessi
   await expect(row.locator("[data-harness-state]")).toHaveAttribute("data-harness-state", "current");
   expect(Object.keys((JSON.parse(readFileSync(config, "utf8")) as typeof own).mcpServers).sort()).toEqual([expect.stringMatching(/^attache/), "playwright"]);
   const connected = await openConnection(page, "copilot-cli");
-  await connected.getByRole("button", { name: "Disconnect…" }).click();
-  await connected.getByRole("button", { name: "Disconnect, keep data" }).click();
+  await connected.getByRole("button", { name: "Disable…" }).click();
+  await connected.getByRole("button", { name: "Disable, keep data" }).click();
   // Disconnect restores the MCP config before it removes Attache's hooks file.
-  await expect(page.getByText("Disconnected; data kept", { exact: true })).toBeVisible();
+  await expect(page.getByText("Disabled; data kept", { exact: true })).toBeVisible();
   expect(JSON.parse(readFileSync(config, "utf8"))).toEqual(own);
   expect(readdirSync(hooks)).toEqual(["mine.json"]);
   rmSync(join(stack.agentHome, ".copilot"), { recursive: true });

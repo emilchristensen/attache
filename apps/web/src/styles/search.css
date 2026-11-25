@@ -60,6 +60,14 @@
   .search-key {
     display: none;
   }
+  /* The prompt keeps its whole width beside Browse: the field's own gaps and edges give way first. */
+  .search-box {
+    gap: var(--s-2);
+    padding-inline: var(--s-3);
+  }
+  .search .search-box .browse-toggle {
+    padding-left: var(--s-3);
+  }
 }
 .search {
   container: search-field / inline-size;
@@ -179,43 +187,54 @@
   font-weight: 600;
 }
 
-/* ---- Home: the compact heading, the date and Browse ----------------------------------- */
+/* ---- Home: the heading with the date, and Browse inside the field ----------------------------------- */
 
 .home-search {
-  margin-bottom: var(--s-5);
+  margin-bottom: var(--s-3);
 }
+/* "Home" and the full date beside it on one line, on a shared baseline; the field below is the first action. */
 .home-head {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: var(--s-2) var(--s-3);
-  margin-bottom: var(--s-3);
-  font: 600 12px/18px var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-2);
+  gap: 0 var(--s-4);
+  margin-bottom: var(--s-2);
 }
-/* A compact page heading: the date beside it says where the owner is; the field below is the first action. */
 .home-head .home-title {
-  font: inherit;
-  letter-spacing: inherit;
-  color: var(--ink);
   margin: 0;
+}
+.home-head time {
+  font-size: var(--fs-control);
+  color: var(--ink-2);
 }
 .home-search-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-2) var(--s-3);
+  flex-direction: column;
 }
-.search-home {
-  flex: 1 1 16rem;
+/* Browse sits inside the field after the keycap, behind a short divider, as one quiet disclosure. */
+.search-box .browse-toggle {
+  flex: none;
+  align-self: center;
+  min-height: 32px;
+  margin-right: calc(-1 * var(--s-2));
+  padding: 0 var(--s-2) 0 var(--s-4);
+  border: 0;
+  border-left: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.search-box .browse-toggle:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
 }
 .browse-toggle .icon {
+  transform: rotate(90deg);
+  color: var(--ink-3);
   transition: transform 0.15s ease;
 }
 .browse-toggle[aria-expanded="true"] .icon {
-  transform: rotate(90deg);
+  transform: rotate(-90deg);
 }
 .browse-links {
   flex-basis: 100%;
@@ -239,7 +258,8 @@
   color: var(--ink-2);
 }
 
-@media (max-width: 720px) {
+/* A field as narrow as a phone's keeps 16 px words, the size below which a phone zooms in on focus. */
+@container search-field (max-width: 600px) {
   .search-box input[type="search"] {
     font-size: 16px;
   }

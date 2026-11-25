@@ -182,32 +182,27 @@ async function approvalsScreens(page: Page, prefix: string) {
 }
 
 async function homeConnectionsScreens(page: Page) {
-  const area = page.getByRole("status", { name: "Connections" });
-  const capture = async (path: string) => {
-    await settled(page);
-    await area.screenshot({ path });
-  };
+  const banner = page.locator("[data-connection-banner]");
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(stack.url);
-    await expect(area).toContainText("All good");
-    await capture(`test-results/screens/${scheme}-home-connections.png`);
+    await expect(banner).toHaveCount(0);
+    await page.locator(".masthead-nav").screenshot({ path: `test-results/screens/${scheme}-home-connections-healthy.png` });
   }
   await routeBadDay(page);
   const badDay = async (path: string) => {
     await page.goto(stack.url);
-    await expect(area.locator(".conn-row")).toHaveCount(4);
-    await area.locator(".conn-row-line").first().click();
-    await area.getByText("1 more: Jira (not read yet)").click();
-    await capture(path);
+    await expect(banner).toBeVisible();
+    await settled(page);
+    await banner.screenshot({ path });
   };
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await badDay(`test-results/screens/${scheme}-home-connections-problems.png`);
+    await badDay(`test-results/screens/${scheme}-connection-banner-problems.png`);
   }
   await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await badDay("test-results/screens/narrow-home-connections-problems.png");
+  await badDay("test-results/screens/narrow-connection-banner-problems.png");
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.unroute("**/api/v1/capabilities");
 }
@@ -278,8 +273,9 @@ test("screens", async ({ browser }) => {
   const jobsBefore = (await jobs()).length;
   await openRow(pr);
   await pr.getByRole("button", { name: "Prepare draft" }).click();
-  await page.getByRole("button", { name: "Briefings" }).click();
-  await page.getByRole("button", { name: /^Prepare a briefing/ }).click();
+  const dailyBriefing = page.getByRole("region", { name: "The Daily Briefing" });
+  await dailyBriefing.getByRole("button", { name: "Briefing options" }).click();
+  await dailyBriefing.getByRole("group", { name: "Briefing actions" }).getByRole("button", { name: /^Prepare a briefing/ }).click();
   // The Draft and the briefing are written before the screens that show them are captured.
   await expect
     .poll(async () => {

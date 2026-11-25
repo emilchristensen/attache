@@ -41,10 +41,31 @@
     overflow-wrap: anywhere;
     text-align: left;
   }
-  /* Links that stand alone as a line's target: Back, Browse's collections, All results, Open in Brain, the Connections details, a Recently added note, the mark. */
-  :is(.back-link, .browse-links a, .search-foot > a, .drawer-brain-link, .conn-details, a.recent-change-title, .masthead .brand) {
+  /* Links that stand alone as a line's target: Back, Browse's collections, All results, Open in Brain, the Connections details, a Recently added note, the mark, the briefing page's trail and entries. */
+  :is(.back-link, .browse-links a, .search-foot > a, .drawer-brain-link, .conn-details, a.recent-change-title, .masthead .brand, .breadcrumbs a, .briefing-item-title, .briefing-item-source) {
     display: inline-flex;
     align-items: center;
+    min-height: 44px;
+  }
+  /*
+   * An Inbox row's subject (and a For you now entry's) is its own 44 px target rather than the whole line: the line
+   * holds the row's own actions, and a tap meant for the line must never land on Start working, Snooze or Done.
+   */
+  .page button.inbox-subject {
+    position: relative;
+    z-index: 2;
+    min-height: 44px;
+  }
+  .page button.inbox-subject::after {
+    content: none;
+    position: static;
+  }
+  .page .for-you-now .inbox-row-actions,
+  .page .for-you-now .inbox-row-actions button {
+    min-height: 44px;
+  }
+  /* A touch screen's buttons are 44 px tall, so the Inbox's range keeps that height in the button's place. */
+  .page .inbox-tools-range {
     min-height: 44px;
   }
   /* A checkbox is tapped on its whole line: its label is part of the target. */
