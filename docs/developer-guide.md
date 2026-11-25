@@ -76,25 +76,26 @@ Which jobs run depends on what started the run, so a branch with a pull request 
 
 | Started by | Jobs |
 | --- | --- |
-| A push to any branch, `main` included | `checks (ubuntu-latest)`, `checks (ubuntu-latest, current Node)`, `install (ubuntu-latest)` |
-| A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks (macos-latest)`, `checks (windows-latest)`, `install (windows-latest)` |
+| A push to any branch, `main` included | `checks` and `journeys` on `ubuntu-latest` and on `ubuntu-latest, current Node`, `install (ubuntu-latest)` |
+| A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks` and `journeys` on `macos-latest` and `windows-latest`, `install (windows-latest)` |
 | A run started by hand (`gh workflow run CI --ref <branch>`) | All of them |
-| The nightly schedule, 23:15 UTC on `main` | `checks (ubuntu-latest)`, `checks (ubuntu-latest, current Node)`, so a test that breaks in the last hour before midnight UTC fails there first |
+| The nightly schedule, 23:15 UTC on `main` | `checks` and `journeys` on `ubuntu-latest` and on `ubuntu-latest, current Node`, so a test that breaks in the last hour before midnight UTC fails there first |
 
 A pull request's macOS and Windows jobs check the commit GitHub would merge; a draft pull request, or a branch without one, runs only the Linux jobs.
-`checks (macos-latest)`, `checks (ubuntu-latest)` and `checks (windows-latest)` run on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`).
-`checks (ubuntu-latest, current Node)` runs the same checks on the newest Node release.
-Each job has these steps:
+The jobs named only by their machine, such as `checks (windows-latest)`, run on the minimum supported Node (`scripts/node-minimum.mjs` reads it from `engines.node`); those marked `current Node` run the same steps on the newest Node release.
+Every job sets up pnpm, Node and the dependencies the same way, through `.github/actions/setup`.
+The browser journeys have their own `journeys` job beside `checks`, so on Windows, the slowest machine, neither job runs near its 30-minute limit.
+The steps:
 
 | Step | Run it locally |
 | --- | --- |
-| Install | `pnpm install --frozen-lockfile` |
+| Install (every job) | `pnpm install --frozen-lockfile` |
 | Lint | `pnpm lint --max-warnings 0` |
 | Typecheck | `pnpm typecheck` |
 | Unit and integration tests | `pnpm test` |
 | Linux desktop session tests (Linux only) | `ATTACHE_TEST_REAL_DESKTOP=1 sh scripts/linux-desktop-session.sh pnpm vitest run apps/service/test/linux-desktop-real.test.ts` |
 | Windows desktop tests (Windows only) | `ATTACHE_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
-| Browser journeys | `npx playwright install chrome` once, then `pnpm e2e` |
+| Browser journeys (the `journeys` job) | `npx playwright install chrome` once, then `pnpm e2e` |
 
 Separate jobs, `install (ubuntu-latest)` and `install (windows-latest)`, run the install test (see "Install test" below) on the minimum supported Node and upload `test-results/install-results.json`.
 When a check fails, the install test copies the installed service's logs (`service.log`, `service.err.log`, `service.out.log`) to `test-results/install-logs/` before it removes the state folder, and the job uploads them with the results.
@@ -113,10 +114,12 @@ Test services keep their state, Brain and Harness home in folders whose names ha
 To reproduce a Linux failure on a Mac, run the same commands in a container with the Node of the failing job, for example `docker run --rm -it -v "$PWD":/src:ro node:24.22.0-bookworm bash` for the minimum, then copy `/src` to a writable folder without `node_modules`, run `corepack enable` and the commands above as a non-root user.
 
 A pull request with a failing check shows the failure on GitHub.
-`node scripts/ci-failures.mjs <run-id|run-url>` prints, for each failed job of a run, the failed step, the failing tests and their first error lines, or the step's last lines when it names no test; for a job that never started it says why (a billing or spending limit, a cancelled run).
+`node scripts/ci-failures.mjs <run-id|run-url>` prints, for each failed job of a run, the failed step, the failing tests and their first error lines, or the step's last lines when it names no test.
+For a job GitHub stopped it says why: its time limit (after how long, and in which step) or a newer run of the same branch that replaced it; for a job that never started it says why too (a billing or spending limit, a cancelled run).
+A failed journey leaves a Playwright trace in its job's uploaded results (`gh run download <run-id> -n journeys-results-<os>-node-<node>`); `node scripts/trace-requests.mjs <trace.zip> [path filter]` lists the API calls the page made, with their request and response bodies.
 It needs the GitHub CLI (`gh`) signed in to an account that can read the repository.
-Branch protection on `main` requires `checks (ubuntu-latest)`, `checks (macos-latest)` and `checks (windows-latest)` to pass before a pull request can merge.
-The `checks (ubuntu-latest, current Node)` and `install` jobs are not required, so a new Node release or a slow or flaky installer run does not hold up a merge; check them before a release.
+Branch protection on `main` requires `checks` and `journeys` on `ubuntu-latest`, `macos-latest` and `windows-latest` to pass before a pull request can merge.
+The `current Node` and `install` jobs are not required, so a new Node release or a slow or flaky installer run does not hold up a merge; check them before a release.
 Before a release, also start a run by hand on `main`: a push to `main` runs only the Linux jobs.
 
 ## Fixtures versus live

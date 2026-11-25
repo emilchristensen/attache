@@ -1,0 +1,29 @@
+# pnpm, Node and the workspace's dependencies, the same way in every CI job.
+name: Set up the workspace
+description: Install pnpm, the minimum supported or the current Node, and the locked dependencies.
+inputs:
+  node:
+    description: "`minimum` (engines.node in package.json) or `current` (the newest stable release)"
+    default: minimum
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+
+    # Read with the runner's own Node, before setup-node.
+    - name: Minimum supported Node
+      id: minimum
+      shell: bash
+      run: node scripts/node-minimum.mjs
+
+    # The current release is the newest stable Node: `*` with check-latest, because the `current` alias
+    # takes the first version nodejs.org lists, which can be an alpha, and `*` alone takes the runner's cached one.
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node == 'minimum' && steps.minimum.outputs.version || '*' }}
+        check-latest: ${{ inputs.node == 'current' }}
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

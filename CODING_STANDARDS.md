@@ -12,6 +12,13 @@ Vocabulary follows `GLOSSARY.md`, and decisions follow `docs/adr/`.
   A test that only fails under load points at real slowness (process start-up, a budget that starts too early): find it before touching a limit.
 - **Drive Attache the way a user or a Harness does** and assert on what comes back: an API response, a file in the Brain, a line a Harness receives, what the Dashboard shows.
   Internal functions, table rows and call order are not assertions.
+  What must show is checked with `toBeVisible`, not by its text being in the page.
+- **Pin the order a journey depends on.**
+  When the outcome depends on whether a refresh lands before or after a step (a decision, a hold, a resize), the journey waits for that refresh (`dashboardAnswer`, `expect.poll`) and covers both orders where both can happen.
+  An order left to timing passes on one runner and fails on another.
+- **Layout checks keep spare room.**
+  A fold, a fit or a clearance is checked with a margin (16 px or more), so a runner whose fonts draw a few pixels wider does not fail it.
+- **Text built from counts gets a table test** over every zero and non-zero combination of its inputs, so no combination reads as "." or "0 items".
 - **Every defect gets a regression test** that fails without the fix.
 
 ## Structure
