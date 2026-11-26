@@ -254,7 +254,7 @@ describe("what a data-deleting uninstall may remove", () => {
 
 describe("the background service", () => {
   describe.skipIf(process.platform === "win32")("on Linux", () => {
-    const linux = (args: string[], env: Record<string, string>, systemctl: { bin: string }) => attache(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
+    const linux = (args: string[], env: Record<string, string | undefined>, systemctl: { bin: string }) => attache(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
 
     it("is a systemd user service that starts at login, restarts after a crash and runs the bundled runtime through the stable `current` link", () => {
       const systemctl = fakeSystemctl();
@@ -305,6 +305,22 @@ describe("the background service", () => {
       };
       expect(unitText({ ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/releases?x=100%" })).toContain('Environment="ATTACHE_RELEASE_FEED_URL=http://127.0.0.1:9/releases?x=100%%"\n');
       expect(unitText({})).not.toContain("ATTACHE_RELEASE_FEED_URL");
+    });
+
+    it("runs in the XDG base folders the installer saw, never the user manager's own", () => {
+      const home = tempDir("attache-systemd-home-");
+      const unitText = (xdg: Record<string, string | undefined>) => {
+        const systemctl = fakeSystemctl();
+        const env = { HOME: home, ATTACHE_INSTANCE: `xdg${process.pid}`, XDG_DATA_HOME: undefined, XDG_STATE_HOME: undefined, ...xdg };
+        expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+        return readFileSync(join(home, ".config/systemd/user", `attache-xdg${process.pid}.service`), "utf8");
+      };
+      // Where the installer put the unit, the release and the state is where the service, and an installer it starts for an Update, look too.
+      const pinned = unitText({ XDG_DATA_HOME: join(home, "data"), XDG_STATE_HOME: join(home, "st") });
+      expect(pinned).toContain(`Environment="XDG_DATA_HOME=${join(home, "data")}"\n`);
+      expect(pinned).toContain(`Environment="XDG_STATE_HOME=${join(home, "st")}"\n`);
+      expect(pinned).toContain("UnsetEnvironment=XDG_CONFIG_HOME\n");
+      expect(unitText({})).toContain("UnsetEnvironment=XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME\n");
     });
 
     it("says what to do when there is no systemd user session to register with", () => {

@@ -24,8 +24,20 @@ const cQuoted = (s: string) => `"${s.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 const execArg = (s: string) => cQuoted(specifiers(s).replace(/\$/g, "$$$$"));
 const environment = (name: string, value: string) => `Environment=${cQuoted(`${name}=${specifiers(value)}`)}`;
 
+/** The XDG base folders that decide where an install puts its release, its state and this unit (`locations.ts`). */
+const LOCATION_VARS = ["XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"] as const;
+
+/**
+ * The XDG base folders as the installer saw them, and those it did not have unset: the user manager's own may differ
+ * from the owner's shell, and the service, and an installer it starts for an Update, must find the install where it is.
+ */
+function locationEnvironment(env: NodeJS.ProcessEnv): string[] {
+  const unset = LOCATION_VARS.filter((v) => !env[v]);
+  return [...LOCATION_VARS.filter((v) => env[v]).map((v) => environment(v, env[v]!)), ...(unset.length ? [`UnsetEnvironment=${unset.join(" ")}`] : [])];
+}
+
 /** The systemd user unit: starts at login, restarts after a crash unless it refused to start, runs the bundled runtime through the stable `current` link. */
-export function systemdUnit(home: string, spec: ServiceSpec): string {
+export function systemdUnit(home: string, spec: ServiceSpec, env: NodeJS.ProcessEnv = process.env): string {
   const current = join(spec.installPrefix, "current");
   const logs = join(spec.stateDir, "logs");
   return [
@@ -40,6 +52,7 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
     environment("ATTACHE_WEB_DIR", join(current, "web")),
     environment("HOME", home),
     environment("PATH", `${home}/.local/bin:/usr/local/bin:/usr/bin:/bin`),
+    ...locationEnvironment(env),
     ...(spec.releaseFeedUrl ? [environment("ATTACHE_RELEASE_FEED_URL", spec.releaseFeedUrl)] : []),
     "Restart=always",
     "RestartSec=2",

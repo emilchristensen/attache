@@ -11,7 +11,7 @@
  *   the installer's own `launchctl bootstrap` of the new version left a service launchd no longer tracked (it
  *   survived `attache stop` and uninstall). The installer runs as a launchd job of its own, which removes itself.
  * - Windows: ending the logon task ends its console host only, never the processes below it (`service-manager/
- *   task-scheduler.ts`), so a detached process is enough.
+ *   task-scheduler.ts`), so a process of the service's own is enough.
  * Unattended mode (`ATTACHE_UNATTENDED=1`) never pairs or opens a browser, and writes the outcome record.
  * The installer's output goes to `<state>/logs/update-<version>.log`.
  */
@@ -65,16 +65,17 @@ function installerEnv(request: InstallRequest): NodeJS.ProcessEnv {
 const shellWord = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
- * A script that sets the installer's environment and runs it with its output in `log`: systemd and launchd start a job
- * with their own environment, not this process's, so the environment travels in the script.
+ * A script that runs the installer in this process's environment, with its output in `log`: systemd and launchd start
+ * a job with their own environment (the user manager's XDG folders, for one), so the environment travels in the script.
  */
 function launcherScript(installer: string, log: string, env: NodeJS.ProcessEnv, after?: string): string {
-  const exports = Object.entries(env)
-    .filter((e): e is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && !/[\0]/.test(e[1]))
-    .map(([k, v]) => `export ${k}=${shellWord(v)}`);
-  const run = `/bin/sh ${shellWord(installer)} >>${shellWord(log)} 2>&1`;
+  // Exactly this environment, none of the job's own: `env -i` starts from nothing.
+  const vars = Object.entries(env)
+    .filter((e): e is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && !e[1].includes("\0"))
+    .map(([k, v]) => `  ${shellWord(`${k}=${v}`)} \\`);
+  const run = ["/usr/bin/env -i \\", ...vars, `  /bin/sh ${shellWord(installer)} >>${shellWord(log)} 2>&1`].join("\n");
   // `after` runs once the installer is done, whatever its outcome: on macOS it removes the installer's own job.
-  return ["#!/bin/sh", ...exports, after ? `${run}\n${after}` : `exec ${run}`, ""].join("\n");
+  return ["#!/bin/sh", after ? `${run}\n${after}` : `exec ${run}`, ""].join("\n");
 }
 
 /** The launchd job that runs the installer: started by `kickstart` only, never kept alive, its output in `log`. */
@@ -118,11 +119,15 @@ async function startLaunchdJob(request: InstallRequest, installer: string, log: 
 /** Whether this process runs as a systemd unit, whose stop would end a child too. */
 const underSystemd = () => !!process.env.INVOCATION_ID;
 
-/** Start `command` detached: a new session on macOS and Linux, no console window on Windows. Resolves once it runs. */
-function startDetached(command: string, args: string[], env: NodeJS.ProcessEnv, log: string): Promise<void> {
+/**
+ * Start `command` on its own, its output in `log`; resolves once it runs. `detached` gives it a new session on macOS and
+ * Linux. On Windows a detached process has no console at all, which Windows PowerShell needs, so there it is left
+ * attached and gets a console without a window; Windows never ends a process when the one that started it exits.
+ */
+function startOnItsOwn(command: string, args: string[], env: NodeJS.ProcessEnv, log: string, detached: boolean): Promise<void> {
   const out = openSync(log, "a");
   try {
-    const child = spawn(command, args, { env, detached: true, stdio: ["ignore", out, out], windowsHide: true });
+    const child = spawn(command, args, { env, detached, stdio: ["ignore", out, out], windowsHide: true });
     return new Promise((resolve, reject) => {
       child.once("error", reject);
       child.once("spawn", () => {
@@ -141,7 +146,7 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
   if (os === "windows") {
     const script = join(folder, "install.ps1");
     if (!existsSync(script)) throw new Error(`${script} is missing from the release`);
-    return startDetached(powershellPath(), ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script], env, log);
+    return startOnItsOwn(powershellPath(), ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script], env, log, false);
   }
   const script = join(folder, "install.sh");
   if (!existsSync(script)) throw new Error(`${script} is missing from the release`);
@@ -154,7 +159,7 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
     return;
   }
   if (os === "macos") return startLaunchdJob(request, script, log, env);
-  return startDetached("/bin/sh", [script], env, log);
+  return startOnItsOwn("/bin/sh", [script], env, log, true);
 }
 
 export function platformInstallerRunner(log: Logger, os: Os = currentOs()): InstallerRunner {
