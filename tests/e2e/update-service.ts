@@ -1,10 +1,11 @@
 /**
  * TEST-ONLY: the service as a release install would run it, for journeys through Updates (spec #130).
- *   node tests/e2e/update-service.ts --state-dir <folder> --port <n> --prefix <folder> --requests <file>
+ *   node tests/e2e/update-service.ts --state-dir <folder> --port <n> --prefix <folder> --requests <file> [--reads-brain-format <n>]
  * It runs from source, so `ATTACHE_RELEASE_PUBLIC_KEY` (the test key), `ATTACHE_VERSION` and `ATTACHE_RELEASE_FEED_URL`
  * (the journey's local release server) come from the environment, as they do in the service tests. A release bundle
  * builds its key in, so nothing here reaches a shipped service. The installer runner is a fake: it starts no installer
  * and appends each request, as a line of JSON, to the `--requests` file, where the journey reads it and plays the installer.
+ * `--reads-brain-format` plays a later release that reads and writes that Brain format (no release does yet, ADR 0008).
  * Prints the bundle's "attache service listening" line and writes `runtime.json`, so `stack.ts` starts it like the bundle.
  */
 import { appendFileSync } from "node:fs";
@@ -22,6 +23,7 @@ function arg(name: string): string {
 }
 
 const paths = resolvePaths(arg("state-dir"));
+const readsFormat = process.argv.includes("--reads-brain-format") ? Number(arg("reads-brain-format")) : null;
 const prefix = arg("prefix");
 const requests = arg("requests");
 const installerRunner: InstallerRunner = {
@@ -29,7 +31,7 @@ const installerRunner: InstallerRunner = {
     appendFileSync(requests, `${JSON.stringify(request)}\n`);
   },
 };
-const app = new App({ stateDir: paths.stateDir, updates: { releaseInstall: { prefix }, installerRunner } });
+const app = new App({ stateDir: paths.stateDir, updates: { releaseInstall: { prefix }, installerRunner }, ...(readsFormat ? { brainFormat: { reads: readsFormat, writes: readsFormat } } : {}) });
 const handle = await startServer(app, { port: Number(arg("port")) });
 app.start();
 writeFileWhole(app.paths.runtimeFile, JSON.stringify({ pid: process.pid, port: handle.port, url: handle.url, version: VERSION, startedAt: app.startedAt, instance: app.instance }, null, 2), { mode: 0o600 });

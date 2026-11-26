@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView } from "@attache/contracts";
+import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView, ReplicationPause } from "@attache/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
@@ -32,6 +32,7 @@ import { agentAdapter } from "./connectors/agent.ts";
 import { harnessAdapters, type HarnessAdapter } from "./agents/harness-adapters.ts";
 import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
+import { pausedNotification } from "./replication/pause-notice.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
 import type { BrainFormatSupport } from "./replication/brain-format.ts";
@@ -173,6 +174,7 @@ export class App {
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
+      onPaused: (pause) => this.replicationPaused(pause),
       // Loaded when needed: the backup module imports this one.
       backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
       lastSourceRefresh: () => lastSourceRefresh(this.db),
@@ -463,6 +465,16 @@ export class App {
     this.bus.emit("event", { type: "replication.changed" });
     // Switching Replication on or off changes who the Reader is.
     this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /**
+   * Replication paused on a Brain format this Machine cannot read (#143): ask for an Update at once (unless Updates are
+   * Off), then tell the owner once, as for a rolled-back Update: not gated by the switch for urgent items nor by quiet hours.
+   */
+  private replicationPaused(pause: ReplicationPause) {
+    this.updater.checkSoon();
+    const { title, body } = pausedNotification(pause, this.updater.view());
+    void this.notifications.notify(title, body, { quietHours: null }).catch((e: unknown) => this.log.warn("could not raise the notification for a paused Replication", { error: (e as Error).message }));
   }
 
   /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */

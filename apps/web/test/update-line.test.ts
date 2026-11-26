@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LastUpdateView, UpdatesStatus, UpdatesView } from "@attache/contracts";
+import type { LastUpdateView, ReplicationView, UpdatesStatus, UpdatesView } from "@attache/contracts";
 import { UPDATED_LINE_MS, updateLine, type UpdateLine } from "../src/update-line.ts";
 
 const NOW = Date.parse("2026-11-26T12:00:00Z");
@@ -14,6 +14,18 @@ const failed = (at: string): LastUpdateView => ({ outcome: "failed", from: "0.6.
 function view(status: UpdatesStatus, extra: Partial<UpdatesView> = {}): UpdatesView {
   return { version: "0.6.1", channel: "stable", mode: "automatic", status, reason: null, update: null, jobs: null, lastCheckedAt: null, lastUpdate: null, ...extra };
 }
+
+/** Replication paused because the Brain is in a format this Machine's Attache cannot read (ADR 0008). */
+const PAUSED: ReplicationView = {
+  status: "paused",
+  remote: "owner/brain",
+  cause: "The Brain is in Brain format 2, and this Machine's Attache reads Brain format 1 at most. Update this Machine to keep replicating; saves carry on here and are sent once it is updated.",
+  lastCheckedAt: ago(0),
+  lastPushedAt: ago(HOUR),
+  upToDateAt: ago(HOUR),
+  pause: { reason: "newer_brain_format", brainFormat: 2, readsBrainFormat: 1 },
+};
+const REPLICATING: ReplicationView = { ...PAUSED, status: "up_to_date", cause: null, pause: null };
 
 /** The line as the owner reads it: its words, then its action's label, as the spec writes them. */
 function read(line: UpdateLine | null): string | null {
@@ -77,5 +89,51 @@ describe("updateLine: what each line carries", () => {
     const c = updateLine({ updates: view("waiting_for_jobs", { update: UPDATE, jobs: 1 }), now: NOW });
     expect(a!.key).toBe(b!.key);
     expect(a!.key).not.toBe(c!.key);
+  });
+});
+
+describe("updateLine: a Machine whose Replication paused asks to be updated", () => {
+  const paused = (v: UpdatesView | null, extra: { inUpdatesSection?: boolean } = {}) => read(updateLine({ updates: v, replication: PAUSED, now: NOW, ...extra }));
+  const cases: ReadonlyArray<[name: string, v: UpdatesView | null, shown: string]> = [
+    ["Updates not known yet", null, "Update this Machine to keep replicating · Details"],
+    ["looking for an Update", view("checking"), "Update this Machine to keep replicating · Details"],
+    ["no newer release in its channel", view("up_to_date"), "Update this Machine to keep replicating · Details"],
+    // Off makes no request: the line only says so, and Details shows Updates are Off.
+    ["Updates are Off", view("off", { mode: "off" }), "Update this Machine to keep replicating · Details"],
+    ["Updates are unavailable", view("unavailable", { reason: "Attache runs from a source checkout here." }), "Update this Machine to keep replicating · Details"],
+    ["the check failed", view("check_failed", { reason: "The release server did not answer." }), "Update this Machine to keep replicating · Details"],
+    ["downloading the Update", view("downloading", { update: UPDATE }), "Update this Machine to keep replicating · Details"],
+    ["ready in Ask first", view("ready", { mode: "ask_first", update: UPDATE }), "Update this Machine to keep replicating · Install"],
+    ["waiting for Jobs", view("waiting_for_jobs", { update: UPDATE, jobs: 2 }), "Update this Machine to keep replicating · Restart now"],
+    ["after a rollback", view("up_to_date", { lastUpdate: rolledBack(ago(HOUR)) }), "Update this Machine to keep replicating · Details"],
+    ["after an Update that still reads an older format", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(HOUR)) }), "Update this Machine to keep replicating · Details"],
+    // The installer is running: that is the Update the line asks for, so the line says so.
+    ["installing the Update", view("installing", { update: UPDATE }), "Installing Attache 0.7.0"],
+  ];
+  it.each(cases)("%s", (_name, v, shown) => {
+    expect(paused(v)).toBe(shown);
+  });
+
+  it("reads as a warning, and its key changes with its action, so a new action gets a fresh button", () => {
+    const line = updateLine({ updates: view("up_to_date"), replication: PAUSED, now: NOW });
+    expect(line).toMatchObject({ state: "paused", tone: "warn", action: { kind: "details" } });
+    const ready = updateLine({ updates: view("ready", { mode: "ask_first", update: UPDATE }), replication: PAUSED, now: NOW });
+    expect(ready).toMatchObject({ state: "paused", action: { kind: "install" } });
+    expect(ready!.key).not.toBe(line!.key);
+  });
+
+  it("shows in Settings' Updates section too, without an action: that section offers Install now itself", () => {
+    expect(paused(view("up_to_date"), { inUpdatesSection: true })).toBe("Update this Machine to keep replicating");
+    expect(paused(view("ready", { mode: "ask_first", update: UPDATE }), { inUpdatesSection: true })).toBe("Update this Machine to keep replicating");
+  });
+
+  it("once Replication resumes, the line is gone, or tells of the Update that made it resume", () => {
+    expect(read(updateLine({ updates: view("up_to_date"), replication: REPLICATING, now: NOW }))).toBeNull();
+    expect(read(updateLine({ updates: view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(0)) }), replication: REPLICATING, now: NOW }))).toBe("Attache updated to 0.7.0 · What changed");
+  });
+
+  it("in Settings' Updates section nothing else shows: the section says it all", () => {
+    expect(updateLine({ updates: view("ready", { mode: "ask_first", update: UPDATE }), replication: REPLICATING, now: NOW, inUpdatesSection: true })).toBeNull();
+    expect(updateLine({ updates: view("up_to_date", { lastUpdate: rolledBack(ago(HOUR)) }), replication: null, now: NOW, inUpdatesSection: true })).toBeNull();
   });
 });

@@ -45,8 +45,11 @@ export interface Stack {
   agentHome: string;
   pairUrl(): string;
   stopService(): Promise<void>;
-  /** Start the service again; with Updates, on `version` when named, as the installer of an Update does. */
-  startService(opts?: { version?: string }): Promise<void>;
+  /**
+   * Start the service again; with Updates, on `version` when named, as the installer of an Update does, and reading
+   * Brain format `readsBrainFormat` from now on when named (a later release, ADR 0008).
+   */
+  startService(opts?: { version?: string; readsBrainFormat?: number }): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -114,12 +117,14 @@ export async function startStack(opts: { updates?: UpdatesOptions } = {}): Promi
   // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
   let port = 0;
   let version = opts.updates?.version;
+  let readsBrainFormat: number | undefined;
   const command = () =>
     opts.updates
-      ? { args: [UPDATE_SERVICE, "--state-dir", stateDir, "--port", String(port), "--prefix", join(base, "install"), "--requests", installRequestsFile(stateDir)], env: { ...env, ATTACHE_RELEASE_FEED_URL: opts.updates.feedUrl, ATTACHE_RELEASE_PUBLIC_KEY: opts.updates.publicKey, ATTACHE_VERSION: version! } }
+      ? { args: [UPDATE_SERVICE, "--state-dir", stateDir, "--port", String(port), "--prefix", join(base, "install"), "--requests", installRequestsFile(stateDir), ...(readsBrainFormat ? ["--reads-brain-format", String(readsBrainFormat)] : [])], env: { ...env, ATTACHE_RELEASE_FEED_URL: opts.updates.feedUrl, ATTACHE_RELEASE_PUBLIC_KEY: opts.updates.publicKey, ATTACHE_VERSION: version! } }
       : { args: [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], env };
-  const startService = async (start: { version?: string } = {}) => {
+  const startService = async (start: { version?: string; readsBrainFormat?: number } = {}) => {
     version = start.version ?? version;
+    readsBrainFormat = start.readsBrainFormat ?? readsBrainFormat;
     const { args, env: serviceEnv } = command();
     service = spawn(NODE, args, { env: serviceEnv, stdio: ["ignore", "pipe", "inherit"] });
     await waitForLine(service, /attache service listening/);

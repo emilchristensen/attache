@@ -37,6 +37,8 @@ export function ScreenLink({ screen, current, badge, warning, warningShown = fal
       <span className="screen-label">{screen.label}</span>
       <BadgeCount badge={badge} />
       {healthy && <span className="connection-healthy-dot" aria-label="All Connections work" />}
+      {/* Words shown beside the label get a space in the text, as the badge's number does (WCAG 2.5.3). */}
+      {warning && warningShown && " "}
       {warning && (
         <span className="screen-warning">
           <AttentionDot decorative />

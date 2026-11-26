@@ -5,15 +5,18 @@
  * - "Attache 0.7.0 is ready · Install", in Ask first;
  * - "Attache 0.7.0 is waiting for 2 Jobs to finish · Restart now";
  * - "Installing Attache 0.7.0", while the installer runs, so the line pressed Install on says what happens now;
- * - "The Update to 0.7.0 failed, so Attache went back to 0.6.1 · Details", for one day after a rollback.
+ * - "The Update to 0.7.0 failed, so Attache went back to 0.6.1 · Details", for one day after a rollback;
+ * - "Update this Machine to keep replicating", while Replication is paused because the Brain is in a Brain format this
+ *   Machine's Attache cannot read (#143, ADR 0008). Its action is the way to that Update: Install or Restart now once
+ *   one waits, otherwise Details in Settings' Updates section, which also tells when Updates are Off.
  * None of them counts toward the Decision count or turns on the Attention dot: they are not decisions.
  *
  * Pure, so every state has a table test (`test/update-line.test.ts`). `LINES` holds the rules in the order they win:
  * what waits for the owner or happens now comes before news of the last Update.
- * A later line (#143's "Update this Machine to keep replicating") adds its input to `UpdateLineInput`, its state and
- * action to the unions below, and one rule to `LINES` where it ranks; `components/UpdateLine.tsx` renders any rule's line.
+ * A later line adds its input to `UpdateLineInput`, its state and action to the unions below, and one rule to `LINES`
+ * where it ranks; `components/UpdateLine.tsx` renders any rule's line.
  */
-import { plural, type LastUpdateView, type UpdatesView } from "@attache/contracts";
+import { plural, type LastUpdateView, type ReplicationView, type UpdatesView } from "@attache/contracts";
 
 /** How long the line tells of a finished Update: one day, then Settings' Updates section keeps it. */
 export const UPDATED_LINE_MS = 24 * 60 * 60_000;
@@ -31,9 +34,9 @@ export type UpdateLineAction =
 export interface UpdateLine {
   /** Changes only when what the line says changes, so the announcement is read out once per line. */
   key: string;
-  state: "updated" | "ready" | "waiting_for_jobs" | "installing" | "rolled_back";
-  /** `danger` for a failure; everything else is plain news. */
-  tone: "plain" | "danger";
+  state: "updated" | "ready" | "waiting_for_jobs" | "installing" | "rolled_back" | "paused";
+  /** `danger` for a failure, `warn` for Replication held back until the owner updates; everything else is plain news. */
+  tone: "plain" | "warn" | "danger";
   text: string;
   action: UpdateLineAction | null;
 }
@@ -41,8 +44,15 @@ export interface UpdateLine {
 export interface UpdateLineInput {
   /** Updates on this Machine (`GET /updates`); null until the service answered. */
   updates: UpdatesView | null;
+  /** This Machine's Replication (`GET /replication`); null until the service answered. */
+  replication?: ReplicationView | null;
   /** The time now, in ms since the epoch: the line of a finished Update goes after one day. */
   now: number;
+  /**
+   * The owner is in Settings' Updates section, which says everything about Updates and offers their actions itself:
+   * only a paused Replication shows there, without an action.
+   */
+  inUpdatesSection?: boolean;
 }
 
 type Rule = (input: UpdateLineInput) => UpdateLine | null;
@@ -85,11 +95,33 @@ const lastUpdate: Rule = (input) => {
   }
 };
 
+const PAUSED_TEXT = "Update this Machine to keep replicating";
+
+/** The way to the Update a paused Machine needs: the one that waits for the owner, else where Updates are told. */
+function pausedAction(v: UpdatesView | null): UpdateLineAction {
+  if (v?.update && v.status === "ready") return { kind: "install", label: "Install" };
+  if (v?.update && v.status === "waiting_for_jobs") return { kind: "restart", label: "Restart now" };
+  return { kind: "details", label: "Details" };
+}
+
+/** Replication waits for this Machine to read the Brain's format: the line asks for the Update until it is installed. */
+const paused: Rule = ({ replication, updates, inUpdatesSection }) => {
+  const pause = replication?.status === "paused" ? replication.pause : null;
+  if (!pause) return null;
+  const action = inUpdatesSection ? null : pausedAction(updates);
+  return { key: `paused:${pause.brainFormat}:${action?.kind ?? "none"}`, state: "paused", tone: "warn", text: PAUSED_TEXT, action };
+};
+
+/** Installing Attache: what happens now, also when it is the Update a paused Replication waits for. */
+const installing: Rule = (input) => (input.updates?.status === "installing" ? pending(input) : null);
+
 /** The rules, first match wins. */
-const LINES: readonly Rule[] = [pending, lastUpdate];
+const LINES: readonly Rule[] = [installing, paused, pending, lastUpdate];
+/** Settings' Updates section tells every Update itself; only what holds Replication back shows above it. */
+const IN_UPDATES_SECTION: readonly Rule[] = [paused];
 
 export function updateLine(input: UpdateLineInput): UpdateLine | null {
-  for (const rule of LINES) {
+  for (const rule of input.inUpdatesSection ? IN_UPDATES_SECTION : LINES) {
     const line = rule(input);
     if (line) return line;
   }

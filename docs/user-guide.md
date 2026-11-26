@@ -762,7 +762,7 @@ Each Machine looks for an Update when the service starts and every 6 hours, and 
   When an Update does not start, Attache goes back to the version it ran before, and the section says so with the reason.
 
 A line under the masthead, after the Connection banner when both show, tells you about Updates on every screen:
-"Attache updated to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; and "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it.
+"Attache updated to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it; and "Update this Machine to keep replicating" while Replication is paused (see [Replication](#replication)).
 None of these counts toward the Decision count or turns on the Attention dot.
 A failed Update that went back also raises a desktop notification, once, even with notifications for urgent items switched off or during quiet hours; a successful Update raises none.
 
@@ -802,6 +802,8 @@ Replication is in the Dashboard under **Settings → Machines and Replication**,
   When it is not up to date, the card shows the cause and what to do.
   Paused means another Machine moved the Brain to a newer Brain format than this Machine's Attache can read: this Machine sends and merges nothing until you update it, so it never changes files a newer Attache wrote, and your saves carry on here and are sent once it is updated.
   The Brain format only moves once every Machine you used in the last 30 days can read the new one, so this happens to a Machine that was off for longer.
+  A paused Machine says "Update this Machine to keep replicating" under the masthead and in one desktop notification, and looks for an Update at once: in Automatic it installs it, in Ask first the line offers **Install**, and with Automatic updates Off it makes no request and only says so, with **Details** leading to Updates.
+  Once the Update is installed, Replication resumes on its own and the line goes away.
   **Check now** replicates straight away instead of waiting for the next check (`attache replication status` and `attache replication check` in the terminal).
 - **Machines:** the card lists every Machine that shares the Brain, with when each last changed it.
   Rename this Machine under **This Machine**; the others show the new name after their next check.
