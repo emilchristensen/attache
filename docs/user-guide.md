@@ -57,12 +57,12 @@ The service stops when you log off, and starts again at your next logon.
 Task Scheduler → Task Scheduler Library → `Attache` shows the task, and its output goes to `logs` in the state folder.
 Claude Code runs Attache's hooks through Git Bash, as it runs every hook on Windows, and Codex through cmd.exe; both work with the paths Attache writes, including a user folder with letters such as æ, ø and å.
 
-### Repair and upgrade
+### Repair and install a newer release
 
 Running the installer again repairs the installation without touching your data.
-Running a newer installer upgrades in place: it backs up first, switches versions and keeps your settings and knowledge.
+Running a newer installer installs it in place: it backs up first, switches versions and keeps your settings and knowledge.
 On Windows, repairing the version you already run replaces its files, so close each Harness that has Attache's MCP server open first; the installer says so if one still holds them.
-Harness hooks and the MCP server run Attache through a stable `current` link, so they keep working across upgrades.
+Harness hooks and the MCP server run Attache through a stable `current` link, so they keep working when a newer release is installed.
 Attache no longer has voice; upgrading from a version that had it removes the downloaded speech model, the speech connection and its key.
 
 ## First-run setup
@@ -167,8 +167,8 @@ The Dashboard follows your system's light or dark setting: warm paper with dark 
 Headings are set in Georgia, and The Daily Briefing leads Home in its own painting card.
 Attache serves its typeface (Inter) itself, so every page looks the same on every Machine and loads nothing from the internet.
 Colour always comes with a word: a state that is fine, such as connected, ready or succeeded, is written in plain text, and only a state that needs a look, such as needs setup, partial or failed, gets a coloured tag.
-The keyboard focus is a blue ring around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
-With a high-contrast theme (Windows contrast themes and other forced colours) the ring takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
+The keyboard focus is a blue outline around the control, and the selected screen or row is filled in ink, so you can always tell where the keyboard is from what is selected.
+With a high-contrast theme (Windows contrast themes and other forced colours) the outline takes your system's highlight colour, the selected screen, tab or row keeps a frame or a bar, and the brass dot stays drawn.
 
 Every screen works in a window 320 px wide and at 200% zoom without scrolling sideways.
 On a phone or a touch screen, a tablet included, every button, link, field, tab and switch on every screen, sheet and dialog is at least 44 × 44 px, and the page's first and last controls stay clear of the bottom bar and the phone's home indicator.
@@ -405,7 +405,7 @@ When a Connection needs you to sign in again, a **Needs you** group comes first 
 - **Attache:** *Features*, *Schedules and notifications* and *Identity*.
 - **Brain:** *Saving and review* (Auto-accept for each connected Harness, and Consolidation), *Meaning-based search* and *Backup and export*.
 - **Machines:** *Machines and Replication* (this Machine's name, then Replication with every state and action it has) and *Paired clients*.
-- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next.
+- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next; and *Updates* (see [Updates](#updates)).
 
 Each section has its own address (`/settings/identity`, `/settings/machines` and so on), so a link or a bookmark opens it, and the browser's Back goes through the sections you opened.
 `/settings` itself opens Features.
@@ -497,7 +497,7 @@ What they have in common:
   A file Attache creates has no earlier version to back up; disabling it removes the file.
 - **Out of date.**
   When the tile says **Out of date**, Attache's file no longer matches this Attache version, for example after you edited it.
-  Attache repairs its files, with a backup, each time it starts, so after an upgrade only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
+  Attache repairs its files, with a backup, each time it starts, so after installing a newer release only a restart of the Harness is needed; to repair them now, connect again and restart the Harness.
 - **Saves through MCP.**
   Like every connected Harness, each saves without asking while its auto-accept switch in Settings is on, which it is when you connect it; with the switch off, a save asks you first where the Harness can show the request, and otherwise waits for you as a Proposal in Approvals.
 - **What is saved.**
@@ -577,7 +577,7 @@ If the Harness already lists a server named `attache` that Attache did not add (
 
 Earlier versions installed two skills, `attache-save` and `attache-audit`, and a `attache save` command.
 The MCP tools and prompts replace both, because a Harness with auto-accept off asks you to confirm a save through the MCP server, which a shell command cannot do.
-When Attache starts after the upgrade, it removes the skill folders it installed (the ones with its `.attache-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
+When Attache starts after that release is installed, it removes the skill folders it installed (the ones with its `.attache-skill.json` marker) and adds the MCP server to every Harness that was already connected; skill folders without the marker are left alone.
 
 - **search** finds passages in your Brain and returns each one with its path, line range, area (`memory` for curated notes, `evidence` for logs, snapshots and wrap-ups), the kind of section it is in (current state, history or body) and the note's title.
   Like recall, it leaves out chat archives from earlier versions and raw session transcripts, and includes session summaries.
@@ -686,6 +686,7 @@ When it wakes, each overdue schedule runs once to catch up; missed intervals are
 If a service is unreachable, its coverage shows *offline* and it is retried at the next refresh.
 
 Urgent inbox items raise a desktop notification when that is switched on in Settings, except during quiet hours.
+An Update that failed and went back to the version before raises one too, whatever that switch says (see [Updates](#updates)).
 On macOS they appear in Notification Center.
 On Linux they go to the desktop's notification service (GNOME, KDE Plasma, mako, dunst and others) through `notify-send`, which comes with libnotify (`libnotify-bin` on Debian and Ubuntu, `libnotify` on Arch and Fedora).
 Without `notify-send` or a running notification service, Attache keeps working and its log says `desktop notifications are off` with the reason; it says `desktop notifications are on again` once one answers.
@@ -721,6 +722,11 @@ The next time Attache starts with Credential Manager working, it moves the crede
   Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `attache stop`, then `attache restore <backup.tar.gz> --data-folder <empty folder> --force`, then `attache start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
+- **Backups taken before an Update:** before it installs a newer version, the installer backs up the Machine as `pre-update-<from>-to-<to>-<time>.tar.gz` in the `backups` folder of the service state.
+  Only the 3 newest of these stay; backups you made yourself are never removed.
+  When an Update does not start, the installer goes back to the previous version and restores the database from that backup, so the previous version never runs on a database the newer one changed.
+  Only the database goes back: your data folder, your paired browsers and your connections stay as they are.
+  If the database could not be restored, run `attache stop`, then `attache restore <backup.tar.gz> --database-only`, then `attache start`.
 - **Uninstall:** `~/.local/bin/attache-uninstall` (on Windows, `%LOCALAPPDATA%\Attache\bin\attache-uninstall`) removes the app, the background service and the command line, removes Attache's hooks from each Harness, and keeps your data.
   `attache-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
   Files you had before Attache are left alone, including notes already in the data folder you chose: only what Attache created there is removed.
@@ -735,6 +741,34 @@ Renaming the Machine affects files written from then on; earlier files keep thei
 
 Only one Attache service can use a data folder at a time.
 The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Attache/locks` on macOS and `~/.local/state/attache/locks` on Linux.
+
+## Updates
+
+Attache keeps itself current.
+Each Machine looks for an Update when the service starts and every 6 hours, and checks every Update against Attache's signature before anything installs.
+**Settings → Updates** shows the version this Machine runs, when it last looked for an Update and what it found, and what is happening now.
+
+- **Automatic updates** is set per Machine:
+  *Automatic* (the default) installs an Update on its own once no Job is running, or after it has waited 24 hours for Jobs, and then tells you what changed;
+  *Ask first* downloads and checks an Update, then waits for you to select *Install now*;
+  *Off* never looks for Updates, so Attache makes no request about them, not even for *Check now*.
+- **Update channel** is set per Machine too: *Stable*, or *Beta*, which gets new releases first and also takes each Stable release that is newer.
+  A Machine never moves to an older version, so a Machine switched back from Beta to Stable stays on its version until a Stable release passes it.
+- **Check now** looks for an Update at once and goes on as Automatic updates says.
+  When a check fails, for example because the network is down, the section says so and why; a failed check never reads as up to date.
+- **Install now** installs an Update that is available or ready.
+  While an Update waits for Jobs to finish, **Restart now** installs it at once; the Jobs pick up from their last checkpoint once Attache is back.
+- After an Update, the section says which version this Machine updated from, with **What changed**: the release's notes, shown inside the Dashboard.
+  When an Update does not start, Attache goes back to the version it ran before, and the section says so with the reason.
+
+A line under the masthead, after the Connection banner when both show, tells you about Updates on every screen:
+"Attache updated from 0.6.1 to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready to install" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it; and "Update this Machine to keep replicating" while Replication is paused (see [Replication](#replication)).
+None of these counts toward the Decision count or turns on the Attention dot.
+A failed Update that went back also raises a desktop notification, once, even with notifications for urgent items switched off or during quiet hours; a successful Update raises none.
+
+A copy of Attache run from a source checkout shows Updates as unavailable: it never replaces itself.
+Pull the newest code and build it instead.
+The command line has the same Updates as `attache update` (see [Where things live](#where-things-live)).
 
 ## Replication
 
@@ -764,8 +798,12 @@ Replication is in the Dashboard under **Settings → Machines and Replication**,
   Attache backs that folder up first, together with its database, to the `backups/` folder, and the refusal names the archive; it changes nothing in the folder.
   Move the folder aside or name an empty one, then join again; `attache restore` brings the backup back if you need it.
   Attache clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
-- **Status:** the card says off, up to date, offline, unauthorized or blocked, when this Machine was last up to date, and when it last checked and last sent changes.
+- **Status:** the card says off, up to date, offline, unauthorized, blocked or paused, when this Machine was last up to date, and when it last checked and last sent changes.
   When it is not up to date, the card shows the cause and what to do.
+  Paused means another Machine moved the Brain to a newer Brain format than this Machine's Attache can read: this Machine sends and merges nothing until you update it, so it never changes files a newer Attache wrote, and your saves carry on here and are sent once it is updated.
+  The Brain format only moves once every Machine you used in the last 30 days can read the new one, so this happens to a Machine that was off for longer.
+  A paused Machine says "Update this Machine to keep replicating" under the masthead and in one desktop notification, and looks for an Update at once: in Automatic it installs it, in Ask first the line offers **Install**, and with Automatic updates Off it makes no request and only says so, with **Details** leading to Updates.
+  Once the Update is installed, Replication resumes on its own and the line goes away.
   **Check now** replicates straight away instead of waiting for the next check (`attache replication status` and `attache replication check` in the terminal).
 - **Machines:** the card lists every Machine that shares the Brain, with when each last changed it.
   Rename this Machine under **This Machine**; the others show the new name after their next check.
@@ -882,9 +920,17 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 | Harness hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.gemini/config/hooks.json` (only the entries Attache added) | the same | the same, under `%USERPROFILE%` |
 | Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `attache` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` | the same, under `%USERPROFILE%`, with Claude Desktop's in `%APPDATA%\Claude\claude_desktop_config.json` |
 
-The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `mcp`, `agent-hooks`, `backup` and `restore`.
+The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `update`, `mcp`, `agent-hooks`, `backup` and `restore`.
+`attache update` installs an available Update now, also one that waits for Jobs to finish: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+Jobs that were running pick up from where they stopped once Attache is back.
+When Automatic updates is Off, `attache update` makes no request and says so.
+When the new version does not start, Attache goes back to the version it had, with the database from just before the Update, and never offers that version again on this Machine; a newer release is still offered.
+The same holds for an Update whose installer stopped before changing anything.
+`attache update` then fails with the reason and says what became of the database.
+`attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 `attache agent-hooks status` lists the hooks and MCP servers Attache added to your Harnesses.
 On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves the app, the state or the service definition.
+The background service keeps the values these had when you installed, so an Update finds everything where the install put it.
 `attache paths` prints every one of these locations for the computer it runs on, and `attache service status` says whether the background service is loaded.
 
 ## Troubleshooting

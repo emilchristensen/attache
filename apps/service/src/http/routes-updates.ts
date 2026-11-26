@@ -1,0 +1,30 @@
+import { UpdateCheckInput, UpdateSettingsInput } from "@attache/contracts";
+import { HttpError, type Router } from "./router.ts";
+import type { App } from "../app.ts";
+import { SettingsLockedError } from "../updates/updater.ts";
+
+/**
+ * Updates on this Machine (spec #130): `GET /updates` reads the status,
+ * `PUT /updates/settings` sets the Update channel and Automatic updates' mode (409 while an Update installs),
+ * `POST /updates/check` checks now (and goes on as the mode says unless
+ * `reportOnly`), `POST /updates/install` is Install now and Restart now (it
+ * answers once the installer runs; the service restarts after). Every answer is the status
+ * after the request.
+ */
+export function registerUpdatesRoutes(r: Router, app: App) {
+  r.get("/updates", () => app.updater.view());
+  r.put("/updates/settings", async (c) => {
+    const input = await c.body(UpdateSettingsInput);
+    let view;
+    try {
+      view = app.updater.setSettings(input);
+    } catch (e) {
+      if (e instanceof SettingsLockedError) throw new HttpError(409, e.code, e.message);
+      throw e;
+    }
+    app.bus.emit("event", { type: "config.changed" });
+    return view;
+  });
+  r.post("/updates/check", async (c) => app.updater.check(await c.body(UpdateCheckInput)));
+  r.post("/updates/install", () => app.updater.install());
+}

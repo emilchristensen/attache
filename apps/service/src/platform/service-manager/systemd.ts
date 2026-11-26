@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import { randomUUID } from "node:crypto";
 import { run, type RunResult } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
-import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { REFUSED_EXIT_CODE, type ServiceManager, type ServiceSpec } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
 import { waitUntil } from "../wait.ts";
 
@@ -24,8 +24,20 @@ const cQuoted = (s: string) => `"${s.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 const execArg = (s: string) => cQuoted(specifiers(s).replace(/\$/g, "$$$$"));
 const environment = (name: string, value: string) => `Environment=${cQuoted(`${name}=${specifiers(value)}`)}`;
 
-/** The systemd user unit: starts at login, restarts after a crash, runs the bundled runtime through the stable `current` link. */
-export function systemdUnit(home: string, spec: ServiceSpec): string {
+/** The XDG base folders that decide where an install puts its release, its state and this unit (`locations.ts`). */
+const LOCATION_VARS = ["XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"] as const;
+
+/**
+ * The XDG base folders as the installer saw them, and those it did not have unset: the user manager's own may differ
+ * from the owner's shell, and the service, and an installer it starts for an Update, must find the install where it is.
+ */
+function locationEnvironment(env: NodeJS.ProcessEnv): string[] {
+  const unset = LOCATION_VARS.filter((v) => !env[v]);
+  return [...LOCATION_VARS.filter((v) => env[v]).map((v) => environment(v, env[v]!)), ...(unset.length ? [`UnsetEnvironment=${unset.join(" ")}`] : [])];
+}
+
+/** The systemd user unit: starts at login, restarts after a crash unless it refused to start, runs the bundled runtime through the stable `current` link. */
+export function systemdUnit(home: string, spec: ServiceSpec, env: NodeJS.ProcessEnv = process.env): string {
   const current = join(spec.installPrefix, "current");
   const logs = join(spec.stateDir, "logs");
   return [
@@ -40,8 +52,11 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
     environment("ATTACHE_WEB_DIR", join(current, "web")),
     environment("HOME", home),
     environment("PATH", `${home}/.local/bin:/usr/local/bin:/usr/bin:/bin`),
+    ...locationEnvironment(env),
+    ...(spec.releaseFeedUrl ? [environment("ATTACHE_RELEASE_FEED_URL", spec.releaseFeedUrl)] : []),
     "Restart=always",
     "RestartSec=2",
+    `RestartPreventExitStatus=${REFUSED_EXIT_CODE}`,
     `StandardOutput=append:${specifiers(join(logs, "service.out.log"))}`,
     `StandardError=append:${specifiers(join(logs, "service.err.log"))}`,
     "",
@@ -56,7 +71,7 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
  * which a login sets. Where it is missing (`su`, some SSH setups), the
  * standard location is tried.
  */
-function userManagerEnv(): NodeJS.ProcessEnv {
+export function userManagerEnv(): NodeJS.ProcessEnv {
   const uid = process.getuid?.();
   return process.env.XDG_RUNTIME_DIR || uid === undefined ? process.env : { ...process.env, XDG_RUNTIME_DIR: `/run/user/${uid}` };
 }
@@ -109,6 +124,10 @@ export class SystemdServiceManager implements ServiceManager {
 
   async start(): Promise<void> {
     if (!existsSync(this.definition)) throw new Error(`Attache is not set up as a background service here: ${this.definition} is missing. Run the Attache installer again.`);
+    // Asked to start, it starts: a version that kept crashing under Restart=always (one an Update then rolled back) can
+    // have used up systemd's start limit, which refuses every start, the owner's and the installer's, until reset.
+    // Resetting a unit that has not failed changes nothing; one systemd does not know yet is not an error either.
+    await this.systemctl(["reset-failed", this.name]);
     await this.must(["restart", this.name]);
   }
 

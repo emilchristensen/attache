@@ -114,8 +114,12 @@ export class MemoryStore {
     return this.root;
   }
 
-  /** Create the folder layout (if needed) and take the single-writer lock. */
-  open(root: string): { created: string[] } {
+  /**
+   * Create the folder layout (if needed) and take the single-writer lock.
+   * `paused`: the Brain is in a format this Machine cannot read, so no README is written; the folders (which git never
+   * replicates while empty) and `.attache/` (which Replication ignores) are only this Machine's.
+   */
+  open(root: string, opts: { paused?: boolean } = {}): { created: string[] } {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
@@ -126,7 +130,7 @@ export class MemoryStore {
         created.push(d + "/");
       }
     }
-    if (!existsSync(join(root, "README.md"))) {
+    if (!opts.paused && !existsSync(join(root, "README.md"))) {
       writeFileSync(join(root, "README.md"), README);
       created.push("README.md");
     }
@@ -406,7 +410,7 @@ export class MemoryStore {
    * grows (compaction, then the end), so one session is always one file.
    */
   archiveAgentSession(rel: string, meta: AgentSessionMeta, turns: Array<{ role: "user" | "assistant"; text: string; at: string | null }>, userName: string): { relPath: string } {
-    this.writeFile(rel, agentSessionFile(meta, turns, userName), "service");
+    this.writeFile(rel, this.keepingUnknownKeys(rel, agentSessionFile(meta, turns, userName)), "service");
     return { relPath: rel };
   }
 
@@ -423,7 +427,7 @@ export class MemoryStore {
   writeConnectorSnapshot(kind: string, label: string, lines: string[]): { relPath: string } {
     const machine = this.opts.machine();
     const rel = connectorSnapshotPath(kind, this.today(), machine);
-    this.writeFile(rel, connectorSnapshotFile({ kind, label, day: this.today(), machine, lines }), "connector");
+    this.writeFile(rel, this.keepingUnknownKeys(rel, connectorSnapshotFile({ kind, label, day: this.today(), machine, lines })), "connector");
     return { relPath: rel };
   }
 
@@ -443,6 +447,16 @@ export class MemoryStore {
     return { relPath: rel, title, date };
   }
 
+  /**
+   * A file written again from scratch, with the frontmatter keys of the file
+   * there now that the new text does not set: keys a later release added
+   * survive this one rewriting the file (ADR 0008). Only for files whose
+   * frontmatter this release always writes whole.
+   */
+  private keepingUnknownKeys(rel: string, content: string): string {
+    return this.exists(rel) ? withUnknownFrontmatter(this.read(rel), content) : content;
+  }
+
   /** Protected identity record; only an explicit user settings action writes it. */
   writeIdentity(input: { name: string; email?: string; role?: string; notes?: string }, confirmed: boolean): { relPath: string } {
     const rel = "memory/self.md";
@@ -457,7 +471,7 @@ export class MemoryStore {
       ...(input.notes ? { notes: input.notes } : {}),
       history: [`- ${this.today()} — identity set from Settings`],
     });
-    this.writeFile(rel, doc, "user", { confirmedProtected: confirmed });
+    this.writeFile(rel, this.keepingUnknownKeys(rel, doc), "user", { confirmedProtected: confirmed });
     return { relPath: rel };
   }
 
@@ -510,6 +524,14 @@ function bumpFrontmatter(raw: string, patch: Record<string, unknown>): string {
   const { frontmatter, body } = splitFrontmatter(raw);
   if (!Object.keys(frontmatter).length) return raw;
   return withFrontmatter({ ...frontmatter, ...patch }, body);
+}
+
+/** `next` with the frontmatter keys of `previous` it does not set itself. */
+function withUnknownFrontmatter(previous: string, next: string): string {
+  const { frontmatter, body } = splitFrontmatter(next);
+  const kept = Object.entries(splitFrontmatter(previous).frontmatter).filter(([k]) => !(k in frontmatter));
+  if (!kept.length || !Object.keys(frontmatter).length) return next;
+  return withFrontmatter({ ...frontmatter, ...Object.fromEntries(kept) }, body);
 }
 
 /** Fingerprint of a note's text, comparable with `MemoryChange.docHash`. */

@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { App, VERSION } from "./app.ts";
 import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
-import { resolvePaths } from "./core/paths.ts";
+import { defaultStateDir, resolvePaths } from "./core/paths.ts";
 import { openDb } from "./core/db.ts";
-import { createBackup, restoreBackup } from "./backup.ts";
+import { NewerDatabaseError } from "./core/schema-guard.ts";
+import { REFUSED_EXIT_CODE, REFUSED_TO_START_FILE } from "./platform/service-manager/types.ts";
+import { createBackup, restoreBackup, restoreDatabase } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, searchByMeaning } from "./memory/search.ts";
 import { unverifiedLabel } from "./memory/review-date.ts";
@@ -29,6 +31,10 @@ import { runMcpServer } from "./mcp/server.ts";
 import { evaluateRecallCommand } from "./cli/recall-evaluation-command.ts";
 import { replicationCommand } from "./cli/replication-commands.ts";
 import { gitCredentialCommand } from "./cli/git-credential-command.ts";
+import { verifyReleaseCommand } from "./cli/release-commands.ts";
+import { updateCommand } from "./cli/update-commands.ts";
+import { prunePreUpdateBackups } from "./updates/pre-update-backups.ts";
+import { builtToFailHealthCheck, failHealthCheck } from "./updates/health-check-fault.ts";
 
 export const DEFAULT_PORT = 7427;
 
@@ -39,10 +45,30 @@ function arg(name: string, argv: string[]): string | undefined {
 
 const out = (s: string) => process.stdout.write(s + "\n");
 
+/**
+ * The service stops for good on a database a newer Attache wrote: it says so,
+ * and exits so that launchd, systemd and the Windows supervisor do not start it
+ * again every few seconds (`REFUSED_EXIT_CODE`).
+ */
+function openApp(stateDir: string | undefined): App {
+  const paths = resolvePaths(stateDir);
+  const refused = join(paths.stateDir, REFUSED_TO_START_FILE);
+  try {
+    const app = new App({ stateDir: paths.stateDir });
+    rmSync(refused, { force: true });
+    return app;
+  } catch (e) {
+    if (!(e instanceof NewerDatabaseError)) throw e;
+    writeFileWhole(refused, `${e.message}\n`);
+    process.stderr.write(`attache: ${e.message}\n`);
+    process.exit(REFUSED_EXIT_CODE);
+  }
+}
+
 async function serve(argv: string[]) {
-  const stateDir = arg("state-dir", argv);
+  if (builtToFailHealthCheck()) failHealthCheck(arg("state-dir", argv));
   const port = Number(arg("port", argv) ?? process.env.ATTACHE_PORT ?? DEFAULT_PORT);
-  const app = new App({ ...(stateDir ? { stateDir } : {}) });
+  const app = openApp(arg("state-dir", argv));
   const handle = await startServer(app, { port });
   app.start();
   const runtime: Runtime = { pid: process.pid, port: handle.port, url: handle.url, version: VERSION, startedAt: app.startedAt, instance: app.instance };
@@ -204,6 +230,11 @@ async function main() {
       return replicationCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "git-credential":
       return gitCredentialCommand(argv, resolvePaths(arg("state-dir", argv)), { readStdin: () => readFileSync(0, "utf8"), write: (t) => process.stdout.write(t) });
+    case "update":
+      return updateCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
+    case "verify-release":
+      // No resolvePaths: checking a release creates no folder in the Machine's state.
+      return verifyReleaseCommand(argv, arg("state-dir", argv) ?? defaultStateDir(), cliIo());
     case "evaluate-recall":
       return evaluateRecallCommand(argv, resolvePaths(arg("state-dir", argv)), cliIo());
     case "stop":
@@ -231,18 +262,28 @@ async function main() {
       app.db.close();
       return out(JSON.stringify({ path: r.path, bytes: r.bytes, manifest: r.manifest }));
     }
+    case "prune-backups": {
+      // After a successful install the installer keeps only the newest pre-Update backups; the owner's own stay.
+      const paths = resolvePaths(arg("state-dir", argv));
+      return out(JSON.stringify({ removed: prunePreUpdateBackups(paths.backupsDir) }));
+    }
     case "restore": {
       const file = argv[1];
-      if (!file || !existsSync(file)) throw new Error("Usage: attache restore <backup.tar.gz> [--data-folder <path>] [--force]");
+      if (!file || !existsSync(file)) throw new Error("Usage: attache restore <backup.tar.gz> [--data-folder <path>] [--force] | attache restore <backup.tar.gz> --database-only");
       const paths = resolvePaths(arg("state-dir", argv));
       const rt = readRuntime(paths.runtimeFile);
       if (rt && alive(rt.pid)) throw new Error(`The Attache service is running (pid ${rt.pid}). Run \`attache stop\` first, then restore, then \`attache start\`.`);
+      // An Update's rollback (installer/install.sh, install.ps1): the database only, nothing else.
+      if (argv.includes("--database-only")) {
+        const r = await restoreDatabase(file, { stateDir: paths.stateDir });
+        return out(JSON.stringify({ restored: true, database: r.database, keptAs: r.keptAs, from: r.manifest.createdAt }));
+      }
       const dataFolder = arg("data-folder", argv);
       const r = await restoreBackup(file, { stateDir: paths.stateDir, ...(dataFolder ? { dataFolder } : {}), force: argv.includes("--force") });
       return out(JSON.stringify({ restored: true, dataFolder: r.dataFolder, from: r.manifest.createdAt, reconnect: r.manifest.connectionsNeedingReconnect }));
     }
     default:
-      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, mcp, agent-hooks, backup, restore, version, service, wrappers, credentials, notifications, locks, paths, data-folder`);
+      throw new Error(`Unknown command ${cmd}. Commands: serve, start, stop, pair, status, search, audit, evaluate-recall, replication, update, mcp, agent-hooks, backup, restore, prune-backups, verify-release, version, service, wrappers, credentials, notifications, locks, paths, data-folder`);
   }
 }
 

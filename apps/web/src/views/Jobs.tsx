@@ -92,7 +92,8 @@ export function JobsView() {
               {endedRows !== null && endedRows.length >= FINISHED_MAX && <p className="jobs-none">These are the newest {FINISHED_MAX}; older jobs are kept but not listed here.</p>}
             </JobGroup>
           </div>
-          <div ref={detailRef} className="split-detail jobs-detail sticky-detail">
+          {/* It scrolls on its own beside the list and holds no control, so the region itself takes keyboard focus to scroll it. */}
+          <div ref={detailRef} className="split-detail jobs-detail sticky-detail" role="region" aria-label="Job details" tabIndex={0}>
             {selected ? <JobDetail key={selected} id={selected} /> : <p className="reader-placeholder">{endedRows?.length === 0 && active.data?.length === 0 ? "No jobs yet. Research a question above, or wait for the next Source refresh." : "Pick a job to see its progress, result and events here."}</p>}
           </div>
         </div>

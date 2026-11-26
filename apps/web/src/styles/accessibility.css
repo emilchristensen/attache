@@ -81,7 +81,7 @@
     align-items: center;
     min-height: 44px;
   }
-  .feature-row > input[type="checkbox"] {
+  .feature-row > input:is([type="checkbox"], [type="radio"]) {
     margin-top: 14px;
   }
 }

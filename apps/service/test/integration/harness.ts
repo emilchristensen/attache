@@ -53,12 +53,20 @@ export interface TestServiceOptions {
   /** Lease commits per generation of the Reader lease ref; small in tests that check the history stays bounded. */
   leaseGenerationCommits?: number;
   meaning?: AppOptions["meaning"];
+  /** The Attache version this Machine runs, as a release build says it; `VERSION` when left out. */
+  version?: string;
+  /** The Brain formats this Machine reads and writes; this release's when left out. Tests name a newer one to play a later release. */
+  brainFormat?: AppOptions["brainFormat"];
+  /** Where the Updater reads releases and whether this copy is a release install; a source checkout reading GitHub when left out. */
+  updates?: AppOptions["updates"];
+  /** Where desktop notifications go; the operating system's (switched off by `ATTACHE_NO_NOTIFY`) when left out. */
+  notifier?: AppOptions["notifier"];
 }
 
 export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? testFolder("state");
   const dataDir = opts.dataDir ?? join(testFolder("data"), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}), ...(opts.version ? { version: opts.version } : {}), ...(opts.brainFormat ? { brainFormat: opts.brainFormat } : {}), ...(opts.updates ? { updates: opts.updates } : {}), ...(opts.notifier ? { notifier: opts.notifier } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `attache serve` writes, so the CLI finds this service.

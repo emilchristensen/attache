@@ -73,7 +73,7 @@ _Avoid_: Command palette, quick open
 
 **Settings section**:
 One page of Settings, at its own address under `/settings/`, such as Identity or Machines and Replication.
-Settings lists its nine sections in four groups, Attache, Brain, Machines and Service, and shows one at a time; each setting and action is in exactly one section.
+Settings lists its ten sections in four groups, Attache, Brain, Machines and Service, and shows one at a time; each setting and action is in exactly one section.
 
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.
@@ -119,6 +119,26 @@ _Avoid_: Disconnect
 **Agent**:
 The AI working inside a Harness on the owner's behalf: it searches the Brain, saves to it and runs the audit.
 The Harness is the application; the agent is what runs in it.
+
+### Keeping Attache current
+
+**Update**:
+A newer release of Attache that a Machine can install.
+_Avoid_: Upgrade, patch, new build
+
+**Automatic updates**:
+How a Machine handles Updates: install them on its own, ask the owner before installing, or never look for them.
+_Avoid_: Auto-upgrade, auto-install
+
+**Update channel**:
+Which releases a Machine takes Updates from: Stable, or Beta, which also takes each Stable release that is newer.
+A Machine never moves to an older version, so switching from Beta to Stable waits until Stable passes it.
+_Avoid_: Track, ring, prerelease
+
+**Brain format**:
+The version of how the Brain's replicated files are laid out, recorded in the Brain.
+It rises only when every Machine used in the last 30 days can read the new one, and a Machine that finds a newer one than it can read pauses Replication until it is updated (ADR 0008).
+_Avoid_: File version, Brain version
 
 ### Keeping the Brain true
 

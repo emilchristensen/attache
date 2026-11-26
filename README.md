@@ -86,7 +86,7 @@ pnpm install
 pnpm build      # contracts, service bundle and Dashboard
 pnpm test       # unit, adapter contract and HTTP integration tests
 pnpm dev        # run the service and Dashboard locally
-pnpm release    # build the installers into release/<version>/
+pnpm release -- --signing-key <key.pem> --public-key <public.pem>   # build signed installers into release/<version>/
 ```
 
 The [developer guide](docs/developer-guide.md) lists every check, the CI setup and the install test.

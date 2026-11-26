@@ -5,7 +5,8 @@ import { useResource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { Tag } from "../components/Tag.tsx";
-import { ReplicationCard, ReplicationProblem, useReplication } from "./Replication.tsx";
+import { ReplicationCard, ReplicationProblem } from "./Replication.tsx";
+import { useReplication } from "../replication-live.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 function ThisMachine() {

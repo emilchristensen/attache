@@ -1,6 +1,6 @@
 # The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
 # on macOS, Linux and Windows on the minimum supported Node (engines.node in package.json),
-# on Linux also on the current Node release, and the install test on Linux and Windows.
+# on Linux also on the current Node release, and the install test on macOS, Linux and Windows.
 # `checks (<os>)` and `journeys (<os>)`, the jobs on the minimum Node, are the required status checks on `main`.
 #
 # The jobs split by event, so a branch with a pull request runs each job once:
@@ -43,7 +43,7 @@ jobs:
     # A healthy Windows run takes about 16 minutes (unit tests 8 to 13), so the limit leaves room for a slow runner.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up the workspace
         id: setup
@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.os }}-node-${{ matrix.node }}
           path: test-results/
@@ -116,7 +116,7 @@ jobs:
     # A healthy Windows run takes about 19 minutes (the journeys 13 to 15), so the limit leaves room for a slow runner.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up the workspace
         uses: ./.github/actions/setup
@@ -137,26 +137,26 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: journeys-results-${{ matrix.os }}-node-${{ matrix.node }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
 
-  # Builds two releases for this computer and installs, upgrades, backs up,
-  # restores and uninstalls them in a clean profile (scripts/test-install.mjs).
+  # Builds two releases for this computer, signed with a test key, and installs, upgrades, backs up,
+  # restores and uninstalls them in a clean profile (scripts/test-install.mjs). macos-latest is Apple silicon.
   install:
     name: install (${{ matrix.os }})
     if: ${{ !github.event.pull_request.draft && github.event_name != 'schedule' }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || github.event_name == 'pull_request' && '["windows-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
+        os: ${{ fromJSON(github.event_name == 'push' && '["ubuntu-latest"]' || github.event_name == 'pull_request' && '["macos-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up the workspace
         uses: ./.github/actions/setup
@@ -189,7 +189,7 @@ jobs:
 
       - name: Upload install results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: install-results-${{ matrix.os }}
           path: |

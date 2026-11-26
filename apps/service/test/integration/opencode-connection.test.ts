@@ -153,7 +153,9 @@ describe("OpenCode as a Harness Connection", () => {
 });
 
 describe("uninstalling Attache", () => {
-  it("the uninstaller removes the OpenCode plugin from the service's folder even when the shell sees another folder", async () => {
+  // Two `attache` commands from source, one after the other: a second alone, but while other test runs share the
+  // computer one Node start can wait seconds (issue #9).
+  it("the uninstaller removes the OpenCode plugin from the service's folder even when the shell sees another folder", { timeout: 60_000 }, async () => {
     await svc.post("/connections/opencode/configure", { method: "mcp", fields: {} });
     expect(readdirSync(PLUGINS)).toHaveLength(2);
     const main = join(import.meta.dirname, "../../src/main.ts");

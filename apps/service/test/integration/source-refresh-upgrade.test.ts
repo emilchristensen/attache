@@ -1,9 +1,8 @@
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { MIGRATIONS } from "../../src/core/db.ts";
+import { databaseBefore } from "../fixtures/old-database.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
 const running: TestService[] = [];
@@ -11,22 +10,14 @@ afterAll(async () => {
   for (const s of running) await s.stop().catch(() => {});
 });
 
-/** The schema version before Source refresh had its own name: every migration up to the one that renames it. */
-function syncEraSchema(db: DatabaseSync) {
-  const rename = MIGRATIONS.findIndex((m) => /source-refresh/.test(m));
-  expect(rename, "a migration renames the stored sync job kind").toBeGreaterThan(0);
-  for (const m of MIGRATIONS.slice(0, rename)) db.exec(m);
-  db.exec(`pragma user_version = ${rename}`);
-}
-
 /** A state folder as an install left it while Source refresh was stored as "sync": its interval, a scheduled run and a refresh of one connection. */
 function syncEraState(): { stateDir: string; dataDir: string } {
   const stateDir = mkdtempSync(join(tmpdir(), "attache-it-sync-state-"));
   const dataDir = join(mkdtempSync(join(tmpdir(), "attache-it-sync-data-")), "data");
   mkdirSync(dataDir, { recursive: true });
   const now = new Date().toISOString();
-  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
-  syncEraSchema(db);
+  // The schema before Source refresh had its own name: every migration up to the one that renames it.
+  const db = databaseBefore(join(stateDir, "attache.sqlite"), /source-refresh/);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, schedules: { syncEveryMinutes: 45, briefingAt: "07:30", briefingEnabled: true } };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), now);
   db.prepare("insert into jobs (id, kind, title, status, input, capability, created_at, updated_at, finished_at) values ('j1', 'sync', 'Refresh sources (scheduled)', 'succeeded', '{\"all\":true}', 'attention', ?, ?, ?)").run(now, now, now);

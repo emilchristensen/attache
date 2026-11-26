@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
-import { useResource, type Resource } from "../live.ts";
+import type { Resource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
@@ -16,6 +16,7 @@ const STATE: Record<ReplicationStatus, { state: string; label: string }> = {
   offline: { state: "partial", label: "offline" },
   unauthorized: { state: "error", label: "unauthorized" },
   blocked: { state: "error", label: "blocked" },
+  paused: { state: "partial", label: "paused" },
 };
 
 /** What a status means and what the owner can do about it; the cause from the service is shown above it. */
@@ -34,6 +35,11 @@ const PROBLEM: Partial<Record<ReplicationStatus, { title: string; todo: string; 
     title: "Replication is blocked",
     todo: "Nothing is sent or received until the cause is fixed. Saves carry on here. Fix the cause, then select Check now.",
     tone: "error",
+  },
+  paused: {
+    title: "Replication is paused",
+    todo: "Until then this Machine sends and merges nothing, so it never changes files a newer Attache wrote.",
+    tone: "partial",
   },
 };
 
@@ -269,11 +275,6 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
 }
 
 /** Replication on this Machine: set it up or join, watch its status and the other Machines, or switch it off. */
-/** This Machine's Replication, as Settings' Machines and Replication section asks for it once for the card and its notice. */
-export function useReplication(): Resource<ReplicationView> {
-  return useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
-}
-
 export function ReplicationCard({ view, dataFolder }: { view: Resource<ReplicationView>; dataFolder: string | null }) {
   const v = view.data;
   const shown = v ? STATE[v.status] : null;

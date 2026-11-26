@@ -3,9 +3,25 @@ import { MachineView } from "./config.ts";
 
 /** API contract: Replication. */
 
-/** off: not set up. offline: the remote cannot be reached; saves carry on and catch up later. */
-export const ReplicationStatus = z.enum(["off", "up_to_date", "offline", "unauthorized", "blocked"]);
+/**
+ * off: not set up. offline: the remote cannot be reached; saves carry on and catch up later.
+ * paused: the Brain is in a format newer than this Machine can read (`ReplicationView.pause` says which);
+ * it merges, commits and pushes nothing until it is updated, and saves carry on here.
+ */
+export const ReplicationStatus = z.enum(["off", "up_to_date", "offline", "unauthorized", "blocked", "paused"]);
 export type ReplicationStatus = z.infer<typeof ReplicationStatus>;
+
+/**
+ * Why Replication is paused, for the Dashboard line, the system notification and
+ * the Update check that ask the owner to update this Machine (ADR 0008).
+ */
+export interface ReplicationPause {
+  reason: "newer_brain_format";
+  /** The Brain format the Brain is in. */
+  brainFormat: number;
+  /** The newest Brain format this Machine's Attache can read. */
+  readsBrainFormat: number;
+}
 
 export interface ReplicationView {
   status: ReplicationStatus;
@@ -17,6 +33,8 @@ export interface ReplicationView {
   lastPushedAt: string | null;
   /** The last time this Machine had the other Machines' changes and had sent its own; setup and join count. */
   upToDateAt: string | null;
+  /** Set exactly while the status is paused. */
+  pause: ReplicationPause | null;
 }
 
 const RepositoryName = z.string().trim().min(1, "Name the repository").max(500);
@@ -33,6 +51,8 @@ export interface ReplicatedMachineView {
   standby: boolean;
   /** The Machine whose Dashboard is asking. */
   thisMachine: boolean;
+  /** The Attache version the Machine runs; null when its record comes from a version that did not record it. */
+  version: string | null;
   /** When this Machine's last change reached the Brain's history here; null when none has yet. */
   lastChangeAt: string | null;
 }

@@ -7,6 +7,7 @@ import { BackupSection, MeaningSearchSection, SavingSection } from "./SettingsBr
 import { ClientsSection, MachinesSection } from "./SettingsMachines.tsx";
 import { SettingsNav } from "./SettingsNav.tsx";
 import { ServiceSection } from "./SettingsService.tsx";
+import { UpdatesSection } from "./SettingsUpdates.tsx";
 
 /** Each section's view, by its id in `SETTINGS_SECTIONS`. */
 const SECTION_VIEWS: Record<string, ComponentType> = {
@@ -19,6 +20,7 @@ const SECTION_VIEWS: Record<string, ComponentType> = {
   machines: MachinesSection,
   clients: ClientsSection,
   service: ServiceSection,
+  updates: UpdatesSection,
 };
 
 /**

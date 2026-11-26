@@ -22,6 +22,7 @@ describe("the palette's Go to group", () => {
       "Machines and Replication /settings/machines",
       "Paired clients /settings/clients",
       "Service health /settings/service",
+      "Updates /settings/updates",
     ]);
   });
 

@@ -1,0 +1,103 @@
+/*
+ * Settings' Updates section: where Updates stand, what the last one did, and this Machine's Automatic updates and
+ * Update channel, as radio rows in the switch rows' shape.
+ */
+
+/* A headline with its tag or time at the end of its first line, however many lines it takes. */
+.updates-head {
+  align-items: baseline;
+  flex-wrap: nowrap;
+}
+.updates-head h3 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Focus lands on the status after the button pressed is gone; the heading is not a control, so no ring. */
+.updates-status-head h3:focus {
+  outline: none;
+}
+
+.updates-detail,
+.last-update-detail {
+  margin: var(--s-1) 0 0;
+  color: var(--ink-2);
+}
+
+/* A failed check, and a rolled-back Update, keep the notice edge of `.state`. */
+:is(.updates-status.danger, .last-update.error) {
+  border-color: var(--red);
+}
+:is(.updates-status.danger, .last-update.error) h3 {
+  color: var(--danger);
+}
+.last-update.partial {
+  border-color: var(--amber);
+}
+
+/* Why the choices below are disabled while an Update installs: said in ink, not muted, as it explains the state. */
+.updates-locked {
+  margin: var(--s-2) 0 0;
+  color: var(--ink-2);
+}
+
+.updates-choices {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.updates-choices legend {
+  padding: 0;
+  font-size: var(--fs-control);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+/* The help under a group closes it; the last choice above it needs no rule of its own. */
+.updates-choices > .feature-row:last-of-type {
+  border-bottom: none;
+}
+.updates-choices .help {
+  margin: var(--s-1) 0 0;
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  color: var(--ink-3);
+}
+
+/*
+ * Release notes, from the signed manifest, in Settings' card and in What changed's dialog over the page: headings at
+ * the card's own scale, never a page heading inside a card.
+ */
+.release-notes {
+  font-size: var(--fs-control);
+  color: var(--ink-2);
+}
+.release-notes :is(h1, h2, h3, h4) {
+  margin: var(--s-3) 0 var(--s-1);
+  font-family: inherit;
+  font-size: var(--fs-control);
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ink);
+}
+.release-notes > :first-child {
+  margin-top: 0;
+}
+.release-notes > :last-child {
+  margin-bottom: 0;
+}
+
+/* The notes close the card: no second rule under them, and no gap beyond the card's own. */
+.card > .updates-notes:last-child {
+  border-bottom: none;
+}
+.card > .updates-notes:last-child > summary {
+  padding-bottom: 0;
+}
+.card > .updates-notes[open]:last-child > summary {
+  padding-bottom: var(--s-3);
+}
+.card > .updates-notes:last-child > .disclosure-body {
+  padding-bottom: 0;
+}

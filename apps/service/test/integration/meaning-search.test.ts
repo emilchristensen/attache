@@ -240,7 +240,9 @@ describe("once every passage has a vector, search ranks by meaning", () => {
   const DANISH = "Hvornår holder vi morgenmøde?";
   const STANDUP = "Daily standup at 09:15 in the Copenhagen office";
 
-  it("finds the English fact for a Danish question in the API, the MCP server and the CLI, with no keywords-only note", async () => {
+  // Three Node starts (the MCP server and two CLI runs) after the model embeds the Brain: 1.5 s alone, past 30 s while
+  // other test runs share the computer, where one Node start can wait seconds (issue #9).
+  it("finds the English fact for a Danish question in the API, the MCP server and the CLI, with no keywords-only note", { timeout: 90_000 }, async () => {
     const svc = await start();
     const missing = await svc.get(`/memory/search?recall=1&q=${encodeURIComponent(DANISH)}`);
     expect(missing.meaning.ranking).toBe("keywords");

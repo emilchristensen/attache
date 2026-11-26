@@ -77,7 +77,7 @@ Which jobs run depends on what started the run, so a branch with a pull request 
 | Started by | Jobs |
 | --- | --- |
 | A push to any branch, `main` included | `checks` and `journeys` on `ubuntu-latest` and on `ubuntu-latest, current Node`, `install (ubuntu-latest)` |
-| A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks` and `journeys` on `macos-latest` and `windows-latest`, `install (windows-latest)` |
+| A pull request that is not a draft: opened, pushed to, reopened or marked ready for review | `checks` and `journeys` on `macos-latest` and `windows-latest`, `install (macos-latest)` and `install (windows-latest)` |
 | A run started by hand (`gh workflow run CI --ref <branch>`) | All of them |
 | The nightly schedule, 23:15 UTC on `main` | `checks` and `journeys` on `ubuntu-latest` and on `ubuntu-latest, current Node`, so a test that breaks in the last hour before midnight UTC fails there first |
 
@@ -97,7 +97,7 @@ The steps:
 | Windows desktop tests (Windows only) | `ATTACHE_TEST_REAL_DESKTOP=1 pnpm vitest run apps/service/test/windows-desktop-real.test.ts` |
 | Browser journeys (the `journeys` job) | `npx playwright install chrome` once, then `pnpm e2e` |
 
-Separate jobs, `install (ubuntu-latest)` and `install (windows-latest)`, run the install test (see "Install test" below) on the minimum supported Node and upload `test-results/install-results.json`.
+Separate jobs, `install (ubuntu-latest)`, `install (macos-latest)` and `install (windows-latest)`, run the install test (see "Install test" below) on the minimum supported Node and upload `test-results/install-results.json`.
 When a check fails, the install test copies the installed service's logs (`service.log`, `service.err.log`, `service.out.log`) to `test-results/install-logs/` before it removes the state folder, and the job uploads them with the results.
 
 Every check runs even when an earlier one fails, so a run lists all failures at once.
@@ -107,6 +107,7 @@ pnpm comes from `packageManager` in `package.json`, so CI and a local checkout u
 `.gitattributes` checks every file out with LF line endings, Windows included, so fixtures are the same bytes on every platform.
 Tests run git with an empty global configuration (`apps/service/test/setup-env.ts`), as on a fresh computer, so a step that needs the developer's own git identity fails locally as it would on CI.
 The e2e stack (`tests/e2e/stack.ts`) starts its services and fixture server on ports the OS picks, so several checkouts on one computer can run `pnpm e2e` at the same time.
+Every journey runs the bundled service, which is a development install and so shows Updates as unavailable, except the Updates journeys: `startStack({ updates })` runs `tests/e2e/update-service.ts` instead, the service from source as a release install, with the test key, a local release server and an installer runner that only records what it is asked.
 Linux has no Georgia, the headings' font, so on Linux the browser journeys start Chrome with `FONTCONFIG_FILE` set to `tests/e2e/fonts/fonts.conf`, which draws Georgia with the bundled, metric-compatible Gelasio (`tests/e2e/fonts.ts`).
 Headings then wrap and overflow as on macOS and Windows, so a layout bug at a narrow width fails on Linux too; the `type:` journey in `shell.spec.ts` checks the mapping.
 Test services keep their state, Brain and Harness home in folders whose names have a space and non-ASCII letters (`testFolder` in `apps/service/test/integration/harness.ts`), so every suite covers such paths.
@@ -158,9 +159,17 @@ The owner's real set lives in their Brain; run `attache evaluate-recall` against
 ## Release
 
 ```sh
-node scripts/build-release.mjs --version 0.1.0                        # for this computer
-node scripts/build-release.mjs --version 0.1.0 --target windows-x64   # macos-arm64, linux-x64 or windows-x64
+node scripts/release-signing.mjs keygen key.pem public.pem             # a test key pair, once
+node scripts/build-release.mjs --version 0.1.0 --signing-key key.pem --public-key public.pem                        # for this computer
+node scripts/build-release.mjs --version 0.1.0 --signing-key key.pem --public-key public.pem --target windows-x64   # macos-arm64, linux-x64 or windows-x64
 ```
+
+Every release is signed (ADR 0007), so the build needs a key pair.
+The public key is a build input: `--public-key` is built into the service bundle as a constant (`apps/service/build.mjs` defines `process.env.ATTACHE_RELEASE_PUBLIC_KEY`), and the installed release checks every later release with it.
+`--signing-key` must belong to that public key; the build refuses a pair that does not match before it starts.
+Test builds use a test key made by the signing tool; the release workflow uses the real one.
+A bundle built without a public key, as `pnpm build` makes for development and the browser journeys, holds no key and accepts no release.
+`--notes <file.md>` puts the release notes into the manifest, and `--next-public-key <file>` names the key that signs the following releases.
 
 macOS and Linux build every target; Windows builds only its own, because a Windows file system cannot mark the macOS and Linux programs executable.
 Produces in `release/0.1.0/`:
@@ -171,7 +180,62 @@ Produces in `release/0.1.0/`:
   Its plain-ASCII batch header hands a PowerShell script (as `-EncodedCommand`) the zip's byte offset; the script copies the zip out, unpacks it with .NET and runs `install.ps1`.
 - `attache-0.1.0-<target>.tar.gz` (macOS, Linux) or `attache-0.1.0-windows-x64.zip` — the same release as a folder with `install.sh`, or `install.cmd` and `install.ps1`.
   `scripts/zip.mjs` writes the zip, so no host needs a zip tool.
-- `SHA256SUMS`, covering every artifact built into the folder.
+- `attache-0.1.0-manifest.json` — the release manifest: the version, its Update channel (Beta for a `-beta.N` version, otherwise Stable), the publish time, the release notes in Markdown, and per target the archive's name, size and SHA-256, and optionally the next public key (`apps/service/src/release/manifest.ts`).
+- `attache-0.1.0-manifest.json.sig` — an Ed25519 signature over the manifest's exact bytes, in base64.
+- `SHA256SUMS`, covering every file above.
+
+Building another target into the same folder writes the manifest, its signature and every one-step installer again (`scripts/release-seal.mjs`), so they always cover every archive in the folder.
+Each one-step installer carries the manifest, its signature and the archive after its header, and unpacks all three into the temporary folder it installs from.
+Run over an existing install, `install.sh` and `install.ps1` first have the installed version run `attache verify-release <folder> --version <v> --target <t>` on that folder, and stop with nothing changed when the signature or the archive's checksum does not match.
+A version from before signed releases cannot run that command, so the installer says so and installs without the check; a first install has nothing to check against.
+`ATTACHE_RELEASE_DIR` names another folder holding the manifest, signature and archive, for an installer run from a release unpacked elsewhere.
+
+### Publishing a release
+
+Releases are published by CI, never from a laptop: pushing a tag `v<version>` runs `.github/workflows/release.yml`.
+Its header says what each job does; in short, it refuses before building, builds every target on Linux, signs in the protected `release` environment and creates the GitHub release.
+
+1. Write the release notes as a new section `## <version>` at the top of `CHANGELOG.md`, for owners and in the glossary's words.
+   The workflow copies that section, unchanged, into the GitHub release and into the signed manifest, which the Dashboard shows under What changed.
+2. Bump the version in a commit: `version` in `package.json` (the one the release build reads and the workflow checks the tag against), and the same number in `apps/service/package.json`, `apps/web/package.json`, `packages/contracts/package.json` and the fallback in `apps/service/src/core/version.ts`.
+3. Merge it to `main`, then start the full CI run on that commit: `gh workflow run ci.yml --ref main`.
+   Only a run started by hand runs every job on the commit itself, the install test on Linux, macOS and Windows included; a push runs the Linux jobs only, and a pull request runs macOS and Windows on the commit it would merge.
+4. When that run has passed, tag the same commit and push the tag: `git tag v0.7.0-beta.1 <commit> && git push origin v0.7.0-beta.1`.
+5. With a required reviewer on the `release` environment, approve the `seal` job in the run; the `publish` job then creates the release.
+
+`scripts/release-gate.mjs` refuses, each with a message saying what to do: a tag that is not `v` followed by the version in `package.json`, a version that is neither `x.y.z` nor `x.y.z-beta.N`, a version without a section in `CHANGELOG.md` or with an empty one, a missing `.github/release-public-key.pem`, and a commit with no CI run started by hand on it whose jobs all passed, none skipped.
+After fixing the cause, re-run the workflow run (Re-run all jobs); the tag stays where it is unless the fix needed a new commit, which needs a new version and tag.
+A tag `vx.y.z-beta.N` makes a GitHub release marked as a pre-release, a Beta release; a tag `vx.y.z` makes a Stable release marked Latest.
+Each release holds the three one-step installers, the three archives, the manifest, its signature and `SHA256SUMS`.
+
+The signing key is the `RELEASE_SIGNING_KEY` secret of the `release` environment, which only tags `v*` may use, so a branch's workflow can never read it.
+The build job builds the archives unsealed (`build-release.mjs --unsealed`), with the committed public key built in and without the signing key; the seal job writes and signs the manifest (`release-signing.mjs seal`), verifies the result with the signing tool, and deletes the key file before anything else runs, and the publish job verifies again against the committed public key.
+
+A dry run proves the workflow without publishing.
+A push to any branch that changes the release machinery (the `paths` in the workflow: the workflow itself, `CHANGELOG.md`, the release scripts, `apps/service/src/release/`) starts one, and `gh workflow run release.yml --ref <branch> [-f version=0.7.0-beta.1]` starts one by hand; GitHub only offers that for a workflow that is on `main`.
+It builds the version given (by default the one in `package.json`) with a throwaway key pair made for the run, seals and verifies it outside the `release` environment, and keeps the sealed release as the run's `release` artifact for a day.
+What would refuse a real release shows as warnings in the run's summary instead of failing it.
+The throwaway signing key is deleted from the run once used.
+
+The key is made once, by hand: `bash scripts/release-key-wizard.sh` makes the key pair, creates the protected `release` environment (tags `v*` only, optionally your approval before each release is signed), stores the signing key as its secret, waits until you have an offline backup, deletes this computer's copy and commits the public key at `.github/release-public-key.pem` (added with `--force`, since `*.pem` is ignored).
+Never replace that key: installed Machines would refuse every later release.
+To change it, rotate it with a release whose manifest names the next key (`--next-public-key`, see below).
+The seal job does that while `.github/release-next-public-key.pem` is committed (with `--force`): every release it signs then names that key, and its verify step refuses a manifest that does not.
+
+### Signing tool
+
+`scripts/release-signing.mjs` makes a key pair, signs a manifest and verifies a release, with the same code the release build and the installed service run (`apps/service/src/release/`) and Node's built-in Ed25519.
+
+```sh
+node scripts/release-signing.mjs keygen key.pem public.pem                          # never overwrites an existing key
+node scripts/release-signing.mjs sign release/0.1.0/attache-0.1.0-manifest.json --key key.pem
+node scripts/release-signing.mjs seal release/0.1.0 --version 0.1.0 --key key.pem --public-key public.pem [--notes notes.md]   # archives built with --unsealed
+node scripts/release-signing.mjs verify release/0.1.0 --public-key public.pem [--targets macos-arm64,linux-x64,windows-x64]   # the signature, then every archive the manifest names
+```
+
+Keys are PEM files: PKCS #8 for the signing key, SPKI for the public key, so `openssl` reads them too.
+`*.pem` files are ignored by git, so a signing key never lands in a commit by accident.
+A manifest signed with a key the Machine trusts may name the next public key; the Machine then keeps it in `release-keys.json` in its state folder and accepts releases signed with it, which is how the key rotates without a manual install.
 
 Targets are listed in `scripts/release-targets.mjs`, the one-step installers' headers in `scripts/release-installers.mjs`.
 The build downloads the official Node runtime of `BUNDLED_NODE_VERSION` (`scripts/release-targets.mjs`) for the target from nodejs.org (the tarball for macOS and Linux, `win-x64/node.exe` for Windows), verifies it against `SHASUMS256.txt`, and bundles it.
@@ -182,11 +246,14 @@ Artifacts are unsigned; notarisation is an external step (see the acceptance rep
 
 ## Install test
 
-`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source.
-It then installs, reinstalls, upgrades, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
-It checks that the service starts at login and comes back after a crash, that hooks keep working across the upgrade, and that uninstall leaves every file the owner had before Attache as it was.
+`node scripts/test-install.mjs --from 0.1.0 --to 0.1.1` builds both releases for this computer from the current source, signed with a test key it makes with the signing tool.
+It checks that the installed release verifies a release signed with that key and refuses one signed with another, and that installers carrying a manifest or an archive changed after signing are refused with nothing on the Machine changed (`scripts/install-test/signed-releases.mjs`).
+It then installs, reinstalls, installs a newer release over the old one, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
+It checks that the service starts at login and comes back after a crash, that hooks keep working across the newer release's install, and that uninstall leaves every file the owner had before Attache as it was.
+It also builds a third release (`--next`, by default `--to` with its last number raised by one) and runs `attache update` against a local stand-in for GitHub Releases (`scripts/install-test/release-server.mjs`; the installer passes `ATTACHE_RELEASE_FEED_URL` on to the service definition).
+That scenario (`scripts/install-test/update.mjs`, checks with id `update`) refuses an archive changed after signing with nothing changed, then installs the newer release unattended and checks the outcome record, the Updates status, the kept configuration and data, that the installer stopped the service before its pre-Update backup, and that only the current and previous versions remain; on Windows a folder a running program holds stays whole.
 What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
-The CI jobs `install (ubuntu-latest)` and `install (windows-latest)` run it on Linux and Windows.
+The CI jobs `install (ubuntu-latest)`, `install (macos-latest)` and `install (windows-latest)` run it on Linux, macOS and Windows.
 On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.
 The GitHub runner's account is an administrator, so the test cannot show that registering the logon task needs no administrator rights; that is checked by hand on a Windows machine.
 A CI job has no login session, so the job turns on lingering for the runner user to get a systemd user manager.

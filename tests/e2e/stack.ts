@@ -17,9 +17,21 @@ import { meetingCapture } from "../../apps/service/test/fixtures/meeting-capture
 
 export const ROOT = resolve(import.meta.dirname, "../..");
 const BUNDLE = join(ROOT, "apps/service/dist/attache-service.mjs");
+/** The service from source as a release install runs it, with a fake installer runner (TEST-ONLY). */
+const UPDATE_SERVICE = join(ROOT, "tests/e2e/update-service.ts");
 const NODE = process.execPath;
 /** Vite's own entry, run with this Node: `npx` is a batch file on Windows, which Node does not start without a shell. */
 const VITE = join(ROOT, "apps/web/node_modules/vite/bin/vite.js");
+
+/**
+ * A stack whose service updates itself as a release install does (`update-service.ts`): it runs `version`, reads
+ * releases from `feedUrl` and trusts `publicKey`, and its installer runner only records what it is asked.
+ */
+export interface UpdatesOptions {
+  feedUrl: string;
+  publicKey: string;
+  version: string;
+}
 
 export interface Stack {
   /** The service's address; the OS picks its port, so several runs on one machine never collide. */
@@ -33,19 +45,29 @@ export interface Stack {
   agentHome: string;
   pairUrl(): string;
   stopService(): Promise<void>;
-  startService(): Promise<void>;
+  /**
+   * Start the service again; with Updates, on `version` when named, as the installer of an Update does, and reading
+   * Brain format `readsBrainFormat` from now on when named (a later release, ADR 0008).
+   */
+  startService(opts?: { version?: string; readsBrainFormat?: number }): Promise<void>;
   stop(): Promise<void>;
 }
 
-function waitForLine(child: ChildProcess, re: RegExp, timeoutMs = 15_000): Promise<string> {
+/**
+ * The first match of `re` in what `child` prints; fails as soon as `child` ends without printing it. No timer of its
+ * own: while other test runs share the computer, starting Node alone can take many seconds (issue #9), so a fixed
+ * limit gave up on a process that was still starting. The hook's own timeout still bounds the wait.
+ */
+function waitForLine(child: ChildProcess, re: RegExp): Promise<string> {
   return new Promise((res, rej) => {
     let buf = "";
-    const t = setTimeout(() => rej(new Error(`timeout waiting for ${re}: ${buf}`)), timeoutMs);
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => rej(new Error(`the process ended (${code ?? signal}) without printing ${re}: ${buf}`));
+    child.once("close", ended);
     child.stdout!.on("data", (d) => {
       buf += String(d);
       const m = re.exec(buf);
       if (m) {
-        clearTimeout(t);
+        child.off("close", ended);
         res(m[1] ?? m[0]);
       }
     });
@@ -65,7 +87,7 @@ export function makeVault(dir: string) {
   writeFileSync(join(dir, "People/Priya Shah.md"), "# Priya Shah\n\nEngineering manager for billing. Prefers written updates on Mondays.\n");
 }
 
-export async function startStack(): Promise<Stack> {
+export async function startStack(opts: { updates?: UpdatesOptions } = {}): Promise<Stack> {
   // A space and non-ASCII letters in every path, as in many owners' home folders.
   const stateDir = mkdtempSync(join(tmpdir(), "attache-e2e-state æøå-"));
   const base = mkdtempSync(join(tmpdir(), "attache-e2e æøå-"));
@@ -94,8 +116,17 @@ export async function startStack(): Promise<Stack> {
   let service: ChildProcess | null = null;
   // The first start asks the OS for a free port; a restart reuses it, so the paired browser keeps its origin.
   let port = 0;
-  const startService = async () => {
-    service = spawn(NODE, [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], { env, stdio: ["ignore", "pipe", "inherit"] });
+  let version = opts.updates?.version;
+  let readsBrainFormat: number | undefined;
+  const command = () =>
+    opts.updates
+      ? { args: [UPDATE_SERVICE, "--state-dir", stateDir, "--port", String(port), "--prefix", join(base, "install"), "--requests", installRequestsFile(stateDir), ...(readsBrainFormat ? ["--reads-brain-format", String(readsBrainFormat)] : [])], env: { ...env, ATTACHE_RELEASE_FEED_URL: opts.updates.feedUrl, ATTACHE_RELEASE_PUBLIC_KEY: opts.updates.publicKey, ATTACHE_VERSION: version! } }
+      : { args: [BUNDLE, "serve", "--state-dir", stateDir, "--port", String(port)], env };
+  const startService = async (start: { version?: string; readsBrainFormat?: number } = {}) => {
+    version = start.version ?? version;
+    readsBrainFormat = start.readsBrainFormat ?? readsBrainFormat;
+    const { args, env: serviceEnv } = command();
+    service = spawn(NODE, args, { env: serviceEnv, stdio: ["ignore", "pipe", "inherit"] });
     await waitForLine(service, /attache service listening/);
     port = boundPort(stateDir);
   };
@@ -183,6 +214,19 @@ export function endApproval(stack: Stack, actionId: string) {
   } finally {
     db.close();
   }
+}
+
+/** Where the Updates stack's fake installer runner records what it is asked: one line of JSON per request. */
+const installRequestsFile = (stateDir: string) => join(stateDir, "e2e-install-requests.jsonl");
+
+/** What the Updater handed the fake installer runner, oldest first: the version each request installs. */
+export function installRequests(stack: Stack): string[] {
+  const file = installRequestsFile(stack.stateDir);
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => (JSON.parse(line) as { to: string }).to);
 }
 
 export function readRuntime(stateDir: string) {

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useRefreshAnnouncement } from "../count-announcement.ts";
 import { SignalsContext, useNavSignals } from "../nav-signals.ts";
-import { screenAt } from "../routes.ts";
+import { screenAt, settingsHref } from "../routes.ts";
 import { focusHomeSearch } from "../search-launch.ts";
 import { useShortcuts } from "../shortcuts.ts";
 import { useTabSignal } from "../tab-signal.ts";
@@ -12,6 +12,7 @@ import { Masthead } from "./Masthead.tsx";
 import { MoreSheet } from "./MoreSheet.tsx";
 import { SearchPalette } from "./SearchPalette.tsx";
 import { ShortcutSheet } from "./ShortcutSheet.tsx";
+import { UpdateLine } from "./UpdateLine.tsx";
 import { ErrorBoundary } from "./ui.tsx";
 
 /** The skip link moves focus to the page without putting `#main` in the address. */
@@ -22,9 +23,9 @@ function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
 
 /**
  * The frame around every screen: the masthead (desktop) or the bottom bar (narrow), the Connection banner under it on
- * every screen but Connections, the page in a centred reading column, the More and shortcut sheets and the search
- * palette. It asks for the count and the Connections status once and shares them with the screens (`useSignals()`,
- * `useConnections()`), and the browser tab's title and favicon follow the count.
+ * every screen but Connections, then the line about Updates (`UpdateLine`), the page in a centred reading column, the
+ * More and shortcut sheets and the search palette. It asks for the count and the Connections status once and shares
+ * them with the screens (`useSignals()`, `useConnections()`), and the browser tab's title and favicon follow the count.
  */
 export function Shell({ children, path }: { children: ReactNode; path: string }) {
   const current = screenAt(path);
@@ -63,6 +64,8 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <Masthead current={current} signals={signals} onSearch={search} connections={connections.status} />
       {current !== "connections" && <ConnectionBanner view={connections} />}
       <ConnectionAnnouncement view={connections} shown={current !== "connections"} />
+      {/* After the Connection banner when both show (spec #130); Settings' Updates section says the rest itself. */}
+      <UpdateLine inUpdatesSection={path === settingsHref("updates")} />
       {/* Present from the start and empty, so what a Source refresh changed is read out when it is written. */}
       <p className="sr-only" role="status" data-count-announcement>
         {announcement}

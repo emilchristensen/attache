@@ -150,6 +150,7 @@ export async function startServer(app: App, opts: { port: number; host?: string 
     server.listen(opts.port, opts.host ?? "127.0.0.1", () => resolveListen());
   });
   port = (server.address() as AddressInfo).port;
+  app.listening(port);
   return {
     server,
     port,

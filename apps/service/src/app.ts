@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView } from "@attache/contracts";
+import type { ConnectionKind, FeatureId, HarnessUninstallResult, JobView, ReplicationPause } from "@attache/contracts";
 import { openDb, type Db, nowIso } from "./core/db.ts";
 import { createLogger, type Logger } from "./core/log.ts";
 import { defaultLocksDir, resolvePaths, type ServicePaths } from "./core/paths.ts";
@@ -8,7 +8,7 @@ import { MachineStore } from "./core/machine.ts";
 import { AutoAcceptStore } from "./agents/auto-accept.ts";
 import { createSecretStore, type SecretStore } from "./platform/secret-store/index.ts";
 import { currentOs } from "./platform/os.ts";
-import { DesktopNotifications, notifierFor } from "./platform/notifier/index.ts";
+import { DesktopNotifications, notifierFor, type Notifier } from "./platform/notifier/index.ts";
 import { ConfigStore } from "./core/config.ts";
 import { retireVoice } from "./core/retire-voice.ts";
 import { MemoryStore } from "./memory/store.ts";
@@ -32,8 +32,10 @@ import { agentAdapter } from "./connectors/agent.ts";
 import { harnessAdapters, type HarnessAdapter } from "./agents/harness-adapters.ts";
 import { systemClock, type Clock, type TimerHandle } from "./replication/clock.ts";
 import { Replication } from "./replication/replication.ts";
+import { pausedNotification } from "./replication/pause-notice.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
+import type { BrainFormatSupport } from "./replication/brain-format.ts";
 import type { GitHubAccess } from "./replication/github.ts";
 import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
@@ -43,6 +45,15 @@ import { CaptureArrivals } from "./consolidation/arrivals.ts";
 import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
 import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
+import { VERSION } from "./core/version.ts";
+import { Updater } from "./updates/updater.ts";
+import { ReleaseFeed, releaseFeedUrl } from "./updates/release-feed.ts";
+import { canUpdate, releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
+import type { InstallerRunner } from "./updates/installer-runner.ts";
+import { platformInstallerRunner } from "./platform/installer-runner.ts";
+import { releaseTarget } from "./platform/release-target.ts";
+import { trustedReleaseKeys } from "./release/trusted-keys.ts";
+import { UPDATES_EVENT, type UpdatesChangedEvent } from "@attache/contracts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -56,9 +67,23 @@ export interface AppOptions {
   meaning?: Partial<MeaningOptions>;
   /** Lease commits per generation of the Reader lease; tests make it small to see the history stay bounded. */
   leaseGenerationCommits?: number;
+  /** The Attache version this Machine records in the Brain; `VERSION` when left out. Tests name one to play a Machine before and after an Update. */
+  version?: string;
+  /** The Brain formats this Machine reads and writes; this release's when left out. Tests name a later release's (ADR 0008). */
+  brainFormat?: BrainFormatSupport;
+  /**
+   * Where the Updater reads releases, the release install it updates and what starts an installer; by default
+   * `releaseFeedUrl()`, the install the service script runs from, and this operating system's installer runner.
+   */
+  updates?: { feedUrl?: string; releaseInstall?: ReleaseInstall | null; installerRunner?: InstallerRunner };
+  /**
+   * Where desktop notifications go: this operating system's when left out, which `ATTACHE_NO_NOTIFY=1` switches off.
+   * Tests pass one that records what it is handed; that switch does not apply to it.
+   */
+  notifier?: Notifier;
 }
 
-export const VERSION = process.env.ATTACHE_VERSION ?? "0.6.0";
+export { VERSION };
 /** How often housekeeping runs at the latest: stale drafts expire and snoozes end within this long of their time. Approvals end on time, see `untilNextHousekeeping`. */
 const HOUSEKEEPING_EVERY_MS = 30_000;
 
@@ -91,6 +116,8 @@ export class App {
   readonly proposals: Proposals;
   /** Meeting captures that arrive in the Brain on this Machine, each consolidated once. */
   readonly captures: CaptureArrivals;
+  /** Finds and installs Updates for this Machine. */
+  readonly updater: Updater;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -102,6 +129,13 @@ export class App {
     this.streams.delete(clientId);
   }
   readonly startedAt = nowIso();
+  /** The port the HTTP API answers on, once it listens. */
+  private httpPort: number | null = null;
+
+  /** The HTTP API listens on `port`: the installer of an Update keeps it. */
+  listening(port: number): void {
+    this.httpPort = port;
+  }
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
@@ -116,7 +150,7 @@ export class App {
     this.log = createLogger(this.paths.logDir, { quiet: opts.quiet ?? false });
     this.db = openDb(this.paths.dbFile);
     this.secrets = createSecretStore({ os: currentOs(), stateDir: this.paths.stateDir, secretsFile: this.paths.secretsFile, instance: this.instance });
-    this.notifications = new DesktopNotifications({ notifier: notifierFor(currentOs(), this.instance), log: this.log });
+    this.notifications = opts.notifier ? new DesktopNotifications({ notifier: opts.notifier, log: this.log, env: {} }) : new DesktopNotifications({ notifier: notifierFor(currentOs(), this.instance), log: this.log });
     void retireVoice({ paths: this.paths, db: this.db, secrets: this.secrets, log: this.log }).catch((e) => this.log.error("could not remove voice leftovers", { error: (e as Error).message }));
     this.config = new ConfigStore(this.db);
     this.machine = new MachineStore(this.db);
@@ -128,16 +162,21 @@ export class App {
     );
     this.clock = opts.clock ?? systemClock;
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
+    // The version this Machine runs: the process's own, unless a test plays an Update.
+    const version = opts.version ?? VERSION;
     this.replication = new Replication({
       db: this.db,
       log: this.log,
       clock: this.clock,
       seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
+      version,
+      ...(opts.brainFormat ? { brainFormat: opts.brainFormat } : {}),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,
       onChange: () => this.replicationChanged(),
+      onPaused: (pause) => this.replicationPaused(pause),
       // Loaded when needed: the backup module imports this one.
       backUpFolder: async (folder) => (await (await import("./backup.ts")).createBackup(this, { dataFolder: folder, label: "before-join" })).path,
       lastSourceRefresh: () => lastSourceRefresh(this.db),
@@ -202,6 +241,27 @@ export class App {
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db, () => this.clock.now());
+    const releaseInstall = opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version);
+    this.updater = new Updater({
+      version,
+      stateDir: this.paths.stateDir,
+      log: this.log,
+      clock: this.clock,
+      settings: { get: () => this.config.get().updates, set: (updates) => this.config.set({ ...this.config.get(), updates }) },
+      changed: () => this.bus.emit("event", { type: UPDATES_EVENT } satisfies UpdatesChangedEvent),
+      feed: new ReleaseFeed(opts.updates?.feedUrl ?? releaseFeedUrl(), `Attache/${version}`),
+      updating: () => canUpdate({ install: releaseInstall, target: releaseTarget(), trustedKeys: trustedReleaseKeys(this.paths.stateDir) }),
+      runner: opts.updates?.installerRunner ?? platformInstallerRunner(this.log),
+      port: () => this.httpPort,
+      jobs: {
+        count: () => this.jobs.countRunning(),
+        onChange: (listener) => {
+          this.jobs.events.on("event", listener);
+          return () => this.jobs.events.off("event", listener);
+        },
+      },
+      notify: (title, body) => this.notifyNow(title, body),
+    });
     this.wire();
     registerRunners(this);
   }
@@ -350,9 +410,12 @@ export class App {
   /**
    * Open the configured data folder and make sure it is registered as the builtin vault source.
    * `adopt` is for a folder the owner just chose or joined: the meeting captures already in it are not consolidated.
+   * A Brain in a format this Machine cannot read (ADR 0008) is opened without writing anything that replicates into it:
+   * no README, no Inbox items, no Proposals carried over. Those wait for an open once this Machine is updated.
    */
   openDataFolder(path: string, opts: { adopt?: boolean } = {}): { created: string[] } {
-    const r = this.memory.open(path);
+    const paused = this.replication.formatHeld(path);
+    const r = this.memory.open(path, { paused });
     const existing = this.connections.record("vault-data");
     const now = nowIso();
     if (!existing) {
@@ -362,8 +425,8 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
-    this.inbox.reconcile();
-    this.proposals.open();
+    if (!paused) this.inbox.reconcile();
+    this.proposals.open({ paused });
     this.captures.opened({ adopt: opts.adopt ?? false });
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {
@@ -405,6 +468,27 @@ export class App {
     this.bus.emit("event", { type: "replication.changed" });
     // Switching Replication on or off changes who the Reader is.
     this.bus.emit("event", { type: "reader.changed" });
+  }
+
+  /**
+   * Replication paused on a Brain format this Machine cannot read (#143): ask for an Update at once (unless Updates are
+   * Off), then tell the owner once, as for a rolled-back Update: not gated by the switch for urgent items nor by quiet hours.
+   */
+  private replicationPaused(pause: ReplicationPause) {
+    this.updater.checkSoon();
+    const { title, body } = pausedNotification(pause, this.updater.view());
+    void this.notifyNow(title, body);
+  }
+
+  /**
+   * Raise a system notification now: an Update or Replication telling the owner what Attache did to itself, which is not
+   * held for quiet hours. Resolves whether it was shown; a failure is logged, never thrown.
+   */
+  private notifyNow(title: string, body: string): Promise<boolean> {
+    return this.notifications.notify(title, body, { quietHours: null }).catch((e: unknown) => {
+      this.log.warn("could not raise a system notification", { title, error: (e as Error).message });
+      return false;
+    });
   }
 
   /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */
@@ -474,12 +558,23 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
+    this.startUpdater();
     this.scheduleHousekeeping();
     this.bus.on("event", this.onAttentionChanged);
     void this.refreshModel();
   }
 
+  private startUpdater() {
+    try {
+      this.updater.start();
+    } catch (e) {
+      // An unreadable record of the last Update must not keep the service from starting.
+      this.log.error("could not read what the last Update did", { error: (e as Error).message });
+    }
+  }
+
   async stop() {
+    this.updater.stop();
     this.bus.off("event", this.onAttentionChanged);
     if (this.housekeeping) this.clock.clearTimeout(this.housekeeping);
     this.housekeeping = null;

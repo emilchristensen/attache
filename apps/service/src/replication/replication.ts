@@ -1,4 +1,4 @@
-import type { ReplicationView } from "@attache/contracts";
+import type { ReplicationPause, ReplicationView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { Db } from "../core/db.ts";
 import type { MachineIdentity } from "../core/machine.ts";
@@ -12,6 +12,7 @@ import { cloneBrain, isEmptyFolder, notEmptyRefusal, prepareRepository, refusalO
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
 import { ReplicatedMachines } from "./machines.ts";
 import { isMachineRecordPath, MachineRecords } from "./machine-records.ts";
+import { BRAIN_FORMAT_FILE, brainFormatHold, nextBrainFormat, readBrainFormat, readBrainFormatFile, RELEASE_BRAIN_FORMAT, writeBrainFormatFile, type BrainFormatSupport } from "./brain-format.ts";
 import { ReaderLease } from "./reader-lease.ts";
 import type { LeaseRecord } from "../reader/lease.ts";
 import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
@@ -32,6 +33,10 @@ export interface ReplicationDeps {
   clock: Clock;
   seams: ReplicationSeams;
   machine: () => MachineIdentity;
+  /** The Attache version this Machine runs, which its Machine record carries. */
+  version: string;
+  /** The Brain formats this Machine reads and writes; `RELEASE_BRAIN_FORMAT` when left out. Tests name a later release's. */
+  brainFormat?: BrainFormatSupport;
   /** The data folder that is open now, if any. */
   dataRoot: () => string | null;
   /** Change-log entries after `seq`, to describe a commit. */
@@ -40,6 +45,12 @@ export interface ReplicationDeps {
   latestSeq: () => number;
   /** Called whenever the status may have changed. */
   onChange?: () => void;
+  /**
+   * A pause began: the Brain is in a format this Machine cannot read, and it waits for an Update (ADR 0008). Called
+   * once per pause (`paused_notified_format`, kept until Replication is up to date again), so neither a restart nor a
+   * failure of another kind in between calls it again.
+   */
+  onPaused?: (pause: ReplicationPause) => void;
   /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
   backUpFolder: (folder: string) => Promise<string>;
   /** This Machine's last Source refresh of every source, which the Reader lease carries to the others. */
@@ -52,13 +63,13 @@ export interface ReplicationDeps {
   leaseGenerationCommits?: number;
 }
 
-type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean };
+type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean; pausedFormat?: number };
 
-const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null, upToDateAt: null });
+const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null, upToDateAt: null, pause: null });
 
 /**
  * Keeps this Machine's copy of the Brain the same as the others through a git
- * remote: commit, fetch, merge, push. It merges and fast-forwards only; it
+ * remote: fetch, commit, merge, push. It merges and fast-forwards only; it
  * never rebases or force-pushes. A failure is reported in the status and
  * retried; it never reaches the save that triggered it.
  */
@@ -69,6 +80,7 @@ export class Replication {
   /** Which Machine is the Reader, shared through the repository outside the Brain's history. */
   private readonly lease: ReaderLease;
   private readonly deps: ReplicationDeps;
+  private readonly brainFormat: BrainFormatSupport;
   private started = false;
   /** Wall-clock time the service started, compared with lock files' times (not the Clock, which drives timers). */
   private startedAtMs = Date.now();
@@ -85,6 +97,7 @@ export class Replication {
 
   constructor(deps: ReplicationDeps) {
     this.deps = deps;
+    this.brainFormat = deps.brainFormat ?? RELEASE_BRAIN_FORMAT;
     this.settings = new ReplicationSettingsStore(deps.db);
     this.lease = new ReaderLease({
       log: deps.log,
@@ -101,6 +114,9 @@ export class Replication {
     this.machines = new ReplicatedMachines({
       root: () => this.activeRoot(),
       machine: deps.machine,
+      version: deps.version,
+      readsBrainFormat: this.brainFormat.reads,
+      paused: () => this.settings.get()?.status === "paused",
       clock: deps.clock,
       lastChangeBy: (root, id) => this.repo(root).lastChangeBy(id),
       written: () => {
@@ -116,7 +132,7 @@ export class Replication {
     return s && !this.folderMoved(s) ? s.dataFolder : null;
   }
 
-  /** This Machine was renamed: its record in the Brain says the new name from the next commit on. */
+  /** This Machine was renamed: its record in the Brain says the new name from the next commit on (once it is no longer paused). */
   machineRenamed(): void {
     this.machines.recordThisMachine();
   }
@@ -139,7 +155,9 @@ export class Replication {
     const s = this.settings.get();
     if (!s) return OFF;
     const moved = this.folderMoved(s);
-    return { status: moved ? "blocked" : s.status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt };
+    const status = moved ? "blocked" : s.status;
+    const pause = status === "paused" && s.pausedFormat !== null ? { reason: "newer_brain_format" as const, brainFormat: s.pausedFormat, readsBrainFormat: this.brainFormat.reads } : null;
+    return { status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt, pause };
   }
 
   /** The Reader lease as this Machine last heard it; null while Replication is off or no Machine holds it yet. */
@@ -174,7 +192,7 @@ export class Replication {
     this.started = true;
     this.startedAtMs = Date.now();
     if (!this.settings.get()) return;
-    this.machines.recordThisMachine();
+    // The first check, at once, refreshes this Machine's record, unless Replication is paused.
     this.soon();
     this.arm();
   }
@@ -213,7 +231,7 @@ export class Replication {
     this.noteOutsideEdit();
   }
 
-  /** Commit, fetch, merge and push now. */
+  /** Fetch, commit, merge and push now. */
   async check(): Promise<ReplicationView> {
     await this.cycle();
     return this.view();
@@ -300,13 +318,18 @@ export class Replication {
 
   private async replicate(repo: BrainRepo, s: ReplicationSettings): Promise<Outcome> {
     this.recoverInterrupted(repo, s.dataFolder);
-    const first = this.commitLocal(repo);
-    if (first) return first;
+    const held = await this.holdForFormat(repo, s.remote);
+    if (held) return held;
     const guard = await this.checkRemote(s.remote);
     if (!guard.ok) return { status: guard.status, cause: guard.cause };
     for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
+      // Fetch before writing or committing anything: a check that finds a newer Brain format there must end having changed nothing (ADR 0008).
       await repo.fetch(s.remote);
-      // Saves made while fetching are part of this round too.
+      // Nothing of a Brain in a newer format is merged, and nothing is committed or pushed.
+      const newer = this.formatHold(repo);
+      if (newer) return newer;
+      // A week-old record is written again here, and committed with this check rather than one more after it.
+      if (attempt === 1 && this.machines.refresh(s.dataFolder)) this.deps.onChange?.();
       const refused = this.commitLocal(repo);
       if (refused) return refused;
       const merged = repo.mergeFetched(this.machineRef(), this.deps.clock.now());
@@ -317,6 +340,11 @@ export class Replication {
         return { status: s.status, cause: s.cause };
       }
       if (merged.kind === "merged") this.announce(merged.changed, merged.notices);
+      // Only now, with the other Machines' latest records merged, may the format rise (or be written when missing).
+      if (this.raiseFormat(s.dataFolder)) {
+        const raised = this.commitLocal(repo);
+        if (raised) return raised;
+      }
       if (repo.ahead() === 0) return this.succeeded(false);
       try {
         await repo.push(s.remote);
@@ -342,6 +370,56 @@ export class Replication {
     if (!reverted) return;
     this.deps.log.warn("abandoned a merge that was interrupted; merging again", { folder });
     if (reverted.length) this.announce(reverted, []);
+  }
+
+  /**
+   * A Brain format this Machine cannot read, in its data folder or in what it
+   * last fetched, holds Replication: it then only fetches, so it hears what
+   * the others write, and reports paused until it is updated (ADR 0008).
+   */
+  private async holdForFormat(repo: BrainRepo, remote: string): Promise<Outcome | null> {
+    if (!this.formatHold(repo)) return null;
+    try {
+      await repo.fetch(remote);
+    } catch (e) {
+      if (!(e instanceof GitError)) throw e;
+      this.deps.log.warn("could not fetch while Replication is paused; trying again at the next check", { error: e.cause });
+    }
+    return this.formatHold(repo);
+  }
+
+  /**
+   * Whether `folder` holds a Brain in a format this Machine cannot read, or one whose format record is unreadable:
+   * opening it then writes nothing that replicates (ADR 0008). For the folder Replication is on for, what was last
+   * fetched counts too, or, without git, the pause last recorded; any other folder opens without asking git.
+   */
+  formatHeld(folder: string): boolean {
+    if (brainFormatHold([{ reading: readBrainFormatFile(folder), where: "in this Machine's data folder" }], this.brainFormat.reads)) return true;
+    const s = this.settings.get();
+    if (s?.dataFolder !== folder) return false;
+    if (!gitVersion()) return s.status === "paused";
+    const repo = this.repo(folder);
+    return repo.isRepository() && this.formatHold(repo) !== null;
+  }
+
+  private formatHold(repo: BrainRepo): Outcome | null {
+    return brainFormatHold(
+      [
+        { reading: readBrainFormatFile(repo.root), where: "in this Machine's data folder" },
+        { reading: readBrainFormat(repo.fetchedFile(BRAIN_FORMAT_FILE)), where: "that came from the repository" },
+      ],
+      this.brainFormat.reads,
+    );
+  }
+
+  /** Write the Brain format record when it is missing or every active Machine reads the format this Machine writes. Returns whether it wrote. */
+  private raiseFormat(root: string): boolean {
+    const reading = readBrainFormatFile(root);
+    const next = nextBrainFormat({ reading, support: this.brainFormat, records: new MachineRecords(root).machines(), machine: this.deps.machine().id, now: this.deps.clock.now() });
+    if (!next) return false;
+    writeBrainFormatFile(root, next);
+    if (reading.kind === "format") this.deps.log.info("raised the Brain format: every Machine heard from in the last 30 days reads it", { from: reading.record.format, to: next.format });
+    return true;
   }
 
   private succeeded(pushed: boolean): Outcome {
@@ -384,9 +462,14 @@ export class Replication {
 
   private report(o: Outcome): void {
     const before = this.view();
-    this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false });
+    this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false, pausedFormat: o.pausedFormat ?? null });
     const after = this.view();
     if (before.status !== after.status || before.cause !== after.cause || o.pushed) this.deps.onChange?.();
+    // Once per pause, not per status change: a blocked check in between, or a restart, raises nothing more. Recorded first, so a crash loses the call rather than repeating it.
+    if (after.pause && this.settings.get()?.pausedNotifiedFormat !== after.pause.brainFormat) {
+      this.settings.pauseNotified(after.pause.brainFormat);
+      this.deps.onPaused?.(after.pause);
+    }
   }
 
   private machineRef() {
@@ -431,6 +514,7 @@ export class Replication {
       }
       prepareRepository(git, remote);
       this.machines.recordThisMachine(root);
+      this.raiseFormat(root);
       const repo = new BrainRepo(git, this.deps.seams);
       const machine = this.machineRef();
       const latest = this.deps.latestSeq();
@@ -475,11 +559,14 @@ export class Replication {
       if (!isEmptyFolder(target)) throw await notEmptyRefusal(target, this.deps.backUpFolder, this.deps.log);
       await this.refuseRemote(remote);
       await cloneBrain(remote, target, this.deps.seams);
+      // Read the Brain format before anything opens or writes the folder: a newer one pauses Replication from the join on (ADR 0008).
+      const held = this.formatHold(this.repo(target));
       open(target);
       const at = this.deps.clock.now().toISOString();
       this.settings.enable({ dataFolder: target, remote, enabledAt: at, committedSeq: this.deps.latestSeq(), pushedAt: null });
+      if (held) this.report(held);
       const view = this.switchedOn();
-      // Sent with the next commit, so the other Machines list this one.
+      // Sent with the next commit, so the other Machines list this one; not while paused.
       this.machines.recordThisMachine(target);
       return view;
     });

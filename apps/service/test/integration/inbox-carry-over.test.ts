@@ -1,9 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIGRATIONS } from "../../src/core/db.ts";
+import { databaseBefore } from "../fixtures/old-database.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 import { startTestService, type TestService } from "./harness.ts";
 import { createRemote } from "./machines.ts";
@@ -12,14 +11,6 @@ const running: TestService[] = [];
 afterAll(async () => {
   for (const s of running) await s.stop().catch(() => {});
 });
-
-/** Every migration before the inbox kept its decisions apart: the schema an install had until then. */
-function schemaBeforeReplicatedInbox(db: DatabaseSync) {
-  const next = MIGRATIONS.findIndex((m) => /alter table attention_items add column resolved_at/.test(m));
-  expect(next, "a migration splits decisions from items").toBeGreaterThan(0);
-  for (const m of MIGRATIONS.slice(0, next)) db.exec(m);
-  db.exec(`pragma user_version = ${next}`);
-}
 
 const hour = 3_600_000;
 
@@ -31,8 +22,8 @@ function stateFromBefore(): { stateDir: string; dataDir: string; until: string }
   const now = new Date();
   const at = (ms: number) => new Date(now.getTime() + ms).toISOString();
   const until = at(48 * hour);
-  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
-  schemaBeforeReplicatedInbox(db);
+  // Every migration before the inbox kept its decisions apart: the schema an install had until then.
+  const db = databaseBefore(join(stateDir, "attache.sqlite"), /alter table attention_items add column resolved_at/);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, features: {} };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), at(0));
   const item = db.prepare(

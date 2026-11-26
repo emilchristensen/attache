@@ -1,9 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIGRATIONS } from "../../src/core/db.ts";
+import { databaseBefore } from "../fixtures/old-database.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
 const running: TestService[] = [];
@@ -12,14 +11,6 @@ afterAll(async () => {
 });
 
 const ARCHIVE = "evidence/conversations/0b6f3c1e-chat.md";
-
-/** The schema version an install had while Attache still kept conversations: every migration before the one that drops them. */
-function chatEraSchema(db: DatabaseSync) {
-  const drop = MIGRATIONS.findIndex((m) => /drop table if exists messages/.test(m));
-  expect(drop, "a migration drops the chat tables").toBeGreaterThan(0);
-  for (const m of MIGRATIONS.slice(0, drop)) db.exec(m);
-  db.exec(`pragma user_version = ${drop}`);
-}
 
 /** A state folder and Brain as an install that used the chat left them: feature on, conversations stored, an archive in the Brain. */
 function chatEraState(): { stateDir: string; dataDir: string } {
@@ -30,8 +21,8 @@ function chatEraState(): { stateDir: string; dataDir: string } {
   writeFileSync(join(dataDir, ARCHIVE), "---\ntype: conversation\ntitle: Zephyr rollout\nprovenance: conversation-archive\n---\n\n### user · 2026-10-01\n\nWhen does the Zephyr rollout start?\n\n### assistant · 2026-10-01\n\nThe Zephyr rollout starts on 3 November.\n");
   writeFileSync(join(dataDir, "memory/projects/zephyr.md"), "---\ntype: project\ntitle: Zephyr\n---\n\n# Zephyr\n\n## Current State\n\n- Rollout: starts 3 November\n");
   const now = new Date().toISOString();
-  const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
-  chatEraSchema(db);
+  // The schema an install had while Attache still kept conversations: every migration before the one that drops them.
+  const db = databaseBefore(join(stateDir, "attache.sqlite"), /drop table if exists messages/);
   const config = { schemaVersion: 1, setupCompleted: true, setupStep: 4, dataFolder: dataDir, features: { conversation: true, drafts: false } };
   db.prepare("insert into config (id, json, revision, updated_at) values (1, ?, 1, ?)").run(JSON.stringify(config), now);
   db.prepare("insert into conversations (id, title, created_at, updated_at) values ('0b6f3c1e', 'Zephyr rollout', ?, ?)").run(now, now);

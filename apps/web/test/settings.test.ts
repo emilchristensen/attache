@@ -9,7 +9,7 @@ describe("the Settings section list", () => {
       ["Attache", ["Features", "Schedules and notifications", "Identity"]],
       ["Brain", ["Saving and review", "Meaning-based search", "Backup and export"]],
       ["Machines", ["Machines and Replication", "Paired clients"]],
-      ["Service", ["Service health"]],
+      ["Service", ["Service health", "Updates"]],
     ]);
   });
 

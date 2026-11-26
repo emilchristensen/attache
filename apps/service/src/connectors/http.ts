@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import type { CoverageState } from "@attache/contracts";
 import { redact } from "../core/log.ts";
 
@@ -23,6 +24,14 @@ export interface HttpRequest {
   timeoutMs?: number;
   /** Retries for 429/5xx/network errors on idempotent calls. Writes pass 0. */
   retries?: number;
+  /** "bytes": `data` is the body's exact bytes (a signed file, a download) instead of parsed JSON or text. */
+  responseType?: "bytes";
+  /**
+   * Stream a successful body into this file instead of reading it into memory (a release archive); `data` is the
+   * number of bytes written. With `maxBytes`, writing stops after one byte more than that, so a body that is too
+   * large never fills the disk and still shows as too large. `timeoutMs` then covers the whole body.
+   */
+  saveTo?: { file: string; maxBytes?: number };
 }
 
 export interface HttpResponse<T = unknown> {
@@ -69,6 +78,31 @@ function retryAfter(headers: Headers): number | null {
   return null;
 }
 
+/** Write a response body to a file, at most `maxBytes + 1` bytes of it; resolves with the bytes written. */
+async function saveBody(body: ReadableStream<Uint8Array>, to: { file: string; maxBytes?: number }): Promise<number> {
+  const limit = to.maxBytes === undefined ? Infinity : to.maxBytes + 1;
+  let written = 0;
+  const out = await open(to.file, "w");
+  try {
+    for await (const chunk of body) {
+      const part = chunk.length > limit - written ? chunk.subarray(0, limit - written) : chunk;
+      await out.write(part);
+      written += part.length;
+      // Enough to show the body is too large: leaving the loop cancels the rest of it.
+      if (written >= limit) break;
+    }
+  } finally {
+    await out.close();
+  }
+  return written;
+}
+
+/** A request that failed on the way: cancelled when the caller aborted it, otherwise the network failed (`offline`). */
+function networkFailure(e: unknown, doing: "contacting" | "reading", url: string, signal: AbortSignal | undefined): RemoteError {
+  if (signal?.aborted) return new RemoteError("Cancelled", "error");
+  return new RemoteError(`Network error ${doing} ${new URL(url).host}: ${(e as Error).message}`, "offline");
+}
+
 export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: number; userAgent?: string } = {}): HttpClient {
   const baseDelay = opts.baseDelayMs ?? 500;
   return {
@@ -76,6 +110,8 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
       const retries = req.retries ?? ((req.method ?? "GET") === "GET" ? 3 : 0);
       let attempt = 0;
       for (;;) {
+        // Cancelled, even while the last answer's body was read or its retry waited: no further attempt.
+        if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
         const ctrl = new AbortController();
         const onAbort = () => ctrl.abort();
         opts.signal?.addEventListener("abort", onAbort);
@@ -95,17 +131,37 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
         } catch (e) {
           clearTimeout(timer);
           opts.signal?.removeEventListener("abort", onAbort);
-          if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
-          if (attempt < retries) {
+          const failure = networkFailure(e, "contacting", req.url, opts.signal);
+          if (failure.state === "offline" && attempt < retries) {
             await sleep(baseDelay * 2 ** attempt++, opts.signal);
             continue;
           }
-          throw new RemoteError(`Network error contacting ${new URL(req.url).host}: ${(e as Error).message}`, "offline");
+          throw failure;
         }
-        clearTimeout(timer);
-        opts.signal?.removeEventListener("abort", onAbort);
-        const text = await res.text();
+        if (res.ok && req.saveTo && res.body) {
+          try {
+            const written = await saveBody(res.body, req.saveTo);
+            return { status: res.status, headers: res.headers, data: written as T };
+          } catch (e) {
+            throw networkFailure(e, "reading", req.url, opts.signal);
+          } finally {
+            clearTimeout(timer);
+            opts.signal?.removeEventListener("abort", onAbort);
+          }
+        }
+        let bytes: Buffer;
+        try {
+          bytes = Buffer.from(await res.arrayBuffer());
+        } catch (e) {
+          throw networkFailure(e, "reading", req.url, opts.signal);
+        } finally {
+          clearTimeout(timer);
+          opts.signal?.removeEventListener("abort", onAbort);
+        }
+        // As `Response.text()` decodes: UTF-8, without a leading byte order mark.
+        const text = new TextDecoder().decode(bytes);
         if (res.ok) {
+          if (req.responseType === "bytes") return { status: res.status, headers: res.headers, data: bytes as T };
           let data: unknown = text;
           if (text && (res.headers.get("content-type") ?? "").includes("json")) {
             try {

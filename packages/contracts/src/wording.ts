@@ -1,6 +1,6 @@
 /**
  * Wording the service and the Dashboard both put in front of the owner, kept
- * here so both say a thing the same way.
+ * here so both say a thing the same way. Updates have their own: `update-wording.ts`.
  */
 
 /** A count with its noun in the right number: `1 file`, `2 files`, `0 entries`. */

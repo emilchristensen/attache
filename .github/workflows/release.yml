@@ -1,0 +1,273 @@
+# Publishes a release from a version tag, never from a laptop (spec #130, ADR 0007).
+#
+# Pushing a tag `v<version>` runs four jobs, each with only what it needs:
+# - gate: refuses, before anything is built, a tag that does not match the version in the code (package.json),
+#   a version without a section in CHANGELOG.md, a missing release public key, and a commit without a full
+#   CI run that passed (scripts/release-gate.mjs). A full CI run is one started by hand
+#   (`gh workflow run ci.yml --ref <tag or main>`): only that runs every job of ci.yml, the install test on
+#   Linux, macOS and Windows included, on the commit itself. A push runs only the Linux jobs, and a pull request
+#   runs macOS and Windows on the commit it would merge.
+# - build: builds the three targets on Linux, unsealed, with the committed public key built in. It never sees the signing key.
+# - seal: in the protected `release` environment, the only place the signing key (the environment secret
+#   RELEASE_SIGNING_KEY) is read, writes and signs the manifest with the changelog section as its notes,
+#   writes the one-step installers and SHA256SUMS, and verifies the result with the signing tool.
+# - publish: verifies again and creates the GitHub release with the changelog section as its notes:
+#   a `-beta.N` tag makes a prerelease, a plain tag the Latest release.
+#
+# Every other run is a dry run: one started by hand (`gh workflow run release.yml --ref <branch> [-f version=0.7.0-beta.1]`,
+# once this file is on main, which GitHub requires for a run by hand), and one on a push to any branch that changes
+# the release machinery (the paths below), so a change that breaks the release fails on its branch, not on the next tag.
+# A dry run:
+# the gate reports what would refuse a real release as warnings, the build uses a throwaway key pair made
+# for the run, the seal job runs outside the `release` environment with that throwaway key, and nothing is published.
+# The sealed dry-run release is kept as the run's `release` artifact for a day; the throwaway signing key is
+# deleted from the run once the seal job has used it.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+    # A tag push ignores `paths`; a branch push runs a dry run only when one of these changed.
+    branches: ["**"]
+    paths:
+      - .github/workflows/release.yml
+      - .github/release-public-key.pem
+      - .github/release-next-public-key.pem
+      - CHANGELOG.md
+      - scripts/build-release.mjs
+      - scripts/release-*.mjs
+      - scripts/release-gate/**
+      - scripts/zip.mjs
+      - apps/service/build.mjs
+      - apps/service/src/release/**
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Dry run: the version to build (default: the version in the code)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.gate.outputs.version }}
+      prerelease: ${{ steps.gate.outputs.prerelease }}
+      dry-run: ${{ steps.mode.outputs.dry-run }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
+
+      - name: Real release or dry run
+        id: mode
+        # Only a pushed tag publishes; a run by hand is a dry run even on a tag.
+        run: echo "dry-run=${{ !(github.event_name == 'push' && github.ref_type == 'tag') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Gate
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ steps.mode.outputs.dry-run }}
+          TAG: ${{ github.ref_name }}
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          commit=$(git rev-parse 'HEAD^{commit}')
+          if [ "$DRY_RUN" = true ]; then
+            node scripts/release-gate.mjs --commit "$commit" --dry-run ${VERSION_INPUT:+--version "$VERSION_INPUT"} --notes-out release-notes.md
+          else
+            node scripts/release-gate.mjs --commit "$commit" --tag "$TAG" --notes-out release-notes.md
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          retention-days: 1
+
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      throwaway-key-artifact: ${{ steps.throwaway-key.outputs.artifact-id }}
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
+
+      - name: Public key to build in
+        id: key
+        run: |
+          if [ "${{ needs.gate.outputs.dry-run }}" = true ]; then
+            mkdir -p "$RUNNER_TEMP/throwaway"
+            node scripts/release-signing.mjs keygen "$RUNNER_TEMP/throwaway/signing-key.pem" "$RUNNER_TEMP/throwaway/public-key.pem"
+            echo "file=$RUNNER_TEMP/throwaway/public-key.pem" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=.github/release-public-key.pem" >> "$GITHUB_OUTPUT"
+          fi
+
+      # macOS and Linux build every target; each build adds its archive to release/<version>.
+      - name: Build every target
+        run: |
+          for target in macos-arm64 linux-x64 windows-x64; do
+            node scripts/build-release.mjs --unsealed --version "$VERSION" --public-key "${{ steps.key.outputs.file }}" --target "$target"
+          done
+          cp "${{ steps.key.outputs.file }}" "release/$VERSION.public-key.pem"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unsealed-release
+          path: |
+            release/${{ needs.gate.outputs.version }}/*.tar.gz
+            release/${{ needs.gate.outputs.version }}/*.zip
+            release/${{ needs.gate.outputs.version }}.public-key.pem
+          if-no-files-found: error
+          retention-days: 1
+
+      # A dry run's throwaway signing key goes to the seal job, which deletes it from the run once used.
+      - name: Hand the throwaway key to the seal job
+        id: throwaway-key
+        if: needs.gate.outputs.dry-run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: throwaway-signing-key
+          path: ${{ runner.temp }}/throwaway/signing-key.pem
+          if-no-files-found: error
+          retention-days: 1
+
+  seal:
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The signing key is a secret of the protected `release` environment, so only a tag's run can read it.
+    # A dry run uses no environment: an empty name means none.
+    environment: ${{ needs.gate.outputs.dry-run != 'true' && 'release' || '' }}
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: unsealed-release
+          path: release
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
+      - uses: actions/download-artifact@v8
+        if: needs.gate.outputs.dry-run == 'true'
+        with:
+          name: throwaway-signing-key
+          path: ${{ runner.temp }}/throwaway
+
+      - name: Seal and sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          key="$RUNNER_TEMP/throwaway/signing-key.pem"
+          if [ "${{ needs.gate.outputs.dry-run }}" != true ]; then
+            if [ -z "$RELEASE_SIGNING_KEY" ]; then
+              echo "::error title=Release refused::The release environment has no RELEASE_SIGNING_KEY secret. Make the signing key with scripts/release-key-wizard.sh." >&2
+              exit 1
+            fi
+            key="$RUNNER_TEMP/signing-key.pem"
+            (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key")
+          fi
+          # A committed next public key goes into the manifest, so installed Machines rotate to it (ADR 0007).
+          set -- --notes release-notes.md
+          if [ -f .github/release-next-public-key.pem ]; then set -- "$@" --next-public-key .github/release-next-public-key.pem; fi
+          status=0
+          node scripts/release-signing.mjs seal "release/$VERSION" --version "$VERSION" --key "$key" --public-key "release/$VERSION.public-key.pem" "$@" || status=$?
+          rm -f "$key"
+          exit "$status"
+
+      - name: Verify with the signing tool
+        run: |
+          set -o pipefail
+          node scripts/release-signing.mjs verify "release/$VERSION" --version "$VERSION" --public-key "release/$VERSION.public-key.pem" --targets macos-arm64,linux-x64,windows-x64 | tee verify.txt
+          if [ -f .github/release-next-public-key.pem ] && ! grep -q "It names the next public key." verify.txt; then
+            echo "::error title=Release refused::.github/release-next-public-key.pem is committed, but the manifest does not name it." >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            release/${{ needs.gate.outputs.version }}/
+            release/${{ needs.gate.outputs.version }}.public-key.pem
+          if-no-files-found: error
+          retention-days: ${{ needs.gate.outputs.dry-run == 'true' && 1 || 7 }}
+
+  # A dry run's throwaway signing key leaves the run as soon as the seal job has used it.
+  forget-throwaway-key:
+    needs: [build, seal]
+    if: always() && needs.build.outputs.throwaway-key-artifact != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the throwaway signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ needs.build.outputs.throwaway-key-artifact }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT"
+
+  publish:
+    needs: [gate, seal]
+    if: needs.gate.outputs.dry-run != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up the workspace
+        uses: ./.github/actions/setup
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
+      # Against the committed key, not the one the artifact carries.
+      - name: Verify with the signing tool
+        run: node scripts/release-signing.mjs verify "release/$VERSION" --version "$VERSION" --public-key .github/release-public-key.pem --targets macos-arm64,linux-x64,windows-x64
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.gate.outputs.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = true ]; then latest=(--prerelease --latest=false); else latest=(--latest); fi
+          gh release create "$TAG" --verify-tag --title "Attache $VERSION" --notes-file release-notes.md "${latest[@]}" release/"$VERSION"/*

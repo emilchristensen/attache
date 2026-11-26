@@ -7,9 +7,13 @@ import type { AttentionItemView } from "@attache/contracts";
  * Source refresh) and the owner's latest decision (written by any Machine).
  * Each Machine's database holds the same items, with the state worked out
  * from these two parts.
+ *
+ * Fields a later release adds, at any level, are kept (`loose`): a Machine
+ * that rewrites or merges a record keeps what it does not know (ADR 0008).
+ * Its database keeps those of the record and the item in `unknown_fields`.
  */
 
-const MachineRef = z.object({ id: z.string().nullable(), name: z.string() });
+const MachineRef = z.object({ id: z.string().nullable(), name: z.string() }).loose();
 export type InboxMachine = z.infer<typeof MachineRef>;
 
 const Evidence = z.array(
@@ -19,12 +23,12 @@ const Evidence = z.array(
     relPath: z.string().optional(),
     lines: z.tuple([z.number(), z.number()]).optional(),
     observedAt: z.string(),
-  }),
+  }).loose(),
 );
 
-const Meeting = z.object({ start: z.string(), end: z.string(), meetLink: z.string().nullable(), attendees: z.array(z.string()) });
+const Meeting = z.object({ start: z.string(), end: z.string(), meetLink: z.string().nullable(), attendees: z.array(z.string()) }).loose();
 
-const Draftable = z.object({ actionKind: z.string(), target: z.record(z.string(), z.unknown()), context: z.record(z.string(), z.unknown()) });
+const Draftable = z.object({ actionKind: z.string(), target: z.record(z.string(), z.unknown()), context: z.record(z.string(), z.unknown()) }).loose();
 
 export const InboxItemPart = z.object({
   fingerprint: z.string(),
@@ -47,7 +51,7 @@ export const InboxItemPart = z.object({
   machine: MachineRef.nullable(),
   /** Meeting prep: the meeting's times and call. Records written before it existed have none. */
   meeting: Meeting.nullable().default(null),
-});
+}).loose();
 export type InboxItemPart = z.infer<typeof InboxItemPart>;
 
 export const DECISIONS = ["start", "dismiss", "snooze", "reopen", "done"] as const;
@@ -61,7 +65,7 @@ export const InboxDecisionPart = z.object({
   at: z.string(),
   actor: z.string(),
   machine: MachineRef.nullable(),
-});
+}).loose();
 export type InboxDecisionPart = z.infer<typeof InboxDecisionPart>;
 
 export const INBOX_RECORD_VERSION = 1;
@@ -72,8 +76,24 @@ export const InboxRecord = z.object({
   key: z.string().min(1),
   item: InboxItemPart,
   decision: InboxDecisionPart.nullable(),
-});
+}).loose();
 export type InboxRecord = z.infer<typeof InboxRecord>;
+
+/** The fields of a record and of its item that this release does not know, as a later release wrote them. */
+export interface InboxUnknownFields {
+  record: Record<string, unknown>;
+  item: Record<string, unknown>;
+}
+
+function unknownOf(value: object, known: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([k]) => !(k in known)));
+}
+
+/** Null when the record holds nothing this release does not know. */
+export function unknownFieldsOf(rec: InboxRecord): InboxUnknownFields | null {
+  const fields = { record: unknownOf(rec, InboxRecord.shape), item: unknownOf(rec.item, InboxItemPart.shape) };
+  return Object.keys(fields.record).length || Object.keys(fields.item).length ? fields : null;
+}
 
 /** A record read from a file another Machine wrote: untrusted until it parses. */
 export function parseInboxRecord(value: unknown): InboxRecord | null {
@@ -128,5 +148,7 @@ export function mergeInboxRecords(a: InboxRecord, b: InboxRecord): InboxRecord {
   const first = a.item.firstSeenAt <= b.item.firstSeenAt ? a : b;
   const item = later(a.item, b.item, (x) => x.updatedAt);
   const decision = a.decision && b.decision ? later(a.decision, b.decision, (d) => d.at) : (a.decision ?? b.decision);
-  return { version: INBOX_RECORD_VERSION, id: first.id, key: a.key, item: { ...item, firstSeenAt: first.item.firstSeenAt }, decision };
+  // Fields this release does not know come from both sides, the newer report's where both have one; known ones from the winner.
+  const [newer, older] = item === a.item ? [a, b] : [b, a];
+  return { ...older, ...newer, version: INBOX_RECORD_VERSION, id: first.id, key: a.key, item: { ...older.item, ...item, firstSeenAt: first.item.firstSeenAt }, decision };
 }

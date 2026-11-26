@@ -100,6 +100,11 @@ export class BrainRepo {
     return { ok: true };
   }
 
+  /** A file as the last fetch brought it from the remote; null before any fetch or when the remote has no such file. */
+  fetchedFile(path: string): string | null {
+    return this.blobAt(TRACKING, path);
+  }
+
   /** A file's content in a commit; null when the commit or the file does not exist. */
   private blobAt(ref: string, path: string): string | null {
     const r = this.git.runSync(["cat-file", "blob", `${ref}:${path}`]);

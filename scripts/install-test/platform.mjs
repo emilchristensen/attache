@@ -58,6 +58,11 @@ function macos(loc, name) {
     /** Whether the service manager still knows the service at all. */
     known: () => existsSync(definition) || succeeds("/bin/launchctl", ["print", `${domain}/${name}`]),
     cleanup: () => succeeds("/bin/launchctl", ["bootout", `${domain}/${name}`]),
+    /** The process launchd runs as the service, or null. */
+    servicePid: () => {
+      const pid = /^\s*pid = (\d+)$/m.exec(succeeds("/bin/launchctl", ["print", `${domain}/${name}`]) ? output("/bin/launchctl", ["print", `${domain}/${name}`]) : "")?.[1];
+      return pid ? Number(pid) : null;
+    },
     /** Service definitions of this instance in the owner's LaunchAgents folder. */
     definitions: () => (existsSync(loc.serviceDefinitionDir) ? readdirSync(loc.serviceDefinitionDir).filter((f) => f.startsWith(`${name}.`)) : []),
     ownerFiles: { "Library/LaunchAgents/com.example.owner.plist": "<plist><dict><key>Label</key><string>com.example.owner</string></dict></plist>\n" },
@@ -96,6 +101,8 @@ function linux(loc, name) {
       systemctl(["stop", name]);
       systemctl(["disable", name]);
     },
+    /** The process systemd runs as the service, or null. */
+    servicePid: () => Number(systemctl(["show", name, "--property=MainPID", "--value"]).out) || null,
     definitions: () => (existsSync(loc.serviceDefinitionDir) ? readdirSync(loc.serviceDefinitionDir).filter((f) => f === name || f.startsWith(`${name}.`)) : []),
     ownerFiles: { ".config/systemd/user/owner-backup.service": "[Service]\nExecStart=/bin/true\n" },
     machineFingerprint: () => ({}),
@@ -120,7 +127,8 @@ function windows(loc, name) {
     runtime: (prefix) => join(prefix, "current", "runtime", "node.exe"),
     command: (binDir, name) => join(binDir, `${name}.cmd`),
     // As a terminal runs them: through cmd.exe (Node uses `cmd.exe /d /s /c "<command>"`).
-    runScript: (file, args, env) => execSync([`"${file}"`, ...args].join(" "), { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+    // Through cmd, as an owner types it: a path with a space is quoted.
+    runScript: (file, args, env) => execSync([`"${file}"`, ...args.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(" "), { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
     // Claude Code runs hook commands through Git Bash on Windows.
     runHook: (command, input, env) => execFileSync(gitBash, ["-c", command], { input, env, encoding: "utf8" }),
     commandPath: (p) => p.replace(/\\/g, "/"),
@@ -145,6 +153,15 @@ function windows(loc, name) {
     },
     runsBundledRuntime: (prefix) => task("[string]$t.Actions[0].Arguments").includes(`"${join(prefix, "current", "runtime", "node.exe")}"`),
     known: () => task("[bool]$t") === true,
+    /** The `attache serve` process the logon task's supervisor (`attache service run`) keeps running, or null. */
+    servicePid: () => {
+      const script = [
+        "$all = @(Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\")",
+        "$sup = @($all | Where-Object { $_.CommandLine -and $_.CommandLine.Contains(' service run ') -and $_.CommandLine.Contains(\" --instance $env:I \") } | ForEach-Object { $_.ProcessId })",
+        "@($all | Where-Object { $sup -contains $_.ParentProcessId -and $_.CommandLine.Contains(' serve ') } | ForEach-Object { $_.ProcessId }) -join ','",
+      ].join("\n");
+      return Number(powershell(script, { I: name.replace(/^Attache-/, "") }).split(",")[0]) || null;
+    },
     cleanup: () => {
       try {
         powershell("if (Get-ScheduledTask -TaskName $env:N -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName $env:N; Unregister-ScheduledTask -TaskName $env:N -Confirm:$false }", { N: name });

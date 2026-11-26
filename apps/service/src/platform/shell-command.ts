@@ -3,6 +3,11 @@ import { currentOs, type Os } from "./os.ts";
 /** Characters a Windows command line cannot carry inside double quotes for both Git Bash and cmd.exe. */
 const WINDOWS_UNQUOTABLE = /["%$`\r\n]/;
 
+/** A value as one single-quoted POSIX shell word: whatever it holds, the shell passes it on as it is. */
+export function posixShellWord(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
  * Quote a path for a command line that a Harness runs through its shell.
  *
@@ -13,7 +18,7 @@ const WINDOWS_UNQUOTABLE = /["%$`\r\n]/;
  * Windows accepts either), and none of the characters either shell expands.
  */
 export function shellPath(path: string, os: Os = currentOs()): string {
-  if (os !== "windows") return `'${path.replace(/'/g, `'\\''`)}'`;
+  if (os !== "windows") return posixShellWord(path);
   if (WINDOWS_UNQUOTABLE.test(path)) throw new Error(`Attache cannot put ${path} in a command line on Windows, because it contains ", %, $, \` or a line break. Move Attache or its state folder to a path without them.`);
   return `"${path.replace(/\\/g, "/")}"`;
 }

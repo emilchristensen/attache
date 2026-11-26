@@ -28,7 +28,10 @@ function withOverrides(overrides: Record<string, string | undefined>): Record<st
 function attache(args: string[], opts: { platform?: string; env?: Record<string, string | undefined> } = {}) {
   const env = withOverrides({ HOME: tempDir("attache-cli-home-"), ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ...opts.env });
   if (opts.platform) env.ATTACHE_TEST_FAKE_PLATFORM = opts.platform;
-  const r = spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env, encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
+  // One Node start can wait up to 18 s before Node's own code runs while other suites start Node (decision log, "flaky under load"), so each run gets 60 s.
+  const r = spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env, encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" });
+  // A run cut off by the budget says so, rather than failing later on its empty output.
+  if (r.error || r.signal) throw new Error(`attache ${args.join(" ")} did not finish: ${r.error?.message ?? `killed by ${r.signal}`}`);
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -254,7 +257,7 @@ describe("what a data-deleting uninstall may remove", () => {
 
 describe("the background service", () => {
   describe.skipIf(process.platform === "win32")("on Linux", () => {
-    const linux = (args: string[], env: Record<string, string>, systemctl: { bin: string }) => attache(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
+    const linux = (args: string[], env: Record<string, string | undefined>, systemctl: { bin: string }) => attache(args, { platform: "linux", env: { ...env, PATH: `${systemctl.bin}:${process.env.PATH}`, XDG_CONFIG_HOME: undefined } });
 
     it("is a systemd user service that starts at login, restarts after a crash and runs the bundled runtime through the stable `current` link", () => {
       const systemctl = fakeSystemctl();
@@ -276,6 +279,8 @@ describe("the background service", () => {
       expect(text).toContain(`Environment="HOME=${home}"\n`);
       expect(text).toContain("StandardError=append:/opt/Attache 100%% $Test/state/logs/service.err.log\n");
       expect(text).toMatch(/\nRestart=always\n/);
+      // A service that refused to start, such as on a database a newer Attache wrote, is not started again and again.
+      expect(text).toMatch(/\nRestartPreventExitStatus=78\n/);
       expect(text).toMatch(/\[Install\]\nWantedBy=default\.target\n/);
       // Installing enables it for the next login, without starting it yet.
       expect(systemctl.state()).toEqual({ enabled: [unitName], active: [] });
@@ -291,6 +296,48 @@ describe("the background service", () => {
       expect(removed.stderr).toBe("");
       expect(existsSync(unit)).toBe(false);
       expect(systemctl.state()).toEqual({ enabled: [], active: [] });
+    });
+
+    it("starts a service that systemd stopped restarting after it crashed too often, as after an Update that rolled back", () => {
+      const systemctl = fakeSystemctl();
+      const home = tempDir("attache-systemd-home-");
+      const instance = `limit${process.pid}`;
+      const env = { HOME: home, ATTACHE_INSTANCE: instance };
+      const unitName = `attache-${instance}.service`;
+      expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+      systemctl.hitStartLimit(unitName);
+
+      const r = linux(["start"], env, systemctl);
+      expect(r.stderr).toBe("");
+      expect(systemctl.state().active).toEqual([unitName]);
+    });
+
+    it("passes on the release feed address the installer was given, so a test's service reads its releases there", () => {
+      const home = tempDir("attache-systemd-home-");
+      const unitText = (extra: Record<string, string>) => {
+        const systemctl = fakeSystemctl();
+        const env = { HOME: home, ATTACHE_INSTANCE: `feed${process.pid}`, ...extra };
+        expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+        return readFileSync(join(home, ".config/systemd/user", `attache-feed${process.pid}.service`), "utf8");
+      };
+      expect(unitText({ ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/releases?x=100%" })).toContain('Environment="ATTACHE_RELEASE_FEED_URL=http://127.0.0.1:9/releases?x=100%%"\n');
+      expect(unitText({})).not.toContain("ATTACHE_RELEASE_FEED_URL");
+    });
+
+    it("runs in the XDG base folders the installer saw, never the user manager's own", () => {
+      const home = tempDir("attache-systemd-home-");
+      const unitText = (xdg: Record<string, string | undefined>) => {
+        const systemctl = fakeSystemctl();
+        const env = { HOME: home, ATTACHE_INSTANCE: `xdg${process.pid}`, XDG_DATA_HOME: undefined, XDG_STATE_HOME: undefined, ...xdg };
+        expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+        return readFileSync(join(home, ".config/systemd/user", `attache-xdg${process.pid}.service`), "utf8");
+      };
+      // Where the installer put the unit, the release and the state is where the service, and an installer it starts for an Update, look too.
+      const pinned = unitText({ XDG_DATA_HOME: join(home, "data"), XDG_STATE_HOME: join(home, "st") });
+      expect(pinned).toContain(`Environment="XDG_DATA_HOME=${join(home, "data")}"\n`);
+      expect(pinned).toContain(`Environment="XDG_STATE_HOME=${join(home, "st")}"\n`);
+      expect(pinned).toContain("UnsetEnvironment=XDG_CONFIG_HOME\n");
+      expect(unitText({})).toContain("UnsetEnvironment=XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME\n");
     });
 
     it("says what to do when there is no systemd user session to register with", () => {
@@ -312,8 +359,14 @@ describe("the background service", () => {
     const r = attache(["service", "install", "--prefix", "/opt/Attache Test", "--state-dir", "/opt/Attache Test/state", "--port", "7998"], { env });
     expect(r.stderr).toBe("");
     const text = readFileSync(plist, "utf8");
-    for (const s of ["<string>/opt/Attache Test/current/runtime/node</string>", "<string>/opt/Attache Test/current/service/attache-service.mjs</string>", "<string>7998</string>", `<key>ATTACHE_INSTANCE</key><string>${instance}</string>`, "<key>KeepAlive</key><true/>", "<key>RunAtLoad</key><true/>"]) expect(text).toContain(s);
+    for (const s of ["<string>/opt/Attache Test/current/runtime/node</string>", "<string>/opt/Attache Test/current/service/attache-service.mjs</string>", "<string>7998</string>", `<key>ATTACHE_INSTANCE</key><string>${instance}</string>`, "<key>RunAtLoad</key><true/>"]) expect(text).toContain(s);
+    // Kept running unless it refused to start, such as on a database a newer Attache wrote: launchd cannot tell exit codes apart, so the service leaves a file.
+    expect(text).toContain("<key>KeepAlive</key><dict><key>PathState</key><dict><key>/opt/Attache Test/state/refused-to-start</key><false/></dict></dict>");
+    expect(text).not.toContain("ATTACHE_RELEASE_FEED_URL");
     expect(JSON.parse(attache(["service", "status"], { env }).stdout)).toMatchObject({ loaded: false, definition: plist });
+    // The release feed address an installer was given goes to the service, so a test's service reads its releases there.
+    attache(["service", "install", "--prefix", "/opt/Attache Test", "--state-dir", "/opt/Attache Test/state", "--port", "7998"], { env: { ...env, ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/releases?a=1&b=2" } });
+    expect(readFileSync(plist, "utf8")).toContain("<key>ATTACHE_RELEASE_FEED_URL</key><string>http://127.0.0.1:9/releases?a=1&amp;b=2</string>");
     const removed = attache(["service", "uninstall"], { env });
     expect(removed.stderr).toBe("");
     expect(existsSync(plist)).toBe(false);

@@ -21,7 +21,7 @@ test.afterAll(() => stack?.stop());
 const runGit = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
 
-/** Machines and Replication in every theme and width: off, up to date with two Machines, and blocked with its cause on top. */
+/** Machines and Replication in every theme and width: off, up to date with three Machines (one on a version that did not record it), blocked with its cause on top, and paused on a newer Brain format. */
 async function replicationScreens(page: Page) {
   // The section is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
   const capture = async (path: string, on: boolean) => {
@@ -46,10 +46,12 @@ async function replicationScreens(page: Page) {
   const remote = join(base, "brain.git");
   runGit(base, "init", "--bare", "--quiet", "-b", "main", remote);
   await api(page, "POST", "/replication/setup", { remote });
-  // Another Machine's record, as it would arrive from the repository.
+  // Other Machines' records, as they would arrive from the repository: one on a newer version, one on a version that did not record it.
   const other = "6b1f0c7e-2d4a-4c55-9a8e-1f2e3d4c5b6a";
+  const old = "0f3c2b1a-9e8d-4c7b-8a6f-5e4d3c2b1a09";
   mkdirSync(join(stack.dataDir, "machines"), { recursive: true });
-  writeFileSync(join(stack.dataDir, "machines", `${other}.json`), `${JSON.stringify({ id: other, name: "Work Mac", standby: true, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  writeFileSync(join(stack.dataDir, "machines", `${other}.json`), `${JSON.stringify({ id: other, name: "Work Mac", standby: true, updatedAt: new Date().toISOString(), version: "0.7.0-beta.2", readsBrainFormat: 1 }, null, 2)}\n`);
+  writeFileSync(join(stack.dataDir, "machines", `${old}.json`), `${JSON.stringify({ id: old, name: "Old Laptop", standby: false, updatedAt: new Date().toISOString() }, null, 2)}\n`);
   await api(page, "PUT", "/replication/preferred-reader", { machine: other });
   await api(page, "POST", "/replication/check");
   await shoot("up-to-date");
@@ -63,6 +65,21 @@ async function replicationScreens(page: Page) {
   writeFileSync(join(stack.dataDir, "plan.txt"), "from the Home PC\n");
   await api(page, "POST", "/replication/check");
   await shoot("blocked");
+  // The Work Mac, on a later release, moved the Brain to a format this Machine cannot read (ADR 0008).
+  mkdirSync(join(clone, "machines"), { recursive: true });
+  writeFileSync(join(clone, "machines", "brain-format.json"), `${JSON.stringify({ format: 2, updatedAt: new Date().toISOString(), by: other }, null, 2)}\n`);
+  runGit(clone, "add", "machines");
+  runGit(clone, "commit", "--quiet", "-m", "Work Mac: Brain format 2");
+  runGit(clone, "push", "--quiet", "origin", "main");
+  await api(page, "POST", "/replication/check");
+  await shoot("paused");
+  await page.goto(`${stack.url}/settings/machines`);
+  const paused = page.locator('[data-settings-section="machines"] [data-replication-problem]');
+  await expect(paused).toBeVisible();
+  await expect(paused).toContainText("Replication is paused");
+  await expect(paused).toContainText("Update this Machine to keep replicating");
+  await expect(page.getByRole("region", { name: "Replication" }).getByText("paused", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /^Machines and Replication/ })).toHaveAccessibleName("Machines and Replication, Replication paused");
   // The rest of the screens show a single Machine.
   await api(page, "POST", "/replication/off");
 }

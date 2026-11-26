@@ -6,8 +6,9 @@ import { installScenarios, type ScenarioState } from "../fixtures/scenarios.ts";
 import { useFakeClaude } from "../fixtures/claude-connectors.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
-// Each refresh starts a fake Claude Code process, which is slow while other suites share the machine.
-vi.setConfig({ testTimeout: 120_000 });
+// Each refresh starts a fake Claude Code process, which is slow while other suites share the machine; so does
+// connecting the calendar in beforeAll, which outran Vitest's 10 s hook limit in a full parallel run.
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 /** 08:00 UTC: before the day's meetings. */
 const MORNING = Date.parse("2026-11-18T08:00:00.000Z");
