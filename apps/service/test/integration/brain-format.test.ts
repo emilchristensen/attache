@@ -174,6 +174,38 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(existsSync(join(target, "README.md"))).toBe(false);
   });
 
+  it("a Machine restarted while paused leaves an approval a later rejection overruled in place, and undoes it once it is updated", async () => {
+    world = await startMachines(["Mac", "PC"], { brainFormat: READS_2 });
+    const [first, pc] = world.machines as [TestMachine, TestMachine];
+    let mac = first;
+    const note = join(mac.dataDir, "memory/projects/atlas-rollout.md");
+    await mac.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }] }] });
+    const made = await mac.post("/memory/proposals", { item: { action: "update", path: "memory/projects/atlas-rollout.md", facts: [{ subject: "Status", value: "Rolled out to Aarhus", reason: "seen in standup" }] }, reason: "Mentioned in standup" });
+    await settle([mac, pc]);
+    expect(JSON.parse(readFileSync(join(mac.dataDir, FORMAT_FILE), "utf8"))).toMatchObject({ format: 2 });
+    world.remote.goOffline();
+    await mac.post(`/memory/proposals/${made.id}/apply`);
+    await pc.clock.advance(10 * 60_000);
+    await pc.post(`/memory/proposals/${made.id}/reject`);
+    world.remote.goOnline();
+    // Mac sends its approval; PC merges it with its later rejection.
+    await mac.clock.advance(AFTER_WRITE);
+    await pc.clock.advance(AFTER_WRITE + CHECK);
+    const [file] = readdirSync(join(pc.dataDir, "review/proposals"));
+    const merged = readFileSync(join(pc.dataDir, "review/proposals", file!), "utf8");
+    expect(merged).toContain("applied");
+
+    // The merged Proposal reaches Mac's folder before Mac reads it, as from a pull cut short, and Mac comes back on a release that reads format 1.
+    writeFileSync(join(mac.dataDir, "review/proposals", file!), merged);
+    mac = await world.restart(mac, { brainFormat: READS_1 });
+    expect(readFileSync(note, "utf8").split("## History")[0]).toContain("Rolled out to Aarhus");
+
+    mac = await world.restart(mac, { brainFormat: READS_2 });
+    const current = readFileSync(note, "utf8").split("## History")[0]!;
+    expect(current).toContain("Pilot in Copenhagen");
+    expect(current).not.toContain("Rolled out to Aarhus");
+  });
+
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [first, pc] = world.machines as [TestMachine, TestMachine];

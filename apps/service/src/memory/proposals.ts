@@ -177,8 +177,10 @@ export class Proposals {
    * Take in Proposal files another Machine changed. A rejection that came
    * later than this Machine's approval wins, so the approval is undone here,
    * where its changes were written. True when anything changed.
+   * `paused`: the Brain is in a format this Machine cannot read, so nothing is undone yet, and a Proposal that would be
+   * stays out of the index for the first open that may write.
    */
-  reload(paths: readonly string[]): boolean {
+  reload(paths: readonly string[], opts: { paused?: boolean } = {}): boolean {
     const root = this.deps.memory.dataRoot;
     if (!root) return false;
     let changed = false;
@@ -190,6 +192,7 @@ export class Proposals {
         continue;
       }
       if (this.index.holds(rel, record)) continue;
+      if (opts.paused && this.overruled(record).length) continue;
       this.index.put(rel, record);
       changed = true;
       try {
@@ -204,7 +207,8 @@ export class Proposals {
   /**
    * Bring the index in line with the Brain when a data folder is opened:
    * Proposals this Machine kept in its change log become files first, then
-   * every Proposal file is read. `paused`: the Brain is in a format this Machine cannot read, so nothing is carried over yet.
+   * every Proposal file is read. `paused`: the Brain is in a format this Machine cannot read, so nothing is carried over
+   * or undone yet.
    */
   open(opts: { paused?: boolean } = {}): void {
     const root = this.deps.memory.dataRoot;
@@ -215,7 +219,7 @@ export class Proposals {
     tx(this.deps.db, () => {
       for (const rel of this.index.paths().keys()) if (!present.has(rel)) this.index.removePath(rel);
     });
-    this.reload(files);
+    this.reload(files, opts);
   }
 
   /** Proposals pending (or decided) before they moved into the Brain are written as files, once. */
@@ -234,14 +238,18 @@ export class Proposals {
 
   /** If a rejection made later on another Machine beat an approval made here, undo what the approval wrote. */
   private settle(record: ProposalRecord): void {
-    if (proposalStatus(record) !== "rejected") return;
-    const me = this.deps.machine().id;
-    const mine = record.decisions.filter((d) => d.decision === "applied" && d.machine.id === me && d.batch);
     const rejection = latestDecision(record.decisions);
-    for (const approval of mine) {
+    for (const approval of this.overruled(record)) {
       const outcome = undoApproval(this.deps.memory, approval.batch!, `the Proposal was rejected${rejection ? ` on ${rejection.machine.name}` : ""} after it was approved on ${approval.machine.name}`);
       if (outcome.kept.length) this.deps.log.warn("could not undo all of an approved Proposal that was rejected later on another Machine", { proposal: record.id, kept: outcome.kept });
     }
+  }
+
+  /** The approvals made here that a later rejection overruled. */
+  private overruled(record: ProposalRecord): ProposalDecision[] {
+    if (proposalStatus(record) !== "rejected") return [];
+    const me = this.deps.machine().id;
+    return record.decisions.filter((d) => d.decision === "applied" && d.machine.id === me && d.batch);
   }
 
   /** The Proposal as its file says now, which may be newer than the index. */
