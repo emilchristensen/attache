@@ -33,6 +33,8 @@ export interface ReplicatedMachineView {
   standby: boolean;
   /** The Machine whose Dashboard is asking. */
   thisMachine: boolean;
+  /** The Attache version the Machine runs; null when its record comes from a version that did not record it. */
+  version: string | null;
   /** When this Machine's last change reached the Brain's history here; null when none has yet. */
   lastChangeAt: string | null;
 }

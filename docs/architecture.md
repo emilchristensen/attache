@@ -181,10 +181,12 @@ The Dashboard's Replication card in Settings (`apps/web/src/views/Replication.ts
 - **Repository token** (`replication/github-credentials.ts`, the `GitCredentials`): for a GitHub https remote, git runs with `credential.helper=` (dropping the Machine's own helpers) and then `credential.helper=!<attache> git-credential --state-dir <state> --connection <id>`.
   The helper (`cli/git-credential-command.ts`) reads `conn:<id>:token` from this install's secret store (the state folder reaches it as `--state-dir`, the instance as `ATTACHE_INSTANCE` in the environment) and answers `get` with `x-access-token` and the token; it ignores `store` and `erase`.
   Other remotes use the Machine's own git setup (ssh keys, or nothing for a folder).
-- **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`) at setup, join, start and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
+- **Machine records** (`replication/machine-records.ts`, `machines.ts`): each Machine writes `machines/<machine id>.json` (`id`, `name`, `standby`, `updatedAt`, `version`, `readsBrainFormat`) at setup, join, start (so after each Update too) and rename, and any Machine may write `machines/preferred-reader.json` (`machine`, `updatedAt`, `by`).
+  `version` is the Attache version the Machine runs and `readsBrainFormat` the newest Brain format it can read (`replication/brain-format.ts`, format 1); records an earlier version wrote have neither, parse all the same, and list the version as unknown (`null`).
+  Each Replication check also rewrites this Machine's record once it is a week old (`RECORD_REFRESH_MS`), committed with that check, so `updatedAt` says when the Machine was last heard from (ADR 0008); a record that is current and under a week old is never rewritten, so nothing is committed.
   They are JSON, so search never indexes them, and they replicate like any file.
   `machineRecordRule` settles a record both sides changed: the later `updatedAt` wins, then the larger text, and a record one side deleted is kept from the other.
-  `GET /replication/machines` lists them with this Machine first and each Machine's last commit time (`git log --author=<id>@machine.attache.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
+  `GET /replication/machines` lists them with this Machine first, each Machine's version (this Machine's as it runs now) and its last commit time (`git log --author=<id>@machine.attache.invalid`); `PUT /replication/standby` and `PUT /replication/preferred-reader` change them and refuse with 409 `replication_off` while Replication is off, when the Machine is its own Reader.
   The Reader lease reads this Machine's standby flag and the Preferred Reader straight from these records (`MachineRecords`).
 - **The Reader** (`reader/`, `replication/reader-lease.ts`, `replication/lease-ref.ts`): exactly one Machine runs scheduled Source refresh, briefings and with them the Review-date inbox items.
   With Replication off, the Machine is its own Reader and nothing changes.
@@ -652,6 +654,10 @@ Disabling removes the hooks, the rule and the server, trying each even when anot
 
 When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.attache-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
 The MCP prompts replace those skills, and there is no `attache save` command any more, because a Harness with auto-accept off has the owner confirm a save inside the Harness, which a shell cannot do.
+
+An Update does not restart a Harness's MCP server: one started before the Update keeps running the earlier version's code and keeps working through `/api/v1`, so the API stays compatible with MCP servers from earlier versions.
+Each tool call also asks `GET /api/v1/health` for the service's `version`, and when that is newer than the server's own (`updates/version.ts`), the first tool result after it carries one more text block saying that Attache was updated and that a new session has the latest tools (`mcp/update-notice.ts`).
+A session is told once, even when several calls run at once, and stops asking after that; a failed check adds nothing and the next call asks again.
 
 `attache audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
 Each pairs itself on first use as client kind `cli` (the same trust as `attache pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.

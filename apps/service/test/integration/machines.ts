@@ -39,7 +39,7 @@ export interface TestWorld {
   /** Start another Machine; it joins unless `join: false`. */
   addMachine(name: string, opts?: { join?: boolean }): Promise<TestMachine>;
   /** Stop a Machine's service and start it again on the same state and Brain, as after a crash or reboot. */
-  restart(machine: TestMachine): Promise<TestMachine>;
+  restart(machine: TestMachine, opts?: { version?: string }): Promise<TestMachine>;
   stop(): Promise<void>;
 }
 
@@ -95,7 +95,7 @@ function holdLeaseWrites(repo: string, count: number): { arrived(): number; stop
 
 async function startMachine(name: string, opts: { setup: boolean } & WorldOptions): Promise<TestMachine> {
   const clock = new ManualClock();
-  const svc = await startTestService({ clock, setup: opts.setup, leaseGenerationCommits: opts.leaseGenerationCommits });
+  const svc = await startTestService({ clock, setup: opts.setup, leaseGenerationCommits: opts.leaseGenerationCommits, version: opts.version });
   await svc.call("PATCH", "/machine", { name });
   return Object.assign(svc, { name, clock });
 }
@@ -107,6 +107,8 @@ async function startMachine(name: string, opts: { setup: boolean } & WorldOption
 export interface WorldOptions {
   /** See `TestServiceOptions.leaseGenerationCommits`. */
   leaseGenerationCommits?: number;
+  /** The Attache version every Machine runs, unless a restart names another, as after an Update. */
+  version?: string;
 }
 
 export async function startMachines(names: string[], world: WorldOptions = {}): Promise<TestWorld> {
@@ -124,12 +126,12 @@ export async function startMachines(names: string[], world: WorldOptions = {}): 
     return m;
   };
   for (const name of names) await addMachine(name);
-  const restart = async (machine: TestMachine) => {
+  const restart = async (machine: TestMachine, opts: { version?: string } = {}) => {
     const i = machines.indexOf(machine);
     if (i < 0) throw new Error(`${machine.name} is not part of this world`);
     await machine.stop();
     const clock = new ManualClock(machine.clock.now().getTime());
-    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir, leaseGenerationCommits: world.leaseGenerationCommits });
+    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir, leaseGenerationCommits: world.leaseGenerationCommits, version: opts.version ?? world.version });
     const again = Object.assign(svc, { name: machine.name, clock });
     machines.splice(i, 1, again);
     return again;

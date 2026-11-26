@@ -1109,6 +1109,15 @@ async function holdInter(page: Page): Promise<() => void> {
   return release;
 }
 
+/**
+ * Whether the page's own Inter web font has loaded.
+ * `document.fonts.check` is not used: on a computer with Inter installed it answers true while the web font is still loading,
+ * although the page draws the fallback font until the web font arrives.
+ */
+function interLoaded(page: Page): Promise<boolean> {
+  return page.evaluate(() => [...document.fonts].some((face) => face.family.replace(/"/g, "") === "Inter" && face.status === "loaded"));
+}
+
 test("narrow layout: the Connections page has one name in the masthead, the More sheet and its heading", async () => {
   const page = await journeys.open("/connections");
   const masthead = page.locator(".masthead-nav");
@@ -1154,9 +1163,9 @@ test("narrow layout: the Brain's collections are one row of chips that scrolls s
     const releaseFont = await holdInter(page);
     await page.goto(`${stack.url}/brain?tab=deliverables`, { waitUntil: "commit" });
     await expect(row.getByRole("link", { name: "Deliverables" })).toHaveAttribute("aria-current", "true");
-    expect(await page.evaluate(() => document.fonts.check('14px "Inter"')), `the chips are laid out before Inter arrives ${at}`).toBe(false);
+    expect(await interLoaded(page), `the chips are laid out before Inter arrives ${at}`).toBe(false);
     releaseFont();
-    await expect.poll(() => page.evaluate(() => document.fonts.check('14px "Inter"')), `Inter arrives ${at}`).toBe(true);
+    await expect.poll(() => interLoaded(page), `Inter arrives ${at}`).toBe(true);
     await expect.poll(async () => (await chipPlaces(row)).find((p) => p.name === "Deliverables")!.shown, `Deliverables in view when opened ${at}`).toBe(true);
   }
 });

@@ -17,6 +17,8 @@ function MachineRow({ m, preferred, reader, busy, onStandby }: { m: ReplicatedMa
         {m.standby && <Tag>standby</Tag>}
       </div>
       <p className="small muted">
+        <span data-machine-version>{m.version ? `Attache ${m.version}` : "Version unknown"}</span>
+        {" · "}
         {m.lastChangeAt ? (
           <>
             Last change <Time iso={m.lastChangeAt} />
