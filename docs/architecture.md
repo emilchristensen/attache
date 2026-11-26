@@ -460,6 +460,7 @@ Every release carries a manifest of its archives and an Ed25519 signature over t
 The keys a Machine trusts are the public key built into the bundle, a constant the release build defines so nothing at run time replaces it, plus each next key that a manifest signed by a trusted key named, kept in `release-keys.json` in the state folder.
 `attache verify-release` is the internal command an installer runs with the installed version before it changes anything; it never opens the database, so an older version can check a newer release.
 `platform/release-target.ts` names this computer's release target, the same mapping the release build uses.
+Releases are published only by `.github/workflows/release.yml` from a version tag: its gate (`scripts/release-gate.mjs`) checks the tag, `CHANGELOG.md` and a full CI run of the commit first, the build job builds every target without the signing key, and only the seal job, in the protected `release` environment, reads the key; `docs/developer-guide.md` ("Publishing a release") gives the steps.
 
 ### Updates
 
