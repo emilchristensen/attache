@@ -5,6 +5,9 @@ const CHILD_PROCESS_MESSAGE =
   "Start tools through apps/service/src/platform: run() (platform/run.ts) to run one and read its output, spawnTool() (platform/launch.ts) to stream its output, launchTool() for the command and arguments.";
 const RENAME_MESSAGE = "Replace files with replaceWith() from apps/service/src/platform/replace-file.ts, which waits for Windows to let go of a file another program holds open.";
 
+const OLD_SCHEMA_MESSAGE =
+  "Build an old install's database with databaseBefore() (apps/service/test/fixtures/old-database.ts). Migrations run a statement at a time wait for a disk flush per statement, which takes seconds on a busy Windows runner (#53).";
+
 const WAIT_FOR_TIMEOUT_MESSAGE =
   "Wait for what the journey needs, not for a fixed time: a web-first assertion (expect(locator).toBeVisible(), toHaveText(), toHaveCount()), expect.poll(), page.waitForResponse() or dashboardAnswer(), page.waitForFunction(), settled() or nextFrames() from tests/e2e/browser.ts before a capture or a measurement, or the browser clock (page.clock) when the app waits for time to pass.";
 
@@ -44,6 +47,11 @@ export default tseslint.config(
   {
     files: ["**/test/**", "tests/**", "scripts/**", "**/*.mjs"],
     rules: { "@typescript-eslint/no-explicit-any": "off", "no-console": "off" },
+  },
+  {
+    // Tests run migrations through the service's own code, which gives each one a single transaction in WAL mode.
+    files: ["**/test/**"],
+    rules: { "no-restricted-syntax": ["error", { selector: "MemberExpression[object.name='MIGRATIONS'][property.name=/^(slice|forEach|map|entries|values)$/], ForOfStatement[right.name='MIGRATIONS']", message: OLD_SCHEMA_MESSAGE }] },
   },
   {
     // A fixed sleep is too short on a slow runner and wasted time on a fast one.

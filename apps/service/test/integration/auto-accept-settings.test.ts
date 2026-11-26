@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { MIGRATIONS } from "../../src/core/db.ts";
+import { databaseBefore } from "../fixtures/old-database.ts";
 import { startTestService, type TestService } from "./harness.ts";
 
 const HOME = process.env.ATTACHE_AGENT_HOME!;
@@ -35,8 +35,6 @@ function snapshot(dir: string, prefix = ""): Record<string, string> {
  * and every later one, as an upgrade does.
  */
 function asBeforeAutoAcceptDefault(stateDir: string): void {
-  const upgrade = MIGRATIONS.findIndex((m) => /update harness_settings set auto_accept = 1/.test(m));
-  expect(upgrade, "a migration switches every stored auto-accept setting on").toBeGreaterThan(0);
   const file = join(stateDir, "attache.sqlite");
   const current = `${file}.current`;
   const live = new DatabaseSync(file);
@@ -44,9 +42,7 @@ function asBeforeAutoAcceptDefault(stateDir: string): void {
   live.close();
   renameSync(file, current);
   for (const side of ["-wal", "-shm"]) rmSync(`${file}${side}`, { force: true });
-  const old = new DatabaseSync(file);
-  for (const m of MIGRATIONS.slice(0, upgrade)) old.exec(m);
-  old.exec(`pragma user_version = ${upgrade}`);
+  const old = databaseBefore(file, /update harness_settings set auto_accept = 1/);
   old.prepare("attach database ? as current").run(current);
   // Every table the old schema has gets the rows in the columns it had. A full-text index cannot be copied (SQLite
   // refuses writes to its storage), so it starts empty, which nothing here searches.

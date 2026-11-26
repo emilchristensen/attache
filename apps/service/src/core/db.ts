@@ -288,11 +288,12 @@ class ServiceDatabase extends DatabaseSync {
   }
 }
 
-export function openDb(file: string): Db {
+/** Open the service's database and migrate it, to the newest schema unless an earlier `schemaVersion` is given. */
+export function openDb(file: string, schemaVersion = MIGRATIONS.length): Db {
   const db = new ServiceDatabase(file);
   try {
     db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma synchronous = normal;");
-    migrate(db);
+    migrate(db, { to: schemaVersion });
   } catch (err) {
     db.close();
     throw err;
@@ -305,19 +306,22 @@ export interface MigrateOptions {
   migrations?: readonly string[];
   /** The Attache version applying them, recorded with each one. */
   version?: string;
+  /** The schema version to stop at; the last migration's by default. Tests use an earlier one to build an old install's database. */
+  to?: number;
 }
 
 /**
- * Apply the migrations the database has not had yet. A database past them was
- * written by a newer Attache: it is refused unchanged with `NewerDatabaseError`,
+ * Apply the migrations the database has not had yet, each in one transaction, up to `to`. A database past
+ * the migrations was written by a newer Attache: it is refused unchanged with `NewerDatabaseError`,
  * since running on a schema this version does not know could damage it.
  */
 export function migrate(db: Db, opts: MigrateOptions = {}): { from: number; to: number } {
   const migrations = opts.migrations ?? MIGRATIONS;
   const version = opts.version ?? VERSION;
+  const to = opts.to ?? migrations.length;
   refuseNewerSchema(db, migrations.length, version);
   const from = schemaVersionOf(db);
-  for (let i = from; i < migrations.length; i++) {
+  for (let i = from; i < to; i++) {
     db.exec("begin");
     try {
       db.exec(migrations[i]!);
@@ -329,7 +333,7 @@ export function migrate(db: Db, opts: MigrateOptions = {}): { from: number; to: 
       throw err;
     }
   }
-  return { from, to: migrations.length };
+  return { from, to: Math.max(from, to) };
 }
 
 export function tx<T>(db: Db, fn: () => T): T {

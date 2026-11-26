@@ -7,8 +7,9 @@ import { installScenarios, type ScenarioState } from "../fixtures/scenarios.ts";
 import { useFakeClaude } from "../fixtures/claude-connectors.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 
-// Each refresh starts a fake Claude Code process, which is slow while other suites share the machine.
-vi.setConfig({ testTimeout: 120_000 });
+// Each refresh starts a fake Claude Code process, which is slow while other suites share the machine,
+// and so does the Connection test in beforeAll: 0.5 s alone, up to 19 s during a full run (#53).
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
