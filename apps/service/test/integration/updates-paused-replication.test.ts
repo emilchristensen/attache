@@ -1,6 +1,8 @@
 // A Machine that fell behind asks to be updated (spec #130, ticket #143): Replication paused on a Brain format this
 // Machine's Attache cannot read raises one system notification and checks for an Update at once, unless Automatic
 // updates is Off, where it makes no request; once the Update is installed, Replication resumes.
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ReplicationView, UpdateMode, UpdatesView } from "@attache/contracts";
 import { startMachines, type TestWorld } from "./machines.ts";
@@ -45,7 +47,7 @@ describe("a Machine whose Replication paused on a newer Brain format", () => {
     const pc = await pcJoinsNewerBrain("automatic");
 
     // No 6-hour check has come round: the pause itself asked for the Update.
-    expect(pc.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(pc.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     expect((await pc.get<UpdatesView>("/updates")).status).toBe("installing");
     expect(pc.notifications.shown).toEqual([{ title: PAUSED_TITLE, body: `${PAUSED_BODY} Attache is looking for an Update now.` }]);
   });
@@ -66,7 +68,7 @@ describe("a Machine whose Replication paused on a newer Brain format", () => {
     expect(pc.runner.requests).toEqual([]);
     expect((await pc.get<UpdatesView>("/updates")).status).toBe("off");
     expect(pc.notifications.shown).toEqual([
-      { title: PAUSED_TITLE, body: `${PAUSED_BODY} Automatic updates is Off, so Attache does not look for one: install a newer release, or choose Automatic or Ask first in Settings, Updates.` },
+      { title: PAUSED_TITLE, body: `${PAUSED_BODY} Automatic updates is Off. Attache does not look for Updates and makes no request about them. Install a newer release, or choose Automatic or Ask first in Settings, Updates.` },
     ]);
   });
 
@@ -80,6 +82,21 @@ describe("a Machine whose Replication paused on a newer Brain format", () => {
 
     expect((await third.get<ReplicationView>("/replication")).status).toBe("paused");
     expect(third.notifications.shown).toHaveLength(1);
+  });
+
+  it("raises the notification once per pause, also when a failure of another kind came in between", async () => {
+    const pc = await pcJoinsNewerBrain("off");
+    // The owner breaks the Brain format record by hand: Replication is blocked on it, then paused again once it is put back.
+    const file = join(pc.dataDir, "machines/brain-format.json");
+    const record = readFileSync(file, "utf8");
+    writeFileSync(file, "{ not json");
+    await pc.clock.advance(CHECK);
+    expect((await pc.get<ReplicationView>("/replication")).status).toBe("blocked");
+    writeFileSync(file, record);
+    await pc.clock.advance(CHECK);
+    expect((await pc.get<ReplicationView>("/replication")).status).toBe("paused");
+
+    expect(pc.notifications.shown).toHaveLength(1);
   });
 
   it("resumes Replication once the Update is installed, and raises nothing more", async () => {

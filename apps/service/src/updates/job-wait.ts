@@ -2,8 +2,8 @@
  * Waiting for Jobs (spec #130, "Updater"): Automatic updates installs a
  * verified Update only once no Job is running, so an Update does not cut
  * into research or a briefing. It looks again whenever a Job changes and at
- * least every minute, and stops waiting after 24 hours, so a Machine that is
- * always busy still gets Updates.
+ * least every minute, and stops waiting 24 hours after the Update began to
+ * wait, also across restarts, so a Machine that is always busy still gets Updates.
  */
 import type { Clock, TimerHandle } from "../replication/clock.ts";
 
@@ -22,6 +22,8 @@ export interface RunningJobs {
 
 export interface JobWaitOptions {
   clock: Clock;
+  /** When this Update began to wait, also before a restart (`job-wait-record.ts`): the 24 hours count from here. */
+  since: Date;
   jobs: RunningJobs;
   /** The number of running Jobs changed, and is still above zero. */
   onCount: (count: number) => void;
@@ -41,7 +43,7 @@ export class JobWait {
   /** Begin waiting while `running` Jobs run (above zero). */
   constructor(opts: JobWaitOptions, running: number) {
     this.opts = opts;
-    this.since = opts.clock.now().getTime();
+    this.since = opts.since.getTime();
     this.last = running;
     this.stopListening = opts.jobs.onChange(() => void this.look());
     this.arm();

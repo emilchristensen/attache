@@ -24,6 +24,8 @@ export interface ReleaseServer {
   requests: FixtureRequest[];
   /** Answer every request with this HTTP status from now on, as a failing GitHub would; null answers again. */
   failWith(status: number | null): void;
+  /** Hold every request from now on, as a slow network does, until the returned function lets them through. */
+  hold(): () => void;
   close(): Promise<void>;
 }
 
@@ -33,9 +35,11 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
   const fx = await startFixtureServer();
   const releases: Array<{ tag: string; version: string; files: Map<string, Buffer> }> = [];
   let failing: number | null = null;
+  let held: Promise<void> = Promise.resolve();
   const failure = () => ({ status: failing!, json: { message: "Server Error" } });
-  fx.route("GET", FEED_PATH, () =>
-    failing
+  fx.route("GET", FEED_PATH, async () => {
+    await held;
+    return failing
       ? failure()
       : {
           json: [...releases].reverse().map((r, i) => ({
@@ -46,9 +50,10 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
             prerelease: r.version.includes("-"),
             assets: [...r.files.keys()].map((name) => ({ name, size: r.files.get(name)!.length, browser_download_url: `${fx.url}/download/${encodeURIComponent(r.tag)}/${encodeURIComponent(name)}` })),
           })),
-        },
-  );
-  fx.route("GET", /^\/download\//, (req) => {
+        };
+  });
+  fx.route("GET", /^\/download\//, async (req) => {
+    await held;
     if (failing) return failure();
     const [, , tag, name] = req.path.split("/").map(decodeURIComponent);
     const body = releases.find((r) => r.tag === tag)?.files.get(name!);
@@ -67,6 +72,11 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
     },
     failWith(status) {
       failing = status;
+    },
+    hold() {
+      let release!: () => void;
+      held = new Promise((resolve) => (release = resolve));
+      return release;
     },
     close: () => fx.close(),
   };

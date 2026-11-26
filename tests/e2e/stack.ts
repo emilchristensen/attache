@@ -226,7 +226,7 @@ export function installRequests(stack: Stack): string[] {
   return readFileSync(file, "utf8")
     .split("\n")
     .filter(Boolean)
-    .map((line) => (JSON.parse(line) as { version: string }).version);
+    .map((line) => (JSON.parse(line) as { to: string }).to);
 }
 
 export function readRuntime(stateDir: string) {

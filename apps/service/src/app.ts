@@ -48,7 +48,7 @@ import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 import { VERSION } from "./core/version.ts";
 import { Updater } from "./updates/updater.ts";
 import { ReleaseFeed, releaseFeedUrl } from "./updates/release-feed.ts";
-import { releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
+import { canUpdate, releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
 import type { InstallerRunner } from "./updates/installer-runner.ts";
 import { platformInstallerRunner } from "./platform/installer-runner.ts";
 import { releaseTarget } from "./platform/release-target.ts";
@@ -162,13 +162,15 @@ export class App {
     );
     this.clock = opts.clock ?? systemClock;
     this.memory = new MemoryStore(this.db, null, { instance: this.instance, locksDir: defaultLocksDir(), machine: () => this.machine.get(), onWrite: (rel) => this.wrote(rel), now: () => this.clock.now() });
+    // The version this Machine runs: the process's own, unless a test plays an Update.
+    const version = opts.version ?? VERSION;
     this.replication = new Replication({
       db: this.db,
       log: this.log,
       clock: this.clock,
       seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
-      version: opts.version ?? VERSION,
+      version,
       ...(opts.brainFormat ? { brainFormat: opts.brainFormat } : {}),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
@@ -239,7 +241,7 @@ export class App {
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db, () => this.clock.now());
-    const version = opts.version ?? VERSION;
+    const releaseInstall = opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version);
     this.updater = new Updater({
       version,
       stateDir: this.paths.stateDir,
@@ -248,9 +250,7 @@ export class App {
       settings: { get: () => this.config.get().updates, set: (updates) => this.config.set({ ...this.config.get(), updates }) },
       changed: () => this.bus.emit("event", { type: UPDATES_EVENT } satisfies UpdatesChangedEvent),
       feed: new ReleaseFeed(opts.updates?.feedUrl ?? releaseFeedUrl(), `Attache/${version}`),
-      install: opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version),
-      target: releaseTarget(),
-      trustedKeys: () => trustedReleaseKeys(this.paths.stateDir),
+      updating: () => canUpdate({ install: releaseInstall, target: releaseTarget(), trustedKeys: trustedReleaseKeys(this.paths.stateDir) }),
       runner: opts.updates?.installerRunner ?? platformInstallerRunner(this.log),
       port: () => this.httpPort,
       jobs: {
@@ -260,7 +260,7 @@ export class App {
           return () => this.jobs.events.off("event", listener);
         },
       },
-      notify: (title, body) => this.notifications.notify(title, body, { quietHours: null }),
+      notify: (title, body) => this.notifyNow(title, body),
     });
     this.wire();
     registerRunners(this);
@@ -474,7 +474,18 @@ export class App {
   private replicationPaused(pause: ReplicationPause) {
     this.updater.checkSoon();
     const { title, body } = pausedNotification(pause, this.updater.view());
-    void this.notifications.notify(title, body, { quietHours: null }).catch((e: unknown) => this.log.warn("could not raise the notification for a paused Replication", { error: (e as Error).message }));
+    void this.notifyNow(title, body);
+  }
+
+  /**
+   * Raise a system notification now: an Update or Replication telling the owner what Attache did to itself, which is not
+   * held for quiet hours. Resolves whether it was shown; a failure is logged, never thrown.
+   */
+  private notifyNow(title: string, body: string): Promise<boolean> {
+    return this.notifications.notify(title, body, { quietHours: null }).catch((e: unknown) => {
+      this.log.warn("could not raise a system notification", { title, error: (e as Error).message });
+      return false;
+    });
   }
 
   /** A Source refresh of every source finished: Dashboards show when, and the Reader lease carries it to the other Machines. */

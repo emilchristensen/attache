@@ -128,6 +128,43 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(readFileSync(join(pc.dataDir, "memory/notes/from-mac.md"), "utf8")).toContain("Written on Mac");
   });
 
+  it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [first, pc] = world.machines as [TestMachine, TestMachine];
+    let mac = first;
+    await settle([pc, mac]);
+    // PC keeps working for 31 days and sends its record again; Mac is away all that time, so its copy of PC's record is 31 days old.
+    pc.clock.skip(31 * DAY);
+    await settle([pc]);
+    mac = await world.restart(mac, { brainFormat: READS_2, after: 31 * DAY });
+    await settle([mac, pc]);
+    expect(pushedFormat(world)).toMatchObject({ format: 1 });
+    expect((await pc.get("/replication")).status).toBe("up_to_date");
+  });
+
+  it("the check that first finds a newer format commits and writes nothing", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    let [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await settle([pc, mac]);
+    const recordFile = join(pc.dataDir, `machines/${await idOf(pc)}.json`);
+    mac = await world.restart(mac, { brainFormat: READS_2 });
+    mac.clock.skip(31 * DAY);
+    await settle([mac]);
+    expect(pushedFormat(world)).toMatchObject({ format: 2 });
+
+    // PC comes back after 31 days, when its own record is due to be written again, with a note written meanwhile.
+    pc = await world.restart(pc, { after: 31 * DAY });
+    const head = localHead(pc);
+    const record = readFileSync(recordFile, "utf8");
+    const format = readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8");
+    handNote(pc, "while-paused");
+    await settle([pc]);
+    expect((await pc.get("/replication")).status).toBe("paused");
+    expect(localHead(pc)).toBe(head);
+    expect(readFileSync(recordFile, "utf8")).toBe(record);
+    expect(readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8")).toBe(format);
+  });
+
   it("a Machine back on a release that cannot read the format, as after a rolled-back Update, pauses at once and commits nothing", async () => {
     world = await startMachines(["Mac", "PC"], { brainFormat: READS_2 });
     const [mac, first] = world.machines as [TestMachine, TestMachine];

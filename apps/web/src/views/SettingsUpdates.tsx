@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode } from "react";
-import type { LastUpdateView, UpdateChannel, UpdateMode, UpdatesView } from "@attache/contracts";
+import { CHANNEL_LABEL, settingsLockedWhileInstalling, type LastUpdateView, type UpdateChannel, type UpdateMode, type UpdatesView } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { ReleaseNotes } from "../components/ReleaseNotes.tsx";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
-import { CHANNEL_LABEL, lastCheckShown, lastUpdateShown, updatesShown } from "../updates.ts";
+import { lastCheckShown, lastUpdateShown, updatesShown } from "../updates.ts";
 import { useUpdates } from "../updates-live.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -91,10 +91,7 @@ function Status({ view, busy, act }: { view: UpdatesView; busy: string | null; a
   );
 }
 
-/**
- * What the last Update did. A rollback's reason is the installer's; the database sentence #138 adds to a rollback
- * (`rollbackDatabaseSentence`) goes in `lastUpdateShown`'s detail, so this view and the line under the masthead say it alike.
- */
+/** What the last Update did. A rollback's detail is the installer's reason, then what became of the database. */
 function LastUpdate({ last }: { last: LastUpdateView }) {
   const shown = lastUpdateShown(last);
   return (
@@ -158,7 +155,8 @@ function ChoiceGroup<T extends string>({ name, legend, choices, value, disabled,
 
 /** This Machine's Automatic updates and Update channel; each Machine keeps its own. */
 function Settings({ view, busy, act }: { view: UpdatesView; busy: string | null; act: Act }) {
-  const disabled = busy !== null || view.status === "installing";
+  const installing = view.status === "installing";
+  const disabled = busy !== null || installing;
   const mode = (id: UpdateMode) => act("mode", () => put<UpdatesView>("/updates/settings", { mode: id }), `Automatic updates: ${MODES.find((m) => m.id === id)!.label}`);
   const channel = (id: UpdateChannel) => act("channel", () => put<UpdatesView>("/updates/settings", { channel: id }), `Update channel: ${CHANNEL_LABEL[id]}`);
   return (
@@ -166,6 +164,11 @@ function Settings({ view, busy, act }: { view: UpdatesView; busy: string | null;
       <div>
         <h3 id="updates-settings-title">On this Machine</h3>
         <p className="small muted">Each Machine keeps its own choice, so you can try Beta on one while the others stay on Stable.</p>
+        {installing && (
+          <p className="small updates-locked" data-settings-locked>
+            {settingsLockedWhileInstalling(view.update?.version ?? null)}
+          </p>
+        )}
       </div>
       <ChoiceGroup name="update-mode" legend="Automatic updates" choices={MODES} value={view.mode} disabled={disabled} onChoose={mode} />
       <ChoiceGroup name="update-channel" legend="Update channel" choices={CHANNELS} value={view.channel} disabled={disabled} onChoose={channel}>

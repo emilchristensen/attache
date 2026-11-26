@@ -37,6 +37,7 @@ describe("updatesShown: every status the service reports, in the owner's words, 
       false,
       "restart",
     ],
+    ["installing, after a restart that knows no manifest", view("installing"), "Installing an Update", "Attache restarts on the new version in a moment, and this page reconnects on its own.", "plain", false, null],
     ["installing", view("installing", { update: UPDATE }), "Installing Attache 0.7.0", "Attache restarts on the new version in a moment, and this page reconnects on its own.", "plain", false, null],
     ["check failed", view("check_failed", { reason: "Attache could not reach GitHub to look for an Update. Check the network, then select Check now." }), "The last check failed", "Attache could not reach GitHub to look for an Update. Check the network, then select Check now.", "danger", true, null],
     // A refused download keeps the Update an earlier check verified, so Install now can try it again.

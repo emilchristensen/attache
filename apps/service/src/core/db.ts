@@ -257,6 +257,11 @@ export const MIGRATIONS: readonly string[] = [
   alter table replication add column paused_format integer;
   alter table attention_items add column unknown_fields text;
   `,
+  // The Brain format whose pause the owner was told about, so a pause raises one notification however often a
+  // failure of another kind interrupts it; cleared once Replication is up to date again.
+  `
+  alter table replication add column paused_notified_format integer;
+  `,
 ];
 
 const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);

@@ -108,11 +108,20 @@ test("up to date, then a failed check says why, and Check now looks again", asyn
   await expect(section(page).locator("[data-last-check]")).toContainText("failed");
   await capture(page, "check-failed");
 
+  // While the check runs, its status offers no Check now; the button pressed stays, disabled and saying so, until the answer.
   releases.failWith(null);
-  const again = reported(page, "up_to_date");
+  const letThrough = releases.hold();
+  const checking = reported(page, "checking");
   await button(page, "Check now").click();
+  await checking;
+  await expect(status(page).getByRole("heading", { name: "Looking for an Update…" })).toBeVisible();
+  await expect(button(page, "Checking…")).toBeVisible();
+  await expect(button(page, "Checking…")).toBeDisabled();
+  const again = reported(page, "up_to_date");
+  letThrough();
   await again;
   await expect(status(page).getByRole("heading", { name: "Attache is up to date" })).toBeVisible();
+  await expect(button(page, "Check now")).toBeEnabled();
 });
 
 test("Automatic updates and the Update channel take effect and survive a reload; Off makes no request", async () => {
@@ -168,8 +177,10 @@ test("Ask first: Check now downloads an Update and waits; Install now hands it t
   await expect(status(page).getByRole("heading", { name: "Installing Attache 0.7.0" })).toBeVisible();
   // Install now is gone with the status that offered it, so focus is on what happens now, not lost.
   await expect(status(page).getByRole("heading", { name: "Installing Attache 0.7.0" })).toBeFocused();
-  // While the installer runs, the settings wait for the version it starts.
+  // While the installer runs, the settings wait for the version it starts, and say so.
   await expect(radio(page, "Automatic")).toBeDisabled();
+  await expect(radio(page, "Beta")).toBeDisabled();
+  await expect(section(page).getByText("Automatic updates and the Update channel can change once Attache 0.7.0 has finished installing.")).toBeVisible();
   expect(installRequests(stack)).toEqual(["0.7.0"]);
   await capture(page, "installing");
 

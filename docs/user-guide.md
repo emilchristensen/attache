@@ -762,7 +762,7 @@ Each Machine looks for an Update when the service starts and every 6 hours, and 
   When an Update does not start, Attache goes back to the version it ran before, and the section says so with the reason.
 
 A line under the masthead, after the Connection banner when both show, tells you about Updates on every screen:
-"Attache updated to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it; and "Update this Machine to keep replicating" while Replication is paused (see [Replication](#replication)).
+"Attache updated from 0.6.1 to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready to install" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it; and "Update this Machine to keep replicating" while Replication is paused (see [Replication](#replication)).
 None of these counts toward the Decision count or turns on the Attention dot.
 A failed Update that went back also raises a desktop notification, once, even with notifications for urgent items switched off or during quiet hours; a successful Update raises none.
 
@@ -925,6 +925,7 @@ The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `e
 Jobs that were running pick up from where they stopped once Attache is back.
 When Automatic updates is Off, `attache update` makes no request and says so.
 When the new version does not start, Attache goes back to the version it had, with the database from just before the Update, and never offers that version again on this Machine; a newer release is still offered.
+The same holds for an Update whose installer stopped before changing anything.
 `attache update` then fails with the reason and says what became of the database.
 `attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 `attache agent-hooks status` lists the hooks and MCP servers Attache added to your Harnesses.

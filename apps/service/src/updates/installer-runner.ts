@@ -10,9 +10,9 @@
  * service tests use a fake that records the request.
  */
 export interface InstallRequest {
-  /** The version installed now, and the version to install. */
+  /** The version installed now, and the version to install: named as in the install and outcome records (`install-records.ts`). */
   from: string;
-  version: string;
+  to: string;
   /** The staged release folder: the signed manifest, its signature and this computer's archive, verified. */
   release: string;
   /** The archive in `release` that holds the release's installer. */

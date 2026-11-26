@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 import type { UpdateMode, UpdatesView } from "@attache/contracts";
 import type { JobContext } from "../../src/jobs/queue.ts";
 import type { ReleaseServer } from "../fixtures/release-server.ts";
-import { updatesWorld, type UpdatesMachine } from "./updates-world.ts";
+import { signedRelease } from "../fixtures/signed-release.ts";
+import { installerFinished, updatesWorld, type UpdatesMachine } from "./updates-world.ts";
 
-const { releases, machine, restart } = updatesWorld();
+const { key, releases, machine, restart, outcomeSeen } = updatesWorld();
 
 const HOUR = 60 * 60_000;
 const view = (m: UpdatesMachine) => m.get<UpdatesView>("/updates");
@@ -101,12 +102,32 @@ describe("the mode", () => {
   });
 });
 
+describe("while an Update installs", () => {
+  // A rollback restores the database from before the Update, never the configuration: a choice made during the install would hold on the version that started and not on the one the rollback returns to.
+  it("refuses to change the mode or the Update channel, says why, and takes changes again once the new version runs", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await m.clock.advance(0);
+    expect((await view(m)).status).toBe("installing");
+    for (const body of [{ mode: "off" }, { channel: "beta" }]) {
+      const r = await m.call("PUT", "/updates/settings", body);
+      expect(r.status).toBe(409);
+      expect(r.body.error).toMatchObject({ code: "update_installing", message: "Automatic updates and the Update channel can change once Attache 0.7.0 has finished installing." });
+    }
+    expect((await m.get("/config")).config.updates).toEqual({ channel: "stable", mode: "automatic" });
+
+    const after = await restart(m, "0.7.0");
+    installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+    await outcomeSeen(after);
+    expect(await setMode(after, "off")).toMatchObject({ mode: "off" });
+  });
+});
+
 describe("Automatic", () => {
   it("installs a verified Update at once when no Job is running", async () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
     await m.clock.advance(0);
     expect(await view(m)).toMatchObject({ status: "installing", update: { version: "0.7.0" }, jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("waits while Jobs run, with the exact count, and installs when the last one ends", async () => {
@@ -125,7 +146,7 @@ describe("Automatic", () => {
     briefing.finish();
     await expect.poll(async () => (await view(m)).status).toBe("installing");
     expect((await view(m)).jobs).toBeNull();
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("looks at the running Jobs again every minute", async () => {
@@ -150,7 +171,48 @@ describe("Automatic", () => {
 
     await m.clock.advance(60_000);
     expect(await view(m)).toMatchObject({ status: "installing", jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
+    job.finish();
+  });
+
+  it("keeps counting the 24 hours across a restart, so a Machine restarted while always busy still installs", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    const job = await runningJob(m, "Research");
+    await m.clock.advance(0);
+    await m.clock.advance(20 * HOUR);
+    expect(await view(m)).toMatchObject({ status: "waiting_for_jobs", jobs: 1 });
+
+    // Still busy when the service restarts: the Job resumes after it.
+    const after = await restart(m, "0.6.0");
+    const busy = await runningJob(after, "Briefing");
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "waiting_for_jobs" });
+    await after.clock.advance(4 * HOUR - 60_000);
+    expect(after.runner.requests).toEqual([]);
+    await after.clock.advance(60_000);
+    expect(await view(after)).toMatchObject({ status: "installing", jobs: null });
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
+    busy.finish();
+    job.finish();
+  });
+
+  it("starts the 24 hours again for a newer Update than the one that waited", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const job = await runningJob(m, "Research");
+    await m.clock.advance(0);
+    await m.clock.advance(20 * HOUR);
+
+    server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));
+    const after = await restart(m, "0.6.0");
+    const busy = await runningJob(after, "Briefing");
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "waiting_for_jobs", update: { version: "0.7.1" } });
+    await after.clock.advance(4 * HOUR);
+    expect(after.runner.requests).toEqual([]);
+    await after.clock.advance(20 * HOUR);
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.1"]);
+    busy.finish();
     job.finish();
   });
 
@@ -176,7 +238,7 @@ describe("Ask first", () => {
     expect(m.runner.requests).toEqual([]);
 
     expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing", update: { version: "0.7.0" } });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     expect(archiveDownloads(server)).toBe(1);
   });
 
@@ -196,7 +258,7 @@ describe("Ask first", () => {
     await setMode(m, "ask_first");
     await m.clock.advance(0);
     expect(await setMode(m, "automatic")).toMatchObject({ status: "installing" });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 });
 
@@ -214,7 +276,7 @@ describe("Restart now", () => {
     expect(await view(m)).toMatchObject({ status: "waiting_for_jobs", jobs: 1 });
 
     expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing", jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
 
     // The installer restarts the service on the new version, whose own runner picks the Job up where it stopped.
     const after = await restart(m, "0.7.0");

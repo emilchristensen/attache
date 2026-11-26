@@ -35,6 +35,12 @@
   border-color: var(--amber);
 }
 
+/* Why the choices below are disabled while an Update installs: said in ink, not muted, as it explains the state. */
+.updates-locked {
+  margin: var(--s-2) 0 0;
+  color: var(--ink-2);
+}
+
 .updates-choices {
   border: none;
   margin: 0;

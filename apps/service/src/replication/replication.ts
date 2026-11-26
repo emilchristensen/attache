@@ -47,7 +47,8 @@ export interface ReplicationDeps {
   onChange?: () => void;
   /**
    * A pause began: the Brain is in a format this Machine cannot read, and it waits for an Update (ADR 0008). Called
-   * once per pause, after the paused status is written, so a service that starts while paused does not call it again.
+   * once per pause (`paused_notified_format`, kept until Replication is up to date again), so neither a restart nor a
+   * failure of another kind in between calls it again.
    */
   onPaused?: (pause: ReplicationPause) => void;
   /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
@@ -68,7 +69,7 @@ const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause:
 
 /**
  * Keeps this Machine's copy of the Brain the same as the others through a git
- * remote: commit, fetch, merge, push. It merges and fast-forwards only; it
+ * remote: fetch, commit, merge, push. It merges and fast-forwards only; it
  * never rebases or force-pushes. A failure is reported in the status and
  * retried; it never reaches the save that triggered it.
  */
@@ -230,7 +231,7 @@ export class Replication {
     this.noteOutsideEdit();
   }
 
-  /** Commit, fetch, merge and push now. */
+  /** Fetch, commit, merge and push now. */
   async check(): Promise<ReplicationView> {
     await this.cycle();
     return this.view();
@@ -319,19 +320,16 @@ export class Replication {
     this.recoverInterrupted(repo, s.dataFolder);
     const held = await this.holdForFormat(repo, s.remote);
     if (held) return held;
-    // A week-old record is written again here, and committed with this check rather than one more after it.
-    if (this.machines.refresh(s.dataFolder)) this.deps.onChange?.();
-    this.raiseFormat(s.dataFolder);
-    const first = this.commitLocal(repo);
-    if (first) return first;
     const guard = await this.checkRemote(s.remote);
     if (!guard.ok) return { status: guard.status, cause: guard.cause };
     for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
+      // Fetch before writing or committing anything: a check that finds a newer Brain format there must end having changed nothing (ADR 0008).
       await repo.fetch(s.remote);
-      // Nothing of a Brain in a newer format is merged, and nothing more is committed or pushed.
+      // Nothing of a Brain in a newer format is merged, and nothing is committed or pushed.
       const newer = this.formatHold(repo);
       if (newer) return newer;
-      // Saves made while fetching are part of this round too.
+      // A week-old record is written again here, and committed with this check rather than one more after it.
+      if (attempt === 1 && this.machines.refresh(s.dataFolder)) this.deps.onChange?.();
       const refused = this.commitLocal(repo);
       if (refused) return refused;
       const merged = repo.mergeFetched(this.machineRef(), this.deps.clock.now());
@@ -341,13 +339,11 @@ export class Replication {
         this.retryLater();
         return { status: s.status, cause: s.cause };
       }
-      if (merged.kind === "merged") {
-        this.announce(merged.changed, merged.notices);
-        // The other Machines' records may now all read the format this Machine writes.
-        if (this.raiseFormat(s.dataFolder)) {
-          const raised = this.commitLocal(repo);
-          if (raised) return raised;
-        }
+      if (merged.kind === "merged") this.announce(merged.changed, merged.notices);
+      // Only now, with the other Machines' latest records merged, may the format rise (or be written when missing).
+      if (this.raiseFormat(s.dataFolder)) {
+        const raised = this.commitLocal(repo);
+        if (raised) return raised;
       }
       if (repo.ahead() === 0) return this.succeeded(false);
       try {
@@ -452,11 +448,14 @@ export class Replication {
 
   private report(o: Outcome): void {
     const before = this.view();
-    const wasPaused = this.settings.get()?.status === "paused";
     this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false, pausedFormat: o.pausedFormat ?? null });
     const after = this.view();
     if (before.status !== after.status || before.cause !== after.cause || o.pushed) this.deps.onChange?.();
-    if (!wasPaused && after.pause) this.deps.onPaused?.(after.pause);
+    // Once per pause, not per status change: a blocked check in between, or a restart, raises nothing more. Recorded first, so a crash loses the call rather than repeating it.
+    if (after.pause && this.settings.get()?.pausedNotifiedFormat !== after.pause.brainFormat) {
+      this.settings.pauseNotified(after.pause.brainFormat);
+      this.deps.onPaused?.(after.pause);
+    }
   }
 
   private machineRef() {
