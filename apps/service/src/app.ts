@@ -45,6 +45,12 @@ import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
 import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 import { VERSION } from "./core/version.ts";
+import { Updater } from "./updates/updater.ts";
+import { ReleaseFeed, releaseFeedUrl } from "./updates/release-feed.ts";
+import { releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
+import { releaseTarget } from "./platform/release-target.ts";
+import { trustedReleaseKeys } from "./release/trusted-keys.ts";
+import { UPDATES_EVENT, type UpdatesChangedEvent } from "@attache/contracts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -62,6 +68,8 @@ export interface AppOptions {
   version?: string;
   /** The Brain formats this Machine reads and writes; this release's when left out. Tests name a later release's (ADR 0008). */
   brainFormat?: BrainFormatSupport;
+  /** Where the Updater reads releases, and the release install it updates; by default `releaseFeedUrl()` and the install the service script runs from. */
+  updates?: { feedUrl?: string; releaseInstall?: ReleaseInstall | null };
 }
 
 export { VERSION };
@@ -97,6 +105,8 @@ export class App {
   readonly proposals: Proposals;
   /** Meeting captures that arrive in the Brain on this Machine, each consolidated once. */
   readonly captures: CaptureArrivals;
+  /** Finds and installs Updates for this Machine. */
+  readonly updater: Updater;
   private readonly adapters: typeof ADAPTERS;
   /** Service-wide event bus for the client SSE stream. */
   readonly bus = new EventEmitter();
@@ -210,6 +220,19 @@ export class App {
     this.jobs = new JobQueue(this.db, this.log, { concurrency: opts.jobConcurrency ?? 2 });
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db, () => this.clock.now());
+    const version = opts.version ?? VERSION;
+    this.updater = new Updater({
+      version,
+      stateDir: this.paths.stateDir,
+      log: this.log,
+      clock: this.clock,
+      settings: { get: () => this.config.get().updates, set: (updates) => this.config.set({ ...this.config.get(), updates }) },
+      changed: () => this.bus.emit("event", { type: UPDATES_EVENT } satisfies UpdatesChangedEvent),
+      feed: new ReleaseFeed(opts.updates?.feedUrl ?? releaseFeedUrl(), `Attache/${version}`),
+      install: opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version),
+      target: releaseTarget(),
+      trustedKeys: () => trustedReleaseKeys(this.paths.stateDir),
+    });
     this.wire();
     registerRunners(this);
   }

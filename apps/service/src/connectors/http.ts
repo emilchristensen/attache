@@ -23,6 +23,8 @@ export interface HttpRequest {
   timeoutMs?: number;
   /** Retries for 429/5xx/network errors on idempotent calls. Writes pass 0. */
   retries?: number;
+  /** "bytes": `data` is the body's exact bytes (a signed file, a download) instead of parsed JSON or text. */
+  responseType?: "bytes";
 }
 
 export interface HttpResponse<T = unknown> {
@@ -104,8 +106,11 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
         }
         clearTimeout(timer);
         opts.signal?.removeEventListener("abort", onAbort);
-        const text = await res.text();
+        const bytes = Buffer.from(await res.arrayBuffer());
+        // As `Response.text()` decodes: UTF-8, without a leading byte order mark.
+        const text = new TextDecoder().decode(bytes);
         if (res.ok) {
+          if (req.responseType === "bytes") return { status: res.status, headers: res.headers, data: bytes as T };
           let data: unknown = text;
           if (text && (res.headers.get("content-type") ?? "").includes("json")) {
             try {

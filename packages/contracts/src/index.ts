@@ -5,6 +5,7 @@ export const API_PREFIX = `/api/${API_VERSION}`;
 export * from "./features.ts";
 export * from "./config.ts";
 export * from "./replication.ts";
+export * from "./updates.ts";
 export * from "./memory.ts";
 export * from "./recall-evaluation.ts";
 export * from "./meaning.ts";

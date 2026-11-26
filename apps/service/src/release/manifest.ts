@@ -6,6 +6,7 @@
  * is read back only from those bytes, never rebuilt from the parsed object.
  */
 import { z } from "zod";
+import type { UpdateChannel } from "@attache/contracts";
 import { parsePublicKey } from "./signature.ts";
 
 /** The manifest layout this version writes and reads. A newer layout gets a new number. */
@@ -13,8 +14,6 @@ export const MANIFEST_VERSION = 1;
 
 /** A release version: `x.y.z` for Stable, `x.y.z-beta.N` for Beta. */
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-beta\.(0|[1-9]\d*))?$/;
-
-export type UpdateChannel = "stable" | "beta";
 
 /** Whether a version is one a release can carry. */
 export const isReleaseVersion = (version: string): boolean => RELEASE_VERSION.test(version);

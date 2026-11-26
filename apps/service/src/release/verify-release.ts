@@ -58,16 +58,15 @@ async function checkArtifact(folder: string, artifact: ReleaseArtifact): Promise
   if (statSync(file).size !== artifact.size || (await sha256File(file)) !== artifact.sha256) throw new ReleaseRefusedError(`${artifact.name} does not match the signed manifest, so it was refused.`);
 }
 
-/** The verified manifest, or a `ReleaseRefusedError` saying why the folder fails. */
-export async function verifyReleaseFolder(folder: string, options: VerifyReleaseOptions): Promise<VerifiedRelease> {
-  const name = findManifest(folder, options.version);
-  const manifestFile = join(folder, name);
-  const signatureFile = join(folder, options.version ? signatureFileName(options.version) : `${name}.sig`);
-  if (!existsSync(manifestFile)) throw new ReleaseRefusedError(`${name} is missing from ${folder}.`);
-  if (!existsSync(signatureFile)) throw new ReleaseRefusedError(`${name} has no signature next to it in ${folder}.`);
-  const bytes = readFileSync(manifestFile);
+/**
+ * The manifest these bytes hold, once `signatureText` proves a trusted key signed them;
+ * a `ReleaseRefusedError` otherwise. `name` is the manifest's file name, for the message.
+ * The signature is checked before the bytes are parsed, so nothing in them is believed before.
+ */
+export function verifySignedManifest(bytes: Uint8Array, signatureText: string, options: { trustedKeys: readonly string[]; version?: string; name: string }): ReleaseManifest {
+  const { name } = options;
   if (!options.trustedKeys.length) throw new ReleaseRefusedError("This copy of Attache holds no release key, so it cannot check a release.");
-  if (!signedByAny(bytes, readFileSync(signatureFile, "utf8"), options.trustedKeys)) throw new ReleaseRefusedError(`${name} is not signed with Attache's key, so it was refused.`);
+  if (!signedByAny(bytes, signatureText, options.trustedKeys)) throw new ReleaseRefusedError(`${name} is not signed with Attache's key, so it was refused.`);
   let manifest: ReleaseManifest;
   try {
     manifest = parseManifest(bytes);
@@ -75,6 +74,17 @@ export async function verifyReleaseFolder(folder: string, options: VerifyRelease
     throw new ReleaseRefusedError((e as Error).message);
   }
   if (options.version && manifest.version !== options.version) throw new ReleaseRefusedError(`${name} describes Attache ${manifest.version}, not ${options.version}.`);
+  return manifest;
+}
+
+/** The verified manifest, or a `ReleaseRefusedError` saying why the folder fails. */
+export async function verifyReleaseFolder(folder: string, options: VerifyReleaseOptions): Promise<VerifiedRelease> {
+  const name = findManifest(folder, options.version);
+  const manifestFile = join(folder, name);
+  const signatureFile = join(folder, options.version ? signatureFileName(options.version) : `${name}.sig`);
+  if (!existsSync(manifestFile)) throw new ReleaseRefusedError(`${name} is missing from ${folder}.`);
+  if (!existsSync(signatureFile)) throw new ReleaseRefusedError(`${name} has no signature next to it in ${folder}.`);
+  const manifest = verifySignedManifest(readFileSync(manifestFile), readFileSync(signatureFile, "utf8"), { trustedKeys: options.trustedKeys, name, ...(options.version ? { version: options.version } : {}) });
   const targets = options.targets ?? Object.keys(manifest.artifacts);
   const artifacts: Record<string, ReleaseArtifact> = {};
   for (const target of targets) {
