@@ -51,6 +51,11 @@ export class JobQueue {
   private readonly running = new Map<string, AbortController>();
   private timer: NodeJS.Timeout | null = null;
   private stopped = true;
+  /**
+   * Set once `stop()` has given running Jobs their grace: the service closes the database next. A runner that settles after
+   * that records nothing; its row stays running, so the next start recovers it and resumes it from its last checkpoint.
+   */
+  private closed = false;
   private concurrency: number;
   /** Returns a reason string if the job may not run now (capability disabled, connection gone). */
   gate: (job: JobView) => string | null = () => null;
@@ -210,6 +215,7 @@ export class JobQueue {
   start() {
     if (!this.stopped) return;
     this.stopped = false;
+    this.closed = false;
     this.recover();
     this.timer = setInterval(() => this.kick(), 1000);
     this.timer.unref();
@@ -221,6 +227,7 @@ export class JobQueue {
     if (this.timer) clearInterval(this.timer);
     const deadline = Date.now() + graceMs;
     while (this.running.size && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+    this.closed = true;
   }
 
   kick() {
@@ -242,11 +249,17 @@ export class JobQueue {
     }
   }
 
+  /** A runner settled after the service stopped: the next start runs its Job again from the last checkpoint. */
+  private outlived(job: JobView): void {
+    this.log.info("a job ended after the service stopped; it resumes at the next start", { id: job.id, kind: job.kind });
+  }
+
   private async execute(id: string) {
     const job = this.get(id)!;
     const ctrl = new AbortController();
     this.running.set(id, ctrl);
     const lease = setInterval(() => {
+      if (this.closed) return clearInterval(lease);
       this.db.prepare("update jobs set lease_until = ? where id = ? and lease_owner = ?").run(new Date(Date.now() + 60_000).toISOString(), id, this.owner);
     }, 20_000);
     lease.unref();
@@ -263,6 +276,7 @@ export class JobQueue {
       this.insertEvent(id, "started", { attempt: job.attempts });
       const ctx = this.context(job, ctrl.signal);
       const result = await runner(ctx);
+      if (this.closed) return this.outlived(job);
       // The runner finished; a cancel that arrived meanwhile came too late to stop it.
       const lateCancel = ctrl.signal.aborted || !!this.get(id)!.cancelRequestedAt;
       tx(this.db, () => {
@@ -270,6 +284,8 @@ export class JobQueue {
         this.insertEvent(id, "succeeded", { result: (redactDeep(result ?? null) as Record<string, unknown>) ?? null, ...(lateCancel ? { cancelOutcome: "too_late" } : {}) });
       });
     } catch (e) {
+      // After the stop the runner's own writes fail too: nothing it did can be recorded.
+      if (this.closed) return this.outlived(job);
       const err = e as Error;
       const current = this.get(id)!;
       if (current.cancelRequestedAt || ctrl.signal.aborted) {
