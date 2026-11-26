@@ -4,7 +4,7 @@ import { type Db, json, nowIso, placeholders, tx } from "../core/db.ts";
 import { fingerprint } from "./fingerprint.ts";
 import type { AttentionCandidate } from "../connectors/types.ts";
 import { isFullyCovered } from "../connectors/types.ts";
-import { deriveState, INBOX_RECORD_VERSION, type InboxDecisionKind, type InboxDecisionPart, type InboxItemPart, type InboxMachine, type InboxRecord } from "./inbox-record.ts";
+import { deriveState, INBOX_RECORD_VERSION, unknownFieldsOf, type InboxUnknownFields, type InboxDecisionKind, type InboxDecisionPart, type InboxItemPart, type InboxMachine, type InboxRecord } from "./inbox-record.ts";
 
 export interface CandidateWithSource extends AttentionCandidate {
   sourceKind: string;
@@ -58,6 +58,7 @@ interface ItemRow {
   decision: string | null;
   machine: string | null;
   meeting: string | null;
+  unknown_fields: string | null;
 }
 
 /**
@@ -72,11 +73,14 @@ function rowByKey(db: Db, key: string): ItemRow | undefined {
 
 /** The replicated record of a row: everything but this Machine's own links (drafts, briefings). */
 export function recordOfRow(r: ItemRow): InboxRecord {
+  const unknown = json<InboxUnknownFields | null>(r.unknown_fields, null) ?? { record: {}, item: {} };
   return {
+    ...unknown.record,
     version: INBOX_RECORD_VERSION,
     id: r.id,
     key: r.item_key,
     item: {
+      ...unknown.item,
       fingerprint: r.fingerprint,
       kind: r.kind,
       title: r.title,
@@ -123,17 +127,18 @@ export function storeRecord(db: Db, rec: InboxRecord, now: string, briefingId?: 
     rec.id, item.fingerprint, item.kind, item.title, item.summary, item.why, item.sourceKind, item.connectionId, JSON.stringify(item.evidence), item.url, item.dueAt, item.priority,
     derived.state, derived.snoozeUntil, derived.decidedFingerprint, item.firstSeenAt, item.updatedAt, item.draftable ? JSON.stringify(item.draftable) : null,
     item.resolvedAt, decision ? JSON.stringify(decision) : null, item.machine ? JSON.stringify(item.machine) : null, item.meeting ? JSON.stringify(item.meeting) : null,
+    jsonOrNull(unknownFieldsOf(rec)),
   ] as const;
   const prev = rowByKey(db, rec.key);
   if (!prev) {
     db.prepare(
-      `insert into attention_items (id, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, snooze_until, decided_fingerprint, first_seen_at, updated_at, draftable, resolved_at, decision, machine, meeting, item_key, last_briefing_id)
-       values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `insert into attention_items (id, fingerprint, kind, title, summary, why, source_kind, connection_id, evidence, url, due_at, priority, state, snooze_until, decided_fingerprint, first_seen_at, updated_at, draftable, resolved_at, decision, machine, meeting, unknown_fields, item_key, last_briefing_id)
+       values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(...values, rec.key, briefingId ?? null);
   } else {
     db.prepare(
       `update attention_items set id = ?, fingerprint = ?, kind = ?, title = ?, summary = ?, why = ?, source_kind = ?, connection_id = ?, evidence = ?, url = ?, due_at = ?, priority = ?,
-         state = ?, snooze_until = ?, decided_fingerprint = ?, first_seen_at = ?, updated_at = ?, draftable = ?, resolved_at = ?, decision = ?, machine = ?, meeting = ?, last_briefing_id = ?
+         state = ?, snooze_until = ?, decided_fingerprint = ?, first_seen_at = ?, updated_at = ?, draftable = ?, resolved_at = ?, decision = ?, machine = ?, meeting = ?, unknown_fields = ?, last_briefing_id = ?
        where item_key = ?`,
     ).run(...values, briefingId === undefined ? prev.last_briefing_id : briefingId, rec.key);
   }
@@ -158,8 +163,17 @@ function itemOf(c: CandidateWithSource, firstSeenAt: string, now: string, machin
     updatedAt: now,
     resolvedAt: null,
     machine,
-    meeting: c.meeting ?? null,
+    meeting: meetingOf(c),
   };
+}
+
+function jsonOrNull(value: unknown): string | null {
+  return value === null ? null : JSON.stringify(value);
+}
+
+/** The meeting the source reports, keeping fields a later release added to the one the record holds. */
+function meetingOf(c: CandidateWithSource, held: InboxItemPart["meeting"] = null): InboxItemPart["meeting"] {
+  return c.meeting ? { ...held, ...c.meeting } : null;
 }
 
 /** Whether the source said something new about the item, beyond when it last looked. */
@@ -205,14 +219,15 @@ export function applyCandidates(
       if (prev.fingerprint === c.fingerprint && !rec.item.resolvedAt) {
         // Same evidence: refresh what it says without alerting again; it replicates only when its wording changed.
         const again = reworded(rec.item, c);
-        storeRecord(db, { ...rec, item: { ...rec.item, title: c.title, summary: c.summary, evidence: c.evidence, draftable: c.draftable ?? null, meeting: c.meeting ?? null, ...(again ? { updatedAt: now, machine } : {}) } }, now);
+        storeRecord(db, { ...rec, item: { ...rec.item, title: c.title, summary: c.summary, evidence: c.evidence, draftable: c.draftable ?? null, meeting: meetingOf(c, rec.item.meeting), ...(again ? { updatedAt: now, machine } : {}) } }, now);
         if (again) out.touched.push(c.key);
         out.unchanged.push(c.key);
         if (prev.state === "dismissed") out.keptDismissed.push(c.key);
         continue;
       }
       // Evidence changed, or an item its source had resolved came back.
-      const state = storeRecord(db, { ...rec, item: itemOf(c, rec.item.firstSeenAt, now, machine) }, now, briefingId);
+      // The source's new report replaces every field this release knows; fields a later release added stay.
+      const state = storeRecord(db, { ...rec, item: { ...rec.item, ...itemOf(c, rec.item.firstSeenAt, now, machine) } }, now, briefingId);
       out.touched.push(c.key);
       if (prev.fingerprint === c.fingerprint && state !== "open") {
         out.unchanged.push(c.key);

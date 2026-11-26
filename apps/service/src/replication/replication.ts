@@ -12,6 +12,7 @@ import { cloneBrain, isEmptyFolder, notEmptyRefusal, prepareRepository, refusalO
 import { ReplicationSettingsStore, type ReplicationSettings } from "./settings.ts";
 import { ReplicatedMachines } from "./machines.ts";
 import { isMachineRecordPath, MachineRecords } from "./machine-records.ts";
+import { BRAIN_FORMAT_FILE, brainFormatHold, nextBrainFormat, readBrainFormat, readBrainFormatFile, RELEASE_BRAIN_FORMAT, writeBrainFormatFile, type BrainFormatSupport } from "./brain-format.ts";
 import { ReaderLease } from "./reader-lease.ts";
 import type { LeaseRecord } from "../reader/lease.ts";
 import type { MergeNotice, RemoteVerdict, ReplicationSeams } from "./seams.ts";
@@ -34,6 +35,8 @@ export interface ReplicationDeps {
   machine: () => MachineIdentity;
   /** The Attache version this Machine runs, which its Machine record carries. */
   version: string;
+  /** The Brain formats this Machine reads and writes; `RELEASE_BRAIN_FORMAT` when left out. Tests name a later release's. */
+  brainFormat?: BrainFormatSupport;
   /** The data folder that is open now, if any. */
   dataRoot: () => string | null;
   /** Change-log entries after `seq`, to describe a commit. */
@@ -54,9 +57,9 @@ export interface ReplicationDeps {
   leaseGenerationCommits?: number;
 }
 
-type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean };
+type Outcome = { status: ReplicationSettings["status"]; cause: string | null; pushed?: boolean; pausedFormat?: number };
 
-const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null, upToDateAt: null });
+const OFF: ReplicationView = Object.freeze({ status: "off", remote: null, cause: null, lastCheckedAt: null, lastPushedAt: null, upToDateAt: null, pause: null });
 
 /**
  * Keeps this Machine's copy of the Brain the same as the others through a git
@@ -71,6 +74,7 @@ export class Replication {
   /** Which Machine is the Reader, shared through the repository outside the Brain's history. */
   private readonly lease: ReaderLease;
   private readonly deps: ReplicationDeps;
+  private readonly brainFormat: BrainFormatSupport;
   private started = false;
   /** Wall-clock time the service started, compared with lock files' times (not the Clock, which drives timers). */
   private startedAtMs = Date.now();
@@ -87,6 +91,7 @@ export class Replication {
 
   constructor(deps: ReplicationDeps) {
     this.deps = deps;
+    this.brainFormat = deps.brainFormat ?? RELEASE_BRAIN_FORMAT;
     this.settings = new ReplicationSettingsStore(deps.db);
     this.lease = new ReaderLease({
       log: deps.log,
@@ -104,6 +109,8 @@ export class Replication {
       root: () => this.activeRoot(),
       machine: deps.machine,
       version: deps.version,
+      readsBrainFormat: this.brainFormat.reads,
+      paused: () => this.settings.get()?.status === "paused",
       clock: deps.clock,
       lastChangeBy: (root, id) => this.repo(root).lastChangeBy(id),
       written: () => {
@@ -119,7 +126,7 @@ export class Replication {
     return s && !this.folderMoved(s) ? s.dataFolder : null;
   }
 
-  /** This Machine was renamed: its record in the Brain says the new name from the next commit on. */
+  /** This Machine was renamed: its record in the Brain says the new name from the next commit on (once it is no longer paused). */
   machineRenamed(): void {
     this.machines.recordThisMachine();
   }
@@ -142,7 +149,9 @@ export class Replication {
     const s = this.settings.get();
     if (!s) return OFF;
     const moved = this.folderMoved(s);
-    return { status: moved ? "blocked" : s.status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt };
+    const status = moved ? "blocked" : s.status;
+    const pause = status === "paused" && s.pausedFormat !== null ? { reason: "newer_brain_format" as const, brainFormat: s.pausedFormat, readsBrainFormat: this.brainFormat.reads } : null;
+    return { status, remote: s.remote, cause: moved ?? s.cause, lastCheckedAt: s.checkedAt, lastPushedAt: s.pushedAt, upToDateAt: s.upToDateAt, pause };
   }
 
   /** The Reader lease as this Machine last heard it; null while Replication is off or no Machine holds it yet. */
@@ -177,7 +186,7 @@ export class Replication {
     this.started = true;
     this.startedAtMs = Date.now();
     if (!this.settings.get()) return;
-    this.machines.recordThisMachine();
+    // The first check, at once, refreshes this Machine's record, unless Replication is paused.
     this.soon();
     this.arm();
   }
@@ -303,14 +312,20 @@ export class Replication {
 
   private async replicate(repo: BrainRepo, s: ReplicationSettings): Promise<Outcome> {
     this.recoverInterrupted(repo, s.dataFolder);
+    const held = await this.holdForFormat(repo, s.remote);
+    if (held) return held;
     // A week-old record is written again here, and committed with this check rather than one more after it.
     if (this.machines.refresh(s.dataFolder)) this.deps.onChange?.();
+    this.raiseFormat(s.dataFolder);
     const first = this.commitLocal(repo);
     if (first) return first;
     const guard = await this.checkRemote(s.remote);
     if (!guard.ok) return { status: guard.status, cause: guard.cause };
     for (let attempt = 1; attempt <= PUSH_ATTEMPTS; attempt++) {
       await repo.fetch(s.remote);
+      // Nothing of a Brain in a newer format is merged, and nothing more is committed or pushed.
+      const newer = this.formatHold(repo);
+      if (newer) return newer;
       // Saves made while fetching are part of this round too.
       const refused = this.commitLocal(repo);
       if (refused) return refused;
@@ -321,7 +336,14 @@ export class Replication {
         this.retryLater();
         return { status: s.status, cause: s.cause };
       }
-      if (merged.kind === "merged") this.announce(merged.changed, merged.notices);
+      if (merged.kind === "merged") {
+        this.announce(merged.changed, merged.notices);
+        // The other Machines' records may now all read the format this Machine writes.
+        if (this.raiseFormat(s.dataFolder)) {
+          const raised = this.commitLocal(repo);
+          if (raised) return raised;
+        }
+      }
       if (repo.ahead() === 0) return this.succeeded(false);
       try {
         await repo.push(s.remote);
@@ -347,6 +369,42 @@ export class Replication {
     if (!reverted) return;
     this.deps.log.warn("abandoned a merge that was interrupted; merging again", { folder });
     if (reverted.length) this.announce(reverted, []);
+  }
+
+  /**
+   * A Brain format this Machine cannot read, in its data folder or in what it
+   * last fetched, holds Replication: it then only fetches, so it hears what
+   * the others write, and reports paused until it is updated (ADR 0008).
+   */
+  private async holdForFormat(repo: BrainRepo, remote: string): Promise<Outcome | null> {
+    if (!this.formatHold(repo)) return null;
+    try {
+      await repo.fetch(remote);
+    } catch (e) {
+      if (!(e instanceof GitError)) throw e;
+      this.deps.log.warn("could not fetch while Replication is paused; trying again at the next check", { error: e.cause });
+    }
+    return this.formatHold(repo);
+  }
+
+  private formatHold(repo: BrainRepo): Outcome | null {
+    return brainFormatHold(
+      [
+        { reading: readBrainFormatFile(repo.root), where: "in this Machine's data folder" },
+        { reading: readBrainFormat(repo.fetchedFile(BRAIN_FORMAT_FILE)), where: "that came from the repository" },
+      ],
+      this.brainFormat.reads,
+    );
+  }
+
+  /** Write the Brain format record when it is missing or every active Machine reads the format this Machine writes. Returns whether it wrote. */
+  private raiseFormat(root: string): boolean {
+    const reading = readBrainFormatFile(root);
+    const next = nextBrainFormat({ reading, support: this.brainFormat, records: new MachineRecords(root).machines(), machine: this.deps.machine().id, now: this.deps.clock.now() });
+    if (!next) return false;
+    writeBrainFormatFile(root, next);
+    if (reading.kind === "format") this.deps.log.info("raised the Brain format: every Machine heard from in the last 30 days reads it", { from: reading.record.format, to: next.format });
+    return true;
   }
 
   private succeeded(pushed: boolean): Outcome {
@@ -389,7 +447,7 @@ export class Replication {
 
   private report(o: Outcome): void {
     const before = this.view();
-    this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false });
+    this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false, pausedFormat: o.pausedFormat ?? null });
     const after = this.view();
     if (before.status !== after.status || before.cause !== after.cause || o.pushed) this.deps.onChange?.();
   }
@@ -436,6 +494,7 @@ export class Replication {
       }
       prepareRepository(git, remote);
       this.machines.recordThisMachine(root);
+      this.raiseFormat(root);
       const repo = new BrainRepo(git, this.deps.seams);
       const machine = this.machineRef();
       const latest = this.deps.latestSeq();

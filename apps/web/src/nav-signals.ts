@@ -86,7 +86,7 @@ function badge(t: Tally, words: (n: number) => string): Badge | undefined {
   return shown && label ? { shown, label } : undefined;
 }
 
-const PROBLEM_WORDS: Partial<Record<ReplicationStatus, string>> = { blocked: "Replication blocked", unauthorized: "Replication unauthorized" };
+const PROBLEM_WORDS: Partial<Record<ReplicationStatus, string>> = { blocked: "Replication blocked", unauthorized: "Replication unauthorized", paused: "Replication paused" };
 
 /**
  * The events that change the Inbox or Drafts rows. A Draft's status shows on its Inbox item, so the Inbox follows

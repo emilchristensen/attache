@@ -135,6 +135,11 @@ Which releases a Machine takes Updates from: Stable, or Beta, which also takes e
 A Machine never moves to an older version, so switching from Beta to Stable waits until Stable passes it.
 _Avoid_: Track, ring, prerelease
 
+**Brain format**:
+The version of how the Brain's replicated files are laid out, recorded in the Brain.
+It rises only when every Machine used in the last 30 days can read the new one, and a Machine that finds a newer one than it can read pauses Replication until it is updated (ADR 0008).
+_Avoid_: File version, Brain version
+
 ### Keeping the Brain true
 
 **Proposal**:

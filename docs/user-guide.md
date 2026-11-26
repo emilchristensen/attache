@@ -764,8 +764,10 @@ Replication is in the Dashboard under **Settings → Machines and Replication**,
   Attache backs that folder up first, together with its database, to the `backups/` folder, and the refusal names the archive; it changes nothing in the folder.
   Move the folder aside or name an empty one, then join again; `attache restore` brings the backup back if you need it.
   Attache clones the Brain into it, makes it this Machine's data folder and builds its search index, so search works straight away.
-- **Status:** the card says off, up to date, offline, unauthorized or blocked, when this Machine was last up to date, and when it last checked and last sent changes.
+- **Status:** the card says off, up to date, offline, unauthorized, blocked or paused, when this Machine was last up to date, and when it last checked and last sent changes.
   When it is not up to date, the card shows the cause and what to do.
+  Paused means another Machine moved the Brain to a newer Brain format than this Machine's Attache can read: this Machine sends and merges nothing until you update it, so it never changes files a newer Attache wrote, and your saves carry on here and are sent once it is updated.
+  The Brain format only moves once every Machine you used in the last 30 days can read the new one, so this happens to a Machine that was off for longer.
   **Check now** replicates straight away instead of waiting for the next check (`attache replication status` and `attache replication check` in the terminal).
 - **Machines:** the card lists every Machine that shares the Brain, with when each last changed it.
   Rename this Machine under **This Machine**; the others show the new name after their next check.

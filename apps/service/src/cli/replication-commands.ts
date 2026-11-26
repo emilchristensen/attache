@@ -23,6 +23,7 @@ const STATUS_TEXT: Record<ReplicationView["status"], string> = {
   offline: "Replication is offline; saves carry on and are sent when the repository can be reached",
   unauthorized: "Replication is not authorised by the repository",
   blocked: "Replication is blocked",
+  paused: "Replication is paused until this Machine is updated",
 };
 
 export function renderReplication(v: ReplicationView): string {

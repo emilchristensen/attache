@@ -1,7 +1,6 @@
 import type { ReplicatedMachineView, ReplicationMachinesView } from "@attache/contracts";
 import type { MachineIdentity } from "../core/machine.ts";
 import type { Clock } from "./clock.ts";
-import { READABLE_BRAIN_FORMAT } from "./brain-format.ts";
 import { MachineRecords, type MachineRecord } from "./machine-records.ts";
 import { ReplicationSetupError } from "./setup.ts";
 
@@ -14,6 +13,10 @@ export interface ReplicatedMachinesDeps {
   machine: () => MachineIdentity;
   /** The Attache version this Machine runs. */
   version: string;
+  /** The newest Brain format this Machine reads. */
+  readsBrainFormat: number;
+  /** Replication is paused on a newer Brain format: this Machine writes nothing to the Brain. */
+  paused: () => boolean;
   clock: Clock;
   /** When the Machine with this id last changed the Brain, from the history in `root`. */
   lastChangeBy: (root: string, id: string) => string | null;
@@ -22,6 +25,7 @@ export interface ReplicatedMachinesDeps {
 }
 
 const OFF_MESSAGE = "Replication is off on this Machine. A Machine on its own is its own Reader; set Replication up first.";
+const PAUSED_MESSAGE = "Replication is paused until this Machine is updated, so a change made here would not reach the other Machines. Update this Machine, or make the change on another Machine.";
 
 /**
  * The Machines that share the Brain, as their records in the Brain say: this
@@ -60,7 +64,7 @@ export class ReplicatedMachines {
    * format, keeping its standby flag; commit and send it like a save.
    */
   recordThisMachine(root = this.deps.root()): void {
-    if (root && this.refresh(root)) this.deps.written();
+    if (root && !this.deps.paused() && this.refresh(root)) this.deps.written();
   }
 
   /**
@@ -71,7 +75,7 @@ export class ReplicatedMachines {
     const records = new MachineRecords(root);
     const me = this.deps.machine();
     const current = records.machine(me.id);
-    const wanted = { id: me.id, name: me.name, standby: standby ?? current?.standby ?? false, version: this.deps.version, readsBrainFormat: READABLE_BRAIN_FORMAT };
+    const wanted = { id: me.id, name: me.name, standby: standby ?? current?.standby ?? false, version: this.deps.version, readsBrainFormat: this.deps.readsBrainFormat };
     if (current && !this.stale(current) && (Object.keys(wanted) as Array<keyof typeof wanted>).every((k) => current[k] === wanted[k])) return false;
     records.writeMachine({ ...wanted, updatedAt: this.now() }, records.unknownFields(me.id));
     return true;
@@ -95,9 +99,11 @@ export class ReplicatedMachines {
     return this.view();
   }
 
+  /** The records, for a change the owner makes; refused while Replication is off or paused. */
   private records(): MachineRecords {
     const root = this.deps.root();
     if (!root) throw new ReplicationSetupError(409, "replication_off", OFF_MESSAGE);
+    if (this.deps.paused()) throw new ReplicationSetupError(409, "replication_paused", PAUSED_MESSAGE);
     return new MachineRecords(root);
   }
 

@@ -21,7 +21,7 @@ test.afterAll(() => stack?.stop());
 const runGit = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
 
-/** Machines and Replication in every theme and width: off, up to date with three Machines (one on a version that did not record it), and blocked with its cause on top. */
+/** Machines and Replication in every theme and width: off, up to date with three Machines (one on a version that did not record it), blocked with its cause on top, and paused on a newer Brain format. */
 async function replicationScreens(page: Page) {
   // The section is captured once the Machines list has loaded, in tall viewports so it fits in one capture.
   const capture = async (path: string, on: boolean) => {
@@ -65,6 +65,17 @@ async function replicationScreens(page: Page) {
   writeFileSync(join(stack.dataDir, "plan.txt"), "from the Home PC\n");
   await api(page, "POST", "/replication/check");
   await shoot("blocked");
+  // The Work Mac, on a later release, moved the Brain to a format this Machine cannot read (ADR 0008).
+  mkdirSync(join(clone, "machines"), { recursive: true });
+  writeFileSync(join(clone, "machines", "brain-format.json"), `${JSON.stringify({ format: 2, updatedAt: new Date().toISOString(), by: other }, null, 2)}\n`);
+  runGit(clone, "add", "machines");
+  runGit(clone, "commit", "--quiet", "-m", "Work Mac: Brain format 2");
+  runGit(clone, "push", "--quiet", "origin", "main");
+  await api(page, "POST", "/replication/check");
+  await shoot("paused");
+  await page.goto(`${stack.url}/settings/machines`);
+  await expect(page.getByRole("region", { name: "Replication" }).getByText("Replication is paused", { exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /^Machines and Replication/ })).toHaveAccessibleName("Machines and Replication, Replication paused");
   // The rest of the screens show a single Machine.
   await api(page, "POST", "/replication/off");
 }
