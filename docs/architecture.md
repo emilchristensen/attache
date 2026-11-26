@@ -463,13 +463,19 @@ The keys a Machine trusts are the public key built into the bundle, a constant t
 
 ### Updates
 
-The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind four calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `setSettings()` and, to come, `install()`.
-The HTTP API is `GET /updates`, `PUT /updates/settings` and `POST /updates/check` (`http/routes-updates.ts`), and every change fires `updates.changed` on the event stream.
+The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind a few calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `install()` (Install now), `setSettings()`, and `start()`/`stop()` with the service.
+The HTTP API is `GET /updates`, `PUT /updates/settings`, `POST /updates/check` and `POST /updates/install` (`http/routes-updates.ts`), and every change fires `updates.changed` on the event stream.
 A check lists the repository's GitHub releases without signing in (`updates/release-feed.ts`; `ATTACHE_RELEASE_FEED_URL` points it elsewhere, for tests), and `updates/channel.ts` keeps the versions in the Machine's Update channel that are newer than the one it runs and not marked bad here, newest first.
 `updates/find-update.ts` downloads the newest one's manifest and signature and checks them (`verifySignedManifest`) before believing anything in them; a refused release is skipped, and when every newer release is refused the check fails with the reason instead of reporting the Machine up to date.
 The Update channel is the Machine's configuration (`config.updates`, Stable by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
 Only a release install updates itself (`updates/release-install.ts`: the service script runs from `<prefix>/app/<version>/` with `<prefix>/current` beside it); a source checkout, or a build without a release key, shows Updates as unavailable and makes no request.
 `attache update --check` (`cli/update-commands.ts`) asks the running service to check without acting on what it finds.
+Installing downloads this computer's archive, streamed and capped at the manifest's size, into `<state>/updates/staging/<version>/` next to the signed manifest and its signature, and checks the folder as an installer does (`updates/staging.ts`); a refused archive leaves nothing staged, and staging an Update removes what it supersedes.
+The Updater then writes `<state>/updates/install.json` (from, to, the release notes) and hands the release to the installer runner, the one port that applies an Update (`updates/installer-runner.ts`; service tests use a fake that records the request).
+The real runner (`platform/installer-runner.ts`) unpacks the archive and starts the release's own installer with `ATTACHE_UNATTENDED=1` outside the service: a transient `systemd-run --user` unit on Linux and a launchd job of its own on macOS (stopping the service ends everything in its unit's control group, and a service the installer starts from inside the old service's launchd job is one launchd loses track of), a detached process on Windows.
+The installer stops the service as a manual install does (Jobs resume after the restart), never pairs or opens the browser, keeps only the new and the previous version in `app/` (on Windows a folder still in use stays whole for the next install), and writes `<state>/updates/outcome.json`: `updated`, `rolled_back` or `failed` (stopped before changing anything), with from, to, at and a reason.
+Whichever service runs next reads that outcome into `lastUpdate`, watching for it every second while the installer is still at work, and clears the staging folder.
+`attache update` checks, asks for the install, and waits for the outcome across the restart.
 
 ## Harness sessions
 

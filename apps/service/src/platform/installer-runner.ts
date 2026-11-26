@@ -7,7 +7,9 @@
  * to anything that stopping the service ends:
  * - Linux: systemd stops a unit by ending every process in its control group, children started with a new session
  *   included. The installer runs as a transient unit of its own (`systemd-run --user`), which has its own group.
- * - macOS: launchd ends the job's process group. The installer leads a new session, so it is in a group of its own.
+ * - macOS: a process the service starts stays part of the service's launchd job, a new session or not: from there,
+ *   the installer's own `launchctl bootstrap` of the new version left a service launchd no longer tracked (it
+ *   survived `attache stop` and uninstall). The installer runs as a launchd job of its own, which removes itself.
  * - Windows: ending the logon task ends its console host only, never the processes below it (`service-manager/
  *   task-scheduler.ts`), so a detached process is enough.
  * Unattended mode (`ATTACHE_UNATTENDED=1`) never pairs or opens a browser, and writes the outcome record.
@@ -22,6 +24,7 @@ import { currentOs, type Os } from "./os.ts";
 import { powershellPath, runPowerShell } from "./powershell.ts";
 import { run } from "./run.ts";
 import { userManagerEnv } from "./service-manager/systemd.ts";
+import { escapeXml } from "./xml.ts";
 
 /** How long unpacking a release archive may take. */
 const UNPACK_TIMEOUT_MS = 5 * 60_000;
@@ -62,14 +65,54 @@ function installerEnv(request: InstallRequest): NodeJS.ProcessEnv {
 const shellWord = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
- * A script that sets the installer's environment and runs it with its output in `log`: systemd starts a transient unit
- * with the user manager's environment, not this process's, so the environment travels in the script.
+ * A script that sets the installer's environment and runs it with its output in `log`: systemd and launchd start a job
+ * with their own environment, not this process's, so the environment travels in the script.
  */
-function launcherScript(installer: string, log: string, env: NodeJS.ProcessEnv): string {
+function launcherScript(installer: string, log: string, env: NodeJS.ProcessEnv, after?: string): string {
   const exports = Object.entries(env)
     .filter((e): e is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && !/[\0]/.test(e[1]))
     .map(([k, v]) => `export ${k}=${shellWord(v)}`);
-  return ["#!/bin/sh", ...exports, `exec /bin/sh ${shellWord(installer)} >>${shellWord(log)} 2>&1`, ""].join("\n");
+  const run = `/bin/sh ${shellWord(installer)} >>${shellWord(log)} 2>&1`;
+  // `after` runs once the installer is done, whatever its outcome: on macOS it removes the installer's own job.
+  return ["#!/bin/sh", ...exports, after ? `${run}\n${after}` : `exec ${run}`, ""].join("\n");
+}
+
+/** The launchd job that runs the installer: started by `kickstart` only, never kept alive, its output in `log`. */
+function installerJobPlist(label: string, launcher: string, log: string): string {
+  const x = escapeXml;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${x(label)}</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/sh</string><string>${x(launcher)}</string></array>
+  <key>RunAtLoad</key><false/>
+  <key>KeepAlive</key><false/>
+  <key>AbandonProcessGroup</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>${x(log)}</string>
+  <key>StandardErrorPath</key><string>${x(log)}</string>
+</dict>
+</plist>
+`;
+}
+
+/** Start the installer as a launchd job of its own in the owner's session; the job removes itself when the installer is done. */
+async function startLaunchdJob(request: InstallRequest, installer: string, log: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const domain = `gui/${process.getuid?.() ?? 0}`;
+  const label = `dev.attache.update.${(env.ATTACHE_INSTANCE ?? "default").replace(/[^A-Za-z0-9.-]/g, "-")}`;
+  const launcher = join(request.release, "run-installer.sh");
+  writeFileSync(launcher, launcherScript(installer, log, env, `/bin/launchctl bootout ${shellWord(`${domain}/${label}`)}`), { mode: 0o700 });
+  const plist = join(request.release, `${label}.plist`);
+  writeFileSync(plist, installerJobPlist(label, launcher, log));
+  // An earlier Update's job that did not remove itself would refuse the new one.
+  await run("/bin/launchctl", ["bootout", `${domain}/${label}`]);
+  const loaded = await run("/bin/launchctl", ["bootstrap", domain, plist], { timeoutMs: 60_000 });
+  if (loaded.code !== 0) throw new Error(`launchd could not load the installer: ${loaded.stderr.trim() || `exit ${loaded.code}`}`);
+  // Only an explicit start runs it, at once: launchd may put off a job that runs at load, and could start it again later.
+  const started = await run("/bin/launchctl", ["kickstart", `${domain}/${label}`], { timeoutMs: 60_000 });
+  if (started.code !== 0) throw new Error(`launchd could not start the installer: ${started.stderr.trim() || `exit ${started.code}`}`);
 }
 
 /** Whether this process runs as a systemd unit, whose stop would end a child too. */
@@ -110,6 +153,7 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
     if (r.code !== 0) throw new Error(`systemd-run could not start the installer: ${r.stderr.trim() || `exit ${r.code}`}`);
     return;
   }
+  if (os === "macos") return startLaunchdJob(request, script, log, env);
   return startDetached("/bin/sh", [script], env, log);
 }
 

@@ -47,7 +47,7 @@ function Say([string]$Message) { Write-Host $Message }
 # Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason? }
 # (apps/service/src/updates/install-records.ts). The bundled runtime writes the JSON, so any reason is escaped;
 # the values travel in the environment, where Windows PowerShell cannot drop an empty one or mangle a quote.
-$OutcomeScript = "const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM, to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + String.fromCharCode(10)); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
+$OutcomeScript = "const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + String.fromCharCode(10)); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
 function Write-Outcome([string]$Kind, [string]$Reason) {
   $script:Done = $true
   if (-not $Unattended) { return }
@@ -153,8 +153,12 @@ if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   }
 }
 
-# If a service is already installed, back it up before changing anything.
-if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
+# If a service is already installed, back it up before changing anything. A service that refused to start on a
+# database a newer Attache wrote (refused-to-start) cannot open that database to back it up, and could not run on a
+# copy of it either: installing a version that reads it is the way out, so it goes ahead without that backup.
+if ($Previous -and (Test-Path -LiteralPath (Join-Path $State 'refused-to-start'))) {
+  Say "Attache $Previous cannot open this Machine's database, which a newer Attache wrote, so Attache $Version is installed without a backup first."
+} elseif ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   Say 'Backing up the existing installation'
   $Stamp = Get-Date -Format 'yyyyMMddHHmmss'
   $env:ATTACHE_STATE_DIR = $State

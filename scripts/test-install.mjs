@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Installation, upgrade, backup/restore and uninstall checks against
+ * Installation, upgrade, Update, backup/restore and uninstall checks against
  * signed release artifacts (built with a test key) for this computer (macOS on Apple silicon, Linux or
  * Windows on x86_64), in a clean temporary profile (fresh home folder whose
  * name has a space and the letters æøå, a minimal PATH with no developer
  * tools, its own service name and port).
  * Writes test-results/install-results.json, and when a check fails, the installed
  * service's logs to test-results/install-logs. Usage:
- *   node scripts/test-install.mjs [--from 0.1.0 --to 0.1.1] [--port 7690]
+ *   node scripts/test-install.mjs [--from 0.1.0 --to 0.1.1] [--next 0.1.2] [--port 7690]
+ * `--next` is the release `attache update` installs over `--to` (by default `--to` with its last number raised by one).
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -16,12 +17,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { installTestPlatform } from "./install-test/platform.mjs";
 import { removeSignedReleaseFolders, signedWithAnotherKey, tamperedArtifactInstaller, tamperedManifestInstaller, testKeyPair } from "./install-test/signed-releases.mjs";
+import { startReleaseServer } from "./install-test/release-server.mjs";
+import { updateScenario } from "./install-test/update.mjs";
 import { copyLogFolder } from "./service-logs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const arg = (n, d) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : d);
 const FROM = arg("from", "0.1.0");
 const TO = arg("to", "0.1.1");
+const NEXT = arg("next", TO.replace(/\d+$/, (n) => String(Number(n) + 1)));
 const PORT = Number(arg("port", "7690"));
 const INSTANCE = `installtest${process.pid}`;
 // The real path, as the installed service reports its own (no /var symlink on macOS, no 8.3 short names on Windows).
@@ -34,13 +38,15 @@ const NODE = P.runtime(PREFIX);
 const SERVICE = join(PREFIX, "current", "service", "attache-service.mjs");
 const INSTALL_LOGS = join(ROOT, "test-results", "install-logs");
 const results = [];
+let releaseServer = null;
 const check = (id, name, ok, detail = "") => {
   results.push({ id, name, ok: !!ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} [${id}] ${name}${detail ? ` — ${detail}` : ""}`);
   if (!ok) process.exitCode = 1;
 };
 const artifact = (v) => P.artifact(ROOT, v);
-const cleanEnv = P.cleanEnv({ ATTACHE_PORT: String(PORT), ATTACHE_INSTANCE: INSTANCE, ATTACHE_NO_OPEN: "1", TMPDIR: tmpdir(), USER: process.env.USER ?? "" });
+// The release feed address joins it once the local release server runs, before the first install, so the service reads it from the start.
+let cleanEnv = P.cleanEnv({ ATTACHE_PORT: String(PORT), ATTACHE_INSTANCE: INSTANCE, ATTACHE_NO_OPEN: "1", TMPDIR: tmpdir(), USER: process.env.USER ?? "" });
 /**
  * Copy a service's logs (service.log, and service.err.log and service.out.log from the service manager)
  * to test-results/install-logs before the test removes its state folder.
@@ -66,6 +72,16 @@ const attacheCli = (args, extraEnv = {}) => P.runScript(P.command(P.binDir, "att
 /** The installed release's own runtime and service, without a wrapper in between. */
 const installed = (args, env = cleanEnv) => execFileSync(NODE, [SERVICE, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Which process listens on `port`, for a failure's detail (macOS and Linux). */
+function listenerOf(port) {
+  if (P.os === "windows") return "(not looked up on Windows)";
+  try {
+    const pid = execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], { encoding: "utf8" }).trim().split("\n")[0];
+    return execFileSync("ps", ["-o", "pid=,ppid=,pgid=,lstart=,command=", "-p", pid], { encoding: "utf8" }).trim();
+  } catch (e) {
+    return `unknown (${e.message.split("\n")[0]})`;
+  }
+}
 // The user's own Claude Code settings, with a hook of their own, from before Attache existed.
 const CLAUDE_SETTINGS = join(HOME, ".claude/settings.json");
 const CLAUDE_JSON = join(HOME, ".claude.json");
@@ -115,7 +131,8 @@ async function http(method, path, body, token) {
   } catch (e) {
     // This test restarts the service on purpose; fetch may reuse a pooled keep-alive socket to the old
     // process, and non-idempotent requests are not retried for us. A fresh connection settles it.
-    if (e?.cause?.code !== "ECONNRESET" && e?.cause?.code !== "UND_ERR_SOCKET") throw e;
+    // Writing to such a socket after the old process closed it fails with EPIPE instead.
+    if (!["ECONNRESET", "UND_ERR_SOCKET", "EPIPE"].includes(e?.cause?.code)) throw e;
     r = await send();
   }
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -167,8 +184,12 @@ async function main() {
   // Always from the current source: a release left over from an earlier build would test old code.
   // Both are signed with a test key made by the signing tool, which is also the key built into them.
   const key = testKeyPair("install-test");
-  for (const v of [FROM, TO]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target, "--signing-key", key.signingKey, "--public-key", key.publicKey], { stdio: "inherit" });
+  for (const v of [FROM, TO, NEXT]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target, "--signing-key", key.signingKey, "--public-key", key.publicKey], { stdio: "inherit" });
   const machineBefore = P.machineFingerprint();
+  // GitHub Releases, here: the installed service lists releases from it (ATTACHE_RELEASE_FEED_URL, which the installer passes on to the service).
+  releaseServer = await startReleaseServer();
+  for (const v of [FROM, TO]) await releaseServer.publish(v, join(ROOT, "release", v));
+  cleanEnv = { ...cleanEnv, ATTACHE_RELEASE_FEED_URL: releaseServer.feedUrl };
   console.log(`Clean profile HOME=${HOME} service=${P.serviceName} port=${PORT}`);
   for (const [path, text] of Object.entries(OWNER_FILES)) {
     mkdirSync(dirname(join(HOME, path)), { recursive: true });
@@ -328,6 +349,9 @@ async function main() {
   })();
   check("install", "the command line has no save command", saveCmd.includes("Unknown command save"), saveCmd.trim());
 
+  // --- attache update installs a newer release, unattended ---
+  token = await updateScenario({ root: ROOT, P, prefix: PREFIX, state: STATE, from: FROM, to: TO, next: NEXT, check, http, attacheCli, pairToken, machineState, cfgBefore, server: releaseServer });
+
   // --- service control from the command line ---
   attacheCli(["stop"]);
   const stopped = await http("GET", "/health").then(() => false, () => true);
@@ -377,7 +401,7 @@ async function main() {
   // --- uninstall keeps data; reinstall picks it up; delete-data removes everything ---
   sh(P.command(P.binDir, "attache-uninstall"));
   const healthGone = await http("GET", "/health").then(() => false, () => true);
-  check("data", "uninstall stops and removes the service", healthGone && !P.loaded() && !P.known() && !existsSync(join(PREFIX, "app")));
+  check("data", "uninstall stops and removes the service", healthGone && !P.loaded() && !P.known() && !existsSync(join(PREFIX, "app")), `health gone ${healthGone}, loaded ${P.loaded()}, known ${P.known()}, app ${existsSync(join(PREFIX, "app"))}${healthGone ? "" : `; still listening: ${listenerOf(PORT)}`}`);
   check("data", "uninstall keeps user data and service state by default", existsSync(join(DATA, "memory/decisions")) && existsSync(join(STATE, "attache.sqlite")));
   check("data", "uninstall removes exactly the hooks Attache added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
   const mcpAfterUninstall = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers;
@@ -401,17 +425,19 @@ async function main() {
   check("data", "the owner's own Attache services on this computer are unchanged", JSON.stringify(machineBefore) === JSON.stringify(P.machineFingerprint()), JSON.stringify(P.machineFingerprint()));
 
   mkdirSync(join(ROOT, "test-results"), { recursive: true });
-  writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, home: HOME, at: new Date().toISOString(), results }, null, 2));
+  writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, next: NEXT, home: HOME, at: new Date().toISOString(), results }, null, 2));
   rmSync(HOME, { recursive: true, force: true });
   removeSignedReleaseFolders();
+  await releaseServer.close();
   const failed = results.filter((r) => !r.ok).length;
   // The logs are kept for a failed run only.
   if (!failed) rmSync(INSTALL_LOGS, { recursive: true, force: true });
   console.log(`\n${results.length - failed}/${results.length} installation checks passed`);
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
   console.error(e);
+  await releaseServer?.close();
   keepLogs(STATE, "state");
   P.cleanup();
   removeSignedReleaseFolders();

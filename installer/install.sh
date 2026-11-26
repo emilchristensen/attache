@@ -47,7 +47,7 @@ outcome() {
       "$SRC/runtime/node" -e "$OUTCOME_SCRIPT" 2>/dev/null ||
     printf 'Attache install: could not write the outcome to %s\n' "$dir/updates/outcome.json" >&2
 }
-OUTCOME_SCRIPT="const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM, to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + '\\n', { mode: 0o600 }); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
+OUTCOME_SCRIPT="const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + '\\n', { mode: 0o600 }); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
 
 # Stopped before anything changed: an installed version that was stopped runs again.
 fail() {
@@ -120,8 +120,12 @@ fi
 mkdir -p "$PREFIX/app" "$STATE/logs"
 chmod 700 "$PREFIX" "$STATE"
 
-# If a service is already running, back it up before changing anything.
-if [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
+# If a service is already running, back it up before changing anything. A service that refused to start on a
+# database a newer Attache wrote (refused-to-start) cannot open that database to back it up, and could not run on a
+# copy of it either: installing a version that reads it is the way out, so it goes ahead without that backup.
+if [ -n "$PREVIOUS" ] && [ -f "$STATE/refused-to-start" ]; then
+  say "Attache $PREVIOUS cannot open this Machine's database, which a newer Attache wrote, so Attache $VERSION is installed without a backup first."
+elif [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
   say "Backing up the existing installation"
   ATTACHE_STATE_DIR="$STATE" "$PREFIX/current/bin/attache" backup --out "$STATE/backups/pre-upgrade-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz" >/dev/null || fail "could not back up the existing installation; nothing was changed"
 fi
