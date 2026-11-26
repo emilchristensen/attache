@@ -354,6 +354,7 @@ A sign-in that is started but not finished never replaces the stored OAuth clien
 Connections created before these transports lose their old credentials once at startup and show `needs auth` with an explanation, keeping their scopes, channels, site and write authority.
 A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Attache first.
 A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
+Source refreshes of one connection may overlap (the first refresh after setup and one started by hand); `ConnectionManager.refresh` numbers them as they start and drops a read that started before the newest one already stored (its run is recorded with outcome `superseded`), so a slow earlier refresh never reopens what a later read resolved.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
 ## Attention and briefings

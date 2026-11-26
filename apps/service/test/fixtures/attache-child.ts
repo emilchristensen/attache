@@ -7,7 +7,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { tempDir } from "../helpers.ts";
+import { eventually, tempDir } from "../helpers.ts";
 import { startFixtureServer, type FixtureServer } from "./fixture-server.ts";
 
 export const MAIN = join(import.meta.dirname, "../../src/main.ts");
@@ -50,16 +50,15 @@ export const runningChildren: ChildProcess[] = [];
 export async function serveChild(stateDir: string, env: EnvChanges): Promise<ChildService> {
   const child = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "serve", "--state-dir", stateDir, "--port", "0"], { env: childEnv(env), stdio: "ignore" });
   runningChildren.push(child);
-  let url = "";
-  for (let i = 0; i < 600 && !url; i++) {
-    await new Promise((r) => setTimeout(r, 100));
+  const logFile = join(stateDir, "logs/service.log");
+  const url = await eventually("the service to start", () => {
+    // A service that exits before it starts never will: say so now, with its log, rather than when the wait runs out.
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`the service exited (${child.exitCode ?? child.signalCode}) before it started:\n${existsSync(logFile) ? readFileSync(logFile, "utf8") : "(no log)"}`);
     const rt = join(stateDir, "runtime.json");
-    if (existsSync(rt)) {
-      const j = JSON.parse(readFileSync(rt, "utf8"));
-      if (j.pid === child.pid) url = j.url;
-    }
-  }
-  if (!url) throw new Error("service did not start");
+    if (!existsSync(rt)) return null;
+    const j = JSON.parse(readFileSync(rt, "utf8"));
+    return j.pid === child.pid ? (j.url as string) : null;
+  });
   const { code } = JSON.parse(attacheCli(["pair", "--state-dir", stateDir, "--json"], env).stdout);
   const paired = await (await fetch(`${url}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "cli", clientName: "child-test" }) })).json();
   const headers = { authorization: `Bearer ${paired.token}`, "content-type": "application/json", "x-attache-client": "1" };
@@ -76,10 +75,7 @@ export async function serveChild(stateDir: string, env: EnvChanges): Promise<Chi
   return {
     stateDir,
     api,
-    log: () => {
-      const f = join(stateDir, "logs/service.log");
-      return existsSync(f) ? readFileSync(f, "utf8") : "";
-    },
+    log: () => (existsSync(logFile) ? readFileSync(logFile, "utf8") : ""),
     async stop() {
       child.kill("SIGTERM");
       await new Promise((r) => child.once("exit", r));
@@ -123,13 +119,13 @@ export async function githubAskingForReviews(token: string, prs: () => ReviewReq
 /** Connect GitHub with `token`, against the stand-in. */
 export const connectGithub = (svc: ChildService, fx: FixtureServer, token: string) => svc.api("POST", "/connections/github/configure", { method: "token", fields: { token, apiBaseUrl: fx.url } });
 
+const JOB_ENDED = ["succeeded", "failed", "blocked", "cancelled"];
+
 /** Refresh GitHub and wait for the job to end; returns its final status. */
 export async function syncGithub(svc: ChildService): Promise<string> {
   const { job } = await svc.api("POST", "/connections/github/refresh");
-  for (let i = 0; i < 300; i++) {
-    const r = await svc.api("GET", `/jobs/${job.id}`);
-    if (["succeeded", "failed", "blocked", "cancelled"].includes(r.job.status)) return r.job.status;
-    await new Promise((res) => setTimeout(res, 100));
-  }
-  throw new Error("sync did not finish");
+  return eventually(`GitHub refresh job ${job.id} to end`, async () => {
+    const { status } = (await svc.api("GET", `/jobs/${job.id}`)).job;
+    return JOB_ENDED.includes(status) ? (status as string) : null;
+  });
 }

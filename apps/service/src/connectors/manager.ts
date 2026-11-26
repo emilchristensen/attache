@@ -57,6 +57,10 @@ export class ConnectionManager {
   onChange: (id: string) => void = () => {};
   /** In-flight syncs per connection, aborted when the connection is disconnected. */
   private readonly inflight = new Map<string, Set<AbortController>>();
+  /** How many Source refreshes have started, which orders their reads. */
+  private refreshesStarted = 0;
+  /** Per connection, the order number of the newest read a refresh stored. */
+  private readonly newestStoredRead = new Map<string, number>();
 
   constructor(deps: ManagerDeps) {
     this.d = deps;
@@ -358,6 +362,7 @@ export class ConnectionManager {
     if (rec.status === "disconnected") throw new RemoteError("Connection is disconnected", "not_configured");
     const runId = randomUUID();
     const started = nowIso();
+    const order = ++this.refreshesStarted;
     this.d.db.prepare("insert into sync_runs (id, connection_id, started_at) values (?,?,?)").run(runId, id, started);
     this.d.db.prepare("update connections set last_attempt_at = ? where id = ?").run(started, id);
     const previous = this.previousCoverage(id);
@@ -386,9 +391,16 @@ export class ConnectionManager {
       if (signal?.aborted) throw new RemoteError("Source refresh cancelled", "error");
       return { coverage: { state: "not_configured", scopes: [], items: 0, at: nowIso(), note: "Connection was disconnected during the Source refresh" }, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0, countDelta: 0 };
     }
+    const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
+    // Refreshes of one Connection can overlap, such as the first refresh after Setup and one started by hand. A read
+    // that started before the one already stored is out of date: storing it would reopen what the newer read resolved.
+    if ((this.newestStoredRead.get(id) ?? 0) > order) {
+      this.d.db.prepare("update sync_runs set finished_at = ?, outcome = 'superseded', item_count = ?, error = 'a later Source refresh already stored a newer read' where id = ?").run(nowIso(), result.observations.length, runId);
+      return { coverage: result.coverage, attention: { created: [], changed: [], unchanged: [], resolved: [], keptDismissed: [], reopened: [], touched: [] }, observations: 0, countDelta: 0 };
+    }
+    if (ok) this.newestStoredRead.set(id, order);
     const weightBefore = this.decisionWeight();
     const attention = this.store(current, result, previous);
-    const ok = result.coverage.state === "complete" || result.coverage.state === "empty" || result.coverage.state === "partial";
     const now = nowIso();
     const errText = result.coverage.state === "complete" || result.coverage.state === "empty" ? null : redact(result.coverage.scopes.filter((s) => s.note).map((s) => `${s.scope}: ${s.note}`).join("; ") || result.coverage.state);
     this.d.db.prepare("update sync_runs set finished_at = ?, outcome = ?, coverage = ?, item_count = ?, error = ? where id = ?").run(now, result.coverage.state, JSON.stringify(result.coverage), result.observations.length, errText, runId);
