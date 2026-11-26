@@ -80,6 +80,20 @@ describe("when the Updater checks", () => {
     expect(await view(m)).toMatchObject({ status: "off", update: null });
   });
 
+  it("in Off asks for the release list no second time, even when the held list then fails", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold();
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    server.failWith(503);
+    letThrough();
+    await checking;
+    expect(server.requests).toHaveLength(1);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
   it("checks at once when Automatic updates is turned back on", async () => {
     const server = await releases("0.7.0");
     const m = await machine("0.6.0", server);

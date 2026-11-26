@@ -100,8 +100,8 @@ export class Updater {
   private readonly outcomes: OutcomeWatch;
   private nextCheck: TimerHandle | null = null;
   private stopped = false;
-  /** Rises when the settings change, so a check that started before answers for the old channel and is dropped. */
-  private generation = 0;
+  /** Aborts when the settings change: a check or download that started before stops its requests, and its answer is dropped. */
+  private settingsChange = new AbortController();
 
   constructor(deps: UpdaterDeps) {
     this.deps = deps;
@@ -199,7 +199,7 @@ export class Updater {
    */
   install(): Promise<UpdatesView> {
     if (this.unavailable() || this.mode() === "off") return Promise.resolve(this.view());
-    const generation = this.generation;
+    const { signal } = this.settingsChange;
     return this.serial(async () => {
       if (this.status === "installing") return this.view();
       if (!(this.status === "ready" || this.status === "waiting_for_jobs") || !this.verified()) {
@@ -209,7 +209,7 @@ export class Updater {
         if (!this.verified() && !(await this.download(found))) return this.view();
       }
       // Off or another channel was chosen since Install now: the settings say what happens now, through the step they queued.
-      if (generation !== this.generation || this.mode() === "off" || !this.verified()) {
+      if (signal.aborted || this.mode() === "off" || !this.verified()) {
         this.set(this.resting());
         return this.view();
       }
@@ -233,7 +233,8 @@ export class Updater {
       throw new SettingsLockedError(settingsLockedWhileInstalling(readInstallRequest(this.deps.stateDir)?.to ?? null));
     }
     this.deps.settings.set(next);
-    this.generation++;
+    this.settingsChange.abort();
+    this.settingsChange = new AbortController();
     this.endJobWait();
     if (channelChanged) {
       this.running = null;
@@ -309,9 +310,9 @@ export class Updater {
   private checkAndProceed(): Promise<void> {
     return this.safely(async () => {
       if (this.busy()) return;
-      const generation = this.generation;
+      const { signal } = this.settingsChange;
       await this.check({ reportOnly: true });
-      if (generation === this.generation) await this.proceed();
+      if (!signal.aborted) await this.proceed();
     });
   }
 
@@ -329,10 +330,10 @@ export class Updater {
     const found = this.found;
     if (this.mode() === "off" || !found || !(this.status === "available" || this.status === "ready")) return;
     if (!this.verified()) {
-      const generation = this.generation;
+      const { signal } = this.settingsChange;
       if (!(await this.download(found))) return;
       // The settings changed during the download: what to do now is for the new settings, through the step they queued.
-      if (generation !== this.generation) return this.set(this.resting());
+      if (signal.aborted) return this.set(this.resting());
     }
     // Already ready: keep what the last check said.
     if (this.mode() === "ask_first") return this.status === "ready" ? undefined : this.set("ready");
@@ -372,13 +373,19 @@ export class Updater {
   /** Download the found Update's archive for this computer and verify it; false, with the reason shown, when that failed. */
   private async download(found: FoundUpdate): Promise<boolean> {
     const to = found.manifest.version;
+    const { signal } = this.settingsChange;
     this.set("downloading");
     try {
       const { target, trustedKeys } = this.canUpdate();
-      this.staged = await stageUpdate({ feed: this.deps.feed, found, target, stateDir: this.deps.stateDir, trustedKeys });
+      this.staged = await stageUpdate({ feed: this.deps.feed, found, target, stateDir: this.deps.stateDir, trustedKeys, signal });
       return true;
     } catch (e) {
       this.staged = null;
+      // Stopped because the settings changed: not a failure, and what happens now is for the new settings.
+      if (signal.aborted) {
+        this.set(this.resting());
+        return false;
+      }
       const reason = e instanceof ReleaseRefusedError ? `The Update to Attache ${to} was refused: ${e.message}` : `The download of Attache ${to} failed. ${unreachable(this.deps.feed, e).message}`;
       this.deps.log.warn("the Update was not installed", { version: to, reason });
       this.set("check_failed", reason);
@@ -393,7 +400,7 @@ export class Updater {
   }
 
   private async runCheck(): Promise<void> {
-    const generation = this.generation;
+    const { signal } = this.settingsChange;
     this.set("checking");
     let outcome: { status: UpdatesStatus; reason: string | null; found: FoundUpdate | null };
     try {
@@ -406,7 +413,7 @@ export class Updater {
         trustedKeys,
         target,
         refused: (version, reason) => this.deps.log.warn("a newer release was refused", { version, reason }),
-        wanted: () => generation === this.generation,
+        signal,
       });
       outcome = found ? { status: "available", reason: null, found } : { status: "up_to_date", reason: null, found: null };
     } catch (e) {
@@ -415,7 +422,7 @@ export class Updater {
       // What an earlier check found and verified stays true; only this check failed.
       outcome = { status: "check_failed", reason, found: this.found };
     }
-    if (generation !== this.generation) return;
+    if (signal.aborted) return;
     this.found = outcome.found;
     this.lastCheckedAt = this.deps.clock.now().toISOString();
     // An Update already verified for Ask first stays ready when a check finds it again, and when a check fails: Install now
