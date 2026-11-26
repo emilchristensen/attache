@@ -75,15 +75,27 @@ export class LaunchdServiceManager implements ServiceManager {
   async start(): Promise<void> {
     if (!existsSync(this.definition)) throw new Error(`Attache is not set up as a background service here: ${this.definition} is missing. Run the Attache installer again.`);
     if (!(await this.loaded())) {
+      // Starting is a new attempt: a refusal from before must not keep launchd from running it (KeepAlive's PathState
+      // also holds RunAtLoad back). If it refuses again, the service writes the file again and launchd leaves it stopped.
+      const stateDir = await this.stateDir();
+      if (stateDir) rmSync(join(stateDir, REFUSED_TO_START_FILE), { force: true });
       // launchd can refuse a bootstrap for a moment after a bootout; retry briefly.
       for (let attempt = 1; ; attempt++) {
         const r = await run(LAUNCHCTL, ["bootstrap", this.domain, this.definition]);
-        if (r.code === 0) break;
+        // RunAtLoad has started it. A kickstart now would start it a second time, past KeepAlive:
+        // a service that already refused to start would run again.
+        if (r.code === 0) return;
         if (attempt >= BOOTSTRAP_ATTEMPTS) throw new Error(`launchctl bootstrap failed: ${r.stderr.trim() || `exit ${r.code}`}`);
         await sleep(1000);
       }
     }
     await run(LAUNCHCTL, ["kickstart", "-k", `${this.domain}/${this.name}`]);
+  }
+
+  /** The state folder the agent runs with, as its definition says (`ATTACHE_STATE_DIR`), or null when it cannot be read. */
+  private async stateDir(): Promise<string | null> {
+    const r = await run("/usr/bin/plutil", ["-extract", "EnvironmentVariables.ATTACHE_STATE_DIR", "raw", "-o", "-", this.definition]);
+    return r.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
   }
 
   async stop(): Promise<void> {
