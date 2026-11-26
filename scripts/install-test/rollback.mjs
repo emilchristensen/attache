@@ -36,12 +36,16 @@ function schemaOf(file) {
   }
 }
 
+/** How long the scenario watches for a restart of a service that refused to start: past every service manager's restart delay. */
+const RESTART_WATCH_S = 15;
+
 /**
+ * @param t.P        the operating system's part of the install test (`platform.mjs`)
  * @param t.failing  the version built to fail its health check
  * @param t.newer    a good release after it
  */
 export async function rollbackScenario(t) {
-  const { root, prefix, state, next, failing, newer, check, http, attacheCli, shRefused, artifact, server, waitForHealth } = t;
+  const { root, P, prefix, state, next, failing, newer, check, http, attacheCli, shRefused, artifact, server, waitForHealth } = t;
   const db = join(state, "attache.sqlite");
   const backups = () => readdirSync(join(state, "backups")).sort();
   const preUpdate = () => backups().filter((f) => /^pre-update-/.test(f));
@@ -87,6 +91,10 @@ export async function rollbackScenario(t) {
   const refused = join(state, "refused-to-start");
   await waitUntil(20, () => existsSync(refused));
   check("rollback", "a Machine on a database a newer Attache wrote refuses to start", existsSync(refused));
+  // The service manager leaves it stopped: no process, and no second refusal, past launchd's 10 s throttle and systemd's 2 s restart delay.
+  const refusedAt = existsSync(refused) ? statSync(refused).mtimeMs : null;
+  const restartedAs = await waitUntil(RESTART_WATCH_S, () => P.servicePid() ?? (existsSync(refused) && statSync(refused).mtimeMs !== refusedAt ? "refused again" : null));
+  check("rollback", `the ${P.serviceKind} does not restart a service that refused to start`, refusedAt !== null && !restartedAs, `restarted as ${restartedAs ?? "nothing"}`);
   const backupsBefore = backups();
   const noBackup = shRefused(artifact(failing));
   check("rollback", "an install that fails there rolls back without a backup, and says the database was not restored", !noBackup.ok && noBackup.said.includes("installed without a backup first") && noBackup.said.includes(`Rolling back to ${next}`) && noBackup.said.includes(`The database was not restored, because Attache ${next} could not open it to back it up before the Update.`), lastLines(noBackup.said, 4));

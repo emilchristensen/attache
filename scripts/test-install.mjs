@@ -355,7 +355,7 @@ async function main() {
   token = await updateScenario({ root: ROOT, P, prefix: PREFIX, state: STATE, from: FROM, to: TO, next: NEXT, check, http, attacheCli, pairToken, machineState, cfgBefore, server: releaseServer });
 
   // --- an Update that fails its health check rolls back and is never offered again; only 3 pre-Update backups stay ---
-  token = await rollbackScenario({ root: ROOT, prefix: PREFIX, state: STATE, next: NEXT, failing: FAILING, newer: NEWER, check, http, attacheCli, pairToken, shRefused, artifact, waitForHealth, server: releaseServer });
+  token = await rollbackScenario({ root: ROOT, P, prefix: PREFIX, state: STATE, next: NEXT, failing: FAILING, newer: NEWER, check, http, attacheCli, pairToken, shRefused, artifact, waitForHealth, server: releaseServer });
 
   // --- service control from the command line ---
   attacheCli(["stop"]);
