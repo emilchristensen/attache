@@ -38,7 +38,7 @@ const PROBLEM: Partial<Record<ReplicationStatus, { title: string; todo: string; 
   },
   paused: {
     title: "Replication is paused",
-    todo: "This Machine sends and merges nothing until it is updated, so it never changes files a newer Attache wrote. Saves carry on here and are sent once it is updated.",
+    todo: "Until then this Machine sends and merges nothing, so it never changes files a newer Attache wrote.",
     tone: "partial",
   },
 };

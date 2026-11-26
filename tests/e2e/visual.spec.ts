@@ -74,7 +74,11 @@ async function replicationScreens(page: Page) {
   await api(page, "POST", "/replication/check");
   await shoot("paused");
   await page.goto(`${stack.url}/settings/machines`);
-  await expect(page.getByRole("region", { name: "Replication" }).getByText("Replication is paused", { exact: true })).toBeVisible();
+  const paused = page.locator('[data-settings-section="machines"] [data-replication-problem]');
+  await expect(paused).toBeVisible();
+  await expect(paused).toContainText("Replication is paused");
+  await expect(paused).toContainText("Update this Machine to keep replicating");
+  await expect(page.getByRole("region", { name: "Replication" }).getByText("paused", { exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /^Machines and Replication/ })).toHaveAccessibleName("Machines and Replication, Replication paused");
   // The rest of the screens show a single Machine.
   await api(page, "POST", "/replication/off");
