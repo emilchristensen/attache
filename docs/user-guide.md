@@ -686,6 +686,7 @@ When it wakes, each overdue schedule runs once to catch up; missed intervals are
 If a service is unreachable, its coverage shows *offline* and it is retried at the next refresh.
 
 Urgent inbox items raise a desktop notification when that is switched on in Settings, except during quiet hours.
+An Update that failed and went back to the version before raises one too, whatever that switch says (see [Updates](#updates)).
 On macOS they appear in Notification Center.
 On Linux they go to the desktop's notification service (GNOME, KDE Plasma, mako, dunst and others) through `notify-send`, which comes with libnotify (`libnotify-bin` on Debian and Ubuntu, `libnotify` on Arch and Fedora).
 Without `notify-send` or a running notification service, Attache keeps working and its log says `desktop notifications are off` with the reason; it says `desktop notifications are on again` once one answers.
@@ -759,6 +760,11 @@ Each Machine looks for an Update when the service starts and every 6 hours, and 
   While an Update waits for Jobs to finish, **Restart now** installs it at once; the Jobs pick up from their last checkpoint once Attache is back.
 - After an Update, the section says which version this Machine updated from, with **What changed**: the release's notes, shown inside the Dashboard.
   When an Update does not start, Attache goes back to the version it ran before, and the section says so with the reason.
+
+A line under the masthead, after the Connection banner when both show, tells you about Updates on every screen:
+"Attache updated to 0.7.0" with **What changed** for one day after an Update; "Attache 0.7.0 is ready" with **Install** in Ask first; "Attache 0.7.0 is waiting for 2 Jobs to finish" with **Restart now**; and "The Update to 0.7.0 failed, so Attache went back to 0.6.1" with **Details**, for one day after it.
+None of these counts toward the Decision count or turns on the Attention dot.
+A failed Update that went back also raises a desktop notification, once, even with notifications for urgent items switched off or during quiet hours; a successful Update raises none.
 
 A copy of Attache run from a source checkout shows Updates as unavailable: it never replaces itself.
 Pull the newest code and build it instead.

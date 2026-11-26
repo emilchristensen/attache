@@ -7,6 +7,7 @@
  *   `installer/install.ps1`): `{ outcome, from, to, at, reason?, database?, backup? }`, where outcome is `updated`,
  *   `rolled_back` (the new version did not come up, so it switched back, and says in `database` what became of the
  *   database and in `backup` which pre-Update backup it restored) or `failed` (it stopped before changing anything).
+ *   The service adds `notifiedAt` once it raised the system notification for a rollback (`rollback-notice.ts`).
  * The outcome's fields are a contract with installers of other versions: add fields, never rename them.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -34,6 +35,8 @@ const OutcomeRecord = z.looseObject({
   /** After a rollback (#138): what became of the database, and the pre-Update backup it came from. */
   database: RollbackDatabase.optional(),
   backup: z.string().optional(),
+  /** Written by the service (#141) when it raised the system notification for a rollback, so no later start raises it again. */
+  notifiedAt: z.string().optional(),
 });
 export type OutcomeRecord = z.infer<typeof OutcomeRecord>;
 

@@ -16,6 +16,7 @@ import { startReleaseServer, type ReleaseServer } from "../fixtures/release-serv
 import { fakeInstallerRunner, type FakeInstallerRunner } from "../fixtures/fake-installer-runner.ts";
 import { eventually } from "../helpers.ts";
 import { ManualClock } from "../fixtures/manual-clock.ts";
+import { recordingNotifier, type RecordingNotifier } from "../fixtures/recording-notifier.ts";
 import { startTestService, testFolder, type TestService } from "./harness.ts";
 
 /** How often the Updater looks for the installer's outcome (`OUTCOME_POLL_MS` in `updater.ts`). */
@@ -30,6 +31,8 @@ export interface UpdatesMachine extends TestService {
   prefix: string | null;
   /** Its clock: time passes for the Updater only when the test advances it. */
   clock: ManualClock;
+  /** The desktop notifications it raised, kept across `restart`, as the owner's computer keeps them. */
+  notifications: RecordingNotifier;
 }
 
 export { installerFinished } from "../fixtures/installer-outcome.ts";
@@ -52,13 +55,14 @@ export function updatesWorld() {
 
   /**
    * A Machine running `version` that reads releases from `server`: a release install, or a source checkout with `releaseInstall: false`.
-   * Its installer runner only records what it is asked; `stateDir`, `prefix` and `startAt` continue an earlier Machine, as a restart does.
+   * Its installer runner only records what it is asked, and its desktop notifications are recorded; `stateDir`, `prefix` and `startAt` continue an earlier Machine, as a restart does.
    */
-  async function machine(version: string, server: ReleaseServer, opts: { releaseInstall?: boolean; stateDir?: string; prefix?: string; runner?: FakeInstallerRunner; startAt?: number } = {}): Promise<UpdatesMachine> {
+  async function machine(version: string, server: ReleaseServer, opts: { releaseInstall?: boolean; stateDir?: string; prefix?: string; runner?: FakeInstallerRunner; notifications?: RecordingNotifier; startAt?: number } = {}): Promise<UpdatesMachine> {
     const runner = opts.runner ?? fakeInstallerRunner();
     const releaseInstall = opts.releaseInstall === false ? null : { prefix: opts.prefix ?? testFolder("prefix") };
     const clock = new ManualClock(opts.startAt);
-    const svc = await startTestService({ version, clock, ...(opts.stateDir ? { stateDir: opts.stateDir } : {}), updates: { feedUrl: server.feedUrl, releaseInstall, installerRunner: runner } });
+    const notifications = opts.notifications ?? recordingNotifier();
+    const svc = await startTestService({ version, clock, notifier: notifications, ...(opts.stateDir ? { stateDir: opts.stateDir } : {}), updates: { feedUrl: server.feedUrl, releaseInstall, installerRunner: runner } });
     const stop = svc.stop;
     let stopped = false;
     const m: UpdatesMachine = Object.assign(svc, {
@@ -66,6 +70,7 @@ export function updatesWorld() {
       releaseServer: server,
       prefix: releaseInstall?.prefix ?? null,
       clock,
+      notifications,
       async stop() {
         if (stopped) return;
         stopped = true;
@@ -96,7 +101,7 @@ export function updatesWorld() {
     /** Stop `m` and start it again on `version`, as the installer does when it switches versions. Its clock goes on from where `m`'s stood. */
     async restart(m: UpdatesMachine, version: string): Promise<UpdatesMachine> {
       await m.stop();
-      return machine(version, m.releaseServer, { stateDir: m.stateDir, runner: m.runner, startAt: m.clock.now().getTime(), ...(m.prefix ? { prefix: m.prefix } : { releaseInstall: false }) });
+      return machine(version, m.releaseServer, { stateDir: m.stateDir, runner: m.runner, notifications: m.notifications, startAt: m.clock.now().getTime(), ...(m.prefix ? { prefix: m.prefix } : { releaseInstall: false }) });
     },
     /** Let the Machine's clock run until the Updater has read the outcome the installer left, as it does once a second. */
     async outcomeSeen(m: UpdatesMachine): Promise<void> {
