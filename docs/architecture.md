@@ -653,6 +653,10 @@ Disabling removes the hooks, the rule and the server, trying each even when anot
 When the service starts, it re-registers the server for connected Harnesses whose entry no longer matches this version, and removes the save and audit skill folders earlier versions installed: only folders whose `.attache-skill.json` marker names this install's state folder, in `~/.claude/skills`, `~/.agents/skills` and `~/.gemini/config/skills` (`agents/legacy-skills.ts`).
 The MCP prompts replace those skills, and there is no `attache save` command any more, because a Harness with auto-accept off has the owner confirm a save inside the Harness, which a shell cannot do.
 
+An Update does not restart a Harness's MCP server: one started before the Update keeps running the earlier version's code and keeps working through `/api/v1`, so the API stays compatible with MCP servers from earlier versions.
+Each tool call also asks `GET /api/v1/health` for the service's `version`, and when that is newer than the server's own (`updates/version.ts`), the first tool result after it carries one more text block saying that Attache was updated and that a new session has the latest tools (`mcp/update-notice.ts`).
+A session is told once, even when several calls run at once, and stops asking after that; a failed check adds nothing and the next call asks again.
+
 `attache audit` and the MCP server are clients of the running service (`cli/`, `mcp/`), because the service holds the data folder's writer lock.
 Each pairs itself on first use as client kind `cli` (the same trust as `attache pair`), keeps the token in `state/cli-token` (private to the owner, see `platform/private-file.ts`), and pairs again if the token is revoked.
 `POST /api/v1/memory/save` (`memory/save.ts`) validates every item before the first write: updates must name an existing note under `memory/` other than the identity record, a new note must not repeat an existing type and title, and no item may set one subject twice.
