@@ -431,6 +431,14 @@ The attention engine follows these rules:
   The model Attache calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
 
+### Signed releases
+
+Every release carries a manifest of its archives and an Ed25519 signature over the manifest's exact bytes (ADR 0007); the release build writes both (`scripts/release-seal.mjs`), and `docs/developer-guide.md` describes the files.
+`apps/service/src/release/` holds the one copy of the format and the checks that the signing tool, the release build and the installed service share: `manifest.ts` (fields, the channel a version belongs to, file names), `signature.ts` (key pairs, signing, verifying with Node's built-in crypto), `verify-release.ts` (a release folder against its manifest: the signature first, then each artifact's size and SHA-256) and `trusted-keys.ts`.
+The keys a Machine trusts are the public key built into the bundle, a constant the release build defines so nothing at run time replaces it, plus each next key that a manifest signed by a trusted key named, kept in `release-keys.json` in the state folder.
+`attache verify-release` is the internal command an installer runs with the installed version before it changes anything; it never opens the database, so an older version can check a newer release.
+`platform/release-target.ts` names this computer's release target, the same mapping the release build uses.
+
 ## Harness sessions
 
 Claude Code, Codex, Antigravity and Claude Desktop are connections (`connectors/agent.ts`, `agents/integrations.ts`).

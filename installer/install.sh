@@ -13,6 +13,9 @@
 #   ATTACHE_STATE_DIR  service state      (default: <prefix>/state on macOS, ~/.local/state/attache on Linux)
 #   ATTACHE_PORT       service port       (default: 7427)
 #   ATTACHE_INSTANCE   instance name      (default: default; also names the background service)
+#   ATTACHE_RELEASE_DIR  the release folder holding the signed manifest, its signature and the
+#                      archive this release came from (default: the folder this release was unpacked in,
+#                      which is where the one-step installer puts them)
 set -eu
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -43,6 +46,20 @@ PREVIOUS=""
 if [ -L "$PREFIX/current" ]; then PREVIOUS="$(basename "$(readlink "$PREFIX/current")")"; fi
 
 say "Installing Attache $VERSION${PREVIOUS:+ (currently $PREVIOUS)}"
+
+# Over an existing install, the installed version checks this release against its signed manifest with the
+# key it holds, before anything changes (ADR 0007). A first install has nothing to check against.
+if [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
+  INSTALLED="$PREFIX/current/bin/attache"
+  if "$INSTALLED" verify-release --supported >/dev/null 2>&1; then
+    RELEASE_DIR="${ATTACHE_RELEASE_DIR:-$(cd "$SRC/.." && pwd)}"
+    "$INSTALLED" verify-release "$RELEASE_DIR" --version "$VERSION" --target "$TARGET" --state-dir "$STATE" >/dev/null ||
+      fail "Attache $PREVIOUS could not confirm that this release is signed by Attache; nothing was changed. Download the installer again from the Attache releases page."
+    say "Attache $PREVIOUS checked that this release is signed by Attache."
+  else
+    say "Attache $PREVIOUS cannot check signed releases, so this release is installed without that check."
+  fi
+fi
 mkdir -p "$PREFIX/app" "$STATE/logs"
 chmod 700 "$PREFIX" "$STATE"
 

@@ -4,6 +4,8 @@
  * a one-step installer that unpacks the release and runs its installer:
  * `install.sh` on macOS and Linux, `install.ps1` on Windows.
  */
+import { releaseTarget } from "../apps/service/src/platform/release-target.ts";
+
 /**
  * The Node.js runtime every release bundles: one exact version, chosen for the product (spec #5 §3)
  * and changed on purpose. Development runs on any Node from `engines.node` in package.json, and this
@@ -46,13 +48,8 @@ export const RELEASE_TARGETS = {
 /** The release archive of a target: a tarball for macOS and Linux, a zip for Windows. */
 export const releaseArchive = (version, target) => `attache-${version}-${target}.${RELEASE_TARGETS[target].archive}`;
 
-/** The target matching this computer, or null when Attache has no release for it. */
-export function hostTarget(platform = process.platform, arch = process.arch) {
-  if (platform === "darwin" && arch === "arm64") return "macos-arm64";
-  if (platform === "linux" && arch === "x64") return "linux-x64";
-  if (platform === "win32" && arch === "x64") return "windows-x64";
-  return null;
-}
+/** The target matching this computer, or null when Attache has no release for it; the service decides it the same way. */
+export const hostTarget = (platform = process.platform, arch = process.arch) => releaseTarget(platform, arch);
 
 /** The target named on the command line, else this computer's. */
 export function chooseTarget(name) {
