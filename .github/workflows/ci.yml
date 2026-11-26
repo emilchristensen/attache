@@ -1,6 +1,6 @@
 # The same checks as `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm e2e` locally,
 # on macOS, Linux and Windows on the minimum supported Node (engines.node in package.json),
-# on Linux also on the current Node release, and the install test on Linux and Windows.
+# on Linux also on the current Node release, and the install test on macOS, Linux and Windows.
 # `checks (<os>)` and `journeys (<os>)`, the jobs on the minimum Node, are the required status checks on `main`.
 #
 # The jobs split by event, so a branch with a pull request runs each job once:
