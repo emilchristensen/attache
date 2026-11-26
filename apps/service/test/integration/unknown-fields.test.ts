@@ -81,6 +81,28 @@ describe("A Machine keeps fields of replicated files it does not understand", ()
     expect(pushedJson(world, rel!)).toMatchObject({ laterRecordField: "kept", item: { laterItemField: { kept: true } }, decision: { decision: "snooze" } });
   });
 
+  it("in an Inbox item: a merge keeps the fields each side alone has, whichever report is newer", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    const [mac, pc] = world.machines as [TestMachine, TestMachine];
+    mkdirSync(join(mac.dataDir, "memory/projects"), { recursive: true });
+    writeFileSync(join(mac.dataDir, "memory/projects/launch.md"), `# Launch\n\n- [ ] Book the venue 📅 ${day(2)}\n`);
+    const { job } = await mac.post("/briefings", { kind: "manual" });
+    expect((await mac.waitJob(job.id)).job).toMatchObject({ status: "succeeded" });
+    await replicate(mac, pc);
+    const [rel] = pushedUnder(world, "review/inbox/");
+
+    // Apart, each Machine's file gains a field from a later release that the other's lacks.
+    world.remote.goOffline();
+    editJson(mac, rel!, (r) => ({ ...r, macRecordField: "kept", item: { ...r.item, macItemField: "kept" } }));
+    editJson(pc, rel!, (r) => ({ ...r, pcRecordField: "kept", item: { ...r.item, pcItemField: "kept" } }));
+    await mac.clock.advance(CHECK);
+    await pc.clock.advance(CHECK);
+    world.remote.goOnline();
+    await replicate(mac, pc);
+    await replicate(pc, mac);
+    expect(pushedJson(world, rel!)).toMatchObject({ macRecordField: "kept", pcRecordField: "kept", item: { macItemField: "kept", pcItemField: "kept" } });
+  });
+
   it("in a Proposal: through a decision made here and a merge of decisions made apart", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [mac, pc] = world.machines as [TestMachine, TestMachine];
