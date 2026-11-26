@@ -34,7 +34,8 @@ export function launchAgentPlist(label: string, home: string, spec: ServiceSpec)
     <key>ATTACHE_INSTANCE</key><string>${p(spec.instance)}</string>
     <key>ATTACHE_WEB_DIR</key><string>${p(join(current, "web"))}</string>
     <key>HOME</key><string>${p(home)}</string>
-    <key>PATH</key><string>${p(`${home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>
+    <key>PATH</key><string>${p(`${home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>${spec.releaseFeedUrl ? `
+    <key>ATTACHE_RELEASE_FEED_URL</key><string>${p(spec.releaseFeedUrl)}</string>` : ""}
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>PathState</key><dict><key>${p(join(spec.stateDir, REFUSED_TO_START_FILE))}</key><false/></dict></dict>
