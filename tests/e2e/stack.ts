@@ -37,15 +37,21 @@ export interface Stack {
   stop(): Promise<void>;
 }
 
-function waitForLine(child: ChildProcess, re: RegExp, timeoutMs = 15_000): Promise<string> {
+/**
+ * The first match of `re` in what `child` prints; fails as soon as `child` ends without printing it. No timer of its
+ * own: while other test runs share the computer, starting Node alone can take many seconds (issue #9), so a fixed
+ * limit gave up on a process that was still starting. The hook's own timeout still bounds the wait.
+ */
+function waitForLine(child: ChildProcess, re: RegExp): Promise<string> {
   return new Promise((res, rej) => {
     let buf = "";
-    const t = setTimeout(() => rej(new Error(`timeout waiting for ${re}: ${buf}`)), timeoutMs);
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => rej(new Error(`the process ended (${code ?? signal}) without printing ${re}: ${buf}`));
+    child.once("close", ended);
     child.stdout!.on("data", (d) => {
       buf += String(d);
       const m = re.exec(buf);
       if (m) {
-        clearTimeout(t);
+        child.off("close", ended);
         res(m[1] ?? m[0]);
       }
     });
