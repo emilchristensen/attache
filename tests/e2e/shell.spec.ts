@@ -811,7 +811,7 @@ test("narrow: a bottom bar with Home, Approvals, Search, Brain and More, and Mor
   const palette = page.getByRole("dialog", { name: "Search the Brain" });
   await expect(palette).toBeVisible();
   await expect(palette.getByRole("combobox", { name: "Search the Brain" })).toBeFocused();
-  await expect(palette.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveCount(15);
+  await expect(palette.getByRole("group", { name: "Go to" }).getByRole("option")).toHaveCount(16);
   const fit = await palette.evaluate((d) => ({ left: d.getBoundingClientRect().left, right: window.innerWidth - d.getBoundingClientRect().right, scroll: document.documentElement.scrollWidth - window.innerWidth }));
   expect(fit.left, "palette left edge").toBeGreaterThanOrEqual(4);
   expect(fit.right, "palette right edge").toBeGreaterThanOrEqual(4);

@@ -22,8 +22,8 @@ export interface ReleaseServer {
   publish(version: string, release: SignedRelease, opts?: PublishOptions): void;
   /** Every request the server answered, so a test can see that none was made. */
   requests: FixtureRequest[];
-  /** Answer every request with this HTTP status from now on, as a failing GitHub would. */
-  failWith(status: number): void;
+  /** Answer every request with this HTTP status from now on, as a failing GitHub would; null answers again. */
+  failWith(status: number | null): void;
   close(): Promise<void>;
 }
 

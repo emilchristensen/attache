@@ -72,6 +72,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: "machines", label: "Machines and Replication", group: "Machines" },
   { id: "clients", label: "Paired clients", group: "Machines" },
   { id: "service", label: "Service health", group: "Service" },
+  { id: "updates", label: "Updates", group: "Service" },
 ];
 
 export function settingsHref(id: string): string {
