@@ -30,7 +30,7 @@ export function registerReplicationRoutes(r: Router, app: App) {
     if (!path) throw new HttpError(400, "invalid_path", "Name the empty folder to keep the Brain in.");
     const preview = dataFolderPreview(path);
     if (!preview.writable) throw new HttpError(400, "not_writable", `Attache cannot write to ${preview.path}`);
-    return asHttp(() => app.replication.join(body.remote, preview.path, (p, paused) => app.useDataFolder(p, paused)));
+    return asHttp(() => app.replication.join(body.remote, preview.path, (p) => app.useDataFolder(p)));
   });
 
   // The Machines sharing the Brain, with standby and the Preferred Reader, as recorded in the Brain.

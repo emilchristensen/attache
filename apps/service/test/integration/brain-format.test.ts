@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
@@ -146,10 +146,15 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(world.remote.git("rev-parse", "main")).toBe(sent);
   });
 
-  it("a Machine that joins a Brain in a newer format writes none of its Inbox items into it", async () => {
+  it("a Machine that joins a Brain in a newer format writes nothing into it, at the join and after a restart while still paused", async () => {
     world = await startMachines(["Mac"], { brainFormat: READS_2 });
-    joining = await startTestService({ clock: new ManualClock() });
-    const pc = joining;
+    const [mac] = world.machines as [TestMachine];
+    rmSync(join(mac.dataDir, "README.md"));
+    await settle([mac]);
+    expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).not.toContain("README.md");
+    const clock = new ManualClock();
+    joining = await startTestService({ clock });
+    let pc = joining;
     const due = new Date(Date.now() + DAY).toISOString().slice(0, 10);
     mkdirSync(join(pc.dataDir, "memory/projects"), { recursive: true });
     writeFileSync(join(pc.dataDir, "memory/projects/launch.md"), `# Launch\n\n- [ ] Book the venue 📅 ${due}\n`);
@@ -160,6 +165,13 @@ describe("The Brain format rises only when every Machine can read it", () => {
 
     expect(await pc.post("/replication/join", { remote: world.remote.url, path: target })).toMatchObject({ status: "paused" });
     expect(existsSync(join(target, "review/inbox"))).toBe(false);
+    expect(existsSync(join(target, "README.md"))).toBe(false);
+
+    await pc.stop();
+    joining = pc = await startTestService({ stateDir: pc.stateDir, clock });
+    expect(await pc.get("/replication")).toMatchObject({ status: "paused" });
+    expect(existsSync(join(target, "review/inbox"))).toBe(false);
+    expect(existsSync(join(target, "README.md"))).toBe(false);
   });
 
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {

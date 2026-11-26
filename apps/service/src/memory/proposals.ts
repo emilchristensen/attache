@@ -204,12 +204,12 @@ export class Proposals {
   /**
    * Bring the index in line with the Brain when a data folder is opened:
    * Proposals this Machine kept in its change log become files first, then
-   * every Proposal file is read.
+   * every Proposal file is read. `paused`: the Brain is in a format this Machine cannot read, so nothing is carried over yet.
    */
-  open(): void {
+  open(opts: { paused?: boolean } = {}): void {
     const root = this.deps.memory.dataRoot;
     if (!root) return;
-    this.carryOver(root);
+    if (!opts.paused) this.carryOver(root);
     const files = listReviewFiles(root, PROPOSALS_KIND);
     const present = new Set(files);
     tx(this.deps.db, () => {

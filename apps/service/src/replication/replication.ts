@@ -388,6 +388,15 @@ export class Replication {
     return this.formatHold(repo);
   }
 
+  /**
+   * Whether `folder` holds a Brain in a format this Machine cannot read, in its files or in what it last fetched, or one
+   * whose format record is unreadable: opening it then writes nothing that replicates (ADR 0008).
+   */
+  formatHeld(folder: string): boolean {
+    const repo = this.repo(folder);
+    return repo.isRepository() && this.formatHold(repo) !== null;
+  }
+
   private formatHold(repo: BrainRepo): Outcome | null {
     return brainFormatHold(
       [
@@ -537,10 +546,9 @@ export class Replication {
 
   /**
    * Join a Brain another Machine set up: clone it into `target`, which must be
-   * empty, then `open` it as this Machine's data folder (which builds the index);
-   * `paused` when its Brain format is newer than this Machine reads.
+   * empty, then `open` it as this Machine's data folder (which builds the index).
    */
-  join(remoteInput: string, target: string, open: (path: string, paused: boolean) => void): Promise<ReplicationView> {
+  join(remoteInput: string, target: string, open: (path: string) => void): Promise<ReplicationView> {
     return this.exclusive(async () => {
       const remote = setupRemote(remoteInput);
       if (!isEmptyFolder(target)) throw await notEmptyRefusal(target, this.deps.backUpFolder, this.deps.log);
@@ -548,7 +556,7 @@ export class Replication {
       await cloneBrain(remote, target, this.deps.seams);
       // Read the Brain format before anything opens or writes the folder: a newer one pauses Replication from the join on (ADR 0008).
       const held = this.formatHold(this.repo(target));
-      open(target, held !== null);
+      open(target);
       const at = this.deps.clock.now().toISOString();
       this.settings.enable({ dataFolder: target, remote, enabledAt: at, committedSeq: this.deps.latestSeq(), pushedAt: null });
       if (held) this.report(held);
