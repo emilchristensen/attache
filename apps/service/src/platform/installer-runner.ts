@@ -10,8 +10,8 @@
  * - macOS: a process the service starts stays part of the service's launchd job, a new session or not: from there,
  *   the installer's own `launchctl bootstrap` of the new version left a service launchd no longer tracked (it
  *   survived `attache stop` and uninstall). The installer runs as a launchd job of its own, which removes itself.
- * - Windows: ending the logon task ends its console host only, never the processes below it (`service-manager/
- *   task-scheduler.ts`), so a process of the service's own is enough.
+ * - Windows: Node ends every child it did not detach when the service exits, and a detached process has no console,
+ *   which Windows PowerShell needs: a detached Node process starts PowerShell with a hidden console and waits for it.
  * Unattended mode (`ATTACHE_UNATTENDED=1`) never pairs or opens a browser, and writes the outcome record.
  * The installer's output goes to `<state>/logs/update-<version>.log`.
  */
@@ -120,14 +120,21 @@ async function startLaunchdJob(request: InstallRequest, installer: string, log: 
 const underSystemd = () => !!process.env.INVOCATION_ID;
 
 /**
- * Start `command` on its own, its output in `log`; resolves once it runs. `detached` gives it a new session on macOS and
- * Linux. On Windows a detached process has no console at all, which Windows PowerShell needs, so there it is left
- * attached and gets a console without a window; Windows never ends a process when the one that started it exits.
+ * On Windows, what the detached process runs: Windows PowerShell, as a child with a console of its own but no window,
+ * waited for. Node puts each child it does not detach in a job that ends with it, so the service cannot start
+ * PowerShell that way (it would end with the service), and a detached process has no console, which PowerShell needs.
  */
-function startOnItsOwn(command: string, args: string[], env: NodeJS.ProcessEnv, log: string, detached: boolean): Promise<void> {
+const WITH_A_CONSOLE = `const { spawn } = require("node:child_process");
+const [command, ...args] = process.argv.slice(1);
+const child = spawn(command, args, { stdio: "inherit", windowsHide: true });
+child.on("error", (e) => { console.error("Could not start " + command + ": " + e.message); process.exit(1); });
+child.on("exit", (code) => process.exit(code ?? 1));`;
+
+/** Start `command` detached, its output in `log`: a new session on macOS and Linux, outside the service's job on Windows. Resolves once it runs. */
+function startDetached(command: string, args: string[], env: NodeJS.ProcessEnv, log: string): Promise<void> {
   const out = openSync(log, "a");
   try {
-    const child = spawn(command, args, { env, detached, stdio: ["ignore", out, out], windowsHide: true });
+    const child = spawn(command, args, { env, detached: true, stdio: ["ignore", out, out], windowsHide: true });
     return new Promise((resolve, reject) => {
       child.once("error", reject);
       child.once("spawn", () => {
@@ -146,7 +153,9 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
   if (os === "windows") {
     const script = join(folder, "install.ps1");
     if (!existsSync(script)) throw new Error(`${script} is missing from the release`);
-    return startOnItsOwn(powershellPath(), ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script], env, log, false);
+    // The new release's own runtime, so no installed version's folder is held while the installer replaces versions.
+    const node = join(folder, "runtime", "node.exe");
+    return startDetached(node, ["-e", WITH_A_CONSOLE, powershellPath(), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script], env, log);
   }
   const script = join(folder, "install.sh");
   if (!existsSync(script)) throw new Error(`${script} is missing from the release`);
@@ -159,7 +168,7 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
     return;
   }
   if (os === "macos") return startLaunchdJob(request, script, log, env);
-  return startOnItsOwn("/bin/sh", [script], env, log, true);
+  return startDetached("/bin/sh", [script], env, log);
 }
 
 export function platformInstallerRunner(log: Logger, os: Os = currentOs()): InstallerRunner {
