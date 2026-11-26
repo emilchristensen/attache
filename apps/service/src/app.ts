@@ -48,7 +48,7 @@ import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
 import { VERSION } from "./core/version.ts";
 import { Updater } from "./updates/updater.ts";
 import { ReleaseFeed, releaseFeedUrl } from "./updates/release-feed.ts";
-import { releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
+import { canUpdate, releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
 import type { InstallerRunner } from "./updates/installer-runner.ts";
 import { platformInstallerRunner } from "./platform/installer-runner.ts";
 import { releaseTarget } from "./platform/release-target.ts";
@@ -240,6 +240,7 @@ export class App {
     this.scheduler = new Scheduler(this.db, this.log, { tickMs: opts.schedulerTickMs ?? 15_000 });
     this.actions = new ActionService(this.db, () => this.clock.now());
     const version = opts.version ?? VERSION;
+    const releaseInstall = opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version);
     this.updater = new Updater({
       version,
       stateDir: this.paths.stateDir,
@@ -248,9 +249,7 @@ export class App {
       settings: { get: () => this.config.get().updates, set: (updates) => this.config.set({ ...this.config.get(), updates }) },
       changed: () => this.bus.emit("event", { type: UPDATES_EVENT } satisfies UpdatesChangedEvent),
       feed: new ReleaseFeed(opts.updates?.feedUrl ?? releaseFeedUrl(), `Attache/${version}`),
-      install: opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version),
-      target: releaseTarget(),
-      trustedKeys: () => trustedReleaseKeys(this.paths.stateDir),
+      updating: () => canUpdate({ install: releaseInstall, target: releaseTarget(), trustedKeys: trustedReleaseKeys(this.paths.stateDir) }),
       runner: opts.updates?.installerRunner ?? platformInstallerRunner(this.log),
       port: () => this.httpPort,
       jobs: {

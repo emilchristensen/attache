@@ -24,29 +24,25 @@
  * step at a time (`serial`), so a timer, Check now and Install now never
  * download twice or start two installers.
  *
- * A rolled-back Update (#138): `settle()` marks the version the installer switched back from bad
- * (`bad-versions.ts`), so a check never offers it again; `lastUpdate` says what became of the database.
- * It also raises the one system notification an Update raises (#141, `rollback-notice.ts`), once per outcome.
+ * What the installer did (#137, #138): `outcome-watch.ts` reads its outcome into `lastUpdate`, marks a version that
+ * failed on this Machine bad so no check offers it again, and raises a rollback's one system notification (#141).
+ * The service that waited for that outcome checks at once, as its check at start was skipped.
  */
 import { settingsLockedWhileInstalling, type LastUpdateView, type UpdateChannel, type UpdateMode, type UpdateSettings, type UpdatesStatus, type UpdatesView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import { ReleaseRefusedError } from "../release/verify-release.ts";
 import type { Clock, TimerHandle } from "../replication/clock.ts";
-import { badVersions, markVersionBad } from "./bad-versions.ts";
+import { badVersions } from "./bad-versions.ts";
 import { findUpdate, unreachable, UpdateCheckError, type FoundUpdate } from "./find-update.ts";
-import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome, type OutcomeRecord } from "./install-records.ts";
+import { forgetInstallRequest, readInstallRequest, recordInstallRequest } from "./install-records.ts";
 import type { InstallerRunner } from "./installer-runner.ts";
 import { JobWait, type RunningJobs } from "./job-wait.ts";
 import { forgetJobWait, jobWaitSince } from "./job-wait-record.ts";
-import { notifyRollbackOnce, type Notify } from "./rollback-notice.ts";
+import { OutcomeWatch } from "./outcome-watch.ts";
+import type { Notify } from "./rollback-notice.ts";
 import type { ReleaseFeed } from "./release-feed.ts";
-import type { ReleaseInstall } from "./release-install.ts";
-import { clearStaging, stageUpdate, type StagedUpdate } from "./staging.ts";
-
-/** How often a service waiting for the installer's outcome looks for it. */
-const OUTCOME_POLL_MS = 1_000;
-/** How long an installer may take before the service stops waiting and says it never reported back. */
-const OUTCOME_WAIT_MS = 15 * 60_000;
+import type { CanUpdate } from "./release-install.ts";
+import { stageUpdate, type StagedUpdate } from "./staging.ts";
 /** How often a Machine looks for an Update, after the check when the service starts. */
 export const CHECK_EVERY_MS = 6 * 60 * 60_000;
 
@@ -61,12 +57,8 @@ export interface UpdaterDeps {
   /** Something in `view()` changed. */
   changed: () => void;
   feed: ReleaseFeed;
-  /** The release install this copy runs from; null for a source checkout, which never updates itself. */
-  install: ReleaseInstall | null;
-  /** This computer's release target; null when Attache has no release for it. */
-  target: string | null;
-  /** The keys a release manifest's signature may come from (`release/trusted-keys.ts`). */
-  trustedKeys: () => readonly string[];
+  /** What updating takes on this Machine, or why this copy cannot update itself (`release-install.ts` `canUpdate`). Asked every time: tests play both. */
+  updating: () => CanUpdate | { unavailable: string };
   /** Starts the staged release's installer. */
   runner: InstallerRunner;
   /** The port the service answers on; null before it listens. */
@@ -105,7 +97,7 @@ export class Updater {
   private running: Promise<void> | null = null;
   /** The last of the steps that download or install, which run one at a time. */
   private tail: Promise<void> | null = null;
-  private watch: TimerHandle | null = null;
+  private readonly outcomes: OutcomeWatch;
   private nextCheck: TimerHandle | null = null;
   private stopped = false;
   /** Rises when the settings change, so a check that started before answers for the old channel and is dropped. */
@@ -113,14 +105,29 @@ export class Updater {
 
   constructor(deps: UpdaterDeps) {
     this.deps = deps;
+    this.outcomes = new OutcomeWatch({
+      stateDir: deps.stateDir,
+      log: deps.log,
+      clock: deps.clock,
+      notify: deps.notify,
+      settled: (o) => this.settled(o),
+      installing: () => {
+        if (this.status !== "installing") this.set("installing");
+      },
+    });
   }
 
-  /** Why this copy cannot update itself, or null when it can. Asked every time: a build's key and its install do not change, but tests play both. */
+  /** Why this copy cannot update itself, or null when it can. */
   private unavailable(): string | null {
-    if (!this.deps.install) return "Attache runs from a source checkout here, so it does not update itself. Pull the newest code and build it instead.";
-    if (!this.deps.target) return `There is no Attache release for ${process.platform}/${process.arch}, so this Machine cannot update itself.`;
-    if (!this.deps.trustedKeys().length) return "This copy of Attache holds no release key, so it cannot check an Update. Install a release from GitHub by hand.";
-    return null;
+    const u = this.deps.updating();
+    return "unavailable" in u ? u.unavailable : null;
+  }
+
+  /** What updating takes; a step reaches here only after `unavailable()` said it can, so this throws only if that changed since. */
+  private canUpdate(): CanUpdate {
+    const u = this.deps.updating();
+    if ("unavailable" in u) throw new Error(u.unavailable);
+    return u;
   }
 
   view(): UpdatesView {
@@ -145,7 +152,7 @@ export class Updater {
   /** With the service: read what the last Update did, keep watching while its installer has yet to say, and check at once unless Off. */
   start(): void {
     this.stopped = false;
-    this.settle();
+    this.outcomes.settle();
     this.scheduleCheck(0);
   }
 
@@ -159,8 +166,7 @@ export class Updater {
 
   stop(): void {
     this.stopped = true;
-    if (this.watch) this.deps.clock.clearTimeout(this.watch);
-    this.watch = null;
+    this.outcomes.stop();
     this.cancelCheck();
     this.endJobWait();
   }
@@ -361,7 +367,8 @@ export class Updater {
     const to = found.manifest.version;
     this.set("downloading");
     try {
-      this.staged = await stageUpdate({ feed: this.deps.feed, found, target: this.deps.target!, stateDir: this.deps.stateDir, trustedKeys: this.deps.trustedKeys() });
+      const { target, trustedKeys } = this.canUpdate();
+      this.staged = await stageUpdate({ feed: this.deps.feed, found, target, stateDir: this.deps.stateDir, trustedKeys });
       return true;
     } catch (e) {
       this.staged = null;
@@ -383,13 +390,14 @@ export class Updater {
     this.set("checking");
     let outcome: { status: UpdatesStatus; reason: string | null; found: FoundUpdate | null };
     try {
+      const { target, trustedKeys } = this.canUpdate();
       const found = await findUpdate({
         feed: this.deps.feed,
         installed: this.deps.version,
         channel: this.deps.settings.get().channel,
         bad: badVersions(this.deps.stateDir).map((b) => b.version),
-        trustedKeys: this.deps.trustedKeys(),
-        target: this.deps.target!,
+        trustedKeys,
+        target,
         refused: (version, reason) => this.deps.log.warn("a newer release was refused", { version, reason }),
       });
       outcome = found ? { status: "available", reason: null, found } : { status: "up_to_date", reason: null, found: null };
@@ -421,7 +429,7 @@ export class Updater {
     recordInstallRequest(this.deps.stateDir, { from: this.deps.version, to, notes: staged.manifest.notes, at: this.deps.clock.now().toISOString() });
     this.set("installing");
     try {
-      await this.deps.runner.start({ from: this.deps.version, version: to, release: staged.folder, archive: staged.archive, prefix: this.deps.install!.prefix, stateDir: this.deps.stateDir, port });
+      await this.deps.runner.start({ from: this.deps.version, version: to, release: staged.folder, archive: staged.archive, prefix: this.canUpdate().prefix, stateDir: this.deps.stateDir, port });
     } catch (e) {
       forgetInstallRequest(this.deps.stateDir);
       const reason = `Attache could not start the installer for ${to}, so nothing was changed: ${(e as Error).message}`;
@@ -430,68 +438,17 @@ export class Updater {
       return;
     }
     this.deps.log.info("the installer for an Update started; it restarts the service", { from: this.deps.version, to });
-    this.watchForOutcome();
+    this.outcomes.watch();
   }
 
-  /**
-   * Read the installer's records. With an outcome, the last Update is known and its staged release is done with;
-   * with only a request, the installer is still at work, so keep looking until it says or takes too long.
-   */
-  private settle(): void {
-    const request = readInstallRequest(this.deps.stateDir);
-    const outcome = readOutcome(this.deps.stateDir);
-    if (outcome) {
-      this.lastUpdate = lastUpdateOf(outcome, request);
-      // A version that failed on this Machine (switched back from, or never switched to) is never tried again here, while a newer release still is.
-      // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
-      if (outcome.outcome !== "updated") this.markBad(outcome);
-      notifyRollbackOnce({ stateDir: this.deps.stateDir, notify: this.deps.notify, log: this.deps.log, now: this.deps.clock.now() }, outcome);
-      this.clearStaged();
-      if (this.status !== "installing") return;
-      this.set(this.resting());
-      // The check at start was skipped while this service waited for the outcome, and after a rollback what it may take changed: look now, not 6 hours later.
-      this.scheduleCheck(0);
-      return;
-    }
-    if (!request) return;
-    const waited = this.deps.clock.now().getTime() - Date.parse(request.at);
-    if (!(waited < OUTCOME_WAIT_MS)) {
-      // The installer never said: it was stopped, or it could not run its own runtime. Say so, once, for good.
-      recordOutcome(this.deps.stateDir, { outcome: "failed", from: request.from, to: request.to, at: this.deps.clock.now().toISOString(), reason: `The installer for Attache ${request.to} did not report back within ${OUTCOME_WAIT_MS / 60_000} minutes. Look in the logs folder in the Machine's state for the installer's log.` });
-      return this.settle();
-    }
-    if (this.status !== "installing") this.set("installing");
-    this.watchForOutcome();
-  }
-
-  /** Mark the version that failed on this Machine bad, and forget it as the Update found, so nothing offers it. */
-  private markBad(outcome: OutcomeRecord): void {
-    const at = Number.isNaN(Date.parse(outcome.at)) ? this.deps.clock.now() : new Date(outcome.at);
-    markVersionBad(this.deps.stateDir, { version: outcome.to, reason: outcome.reason ?? "The installer gave no reason.", at });
-    if (this.found?.manifest.version === outcome.to) this.found = null;
-    if (this.staged?.manifest.version === outcome.to) this.staged = null;
-  }
-
-  private watchForOutcome(): void {
-    if (this.watch) return;
-    this.watch = this.deps.clock.setTimeout(() => {
-      this.watch = null;
-      try {
-        this.settle();
-      } catch (e) {
-        this.deps.log.warn("could not read the outcome of the Update", { error: (e as Error).message });
-        this.watchForOutcome();
-      }
-    }, OUTCOME_POLL_MS);
-  }
-
-  private clearStaged(): void {
+  /** The installer said what it did: the last Update is known, and a version that failed here is forgotten as the Update found. */
+  private settled({ lastUpdate, bad }: { lastUpdate: LastUpdateView; bad: string | null }): void {
+    this.lastUpdate = lastUpdate;
+    if (bad && this.found?.manifest.version === bad) this.found = null;
     this.staged = null;
-    try {
-      const left = clearStaging(this.deps.stateDir);
-      if (left.length) this.deps.log.info("a staged release is still in use; it is removed with the next Update", { left });
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") this.deps.log.warn("could not clear the staged release", { error: (e as Error).message });
-    }
+    if (this.status !== "installing") return;
+    this.set(this.resting());
+    // The check at start was skipped while this service waited for the outcome, and after a failure what it may take changed: look now, not 6 hours later.
+    this.scheduleCheck(0);
   }
 }
