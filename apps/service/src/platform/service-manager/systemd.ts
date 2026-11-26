@@ -40,6 +40,7 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
     environment("ATTACHE_WEB_DIR", join(current, "web")),
     environment("HOME", home),
     environment("PATH", `${home}/.local/bin:/usr/local/bin:/usr/bin:/bin`),
+    ...(spec.releaseFeedUrl ? [environment("ATTACHE_RELEASE_FEED_URL", spec.releaseFeedUrl)] : []),
     "Restart=always",
     "RestartSec=2",
     `RestartPreventExitStatus=${REFUSED_EXIT_CODE}`,

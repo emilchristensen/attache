@@ -295,6 +295,18 @@ describe("the background service", () => {
       expect(systemctl.state()).toEqual({ enabled: [], active: [] });
     });
 
+    it("passes on the release feed address the installer was given, so a test's service reads its releases there", () => {
+      const home = tempDir("attache-systemd-home-");
+      const unitText = (extra: Record<string, string>) => {
+        const systemctl = fakeSystemctl();
+        const env = { HOME: home, ATTACHE_INSTANCE: `feed${process.pid}`, ...extra };
+        expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+        return readFileSync(join(home, ".config/systemd/user", `attache-feed${process.pid}.service`), "utf8");
+      };
+      expect(unitText({ ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/releases?x=100%" })).toContain('Environment="ATTACHE_RELEASE_FEED_URL=http://127.0.0.1:9/releases?x=100%%"\n');
+      expect(unitText({})).not.toContain("ATTACHE_RELEASE_FEED_URL");
+    });
+
     it("says what to do when there is no systemd user session to register with", () => {
       const systemctl = fakeSystemctl({ noUserSession: true });
       const home = tempDir("attache-systemd-home-");
@@ -317,7 +329,11 @@ describe("the background service", () => {
     for (const s of ["<string>/opt/Attache Test/current/runtime/node</string>", "<string>/opt/Attache Test/current/service/attache-service.mjs</string>", "<string>7998</string>", `<key>ATTACHE_INSTANCE</key><string>${instance}</string>`, "<key>RunAtLoad</key><true/>"]) expect(text).toContain(s);
     // Kept running unless it refused to start, such as on a database a newer Attache wrote: launchd cannot tell exit codes apart, so the service leaves a file.
     expect(text).toContain("<key>KeepAlive</key><dict><key>PathState</key><dict><key>/opt/Attache Test/state/refused-to-start</key><false/></dict></dict>");
+    expect(text).not.toContain("ATTACHE_RELEASE_FEED_URL");
     expect(JSON.parse(attache(["service", "status"], { env }).stdout)).toMatchObject({ loaded: false, definition: plist });
+    // The release feed address an installer was given goes to the service, so a test's service reads its releases there.
+    attache(["service", "install", "--prefix", "/opt/Attache Test", "--state-dir", "/opt/Attache Test/state", "--port", "7998"], { env: { ...env, ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/releases?a=1&b=2" } });
+    expect(readFileSync(plist, "utf8")).toContain("<key>ATTACHE_RELEASE_FEED_URL</key><string>http://127.0.0.1:9/releases?a=1&amp;b=2</string>");
     const removed = attache(["service", "uninstall"], { env });
     expect(removed.stderr).toBe("");
     expect(existsSync(plist)).toBe(false);

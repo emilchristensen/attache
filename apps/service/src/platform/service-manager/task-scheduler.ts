@@ -42,6 +42,7 @@ export function logonTaskXml(loc: PlatformLocations, spec: ServiceSpec, env: Env
     join(current, "service", "attache-service.mjs"),
     ...["service", "run", "--port", String(spec.port), "--state-dir", spec.stateDir, "--instance", spec.instance],
     ...["--home", loc.home, "--local-app-data", localAppData, "--app-data", appData],
+    ...(spec.releaseFeedUrl ? ["--release-feed", spec.releaseFeedUrl] : []),
   ];
   return `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>

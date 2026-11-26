@@ -15,6 +15,8 @@
 #   ATTACHE_RELEASE_DIR  the release folder holding the signed manifest, its signature and the
 #                      archive this release came from (default: the folder this release was unpacked in,
 #                      which is where the one-step installer puts them)
+#   ATTACHE_UNATTENDED=1  an Update the running service started: never pair or open the browser, and write
+#                      the outcome to <state>\updates\outcome.json, where the service reads it after the restart
 #
 # This file is plain ASCII on purpose: Windows PowerShell reads a script
 # without a byte order mark in the computer's legacy code page.
@@ -26,17 +28,78 @@ Set-StrictMode -Version 3
 # The bundled attache prints UTF-8; read it as such, so paths with letters like ae, o-slash or a-ring survive.
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 
-function Say([string]$Message) { Write-Host $Message }
-function Fail([string]$Message) {
-  [Console]::Error.WriteLine("Attache install failed: $Message")
-  exit 1
-}
-
 $Src = $PSScriptRoot
 $Version = (Get-Content -Raw -LiteralPath (Join-Path $Src 'VERSION')).Trim()
 $Target = (Get-Content -Raw -LiteralPath (Join-Path $Src 'TARGET')).Trim()
 $NewNode = Join-Path $Src 'runtime\node.exe'
 $NewService = Join-Path $Src 'service\attache-service.mjs'
+$Unattended = $env:ATTACHE_UNATTENDED -eq '1'
+$Previous = ''
+$State = ''
+$Prefix = ''
+# How far the install got: an outcome was written, the running service was stopped, `current` was switched.
+$script:Done = $false
+$script:Stopped = $false
+$script:Switched = $false
+
+function Say([string]$Message) { Write-Host $Message }
+
+# Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason? }
+# (apps/service/src/updates/install-records.ts). The bundled runtime writes the JSON, so any reason is escaped;
+# the values travel in the environment, where Windows PowerShell cannot drop an empty one or mangle a quote.
+$OutcomeScript = "const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM, to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + String.fromCharCode(10)); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
+function Write-Outcome([string]$Kind, [string]$Reason) {
+  $script:Done = $true
+  if (-not $Unattended) { return }
+  $Dir = if ($State) { $State } else { $env:ATTACHE_STATE_DIR }
+  if (-not $Dir) { return }
+  try {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Dir 'updates') | Out-Null
+    $env:ATTACHE_OUTCOME_FILE = Join-Path $Dir 'updates\outcome.json'
+    $env:ATTACHE_OUTCOME = $Kind
+    $env:ATTACHE_OUTCOME_FROM = $Previous
+    $env:ATTACHE_OUTCOME_TO = $Version
+    $env:ATTACHE_OUTCOME_REASON = $Reason
+    & $NewNode -e $OutcomeScript
+    if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+  } catch {
+    [Console]::Error.WriteLine("Attache install: could not write the outcome to $env:ATTACHE_OUTCOME_FILE ($_)")
+  }
+}
+
+# Stopped before anything changed: an installed version that was stopped runs again.
+function Fail([string]$Message) {
+  [Console]::Error.WriteLine("Attache install failed: $Message")
+  if ($script:Stopped -and -not $script:Switched) { & $NewNode $NewService service start | Out-Null }
+  Write-Outcome 'failed' $Message
+  exit 1
+}
+
+# After the switch: go back to the version that was installed, and start it.
+function Rollback([string]$Why) {
+  $Before = Join-Path $Prefix "app\$Previous"
+  if ($Previous -and $Previous -ne $Version -and (Test-Path -LiteralPath $Before)) {
+    Say "Rolling back to $Previous"
+    $Current = Join-Path $Prefix 'current'
+    & $NewNode $NewService service stop | Out-Null
+    if (Test-Path -LiteralPath $Current) { [IO.Directory]::Delete($Current) }
+    New-Item -ItemType Junction -Path $Current -Value $Before | Out-Null
+    & $NewNode $NewService service start | Out-Null
+    [Console]::Error.WriteLine("Attache install failed: $Why")
+    Write-Outcome 'rolled_back' $Why
+    exit 1
+  }
+  $script:Switched = $false
+  Fail $Why
+}
+
+# A command that failed under ErrorActionPreference Stop ends the script without a word: say so, as Fail and Rollback do.
+trap {
+  if ($script:Done) { break }
+  $Why = "the installer stopped unexpectedly: $($_.Exception.Message)"
+  if ($script:Switched) { Rollback $Why }
+  Fail $Why
+}
 
 # Run the attache in this release; returns its output, and fails the install when it fails.
 function NewAttache([string]$Why) {
@@ -61,7 +124,6 @@ $Current = Join-Path $Prefix 'current'
 $Bin = Join-Path $Prefix 'bin'
 
 # The installed version is the folder the `current` junction points at.
-$Previous = ''
 $Link = Get-Item -LiteralPath $Current -Force -ErrorAction SilentlyContinue
 if ($Link -and $Link.LinkType -eq 'Junction') { $Previous = Split-Path -Leaf ([string]@($Link.Target)[0]) }
 
@@ -101,6 +163,7 @@ if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
 }
 
 # Stop the running service (if any) and wait until it has really stopped.
+$script:Stopped = $true
 $null = NewAttache 'could not stop the running Attache service; nothing was changed' service stop
 
 # Move a folder out of the way. Windows refuses while a program still runs from it; a service that
@@ -128,28 +191,19 @@ if (Test-Path -LiteralPath $App) {
   }
 }
 # Removes the junction itself, never what it points at.
+$script:Switched = $true
 if ($Link) { [IO.Directory]::Delete($Current) }
 Rename-Item -LiteralPath $Tmp -NewName $Version
 New-Item -ItemType Junction -Path $Current -Value $App | Out-Null
-$Switched = Join-Path $Current 'VERSION'
-if (-not (Test-Path -LiteralPath $Switched) -or (Get-Content -Raw -LiteralPath $Switched).Trim() -ne $Version) { Fail "could not switch to version $Version" }
+$SwitchedTo = Join-Path $Current 'VERSION'
+if (-not (Test-Path -LiteralPath $SwitchedTo) -or (Get-Content -Raw -LiteralPath $SwitchedTo).Trim() -ne $Version) { Rollback "could not switch to version $Version" }
 if ($Replaced) { Remove-Item -LiteralPath $Replaced -Recurse -Force -ErrorAction SilentlyContinue }
 
 # Command-line entry points, and the logon task: starts at logon, restarts on crash, independent of any browser.
-$null = NewAttache 'could not install the attache command' wrappers install --prefix $Prefix --state-dir $State --port $Port
-$null = NewAttache 'could not set up the logon task' service install --prefix $Prefix --state-dir $State --port $Port
-
-function Rollback([string]$Why) {
-  $Before = Join-Path $Prefix "app\$Previous"
-  if ($Previous -and (Test-Path -LiteralPath $Before)) {
-    Say "Rolling back to $Previous"
-    & $NewNode $NewService service stop | Out-Null
-    [IO.Directory]::Delete($Current)
-    New-Item -ItemType Junction -Path $Current -Value $Before | Out-Null
-    & $NewNode $NewService service start | Out-Null
-  }
-  Fail $Why
-}
+& $NewNode $NewService wrappers install --prefix $Prefix --state-dir $State --port $Port | Out-Null
+if ($LASTEXITCODE -ne 0) { Rollback 'could not install the attache command' }
+& $NewNode $NewService service install --prefix $Prefix --state-dir $State --port $Port | Out-Null
+if ($LASTEXITCODE -ne 0) { Rollback 'could not set up the logon task' }
 
 & $NewNode $NewService service start | Out-Null
 if ($LASTEXITCODE -ne 0) { Rollback 'the background service could not be started' }
@@ -166,6 +220,27 @@ for ($i = 0; $i -lt 60 -and -not $Healthy; $i++) {
 if (-not $Healthy) { Rollback "the service did not become healthy; see the logs in $State\logs" }
 
 Say "Attache $Version is running."
+
+# Keep this version and the one it replaced, for going back; remove the rest, and folders an earlier install left.
+# Windows refuses to rename a folder a program still runs from (such as a Harness's MCP server): that one stays,
+# whole, until the next install. A folder that could be renamed aside is no longer in use and is removed.
+if ($Previous -and $Previous -ne $Version) {
+  foreach ($Old in @(Get-ChildItem -LiteralPath (Join-Path $Prefix 'app') -Directory -Force)) {
+    if ($Old.Name -eq $Version -or $Old.Name -eq $Previous) { continue }
+    $Gone = $Old.FullName
+    if (-not $Old.Name.StartsWith('.')) {
+      $Gone = Join-Path $Old.Parent.FullName ".$($Old.Name).removing.$PID"
+      try { Rename-Item -LiteralPath $Old.FullName -NewName (Split-Path -Leaf $Gone) }
+      catch { Say "Attache $($Old.Name) is still in use, so it stays until the next install."; continue }
+    }
+    Remove-Item -LiteralPath $Gone -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+if ($Unattended) {
+  Write-Outcome 'updated' ''
+  exit 0
+}
 $Attache = Join-Path $Bin 'attache.cmd'
 if ($env:ATTACHE_NO_OPEN -eq '1') { & $Attache pair } else { & $Attache pair --open }
 Say ''
