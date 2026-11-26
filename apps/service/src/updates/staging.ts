@@ -29,6 +29,8 @@ export interface StageInput {
   target: string;
   stateDir: string;
   trustedKeys: readonly string[];
+  /** Aborts once the download is no longer wanted: it stops and makes no retry. */
+  signal?: AbortSignal;
 }
 
 /** Remove every staged release; one still in use (a Windows installer that is just exiting) stays for the next time. */
@@ -64,7 +66,7 @@ export async function stageUpdate(input: StageInput): Promise<StagedUpdate> {
     writeFileSync(join(folder, manifestFileName(manifest.version)), input.found.signed.manifest);
     writeFileSync(join(folder, signatureFileName(manifest.version)), input.found.signed.signature);
     const archive = join(folder, artifact.name);
-    await input.feed.downloadTo(url, archive, artifact.size);
+    await input.feed.downloadTo(url, archive, artifact.size, input.signal);
     const verified = await verifyReleaseFolder(folder, { trustedKeys: input.trustedKeys, version: manifest.version, targets: [input.target] });
     // The whole release checked out, so a next key it names is one this Machine may trust from now on (ADR 0007).
     keepNextReleaseKey(input.stateDir, verified.manifest);

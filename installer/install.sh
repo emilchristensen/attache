@@ -142,7 +142,11 @@ fi
 mkdir -p "$PREFIX/app" "$STATE/logs"
 chmod 700 "$PREFIX" "$STATE"
 
-# If a service is already running, back it up before changing anything: the pre-Update backup, which a rollback
+# Stop the running service (if any) and wait until it has really stopped: the backup below then holds its last write.
+STOPPED=1
+"$NEW" service stop >/dev/null || fail "could not stop the running Attache service; nothing was changed"
+
+# If a service was installed, back it up before changing anything: the pre-Update backup, which a rollback
 # restores the database from (only the newest 3 stay, see below; the owner's own backups are never touched).
 # A service that refused to start on a database a newer Attache wrote (refused-to-start) cannot open that database to
 # back it up, and could not run on a copy of it either: installing a version that reads it is the way out, so it goes
@@ -155,13 +159,10 @@ elif [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
   BACKUP="$STATE/backups/pre-update-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz"
   ATTACHE_STATE_DIR="$STATE" "$PREFIX/current/bin/attache" backup --out "$BACKUP" >/dev/null || {
     BACKUP=""
+    # fail starts the installed version again.
     fail "could not back up the existing installation; nothing was changed"
   }
 fi
-
-# Stop the running service (if any) and wait until it has really stopped.
-STOPPED=1
-"$NEW" service stop >/dev/null || fail "could not stop the running Attache service; nothing was changed"
 
 # Copy this version into place atomically, then point "current" at it.
 TMP="$PREFIX/app/.$VERSION.installing.$$"

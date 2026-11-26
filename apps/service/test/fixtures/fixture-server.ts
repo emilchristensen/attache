@@ -24,6 +24,8 @@ export interface FixtureResponse {
   text?: string;
   /** Raw bytes, for file downloads. */
   body?: Uint8Array;
+  /** Send the status and headers at once, and the body only once this settles, as a slow network does. */
+  bodyAfter?: Promise<void>;
 }
 
 export type FixtureHandler = (req: FixtureRequest) => FixtureResponse | Promise<FixtureResponse>;
@@ -60,6 +62,10 @@ export async function startFixtureServer(port = 0): Promise<FixtureServer> {
       const type = out.json !== undefined ? "application/json" : out.body !== undefined ? "application/octet-stream" : "text/plain";
       const headers = { "content-type": type, ...(out.body !== undefined ? { "content-length": String(out.body.length) } : {}), ...(out.headers ?? {}) };
       res.writeHead(out.status ?? 200, headers);
+      if (out.bodyAfter) {
+        res.flushHeaders();
+        await out.bodyAfter;
+      }
       res.end(out.json !== undefined ? JSON.stringify(out.json) : (out.body ?? out.text ?? ""));
     } catch (e) {
       res.writeHead(500, { "content-type": "application/json" });

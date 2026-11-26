@@ -20,6 +20,15 @@ describe("updatesShown: every status the service reports, in the owner's words, 
     ["downloading", view("downloading", { update: UPDATE }), "Downloading Attache 0.7.0…", "Attache checks it against its signature before anything installs.", "plain", false, null],
     ["ready", view("ready", { mode: "ask_first", update: UPDATE }), "Attache 0.7.0 is ready to install", "It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.", "plain", true, "install"],
     [
+      "ready, after a check that failed",
+      view("ready", { mode: "ask_first", update: UPDATE, reason: "github.com answered HTTP 503 when Attache looked for an Update. Check again later." }),
+      "Attache 0.7.0 is ready to install",
+      "github.com answered HTTP 503 when Attache looked for an Update. Check again later. It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.",
+      "plain",
+      true,
+      "install",
+    ],
+    [
       "waiting for 1 Job",
       view("waiting_for_jobs", { update: UPDATE, jobs: 1 }),
       "Attache 0.7.0 is waiting for 1 Job to finish",
@@ -59,6 +68,7 @@ describe("lastCheckShown: when the last check finished, and what it found", () =
     ["found nothing newer", view("up_to_date", { lastCheckedAt: "2026-11-26T09:00:00Z" }), "up to date"],
     ["found an Update", view("ready", { lastCheckedAt: "2026-11-26T09:00:00Z", update: UPDATE }), "found Attache 0.7.0"],
     ["failed", view("check_failed", { lastCheckedAt: "2026-11-26T09:00:00Z", reason: "x" }), "failed"],
+    ["failed, with a verified Update still ready", view("ready", { lastCheckedAt: "2026-11-26T09:00:00Z", reason: "x", update: UPDATE }), "failed"],
     ["checking again after a check that found nothing", view("checking", { lastCheckedAt: "2026-11-26T09:00:00Z" }), null],
   ])("%s", (_name, v, result) => {
     expect(lastCheckShown(v)).toEqual(v.lastCheckedAt ? { at: v.lastCheckedAt, result } : null);

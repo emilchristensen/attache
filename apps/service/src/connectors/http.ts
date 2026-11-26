@@ -110,6 +110,8 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
       const retries = req.retries ?? ((req.method ?? "GET") === "GET" ? 3 : 0);
       let attempt = 0;
       for (;;) {
+        // Cancelled, even while the last answer's body was read or its retry waited: no further attempt.
+        if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
         const ctrl = new AbortController();
         const onAbort = () => ctrl.abort();
         opts.signal?.addEventListener("abort", onAbort);
@@ -147,9 +149,15 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
             opts.signal?.removeEventListener("abort", onAbort);
           }
         }
-        clearTimeout(timer);
-        opts.signal?.removeEventListener("abort", onAbort);
-        const bytes = Buffer.from(await res.arrayBuffer());
+        let bytes: Buffer;
+        try {
+          bytes = Buffer.from(await res.arrayBuffer());
+        } catch (e) {
+          throw networkFailure(e, "reading", req.url, opts.signal);
+        } finally {
+          clearTimeout(timer);
+          opts.signal?.removeEventListener("abort", onAbort);
+        }
         // As `Response.text()` decodes: UTF-8, without a leading byte order mark.
         const text = new TextDecoder().decode(bytes);
         if (res.ok) {

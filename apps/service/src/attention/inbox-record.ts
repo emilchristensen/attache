@@ -148,7 +148,7 @@ export function mergeInboxRecords(a: InboxRecord, b: InboxRecord): InboxRecord {
   const first = a.item.firstSeenAt <= b.item.firstSeenAt ? a : b;
   const item = later(a.item, b.item, (x) => x.updatedAt);
   const decision = a.decision && b.decision ? later(a.decision, b.decision, (d) => d.at) : (a.decision ?? b.decision);
-  // Fields this release does not know come from the side with the newer report, as the item does.
-  const newer = item === a.item ? a : b;
-  return { ...newer, version: INBOX_RECORD_VERSION, id: first.id, key: a.key, item: { ...item, firstSeenAt: first.item.firstSeenAt }, decision };
+  // Fields this release does not know come from both sides, the newer report's where both have one; known ones from the winner.
+  const [newer, older] = item === a.item ? [a, b] : [b, a];
+  return { ...older, ...newer, version: INBOX_RECORD_VERSION, id: first.id, key: a.key, item: { ...older.item, ...item, firstSeenAt: first.item.firstSeenAt }, decision };
 }

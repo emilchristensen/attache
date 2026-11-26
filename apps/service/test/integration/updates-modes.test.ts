@@ -67,6 +67,47 @@ describe("when the Updater checks", () => {
     expect(m.runner.requests).toEqual([]);
   });
 
+  it("in Off asks for nothing more, even when Off comes while a check waits for the release list", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold();
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    letThrough();
+    await checking;
+    expect(server.requests.map((r) => r.path).filter((p) => !p.endsWith("/releases"))).toEqual([]);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
+  it("in Off asks for the release list no second time, even when the held list then fails", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold();
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    server.failWith(503);
+    letThrough();
+    await checking;
+    expect(server.requests).toHaveLength(1);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
+  it("in Off asks for the release list no second time, even when a failure's headers came before Off and its body after", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    let sendBody!: () => void;
+    server.failWith(503, { bodyAfter: new Promise<void>((resolve) => (sendBody = resolve)) });
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    sendBody();
+    await checking;
+    expect(server.requests).toHaveLength(1);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
   it("checks at once when Automatic updates is turned back on", async () => {
     const server = await releases("0.7.0");
     const m = await machine("0.6.0", server);
@@ -253,12 +294,57 @@ describe("Ask first", () => {
     expect(archiveDownloads(server)).toBe(1);
   });
 
+  it("keeps a verified Update ready when a later check fails, and Install now installs it without the network", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await setMode(m, "ask_first");
+    await m.clock.advance(0);
+    server.failWith(503);
+    await m.clock.advance(6 * HOUR);
+    const after = await view(m);
+    expect(after).toMatchObject({ status: "ready", update: { version: "0.7.0" } });
+    expect(after.reason).toContain("HTTP 503");
+
+    expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing" });
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
+  });
+
   it("installs a waiting Update once switched to Automatic and no Job runs", async () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
     await setMode(m, "ask_first");
     await m.clock.advance(0);
     expect(await setMode(m, "automatic")).toMatchObject({ status: "installing" });
     expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
+  });
+});
+
+describe("Install now", () => {
+  it("installs nothing when Off is chosen while it downloads", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold(/\.(tar\.gz|zip)$/);
+    const installing = m.post<UpdatesView>("/updates/install");
+    await expect.poll(() => archiveDownloads(server)).toBe(1);
+    await setMode(m, "off");
+    letThrough();
+    expect(await installing).toMatchObject({ status: "off" });
+    expect(m.runner.requests).toEqual([]);
+  });
+
+  it("downloads nothing more when Off is chosen while it waits behind a download", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await setMode(m, "ask_first");
+    const letThrough = server.hold(/\.(tar\.gz|zip)$/);
+    const checked = m.clock.advance(0);
+    await expect.poll(() => archiveDownloads(server)).toBe(1);
+    const installing = m.post<UpdatesView>("/updates/install");
+    await setMode(m, "off");
+    letThrough();
+    await checked;
+    expect(await installing).toMatchObject({ status: "off" });
+    expect(archiveDownloads(server)).toBe(1);
+    expect(m.runner.requests).toEqual([]);
   });
 });
 

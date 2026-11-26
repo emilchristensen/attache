@@ -30,6 +30,8 @@ export interface FindUpdateInput {
   target: string;
   /** Told about each newer release that was refused, with the reason. */
   refused?: (version: string, reason: string) => void;
+  /** Aborts once the check is no longer wanted (Off or another channel): no further request or retry is made (spec #130, story 4). */
+  signal?: AbortSignal;
 }
 
 /** An Update a check found: its verified manifest, the exact bytes that were verified, and the release's files. */
@@ -60,7 +62,7 @@ async function verifiedManifest(input: FindUpdateInput, release: FeedRelease, ve
   let bytes: Buffer;
   let signature: Buffer;
   try {
-    [bytes, signature] = await Promise.all([input.feed.download(manifestUrl), input.feed.download(signatureUrl)]);
+    [bytes, signature] = await Promise.all([input.feed.download(manifestUrl, input.signal), input.feed.download(signatureUrl, input.signal)]);
   } catch (e) {
     throw unreachable(input.feed, e);
   }
@@ -77,13 +79,15 @@ async function verifiedManifest(input: FindUpdateInput, release: FeedRelease, ve
 export async function findUpdate(input: FindUpdateInput): Promise<FoundUpdate | null> {
   let listed: FeedRelease[];
   try {
-    listed = await input.feed.releases();
+    listed = await input.feed.releases(input.signal);
   } catch (e) {
     throw unreachable(input.feed, e);
   }
   const byVersion = new Map(listed.map((r) => [tagVersion(r.tag), r]));
   let firstRefusal: string | null = null;
   for (const version of eligibleVersions(listed.map((r) => r.tag), input)) {
+    // The caller drops the answer of a check no longer wanted, so what it returns here is never shown.
+    if (input.signal?.aborted) return null;
     try {
       const found = await verifiedManifest(input, byVersion.get(version)!, version);
       // A release without a build for this computer is not an Update here, nor a fault.

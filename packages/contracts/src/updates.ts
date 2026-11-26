@@ -52,7 +52,7 @@ export type UpdateCheckInput = z.infer<typeof UpdateCheckInput>;
  * - `up_to_date`: the last check found no newer release in the channel.
  * - `available`: the last check found `update`, verified its signed manifest, and nothing more happened yet.
  * - `downloading`: `update`'s artifact for this computer is downloading.
- * - `ready`: `update` is downloaded and verified, and waits for Install (Ask first).
+ * - `ready`: `update` is downloaded and verified, and waits for Install (Ask first). A later check that fails leaves it ready, with `reason`.
  * - `waiting_for_jobs`: `update` waits for `jobs` Jobs to finish before it installs.
  * - `installing`: the installer runs; the service is about to restart.
  * - `check_failed`: the last check, or the download of `update`, did not finish or was refused; `reason` says why. Never read as up to date.
@@ -98,7 +98,7 @@ export interface UpdatesView {
   channel: UpdateChannel;
   mode: UpdateMode;
   status: UpdatesStatus;
-  /** Why Updates are unavailable or the last check failed; null otherwise. */
+  /** Why Updates are unavailable or the last check failed (also while a verified Update stays `ready`); null otherwise. */
   reason: string | null;
   /** The newest release this Machine may take; null when none is known. */
   update: AvailableUpdateView | null;

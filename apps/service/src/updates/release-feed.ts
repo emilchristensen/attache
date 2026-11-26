@@ -32,12 +32,17 @@ const PER_PAGE = 100;
 
 export class ReleaseFeed {
   readonly url: string;
-  private readonly http: HttpClient;
+  private readonly userAgent: string;
 
   constructor(url: string, userAgent: string) {
     this.url = url;
+    this.userAgent = userAgent;
+  }
+
+  /** A client for one request; once `signal` aborts (the check or download is no longer wanted), it stops and makes no retry. */
+  private http(signal?: AbortSignal): HttpClient {
     // One retry: a check runs again at the next one anyway, and a failure must reach the owner without a long wait.
-    this.http = createHttpClient({ userAgent, baseDelayMs: 500 });
+    return createHttpClient({ userAgent: this.userAgent, baseDelayMs: 500, ...(signal ? { signal } : {}) });
   }
 
   /** The address's host, as the owner reads it in a failure. */
@@ -46,10 +51,10 @@ export class ReleaseFeed {
   }
 
   /** The published releases, newest first as GitHub lists them; drafts and entries Attache cannot read are left out. */
-  async releases(): Promise<FeedRelease[]> {
+  async releases(signal?: AbortSignal): Promise<FeedRelease[]> {
     const url = new URL(this.url);
     url.searchParams.set("per_page", String(PER_PAGE));
-    const res = await this.http.request<unknown>({ url: url.toString(), headers: { accept: "application/vnd.github+json" }, retries: 1, timeoutMs: 30_000 });
+    const res = await this.http(signal).request<unknown>({ url: url.toString(), headers: { accept: "application/vnd.github+json" }, retries: 1, timeoutMs: 30_000 });
     if (!Array.isArray(res.data)) throw new Error(`The release list from ${this.host} is not a list of releases.`);
     return res.data.flatMap((entry) => {
       const r = GitHubRelease.safeParse(entry);
@@ -62,14 +67,14 @@ export class ReleaseFeed {
    * Save a release file into `file`, streamed, so a release archive never sits in memory whole.
    * Saving stops one byte past `maxBytes`: a file that large cannot be the one the manifest names. Resolves with the bytes saved.
    */
-  async downloadTo(url: string, file: string, maxBytes: number): Promise<number> {
-    const res = await this.http.request<number>({ url, headers: { accept: "application/octet-stream" }, saveTo: { file, maxBytes }, retries: 1, timeoutMs: DOWNLOAD_TIMEOUT_MS });
+  async downloadTo(url: string, file: string, maxBytes: number, signal?: AbortSignal): Promise<number> {
+    const res = await this.http(signal).request<number>({ url, headers: { accept: "application/octet-stream" }, saveTo: { file, maxBytes }, retries: 1, timeoutMs: DOWNLOAD_TIMEOUT_MS });
     return res.data;
   }
 
   /** A release file's exact bytes. */
-  async download(url: string): Promise<Buffer> {
-    const res = await this.http.request<Buffer>({ url, headers: { accept: "application/octet-stream" }, responseType: "bytes", retries: 1, timeoutMs: 60_000 });
+  async download(url: string, signal?: AbortSignal): Promise<Buffer> {
+    const res = await this.http(signal).request<Buffer>({ url, headers: { accept: "application/octet-stream" }, responseType: "bytes", retries: 1, timeoutMs: 60_000 });
     return res.data;
   }
 }

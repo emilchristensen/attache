@@ -410,9 +410,12 @@ export class App {
   /**
    * Open the configured data folder and make sure it is registered as the builtin vault source.
    * `adopt` is for a folder the owner just chose or joined: the meeting captures already in it are not consolidated.
+   * A Brain in a format this Machine cannot read (ADR 0008) is opened without writing anything that replicates into it:
+   * no README, no Inbox items, no Proposals carried over. Those wait for an open once this Machine is updated.
    */
   openDataFolder(path: string, opts: { adopt?: boolean } = {}): { created: string[] } {
-    const r = this.memory.open(path);
+    const paused = this.replication.formatHeld(path);
+    const r = this.memory.open(path, { paused });
     const existing = this.connections.record("vault-data");
     const now = nowIso();
     if (!existing) {
@@ -422,8 +425,8 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
-    this.inbox.reconcile();
-    this.proposals.open();
+    if (!paused) this.inbox.reconcile();
+    this.proposals.open({ paused });
     this.captures.opened({ adopt: opts.adopt ?? false });
     this.dataWatcher?.stop();
     this.dataWatcher = new FolderWatcher(this.memory.indexer, root, this.log, {

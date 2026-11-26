@@ -220,6 +220,7 @@ The throwaway signing key is deleted from the run once used.
 The key is made once, by hand: `bash scripts/release-key-wizard.sh` makes the key pair, creates the protected `release` environment (tags `v*` only, optionally your approval before each release is signed), stores the signing key as its secret, waits until you have an offline backup, deletes this computer's copy and commits the public key at `.github/release-public-key.pem` (added with `--force`, since `*.pem` is ignored).
 Never replace that key: installed Machines would refuse every later release.
 To change it, rotate it with a release whose manifest names the next key (`--next-public-key`, see below).
+The seal job does that while `.github/release-next-public-key.pem` is committed (with `--force`): every release it signs then names that key, and its verify step refuses a manifest that does not.
 
 ### Signing tool
 
@@ -250,7 +251,7 @@ It checks that the installed release verifies a release signed with that key and
 It then installs, reinstalls, installs a newer release over the old one, crashes the service, backs up, restores and uninstalls in a clean temporary home folder whose name has a space and the letters æøå, with its own service name and port.
 It checks that the service starts at login and comes back after a crash, that hooks keep working across the newer release's install, and that uninstall leaves every file the owner had before Attache as it was.
 It also builds a third release (`--next`, by default `--to` with its last number raised by one) and runs `attache update` against a local stand-in for GitHub Releases (`scripts/install-test/release-server.mjs`; the installer passes `ATTACHE_RELEASE_FEED_URL` on to the service definition).
-That scenario (`scripts/install-test/update.mjs`, checks with id `update`) refuses an archive changed after signing with nothing changed, then installs the newer release unattended and checks the outcome record, the Updates status, the kept configuration and data, and that only the current and previous versions remain; on Windows a folder a running program holds stays whole.
+That scenario (`scripts/install-test/update.mjs`, checks with id `update`) refuses an archive changed after signing with nothing changed, then installs the newer release unattended and checks the outcome record, the Updates status, the kept configuration and data, that the installer stopped the service before its pre-Update backup, and that only the current and previous versions remain; on Windows a folder a running program holds stays whole.
 What differs per operating system (where the release installs, how to run its scripts and a Harness's hooks, how to ask launchd, systemd or Task Scheduler about the service) is in `scripts/install-test/platform.mjs`.
 The CI jobs `install (ubuntu-latest)`, `install (macos-latest)` and `install (windows-latest)` run it on Linux, macOS and Windows.
 On Windows it runs the installer and the wrappers through cmd.exe and the Claude Code hooks through Git Bash, as a terminal and Claude Code do.

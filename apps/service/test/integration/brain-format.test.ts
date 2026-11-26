@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ManualClock } from "../fixtures/manual-clock.ts";
+import { startTestService, type TestService } from "./harness.ts";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 
 const CHECK = 60_000;
@@ -13,15 +16,18 @@ const READS_2 = { reads: 2, writes: 2 };
 const READS_1 = { reads: 1, writes: 1 };
 
 let world: TestWorld | null = null;
+let joining: TestService | null = null;
 
 afterEach(async () => {
   await world?.stop();
+  await joining?.stop();
   world = null;
+  joining = null;
 });
 
 /** The Brain format record as the repository holds it, which is what every Machine reads. */
 const pushedFormat = (w: TestWorld) => JSON.parse(w.remote.git("show", `main:${FORMAT_FILE}`)) as Record<string, unknown>;
-const idOf = async (m: TestMachine) => ((await m.get("/machine")) as { id: string }).id;
+const idOf = async (m: TestService) => ((await m.get("/machine")) as { id: string }).id;
 const pushedRecord = (w: TestWorld, id: string) => JSON.parse(w.remote.git("show", `main:machines/${id}.json`)) as Record<string, unknown>;
 const localHead = (m: TestMachine) => execFileSync("git", ["rev-parse", "HEAD"], { cwd: m.dataDir, encoding: "utf8" }).trim();
 
@@ -128,6 +134,78 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(readFileSync(join(pc.dataDir, "memory/notes/from-mac.md"), "utf8")).toContain("Written on Mac");
   });
 
+  it("a Machine that joins a Brain in a newer format is paused by the join itself, and writes no record of itself", async () => {
+    world = await startMachines(["Mac"], { brainFormat: READS_2 });
+    expect(pushedFormat(world)).toMatchObject({ format: 2 });
+    const sent = world.remote.git("rev-parse", "main");
+    joining = await startTestService({ clock: new ManualClock(), setup: false });
+    const pc = joining;
+
+    expect(await pc.post("/replication/join", { remote: world.remote.url, path: pc.dataDir })).toMatchObject({ status: "paused", pause: { brainFormat: 2, readsBrainFormat: 1 } });
+    expect(existsSync(join(pc.dataDir, `machines/${await idOf(pc)}.json`))).toBe(false);
+    expect(world.remote.git("rev-parse", "main")).toBe(sent);
+  });
+
+  it("a Machine that joins a Brain in a newer format writes nothing into it, at the join and after a restart while still paused", async () => {
+    world = await startMachines(["Mac"], { brainFormat: READS_2 });
+    const [mac] = world.machines as [TestMachine];
+    rmSync(join(mac.dataDir, "README.md"));
+    await settle([mac]);
+    expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).not.toContain("README.md");
+    const clock = new ManualClock();
+    joining = await startTestService({ clock });
+    let pc = joining;
+    const due = new Date(Date.now() + DAY).toISOString().slice(0, 10);
+    mkdirSync(join(pc.dataDir, "memory/projects"), { recursive: true });
+    writeFileSync(join(pc.dataDir, "memory/projects/launch.md"), `# Launch\n\n- [ ] Book the venue 📅 ${due}\n`);
+    const { job } = await pc.post("/briefings", { kind: "manual" });
+    expect((await pc.waitJob(job.id)).job.status).toBe("succeeded");
+    expect(readdirSync(join(pc.dataDir, "review/inbox"))).toHaveLength(1);
+    const target = join(mkdtempSync(join(tmpdir(), "attache-it-join-")), "brain");
+
+    expect(await pc.post("/replication/join", { remote: world.remote.url, path: target })).toMatchObject({ status: "paused" });
+    expect(existsSync(join(target, "review/inbox"))).toBe(false);
+    expect(existsSync(join(target, "README.md"))).toBe(false);
+
+    await pc.stop();
+    joining = pc = await startTestService({ stateDir: pc.stateDir, clock });
+    expect(await pc.get("/replication")).toMatchObject({ status: "paused" });
+    expect(existsSync(join(target, "review/inbox"))).toBe(false);
+    expect(existsSync(join(target, "README.md"))).toBe(false);
+  });
+
+  it("a Machine restarted while paused leaves an approval a later rejection overruled in place, and undoes it once it is updated", async () => {
+    world = await startMachines(["Mac", "PC"], { brainFormat: READS_2 });
+    const [first, pc] = world.machines as [TestMachine, TestMachine];
+    let mac = first;
+    const note = join(mac.dataDir, "memory/projects/atlas-rollout.md");
+    await mac.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Atlas rollout", facts: [{ subject: "Status", value: "Pilot in Copenhagen" }] }] });
+    const made = await mac.post("/memory/proposals", { item: { action: "update", path: "memory/projects/atlas-rollout.md", facts: [{ subject: "Status", value: "Rolled out to Aarhus", reason: "seen in standup" }] }, reason: "Mentioned in standup" });
+    await settle([mac, pc]);
+    expect(JSON.parse(readFileSync(join(mac.dataDir, FORMAT_FILE), "utf8"))).toMatchObject({ format: 2 });
+    world.remote.goOffline();
+    await mac.post(`/memory/proposals/${made.id}/apply`);
+    await pc.clock.advance(10 * 60_000);
+    await pc.post(`/memory/proposals/${made.id}/reject`);
+    world.remote.goOnline();
+    // Mac sends its approval; PC merges it with its later rejection.
+    await mac.clock.advance(AFTER_WRITE);
+    await pc.clock.advance(AFTER_WRITE + CHECK);
+    const [file] = readdirSync(join(pc.dataDir, "review/proposals"));
+    const merged = readFileSync(join(pc.dataDir, "review/proposals", file!), "utf8");
+    expect(merged).toContain("applied");
+
+    // The merged Proposal reaches Mac's folder before Mac reads it, as from a pull cut short, and Mac comes back on a release that reads format 1.
+    writeFileSync(join(mac.dataDir, "review/proposals", file!), merged);
+    mac = await world.restart(mac, { brainFormat: READS_1 });
+    expect(readFileSync(note, "utf8").split("## History")[0]).toContain("Rolled out to Aarhus");
+
+    mac = await world.restart(mac, { brainFormat: READS_2 });
+    const current = readFileSync(note, "utf8").split("## History")[0]!;
+    expect(current).toContain("Pilot in Copenhagen");
+    expect(current).not.toContain("Rolled out to Aarhus");
+  });
+
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {
     world = await startMachines(["Mac", "PC"]);
     const [first, pc] = world.machines as [TestMachine, TestMachine];
@@ -163,6 +241,25 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(localHead(pc)).toBe(head);
     expect(readFileSync(recordFile, "utf8")).toBe(record);
     expect(readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8")).toBe(format);
+  });
+
+  it("a Machine paused by a newer format it fetched writes nothing into its folder after a restart, though its folder still holds the older format", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    let [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await settle([pc, mac]);
+    mac = await world.restart(mac, { brainFormat: READS_2 });
+    mac.clock.skip(31 * DAY);
+    await settle([mac]);
+    expect(pushedFormat(world)).toMatchObject({ format: 2 });
+    pc = await world.restart(pc, { after: 31 * DAY });
+    await settle([pc]);
+    expect((await pc.get("/replication")).status).toBe("paused");
+    expect(JSON.parse(readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8"))).toMatchObject({ format: 1 });
+
+    rmSync(join(pc.dataDir, "README.md"));
+    pc = await world.restart(pc);
+    expect((await pc.get("/replication")).status).toBe("paused");
+    expect(existsSync(join(pc.dataDir, "README.md"))).toBe(false);
   });
 
   it("a Machine back on a release that cannot read the format, as after a rolled-back Update, pauses at once and commits nothing", async () => {

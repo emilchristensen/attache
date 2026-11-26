@@ -26,7 +26,8 @@ const DETAIL: Record<UpdatesStatus, { detail: (v: UpdatesView) => string | null;
   up_to_date: { detail: (v) => `No newer release in the ${CHANNEL_LABEL[v.channel]} channel.`, check: true },
   available: { detail: () => "Select Install now to install it. Attache restarts on the new version.", check: true },
   downloading: { detail: () => "Attache checks it against its signature before anything installs.", check: false },
-  ready: { detail: () => "It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.", check: true },
+  // A later check that failed leaves the Update ready: its reason comes first.
+  ready: { detail: (v) => `${v.reason ? `${v.reason} ` : ""}It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.`, check: true },
   waiting_for_jobs: {
     detail: (v) => `It installs once no Job is running, or after waiting 24 hours. Restart now installs it at once; ${v.jobs === 1 ? "the Job resumes from its" : "the Jobs resume from their"} last checkpoint.`,
     check: false,
@@ -44,7 +45,9 @@ export function updatesShown(v: UpdatesView): UpdatesShown {
 /** When the last check finished, and what it found: null before the first one; no result while the next one runs. */
 export function lastCheckShown(v: UpdatesView): { at: string; result: string | null } | null {
   if (!v.lastCheckedAt) return null;
-  const result = v.status === "check_failed" ? "failed" : v.status === "up_to_date" ? "up to date" : v.update ? `found Attache ${v.update.version}` : null;
+  // A verified Update stays ready when a later check fails; the failure is that check's result.
+  const failed = v.status === "check_failed" || (v.status === "ready" && v.reason !== null);
+  const result = failed ? "failed" : v.status === "up_to_date" ? "up to date" : v.update ? `found Attache ${v.update.version}` : null;
   return { at: v.lastCheckedAt, result };
 }
 

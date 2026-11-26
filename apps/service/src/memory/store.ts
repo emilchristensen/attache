@@ -114,8 +114,12 @@ export class MemoryStore {
     return this.root;
   }
 
-  /** Create the folder layout (if needed) and take the single-writer lock. */
-  open(root: string): { created: string[] } {
+  /**
+   * Create the folder layout (if needed) and take the single-writer lock.
+   * `paused`: the Brain is in a format this Machine cannot read, so no README is written; the folders (which git never
+   * replicates while empty) and `.attache/` (which Replication ignores) are only this Machine's.
+   */
+  open(root: string, opts: { paused?: boolean } = {}): { created: string[] } {
     const created: string[] = [];
     const before = existsSync(root) ? new Set(readdirSync(root).filter((f) => f !== ".DS_Store")) : null;
     mkdirSync(root, { recursive: true });
@@ -126,7 +130,7 @@ export class MemoryStore {
         created.push(d + "/");
       }
     }
-    if (!existsSync(join(root, "README.md"))) {
+    if (!opts.paused && !existsSync(join(root, "README.md"))) {
       writeFileSync(join(root, "README.md"), README);
       created.push("README.md");
     }
