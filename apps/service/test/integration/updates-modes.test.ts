@@ -127,7 +127,7 @@ describe("Automatic", () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
     await m.clock.advance(0);
     expect(await view(m)).toMatchObject({ status: "installing", update: { version: "0.7.0" }, jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("waits while Jobs run, with the exact count, and installs when the last one ends", async () => {
@@ -146,7 +146,7 @@ describe("Automatic", () => {
     briefing.finish();
     await expect.poll(async () => (await view(m)).status).toBe("installing");
     expect((await view(m)).jobs).toBeNull();
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("looks at the running Jobs again every minute", async () => {
@@ -171,7 +171,7 @@ describe("Automatic", () => {
 
     await m.clock.advance(60_000);
     expect(await view(m)).toMatchObject({ status: "installing", jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     job.finish();
   });
 
@@ -191,7 +191,7 @@ describe("Automatic", () => {
     expect(after.runner.requests).toEqual([]);
     await after.clock.advance(60_000);
     expect(await view(after)).toMatchObject({ status: "installing", jobs: null });
-    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     busy.finish();
     job.finish();
   });
@@ -211,7 +211,7 @@ describe("Automatic", () => {
     await after.clock.advance(4 * HOUR);
     expect(after.runner.requests).toEqual([]);
     await after.clock.advance(20 * HOUR);
-    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.1"]);
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.1"]);
     busy.finish();
     job.finish();
   });
@@ -238,7 +238,7 @@ describe("Ask first", () => {
     expect(m.runner.requests).toEqual([]);
 
     expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing", update: { version: "0.7.0" } });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     expect(archiveDownloads(server)).toBe(1);
   });
 
@@ -258,7 +258,7 @@ describe("Ask first", () => {
     await setMode(m, "ask_first");
     await m.clock.advance(0);
     expect(await setMode(m, "automatic")).toMatchObject({ status: "installing" });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 });
 
@@ -276,7 +276,7 @@ describe("Restart now", () => {
     expect(await view(m)).toMatchObject({ status: "waiting_for_jobs", jobs: 1 });
 
     expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing", jobs: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
 
     // The installer restarts the service on the new version, whose own runner picks the Job up where it stopped.
     const after = await restart(m, "0.7.0");

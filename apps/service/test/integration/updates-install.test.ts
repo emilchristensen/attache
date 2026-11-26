@@ -29,7 +29,7 @@ describe("installing an Update", () => {
     expect(v).toMatchObject({ version: "0.6.0", status: "installing", reason: null, update: { version: "0.7.0" } });
     expect(m.runner.requests).toHaveLength(1);
     const [request] = m.runner.requests;
-    expect(request).toMatchObject({ from: "0.6.0", version: "0.7.0", prefix: m.prefix, stateDir: m.stateDir, port: Number(new URL(m.url).port) });
+    expect(request).toMatchObject({ from: "0.6.0", to: "0.7.0", prefix: m.prefix, stateDir: m.stateDir, port: Number(new URL(m.url).port) });
     // The staged folder is a release folder, as the installer's own check reads one: the signed manifest, its signature and this computer's archive.
     const published = signedRelease({ version: "0.7.0", key });
     const archive = readdirSync(published.folder).find((f) => f.includes(TARGET))!;
@@ -133,7 +133,7 @@ describe("after the installer finishes", () => {
       await after.clock.advance(0);
       expect(server.requests.filter((r) => r.path.endsWith("/releases")).length).toBe(checksBefore + 1);
       expect(await view(after)).toMatchObject({ version: runs, status: "up_to_date", update: null, lastCheckedAt: expect.any(String) });
-      expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+      expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     });
   }
 
@@ -147,7 +147,7 @@ describe("after the installer finishes", () => {
     await m.clock.advance(0);
     await m.clock.advance(CHECK_EVERY_MS);
     expect(await view(m)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
-    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     const again = await restart(m, "0.6.0");
     expect(await again.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null, lastUpdate: { outcome: "failed" } });
 
@@ -166,7 +166,7 @@ describe("after the installer finishes", () => {
     await after.clock.advance(0);
     await after.clock.advance(CHECK_EVERY_MS);
     expect(await view(after)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
-    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("tells a rolled-back Update apart from a successful one", async () => {
@@ -222,7 +222,7 @@ describe("after an Update rolled back", () => {
     await outcomeSeen(after);
     await after.clock.advance(CHECK_EVERY_MS);
     expect(await view(after)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
-    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(after.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
   });
 
   it("looks again at once, and no longer shows the failed version as available", async () => {

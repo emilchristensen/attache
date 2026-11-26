@@ -146,7 +146,7 @@ function startDetached(command: string, args: string[], env: NodeJS.ProcessEnv, 
 }
 
 async function startInstaller(os: Os, request: InstallRequest, log: string): Promise<void> {
-  const folder = join(request.release, `attache-${request.version}`);
+  const folder = join(request.release, `attache-${request.to}`);
   const env = installerEnv(request);
   if (os === "windows") {
     const script = join(folder, "install.ps1");
@@ -160,7 +160,7 @@ async function startInstaller(os: Os, request: InstallRequest, log: string): Pro
   if (os === "linux" && underSystemd()) {
     const launcher = join(request.release, "run-installer.sh");
     writeFileSync(launcher, launcherScript(script, log, env), { mode: 0o700 });
-    const unit = `attache-update-${request.version.replace(/[^A-Za-z0-9]/g, "-")}-${Date.now()}`;
+    const unit = `attache-update-${request.to.replace(/[^A-Za-z0-9]/g, "-")}-${Date.now()}`;
     const r = await run("systemd-run", ["--user", "--collect", "--quiet", `--unit=${unit}`, "/bin/sh", launcher], { env: userManagerEnv(), timeoutMs: 60_000 });
     if (r.code !== 0) throw new Error(`systemd-run could not start the installer: ${r.stderr.trim() || `exit ${r.code}`}`);
     return;
@@ -175,9 +175,9 @@ export function platformInstallerRunner(log: Logger, os: Os = currentOs()): Inst
       await unpack(os, request);
       const logs = join(request.stateDir, "logs");
       mkdirSync(logs, { recursive: true });
-      const logFile = join(logs, `update-${request.version}.log`);
+      const logFile = join(logs, `update-${request.to}.log`);
       await startInstaller(os, request, logFile);
-      log.info("started the installer of an Update", { version: request.version, log: logFile });
+      log.info("started the installer of an Update", { version: request.to, log: logFile });
     },
   };
 }

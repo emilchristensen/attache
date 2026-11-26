@@ -49,7 +49,7 @@ export class OutcomeWatch {
     if (outcome) {
       // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
       const bad = outcome.outcome === "updated" ? null : this.markBad(outcome);
-      notifyRollbackOnce({ stateDir: this.deps.stateDir, notify: this.deps.notify, log: this.deps.log, now: this.deps.clock.now() }, outcome);
+      notifyRollbackOnce({ stateDir: this.deps.stateDir, notify: this.deps.notify, now: this.deps.clock.now() }, outcome);
       this.clearStaged();
       this.deps.settled({ lastUpdate: lastUpdateOf(outcome, request), bad });
       return;

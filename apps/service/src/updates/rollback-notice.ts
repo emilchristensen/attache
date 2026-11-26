@@ -9,10 +9,9 @@
  * rollback means Attache changed its own software and went back, which the owner hears about once, when it happens.
  */
 import { rollbackDetail } from "@attache/contracts";
-import type { Logger } from "../core/log.ts";
 import { recordOutcome, type OutcomeRecord } from "./install-records.ts";
 
-/** Hands a notification to the operating system; resolves whether it was shown. */
+/** Hands a notification to the operating system; resolves whether it was shown, and logs rather than rejects when it could not. */
 export type Notify = (title: string, body: string) => Promise<boolean>;
 
 /** The notification's words: which Update failed, the version Attache runs again, why, and what became of the database. */
@@ -25,9 +24,9 @@ export function rollbackNotification(outcome: OutcomeRecord): { title: string; b
 }
 
 /** Raise the notification for a rolled-back outcome no service has raised it for yet; anything else raises nothing. */
-export function notifyRollbackOnce(deps: { stateDir: string; notify: Notify; log: Logger; now: Date }, outcome: OutcomeRecord): void {
+export function notifyRollbackOnce(deps: { stateDir: string; notify: Notify; now: Date }, outcome: OutcomeRecord): void {
   if (outcome.outcome !== "rolled_back" || outcome.notifiedAt) return;
   recordOutcome(deps.stateDir, { ...outcome, notifiedAt: deps.now.toISOString() });
   const { title, body } = rollbackNotification(outcome);
-  void deps.notify(title, body).catch((e: unknown) => deps.log.warn("could not raise the notification for a rolled-back Update", { error: (e as Error).message }));
+  void deps.notify(title, body);
 }

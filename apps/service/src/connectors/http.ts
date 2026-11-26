@@ -97,6 +97,12 @@ async function saveBody(body: ReadableStream<Uint8Array>, to: { file: string; ma
   return written;
 }
 
+/** A request that failed on the way: cancelled when the caller aborted it, otherwise the network failed (`offline`). */
+function networkFailure(e: unknown, doing: "contacting" | "reading", url: string, signal: AbortSignal | undefined): RemoteError {
+  if (signal?.aborted) return new RemoteError("Cancelled", "error");
+  return new RemoteError(`Network error ${doing} ${new URL(url).host}: ${(e as Error).message}`, "offline");
+}
+
 export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: number; userAgent?: string } = {}): HttpClient {
   const baseDelay = opts.baseDelayMs ?? 500;
   return {
@@ -123,20 +129,19 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
         } catch (e) {
           clearTimeout(timer);
           opts.signal?.removeEventListener("abort", onAbort);
-          if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
-          if (attempt < retries) {
+          const failure = networkFailure(e, "contacting", req.url, opts.signal);
+          if (failure.state === "offline" && attempt < retries) {
             await sleep(baseDelay * 2 ** attempt++, opts.signal);
             continue;
           }
-          throw new RemoteError(`Network error contacting ${new URL(req.url).host}: ${(e as Error).message}`, "offline");
+          throw failure;
         }
         if (res.ok && req.saveTo && res.body) {
           try {
             const written = await saveBody(res.body, req.saveTo);
             return { status: res.status, headers: res.headers, data: written as T };
           } catch (e) {
-            if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
-            throw new RemoteError(`Network error reading ${new URL(req.url).host}: ${(e as Error).message}`, "offline");
+            throw networkFailure(e, "reading", req.url, opts.signal);
           } finally {
             clearTimeout(timer);
             opts.signal?.removeEventListener("abort", onAbort);

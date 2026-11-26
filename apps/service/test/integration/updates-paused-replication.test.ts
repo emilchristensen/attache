@@ -47,7 +47,7 @@ describe("a Machine whose Replication paused on a newer Brain format", () => {
     const pc = await pcJoinsNewerBrain("automatic");
 
     // No 6-hour check has come round: the pause itself asked for the Update.
-    expect(pc.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    expect(pc.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
     expect((await pc.get<UpdatesView>("/updates")).status).toBe("installing");
     expect(pc.notifications.shown).toEqual([{ title: PAUSED_TITLE, body: `${PAUSED_BODY} Attache is looking for an Update now.` }]);
   });

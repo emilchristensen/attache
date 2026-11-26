@@ -429,7 +429,7 @@ export class Updater {
     recordInstallRequest(this.deps.stateDir, { from: this.deps.version, to, notes: staged.manifest.notes, at: this.deps.clock.now().toISOString() });
     this.set("installing");
     try {
-      await this.deps.runner.start({ from: this.deps.version, version: to, release: staged.folder, archive: staged.archive, prefix: this.canUpdate().prefix, stateDir: this.deps.stateDir, port });
+      await this.deps.runner.start({ from: this.deps.version, to, release: staged.folder, archive: staged.archive, prefix: this.canUpdate().prefix, stateDir: this.deps.stateDir, port });
     } catch (e) {
       forgetInstallRequest(this.deps.stateDir);
       const reason = `Attache could not start the installer for ${to}, so nothing was changed: ${(e as Error).message}`;
