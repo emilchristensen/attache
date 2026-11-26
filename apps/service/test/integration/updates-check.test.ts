@@ -107,9 +107,9 @@ describe("finding the right Update", () => {
 
   it("keeps the channel in this Machine's configuration, Stable by default", async () => {
     const svc = await machine("0.6.0", await releases());
-    expect((await svc.get("/config")).config.updates).toEqual({ channel: "stable" });
+    expect((await svc.get("/config")).config.updates).toEqual({ channel: "stable", mode: "automatic" });
     await setChannel(svc, "beta");
-    expect((await svc.get("/config")).config.updates).toEqual({ channel: "beta" });
+    expect((await svc.get("/config")).config.updates).toEqual({ channel: "beta", mode: "automatic" });
     expect((await svc.get<UpdatesView>("/updates")).channel).toBe("beta");
     expect((await svc.call("PUT", "/updates/settings", { channel: "nightly" })).status).toBe(400);
     expect((await svc.call("PUT", "/updates/settings", {})).status).toBe(400);

@@ -7,24 +7,37 @@ export const UpdateChannel = z.enum(["stable", "beta"]);
 export type UpdateChannel = z.infer<typeof UpdateChannel>;
 
 /**
+ * Automatic updates on this Machine:
+ * - `automatic` (the default): an Update installs on its own once no Job is running, or after it has waited 24 hours for Jobs;
+ * - `ask_first`: an Update is downloaded and verified, then waits for Install now;
+ * - `off`: Attache makes no request about Updates at all, not even for Check now or Install now.
+ */
+export const UpdateMode = z.enum(["automatic", "ask_first", "off"]);
+export type UpdateMode = z.infer<typeof UpdateMode>;
+
+/**
  * Updates on this Machine: its configuration, never a Preference (ADR 0005).
  * Every field is optional with a default, so a configuration saved before
- * Updates existed reads as Stable. Automatic updates' mode joins it here.
+ * Updates existed reads as Stable and Automatic.
  */
 export const UpdateSettings = z.object({
   channel: UpdateChannel.default("stable"),
+  mode: UpdateMode.default("automatic"),
 });
 export type UpdateSettings = z.infer<typeof UpdateSettings>;
 
 /** `PUT /updates/settings`: change what is named, keep the rest. */
 export const UpdateSettingsInput = z
-  .object({ channel: UpdateChannel.optional() })
+  .object({ channel: UpdateChannel.optional(), mode: UpdateMode.optional() })
   .refine((s) => Object.values(s).some((v) => v !== undefined), "Name a setting to change");
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 
 /** `POST /updates/check`. */
 export const UpdateCheckInput = z.object({
-  /** Only report what is available: download and install nothing, whatever Automatic updates says. `attache update --check` asks this. */
+  /**
+   * Only report what is available: download and install nothing, whatever Automatic updates says. `attache update --check` asks this.
+   * Without it, the check acts as the one every 6 hours does: Automatic goes on to install, Ask first to download and wait at `ready`.
+   */
   reportOnly: z.boolean().default(false),
 });
 export type UpdateCheckInput = z.infer<typeof UpdateCheckInput>;
@@ -33,7 +46,7 @@ export type UpdateCheckInput = z.infer<typeof UpdateCheckInput>;
  * Where the Updater stands. The whole lifecycle is listed here, so every place
  * that words a status handles each one:
  * - `unavailable`: this copy cannot update itself (a source checkout, or a build without a release key); `reason` says why.
- * - `off`: Automatic updates is Off, so nothing is checked.
+ * - `off`: Automatic updates is Off, so nothing is checked and no request is made.
  * - `not_checked`: no check has run since the service started.
  * - `checking`: a check is running.
  * - `up_to_date`: the last check found no newer release in the channel.
@@ -70,6 +83,7 @@ export interface UpdatesView {
   /** The version this Machine runs. */
   version: string;
   channel: UpdateChannel;
+  mode: UpdateMode;
   status: UpdatesStatus;
   /** Why Updates are unavailable or the last check failed; null otherwise. */
   reason: string | null;

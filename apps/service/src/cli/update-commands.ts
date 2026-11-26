@@ -1,11 +1,11 @@
-import type { LastUpdateView, UpdatesView } from "@attache/contracts";
+import { plural, type LastUpdateView, type UpdatesView } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import type { CliIo } from "./memory-commands.ts";
 import { ServiceClient, ServiceError } from "./client.ts";
 
 export const UPDATE_USAGE = `Usage: attache update [--check] [--json]
 
-attache update installs an available Update now: the service restarts on the new version, and the command says which version this Machine updated from.
+attache update installs an available Update now, also one that waits for Jobs to finish (they resume after the restart): the service restarts on the new version, and the command says which version this Machine updated from.
 --check looks for an Update now and reports the version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 The Update channel and Automatic updates are set in the Dashboard, under Settings.`;
 
@@ -26,14 +26,26 @@ export function renderUpdateCheck(v: UpdatesView): { lines: string[]; failure: s
     case "not_checked":
     case "checking":
       return { lines: [head], failure: "The check for an Update did not finish. Try again." };
+    case "ready":
+      return { lines: [head, `Attache ${version(v)} is ready to install.`], failure: null };
+    case "waiting_for_jobs":
+      return { lines: [head, `Attache ${version(v)} is waiting for ${plural(v.jobs ?? 0, "Job")} to finish.`], failure: null };
     case "available":
     case "downloading":
-    case "ready":
-    case "waiting_for_jobs":
     case "installing":
-      return { lines: [head, `Attache ${v.update?.version ?? "(unknown version)"} is available.`], failure: null };
+      return { lines: [head, `Attache ${version(v)} is available.`], failure: null };
   }
 }
+
+function version(v: UpdatesView): string {
+  return v.update?.version ?? "(unknown version)";
+}
+
+/** Statuses from which `attache update` installs at once: found, verified for Ask first, or waiting for Jobs (Restart now). */
+const INSTALLABLE: ReadonlySet<UpdatesView["status"]> = new Set(["available", "ready", "waiting_for_jobs"]);
+
+/** Why `attache update` installs nothing in Off: it makes no request, so it cannot know of an Update. */
+const OFF_FAILURE = "Automatic updates is Off, so Attache makes no request about Updates. Choose Automatic or Ask first in the Dashboard, under Settings, to install one.";
 
 /** How long `attache update` waits for the installer: a backup, the switch, and up to 30 s for the new version's health. */
 const INSTALL_WAIT_MS = 10 * 60_000;
@@ -88,7 +100,11 @@ async function installCommand(paths: ServicePaths, io: CliIo): Promise<void> {
   const client = new ServiceClient(paths);
   // A check first names the version to wait for, and answers "up to date" or why not without starting anything.
   const checked = await client.post<UpdatesView>("/updates/check", { reportOnly: true });
-  if (checked.status !== "available" || !checked.update) {
+  if (checked.status === "off") {
+    io.out(renderUpdateCheck(checked).lines[0]!);
+    throw new Error(OFF_FAILURE);
+  }
+  if (!INSTALLABLE.has(checked.status) || !checked.update) {
     const { lines, failure } = renderUpdateCheck(checked);
     io.out(lines.join("\n"));
     if (failure) throw new Error(failure);

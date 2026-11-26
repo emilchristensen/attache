@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import type { UpdatesView } from "@attache/contracts";
 import { releaseTarget } from "../../src/platform/release-target.ts";
 import { signedRelease } from "../fixtures/signed-release.ts";
 import type { TestService } from "./harness.ts";
@@ -12,7 +13,7 @@ import { installerFinished, updatesWorld } from "./updates-world.ts";
 vi.setConfig({ testTimeout: 120_000 });
 
 const MAIN = join(import.meta.dirname, "../../src/main.ts");
-const { key, releases, machine, restart } = updatesWorld();
+const { key, releases, machine, restart, outcomeSeen } = updatesWorld();
 
 /** The real CLI, pinned to one test service's state folder. Asynchronous: the service runs in this process. */
 function cli(svc: TestService, args: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
@@ -80,6 +81,7 @@ describe("attache update", () => {
     m.runner.onStart = async () => {
       const after = await restart(m, "0.7.0");
       installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+      await outcomeSeen(after);
     };
     const r = await cli(m, ["update"]);
     expect(r.stderr).toBe("");
@@ -89,7 +91,10 @@ describe("attache update", () => {
 
   it("fails with the reason when the installer changed nothing", async () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
-    m.runner.onStart = () => installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
+    m.runner.onStart = async () => {
+      installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
+      await outcomeSeen(m);
+    };
     const r = await cli(m, ["update"]);
     expect(r.status).toBe(1);
     expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, and Attache stayed on 0.6.0: could not back up the existing installation; nothing was changed\n");
@@ -100,10 +105,54 @@ describe("attache update", () => {
     m.runner.onStart = async () => {
       const after = await restart(m, "0.6.0");
       installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
+      await outcomeSeen(after);
     };
     const r = await cli(m, ["update"]);
     expect(r.status).toBe(1);
     expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy\n");
+  });
+
+  it("installs an Update that waits for Jobs at once, as Restart now does", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    m.app.jobs.register("demo-long", () => new Promise(() => {}));
+    const { job } = m.app.jobs.create({ kind: "demo-long", title: "Research", input: {} });
+    await m.waitJob(job.id, ["running"]);
+    await m.clock.advance(0);
+    expect((await m.get<UpdatesView>("/updates")).status).toBe("waiting_for_jobs");
+    expect((await cli(m, ["update", "--check"])).stdout).toBe("Attache 0.6.0, Update channel Stable\nAttache 0.7.0 is waiting for 1 Job to finish.\n");
+
+    m.runner.onStart = async () => {
+      const after = await restart(m, "0.7.0");
+      installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+      await outcomeSeen(after);
+    };
+    const r = await cli(m, ["update"]);
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toBe("Installing Attache 0.7.0. Attache restarts to finish the Update.\nAttache updated from 0.6.0 to 0.7.0.\n");
+  });
+
+  it("installs an Update that Ask first has ready", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await m.put("/updates/settings", { mode: "ask_first" });
+    await m.clock.advance(0);
+    expect((await cli(m, ["update", "--check"])).stdout).toBe("Attache 0.6.0, Update channel Stable\nAttache 0.7.0 is ready to install.\n");
+    m.runner.onStart = async () => {
+      installerFinished(m.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+      await outcomeSeen(m);
+    };
+    expect((await cli(m, ["update"])).stdout).toBe("Installing Attache 0.7.0. Attache restarts to finish the Update.\nAttache updated from 0.6.0 to 0.7.0.\n");
+  });
+
+  it("fails without asking anything when Automatic updates is Off", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await m.put("/updates/settings", { mode: "off" });
+    const r = await cli(m, ["update"]);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("Attache 0.6.0, Update channel Stable\n");
+    expect(r.stderr).toBe("attache: Automatic updates is Off, so Attache makes no request about Updates. Choose Automatic or Ask first in the Dashboard, under Settings, to install one.\n");
+    expect(server.requests).toEqual([]);
+    expect(m.runner.requests).toEqual([]);
   });
 
   it("says when there is nothing to install", async () => {

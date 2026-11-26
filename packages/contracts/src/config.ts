@@ -41,7 +41,7 @@ export const Config = z.object({
   identity: z.object({ name: z.string(), email: z.string() }).nullable().default(null),
   consolidation: ConsolidationSettings.default({ autoAccept: true }),
   /** Updates on this Machine (`updates.ts`); a configuration from before Updates reads as the defaults. */
-  updates: UpdateSettings.default({ channel: "stable" }),
+  updates: UpdateSettings.default({ channel: "stable", mode: "automatic" }),
 });
 export type Config = z.infer<typeof Config>;
 
