@@ -355,6 +355,7 @@ Connections created before these transports lose their old credentials once at s
 A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Attache first.
 A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
 Source refreshes of one connection may overlap (the first refresh after setup and one started by hand); `ConnectionManager.refresh` numbers them as they start and drops a read that started before the newest one already stored (its run is recorded with outcome `superseded`), so a slow earlier refresh never reopens what a later read resolved.
+A refresh compares with the read stored last as it stores, not as it starts: when an earlier refresh still running at its start stores first, the later read resolves what that earlier one found and it no longer sees.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
 ## Attention and briefings
@@ -364,7 +365,7 @@ The attention engine follows these rules:
   Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
 - Keys use the work item identity (for example `jira:ISSUE-1`), and the category (due, overdue) goes in the fingerprint, fixing the due→overdue key churn.
 - Transport-dependent fields (`updated_at`) are not fingerprint parts.
-- An item is resolved only if its source was fully covered in this and the previous run.
+- An item is resolved only if its source was fully covered in this run and in the run stored before it.
 - A dismissal records the fingerprint it applied to.
   Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
