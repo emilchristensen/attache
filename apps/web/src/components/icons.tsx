@@ -187,6 +187,8 @@ const PATHS = {
   ),
   /** A service failure. */
   warning: <path d="M12 3.8 21 19.5H3zM12 10v4M12 17v.1" />,
+  /** An Update of Attache itself: the line under the masthead. */
+  update: <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4" />,
   /** Unknown coverage. */
   question: (
     <>

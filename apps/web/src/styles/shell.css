@@ -418,6 +418,62 @@
   }
 }
 
+/*
+ * The line about Updates, under the Connection banner when both show: its words, then its one action at the end of the
+ * row. Plain news on the blue tint, a failed Update on the red one. A narrow window puts the action under the words.
+ */
+.update-line {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.banner.news {
+  background: var(--blue-soft);
+  color: var(--ink);
+}
+.banner.news > .icon {
+  color: var(--blue);
+}
+.update-line > .icon {
+  margin-top: 0;
+}
+/* The words take the row, so the action ends it at the column's edge, as the Connection banner's buttons do. */
+.update-line-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Beside the list of screens, a line without an action (Installing) keeps the height of one with a button. */
+@media (min-width: 721px) {
+  .update-line-text {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+}
+/* Focus lands on the words after Install's button is gone; they are not a control, so no outline. */
+.update-line-text:focus {
+  outline: none;
+}
+.update-line .btn,
+.update-line button {
+  min-height: 44px;
+}
+.update-line .btn:not(.primary),
+.update-line button:not(.primary) {
+  color: inherit;
+  border-color: currentColor;
+}
+@media (max-width: 720px) {
+  .update-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .update-line > :is(button, .btn) {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 /* ---- the sheets: More and the keyboard shortcuts ------------------------------------------------ */
 
 .sheet {

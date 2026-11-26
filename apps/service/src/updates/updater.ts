@@ -26,9 +26,7 @@
  *
  * A rolled-back Update (#138): `settle()` marks the version the installer switched back from bad
  * (`bad-versions.ts`), so a check never offers it again; `lastUpdate` says what became of the database.
- *
- * Still to come, extending this class rather than adding a second one:
- * - the system notification for a rolled-back Update (#141): raise it once per outcome, keyed on the outcome's `at`.
+ * It also raises the one system notification an Update raises (#141, `rollback-notice.ts`), once per outcome.
  */
 import type { LastUpdateView, UpdateChannel, UpdateMode, UpdateSettings, UpdatesStatus, UpdatesView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
@@ -39,6 +37,7 @@ import { findUpdate, unreachable, UpdateCheckError, type FoundUpdate } from "./f
 import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome, type OutcomeRecord } from "./install-records.ts";
 import type { InstallerRunner } from "./installer-runner.ts";
 import { JobWait, type RunningJobs } from "./job-wait.ts";
+import { notifyRollbackOnce, type Notify } from "./rollback-notice.ts";
 import type { ReleaseFeed } from "./release-feed.ts";
 import type { ReleaseInstall } from "./release-install.ts";
 import { clearStaging, stageUpdate, type StagedUpdate } from "./staging.ts";
@@ -73,6 +72,8 @@ export interface UpdaterDeps {
   port: () => number | null;
   /** The Jobs an Automatic install waits for. */
   jobs: RunningJobs;
+  /** Raises a desktop notification, for a rolled-back Update. */
+  notify: Notify;
 }
 
 export interface CheckOptions {
@@ -426,6 +427,7 @@ export class Updater {
       // A version the installer switched back from is never tried again here, while a newer release still is.
       // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
       if (outcome.outcome === "rolled_back") this.markBad(outcome);
+      notifyRollbackOnce({ stateDir: this.deps.stateDir, notify: this.deps.notify, log: this.deps.log, now: this.deps.clock.now() }, outcome);
       this.clearStaged();
       if (this.status !== "installing") return;
       this.set(this.resting());

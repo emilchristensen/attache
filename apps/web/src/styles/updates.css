@@ -58,7 +58,10 @@
   color: var(--ink-3);
 }
 
-/* Release notes, from the signed manifest: headings at the card's own scale, never a page heading inside a card. */
+/*
+ * Release notes, from the signed manifest, in Settings' card and in What changed's dialog over the page: headings at
+ * the card's own scale, never a page heading inside a card.
+ */
 .release-notes {
   font-size: var(--fs-control);
   color: var(--ink-2);
@@ -74,6 +77,9 @@
 }
 .release-notes > :first-child {
   margin-top: 0;
+}
+.release-notes > :last-child {
+  margin-bottom: 0;
 }
 
 /* The notes close the card: no second rule under them, and no gap beyond the card's own. */
