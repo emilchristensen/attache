@@ -6,7 +6,8 @@ import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { App } from "./app.ts";
 import { VERSION } from "./app.ts";
-import { nowIso } from "./core/db.ts";
+import { MIGRATIONS, nowIso } from "./core/db.ts";
+import { refuseNewerSchemaFile } from "./core/schema-guard.ts";
 import { platformLocations } from "./platform/locations.ts";
 import { run } from "./platform/run.ts";
 
@@ -85,6 +86,8 @@ export async function restoreBackup(archive: string, opts: { stateDir: string; d
     await tar(["-xzf", archive, "-C", work]);
     const manifest = JSON.parse(readFileSync(join(work, "manifest.json"), "utf8")) as BackupManifest;
     if (manifest.format !== "attache-backup-1") throw new Error("Not an Attache backup");
+    // A backup a newer Attache made is refused before anything here changes, as opening its database would be.
+    refuseNewerSchemaFile(join(work, "attache.sqlite"), MIGRATIONS.length, VERSION);
     mkdirSync(opts.stateDir, { recursive: true, mode: 0o700 });
     const dbFile = join(opts.stateDir, "attache.sqlite");
     if (existsSync(dbFile)) {
