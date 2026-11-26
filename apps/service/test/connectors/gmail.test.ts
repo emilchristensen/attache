@@ -63,7 +63,8 @@ describe("Gmail adapter contract (claude.ai Gmail connector)", () => {
     inbox([thread("t1", [m("a", "mia@client.example", 1, ["INBOX"])])]);
     expect(await gmailAdapter.test(ctx())).toMatchObject({ ok: true, account: SELF });
     claude.servers = [{ name: SERVER, status: "needs-auth", source: "claudeai" }];
-    expect(await gmailAdapter.test(ctx())).toMatchObject({ ok: false, state: "unauthorized" });
+    const unconnected = await gmailAdapter.test(ctx());
+    expect(unconnected, JSON.stringify(unconnected)).toMatchObject({ ok: false, state: "unauthorized" });
     expect((await gmailAdapter.refresh!(ctx())).coverage.state).toBe("unauthorized");
   });
 
