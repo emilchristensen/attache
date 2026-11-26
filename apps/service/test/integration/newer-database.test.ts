@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIGRATIONS, migrate } from "../../src/core/db.ts";
+import { MIGRATIONS, migrate, openDb } from "../../src/core/db.ts";
 import { REFUSED_EXIT_CODE, REFUSED_TO_START_FILE } from "../../src/platform/service-manager/types.ts";
 
 // Each case starts the real command line as a child process, which loads the whole service from source.
@@ -19,13 +19,9 @@ const FROM_THE_FUTURE = "create table from_the_future (id integer primary key);"
 function newerDatabase(file: string, writtenBy: string | null = NEWER): void {
   const db = new DatabaseSync(file);
   try {
-    if (writtenBy) migrate(db, { migrations: [...MIGRATIONS, FROM_THE_FUTURE], version: writtenBy });
-    else {
-      // An install whose newest migration was applied without a record of who applied it.
-      for (const m of [...MIGRATIONS, FROM_THE_FUTURE]) db.exec(m);
-      db.exec(`pragma user_version = ${MIGRATIONS.length + 1}`);
-      db.exec("delete from schema_writer");
-    }
+    migrate(db, { migrations: [...MIGRATIONS, FROM_THE_FUTURE], version: writtenBy ?? NEWER });
+    // An install whose newest migration was applied without a record of who applied it.
+    if (!writtenBy) db.exec("delete from schema_writer");
   } finally {
     db.close();
   }
@@ -141,11 +137,8 @@ describe("a database newer than this Attache", () => {
 
   it("a database at the schema this Attache knows opens as before, and an older one migrates", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "attache-it-known-db-"));
-    const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
     // The schema an install had one migration ago.
-    for (const m of MIGRATIONS.slice(0, -1)) db.exec(m);
-    db.exec(`pragma user_version = ${MIGRATIONS.length - 1}`);
-    db.close();
+    openDb(join(stateDir, "attache.sqlite"), MIGRATIONS.length - 1).close();
 
     const migrated = await attache(["pair", "--state-dir", stateDir, "--json"]);
     expect(migrated.stderr).toBe("");
