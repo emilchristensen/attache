@@ -885,7 +885,9 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 | Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `attache` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` | the same, under `%USERPROFILE%`, with Claude Desktop's in `%APPDATA%\Claude\claude_desktop_config.json` |
 
 The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `update`, `mcp`, `agent-hooks`, `backup` and `restore`.
-`attache update` installs an available Update now: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+`attache update` installs an available Update now, also one that waits for Jobs to finish: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+Jobs that were running pick up from where they stopped once Attache is back.
+When Automatic updates is Off, `attache update` makes no request and says so.
 `attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 `attache agent-hooks status` lists the hooks and MCP servers Attache added to your Harnesses.
 On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves the app, the state or the service definition.

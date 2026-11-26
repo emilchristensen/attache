@@ -465,11 +465,11 @@ Releases are published only by `.github/workflows/release.yml` from a version ta
 
 ### Updates
 
-The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind a few calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `install()` (Install now), `setSettings()`, and `start()`/`stop()` with the service.
+The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind a few calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `install()` (Install now and Restart now), `setSettings()` (channel and mode), and `start()`/`stop()` with the service.
 The HTTP API is `GET /updates`, `PUT /updates/settings`, `POST /updates/check` and `POST /updates/install` (`http/routes-updates.ts`), and every change fires `updates.changed` on the event stream.
 A check lists the repository's GitHub releases without signing in (`updates/release-feed.ts`; `ATTACHE_RELEASE_FEED_URL` points it elsewhere, for tests), and `updates/channel.ts` keeps the versions in the Machine's Update channel that are newer than the one it runs and not marked bad here, newest first.
 `updates/find-update.ts` downloads the newest one's manifest and signature and checks them (`verifySignedManifest`) before believing anything in them; a refused release is skipped, and when every newer release is refused the check fails with the reason instead of reporting the Machine up to date.
-The Update channel is the Machine's configuration (`config.updates`, Stable by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
+The Update channel and Automatic updates' mode are the Machine's configuration (`config.updates`, Stable and Automatic by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
 Only a release install updates itself (`updates/release-install.ts`: the service script runs from `<prefix>/app/<version>/` with `<prefix>/current` beside it); a source checkout, or a build without a release key, shows Updates as unavailable and makes no request.
 `attache update --check` (`cli/update-commands.ts`) asks the running service to check without acting on what it finds.
 Installing downloads this computer's archive, streamed and capped at the manifest's size, into `<state>/updates/staging/<version>/` next to the signed manifest and its signature, and checks the folder as an installer does (`updates/staging.ts`); a refused archive leaves nothing staged, and staging an Update removes what it supersedes.
@@ -479,6 +479,13 @@ The installer runs in exactly the service's environment, and the systemd unit pi
 The installer stops the service as a manual install does (Jobs resume after the restart), never pairs or opens the browser, keeps only the new and the previous version in `app/` (on Windows a folder still in use stays whole for the next install), and writes `<state>/updates/outcome.json`: `updated`, `rolled_back` or `failed` (stopped before changing anything), with from, to, at and a reason.
 Whichever service runs next reads that outcome into `lastUpdate`, watching for it every second while the installer is still at work, and clears the staging folder.
 `attache update` checks, asks for the install, and waits for the outcome across the restart.
+
+Automatic updates has three modes.
+Unless the mode is Off, the Updater checks when the service starts and every 6 hours after, on the App's clock (`Updater.scheduleCheck`); Off makes no request about Updates at all, not even for Check now, Install now or `attache update`, and shows the status `off`.
+A check that is not report-only (the timer, or `POST /updates/check` without `reportOnly`) goes on as the mode says (`Updater.proceed`): Ask first downloads and verifies the Update into the staging folder and waits at `ready`; Automatic does the same, then installs once no Job is running.
+While Jobs run the status is `waiting_for_jobs` with their exact count in `jobs`; `updates/job-wait.ts` looks again whenever a Job changes and every minute, and installs anyway once the Update has waited 24 hours (the wait starts again if the service restarts).
+Install now and Restart now hand a verified Update to the installer at once, whatever Jobs run; the installer stops the service, and the Job queue resumes those Jobs from their last checkpoint when it starts again.
+Downloads and installs run one step at a time (`Updater.serial`), so the timer, Check now, Install now and a change of mode never download twice or start two installers.
 
 ## Harness sessions
 

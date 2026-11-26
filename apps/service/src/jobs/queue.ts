@@ -114,6 +114,11 @@ export class JobQueue {
     return (this.db.prepare(`select * from jobs ${where.length ? "where " + where.join(" and ") : ""} order by created_at desc limit ${Math.min(opts.limit ?? 100, 500)}`).all(...args) as Array<Record<string, unknown>>).map(toView);
   }
 
+  /** How many Jobs run now, in this process or left running by one that stopped (those resume at the next start). */
+  countRunning(): number {
+    return Number((this.db.prepare("select count(*) as n from jobs where status = 'running'").get() as { n: number }).n);
+  }
+
   eventsSince(afterSeq: number, jobId?: string, limit = 1000): JobEvent[] {
     const rows = (jobId
       ? this.db.prepare("select * from job_events where seq > ? and job_id = ? order by seq limit ?").all(afterSeq, jobId, limit)
