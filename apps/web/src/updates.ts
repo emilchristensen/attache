@@ -44,7 +44,9 @@ export function updatesShown(v: UpdatesView): UpdatesShown {
 /** When the last check finished, and what it found: null before the first one; no result while the next one runs. */
 export function lastCheckShown(v: UpdatesView): { at: string; result: string | null } | null {
   if (!v.lastCheckedAt) return null;
-  const result = v.status === "check_failed" ? "failed" : v.status === "up_to_date" ? "up to date" : v.update ? `found Attache ${v.update.version}` : null;
+  // A verified Update stays ready when a later check fails; the failure is that check's result.
+  const failed = v.status === "check_failed" || (v.status === "ready" && v.reason !== null);
+  const result = failed ? "failed" : v.status === "up_to_date" ? "up to date" : v.update ? `found Attache ${v.update.version}` : null;
   return { at: v.lastCheckedAt, result };
 }
 

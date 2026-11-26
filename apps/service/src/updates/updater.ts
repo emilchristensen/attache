@@ -334,7 +334,8 @@ export class Updater {
       // The settings changed during the download: what to do now is for the new settings, through the step they queued.
       if (generation !== this.generation) return this.set(this.resting());
     }
-    if (this.mode() === "ask_first") return this.set("ready");
+    // Already ready: keep what the last check said.
+    if (this.mode() === "ask_first") return this.status === "ready" ? undefined : this.set("ready");
     const running = this.deps.jobs.count();
     if (running === 0) return this.apply();
     this.jobsRunning = running;
@@ -417,8 +418,9 @@ export class Updater {
     if (generation !== this.generation) return;
     this.found = outcome.found;
     this.lastCheckedAt = this.deps.clock.now().toISOString();
-    // An Update already verified for Ask first stays ready when a check finds it again.
-    this.set(outcome.status === "available" ? this.resting() : outcome.status, outcome.reason);
+    // An Update already verified for Ask first stays ready when a check finds it again, and when a check fails: Install now
+    // needs no network for it. The failure still shows, as `reason`.
+    this.set(outcome.status === "available" || this.resting() === "ready" ? this.resting() : outcome.status, outcome.reason);
   }
 
   /** Hand the verified Update to the installer runner, which restarts the service on it. */

@@ -59,6 +59,7 @@ describe("lastCheckShown: when the last check finished, and what it found", () =
     ["found nothing newer", view("up_to_date", { lastCheckedAt: "2026-11-26T09:00:00Z" }), "up to date"],
     ["found an Update", view("ready", { lastCheckedAt: "2026-11-26T09:00:00Z", update: UPDATE }), "found Attache 0.7.0"],
     ["failed", view("check_failed", { lastCheckedAt: "2026-11-26T09:00:00Z", reason: "x" }), "failed"],
+    ["failed, with a verified Update still ready", view("ready", { lastCheckedAt: "2026-11-26T09:00:00Z", reason: "x", update: UPDATE }), "failed"],
     ["checking again after a check that found nothing", view("checking", { lastCheckedAt: "2026-11-26T09:00:00Z" }), null],
   ])("%s", (_name, v, result) => {
     expect(lastCheckShown(v)).toEqual(v.lastCheckedAt ? { at: v.lastCheckedAt, result } : null);

@@ -266,6 +266,21 @@ describe("Ask first", () => {
     expect(archiveDownloads(server)).toBe(1);
   });
 
+  it("keeps a verified Update ready when a later check fails, and Install now installs it without the network", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await setMode(m, "ask_first");
+    await m.clock.advance(0);
+    server.failWith(503);
+    await m.clock.advance(6 * HOUR);
+    const after = await view(m);
+    expect(after).toMatchObject({ status: "ready", update: { version: "0.7.0" } });
+    expect(after.reason).toContain("HTTP 503");
+
+    expect(await m.post<UpdatesView>("/updates/install")).toMatchObject({ status: "installing" });
+    expect(m.runner.requests.map((r) => r.to)).toEqual(["0.7.0"]);
+  });
+
   it("installs a waiting Update once switched to Automatic and no Job runs", async () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
     await setMode(m, "ask_first");
