@@ -11,8 +11,11 @@ import { tempDir } from "./helpers.ts";
 import type { FixtureServer } from "./fixtures/fixture-server.ts";
 import { connectGithub as connect, githubAskingForReviews, attacheCli, newStateDir, runningChildren, serveChild as serve, syncGithub, type ChildService, type ReviewRequest } from "./fixtures/attache-child.ts";
 
-// Each test starts the service from source, sometimes twice, which is slow under load.
-const SLOW = 90_000;
+// Each test starts Node about fifteen times, one after another: the service from source (sometimes twice), the
+// `attache` commands, and the secret-tool and notify-send stand-ins for every call. Alone that takes under 5 s. While other test runs
+// share the computer, one Node start can wait seconds (up to 18 s measured on a Mac whose endpoint security checks
+// each start, issue #9), and with two other suites running these tests took 70 to 117 s.
+const SLOW = 180_000;
 const FAKE_SECRET_TOOL = join(import.meta.dirname, "fixtures/fake-secret-tool.mjs");
 const FAKE_NOTIFY_SEND = join(import.meta.dirname, "fixtures/fake-notify-send.mjs");
 const SECRET = "ghp_LinuxKeyringSecret0123456789abcdefXYZ";

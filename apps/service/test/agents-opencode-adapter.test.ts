@@ -38,11 +38,26 @@ const ours = () => {
   return join(PLUGINS(), files[0]!);
 };
 
+/** `text` as one single-quoted POSIX shell word. */
+const shWord = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * A stand-in `opencode` executable, made the current one: a shell script on macOS and Linux, a Node script on
+ * Windows, which runs no shell scripts. The real OpenCode is a native executable that answers at once. A Node
+ * stand-in first waits for Node to start, and while the suite runs that can take longer than the 15 s Attache
+ * gives `--version`: on a Mac whose endpoint security checks every start of the Node executable one at a time,
+ * the suite's own Node starts queue up to 18 s (issue #9).
+ */
+function standInOpenCode(script: { sh: string; node: string }): void {
+  const windows = process.platform === "win32";
+  const bin = join(tempDir("attache-opencode-bin-"), windows ? "opencode.mjs" : "opencode");
+  writeFileSync(bin, windows ? script.node : `#!/bin/sh\n${script.sh}\n`, { mode: 0o755 });
+  process.env.ATTACHE_OPENCODE_BIN = bin;
+}
+
 /** A stand-in `opencode` that prints `output` for `--version`, as the real one does. */
 function installOpenCode(output: string) {
-  const bin = join(tempDir("attache-opencode-bin-"), "opencode.mjs");
-  writeFileSync(bin, `process.stdout.write(${JSON.stringify(`${output}\n`)});\n`);
-  process.env.ATTACHE_OPENCODE_BIN = bin;
+  standInOpenCode({ sh: `printf '%s\\n' ${shWord(output)}`, node: `process.stdout.write(${JSON.stringify(`${output}\n`)});\n` });
 }
 
 interface Server {
@@ -315,9 +330,10 @@ describe("OpenCode versions", () => {
 
   it("asks an OpenCode whose --version fails only once, not on every status check", () => {
     const runs = join(tempDir("attache-opencode-runs-"), "runs");
-    const bin = join(tempDir("attache-opencode-bin-"), "opencode.mjs");
-    writeFileSync(bin, `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(runs)}, "run\\n");\nprocess.stderr.write("broken\\n");\nprocess.exit(3);\n`);
-    process.env.ATTACHE_OPENCODE_BIN = bin;
+    standInOpenCode({
+      sh: `echo run >> ${shWord(runs)}\necho broken >&2\nexit 3`,
+      node: `import { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(runs)}, "run\\n");\nprocess.stderr.write("broken\\n");\nprocess.exit(3);\n`,
+    });
     expect(() => openCode().preview()).toThrow(/could not run .*--version \(broken\)/);
     expect(() => openCode().apply()).toThrow(/could not run/);
     expect(openCode().status()).toMatchObject({ state: "failed", message: expect.stringMatching(/could not run/) });
@@ -342,7 +358,7 @@ describe("OpenCode versions", () => {
 
   it("refuses an OpenCode whose version it cannot read, naming the executable and what it printed", () => {
     installOpenCode("something odd");
-    expect(() => openCode().apply()).toThrow(/could not tell which OpenCode .*opencode\.mjs.* is \(it printed "something odd"\)/);
+    expect(() => openCode().apply()).toThrow(/could not tell which OpenCode .*opencode(\.mjs)? is \(it printed "something odd"\)/);
     expect(existsSync(PLUGINS())).toBe(false);
   });
 

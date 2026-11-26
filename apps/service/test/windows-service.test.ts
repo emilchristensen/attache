@@ -5,13 +5,12 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { MIGRATIONS } from "../src/core/db.ts";
 import { runPowerShell } from "../src/platform/powershell.ts";
-import { tempDir } from "./helpers.ts";
+import { eventually, tempDir } from "./helpers.ts";
 import { childEnv, FAKE_PLATFORM, attacheCli, MAIN } from "./fixtures/attache-child.ts";
 
 // These tests start the service from source, which is slow while the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 120_000 });
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
@@ -20,17 +19,6 @@ const alive = (pid: number) => {
     return false;
   }
 };
-
-/** Poll `check` until it returns a value, or fail after `ms`. */
-async function eventually<T>(what: string, check: () => Promise<T | null> | T | null, ms = 60_000): Promise<T> {
-  const deadline = Date.now() + ms;
-  for (;;) {
-    const v = await check();
-    if (v !== null && v !== undefined) return v;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    await sleep(200);
-  }
-}
 
 /** The running service in a state folder, once it answers: its pid and address. */
 async function healthyService(stateDir: string, notPid?: number) {
@@ -87,16 +75,27 @@ describe("the background service on Windows", () => {
     );
   });
 
-  it("starts, stops and is removed again; stopping a service that was never set up succeeds", () => {
+  // Each `attache` command below starts Node twice (the command from source, then the PowerShell stand-in), and
+  // while the suite runs a Node start can wait seconds (issue #9), so each test keeps to a few commands.
+  it("stopping a service that was never set up succeeds, and starting it says to run the installer", () => {
     const w = windows();
     expect(w.attache(["stop"]).stderr).toBe("");
     expect(w.attache(["start"]).stderr).toBe("attache: Attache is not set up as a background service here: the logon task Attache-svctest is missing. Run the Attache installer again.\n");
+  });
+
+  it("starts and stops the task it set up, and says whether it is running", () => {
+    const w = windows();
     w.attache(["service", "install", "--prefix", PREFIX, "--port", "7998"]);
     expect(JSON.parse(w.attache(["service", "status"]).stdout)).toEqual({ name: "Attache-svctest", definition: null, loaded: false });
     expect(w.attache(["start"]).stderr).toBe("");
     expect(JSON.parse(w.attache(["service", "status"]).stdout)).toMatchObject({ loaded: true });
     expect(w.attache(["stop"]).stderr).toBe("");
     expect(JSON.parse(w.attache(["service", "status"]).stdout)).toMatchObject({ loaded: false });
+  });
+
+  it("removes the task while it runs", () => {
+    const w = windows();
+    w.attache(["service", "install", "--prefix", PREFIX, "--port", "7998"]);
     w.attache(["start"]);
     const removed = w.attache(["service", "uninstall"]);
     expect(removed.stderr).toBe("");
@@ -149,7 +148,7 @@ function Invoke-Request($req) {
 
       expect(attache(["stop"]).stderr).toBe("");
       expect(JSON.parse(attache(["service", "status"]).stdout)).toMatchObject({ loaded: false });
-      await eventually("the release the task started to stop", () => (alive(started.pid) ? null : true), 15_000);
+      await eventually("the release the task started to stop", () => (alive(started.pid) ? null : true), { timeoutMs: 15_000 });
 
       expect(attache(["service", "uninstall"]).stderr).toBe("");
       expect(await inspect(task)).toEqual({ ok: true, present: false });
@@ -180,7 +179,7 @@ describe("the entry point of the Windows logon task", () => {
     const exited = new Promise((r) => supervisor.once("exit", r));
     supervisor.kill("SIGTERM");
     await exited;
-    await eventually("the service to stop with its supervisor", () => (alive(second.pid) ? null : true), 15_000);
+    await eventually("the service to stop with its supervisor", () => (alive(second.pid) ? null : true), { timeoutMs: 15_000 });
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
   });
 
@@ -212,7 +211,7 @@ describe("the entry point of the Windows logon task", () => {
     supervisors.push(supervisor);
     const service = await healthyService(stateDir);
     supervisor.kill("SIGKILL");
-    await eventually("the service to stop without its supervisor", () => (alive(service.pid) ? null : true), 15_000);
+    await eventually("the service to stop without its supervisor", () => (alive(service.pid) ? null : true), { timeoutMs: 15_000 });
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
   });
 
@@ -231,8 +230,8 @@ describe("the entry point of the Windows logon task", () => {
     strays.push(supervisorPid);
     const service = await healthyService(stateDir);
     host.kill("SIGKILL");
-    await eventually("the supervisor to stop after its host", () => (alive(supervisorPid) ? null : true), 20_000);
-    await eventually("the service to stop with its supervisor", () => (alive(service.pid) ? null : true), 20_000);
+    await eventually("the supervisor to stop after its host", () => (alive(supervisorPid) ? null : true), { timeoutMs: 20_000 });
+    await eventually("the service to stop with its supervisor", () => (alive(service.pid) ? null : true), { timeoutMs: 20_000 });
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
     expect(readFileSync(join(stateDir, "logs", "service.err.log"), "utf8")).toContain("stopping (the task that started it has ended)");
   });
