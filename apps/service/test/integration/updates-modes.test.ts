@@ -330,6 +330,22 @@ describe("Install now", () => {
     expect(await installing).toMatchObject({ status: "off" });
     expect(m.runner.requests).toEqual([]);
   });
+
+  it("downloads nothing more when Off is chosen while it waits behind a download", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await setMode(m, "ask_first");
+    const letThrough = server.hold(/\.(tar\.gz|zip)$/);
+    const checked = m.clock.advance(0);
+    await expect.poll(() => archiveDownloads(server)).toBe(1);
+    const installing = m.post<UpdatesView>("/updates/install");
+    await setMode(m, "off");
+    letThrough();
+    await checked;
+    expect(await installing).toMatchObject({ status: "off" });
+    expect(archiveDownloads(server)).toBe(1);
+    expect(m.runner.requests).toEqual([]);
+  });
 });
 
 describe("Restart now", () => {

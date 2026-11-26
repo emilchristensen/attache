@@ -201,12 +201,13 @@ export class Updater {
     if (this.unavailable() || this.mode() === "off") return Promise.resolve(this.view());
     const { signal } = this.settingsChange;
     return this.serial(async () => {
-      if (this.status === "installing") return this.view();
+      // Queued behind another step, and the settings changed meanwhile: they say what happens now.
+      if (this.status === "installing" || signal.aborted) return this.view();
       if (!(this.status === "ready" || this.status === "waiting_for_jobs") || !this.verified()) {
         await this.check({ reportOnly: true });
         const found = this.found;
         if (!(this.status === "available" || this.status === "ready") || !found) return this.view();
-        if (!this.verified() && !(await this.download(found))) return this.view();
+        if (!this.verified() && !(await this.download(found, signal))) return this.view();
       }
       // Off or another channel was chosen since Install now: the settings say what happens now, through the step they queued.
       if (signal.aborted || this.mode() === "off" || !this.verified()) {
@@ -370,10 +371,12 @@ export class Updater {
     this.jobsRunning = null;
   }
 
-  /** Download the found Update's archive for this computer and verify it; false, with the reason shown, when that failed. */
-  private async download(found: FoundUpdate): Promise<boolean> {
+  /**
+   * Download the found Update's archive for this computer and verify it; false, with the reason shown, when that failed.
+   * `signal` is the settings the step that asked was started under: once they changed, no request is made.
+   */
+  private async download(found: FoundUpdate, signal = this.settingsChange.signal): Promise<boolean> {
     const to = found.manifest.version;
-    const { signal } = this.settingsChange;
     this.set("downloading");
     try {
       const { target, trustedKeys } = this.canUpdate();
