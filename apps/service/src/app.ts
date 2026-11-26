@@ -34,6 +34,7 @@ import { systemClock, type Clock, type TimerHandle } from "./replication/clock.t
 import { Replication } from "./replication/replication.ts";
 import { Proposals } from "./memory/proposals.ts";
 import { defaultSeams } from "./replication/seams.ts";
+import type { BrainFormatSupport } from "./replication/brain-format.ts";
 import type { GitHubAccess } from "./replication/github.ts";
 import { connectionSecretKey } from "./connectors/manager.ts";
 import { resolveEndpoint } from "./connectors/test-endpoints.ts";
@@ -59,6 +60,8 @@ export interface AppOptions {
   leaseGenerationCommits?: number;
   /** The Attache version this Machine records in the Brain; `VERSION` when left out. Tests name one to play a Machine before and after an Update. */
   version?: string;
+  /** The Brain formats this Machine reads and writes; this release's when left out. Tests name a later release's (ADR 0008). */
+  brainFormat?: BrainFormatSupport;
 }
 
 export { VERSION };
@@ -138,6 +141,7 @@ export class App {
       seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
       version: opts.version ?? VERSION,
+      ...(opts.brainFormat ? { brainFormat: opts.brainFormat } : {}),
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,

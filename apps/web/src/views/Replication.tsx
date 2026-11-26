@@ -16,6 +16,7 @@ const STATE: Record<ReplicationStatus, { state: string; label: string }> = {
   offline: { state: "partial", label: "offline" },
   unauthorized: { state: "error", label: "unauthorized" },
   blocked: { state: "error", label: "blocked" },
+  paused: { state: "partial", label: "paused" },
 };
 
 /** What a status means and what the owner can do about it; the cause from the service is shown above it. */
@@ -34,6 +35,11 @@ const PROBLEM: Partial<Record<ReplicationStatus, { title: string; todo: string; 
     title: "Replication is blocked",
     todo: "Nothing is sent or received until the cause is fixed. Saves carry on here. Fix the cause, then select Check now.",
     tone: "error",
+  },
+  paused: {
+    title: "Replication is paused",
+    todo: "Until then this Machine sends and merges nothing, so it never changes files a newer Attache wrote.",
+    tone: "partial",
   },
 };
 

@@ -37,6 +37,12 @@ const connection = async () => (await svc.get<Status[]>("/connections")).find((s
 let hooksFile: string;
 
 /** Run the session-start hook Attache installed, as Copilot CLI's hooks reference describes: its `bash` command, the sessionStart input on stdin. */
+/**
+ * Every call starts the hook as a process, which alone can take over `expect.poll`'s default 1 s while other suites
+ * load the machine, leaving a single try; a poll over it waits as long as a process start can take.
+ */
+const HOOK_POLL = { timeout: 30_000, interval: 200 };
+
 function sessionStart(cwd: string): string {
   const command = (JSON.parse(readFileSync(hooksFile, "utf8")) as { hooks: { sessionStart: Array<{ bash: string }> } }).hooks.sessionStart[0]!.bash;
   const r = spawnSync("bash", ["-c", command], { input: JSON.stringify({ sessionId: "s1", timestamp: Date.now(), cwd, source: "new", initialPrompt: "hi" }), encoding: "utf8" });
@@ -109,11 +115,11 @@ describe("Copilot CLI as a Harness Connection", () => {
   });
 
   it("the session-start hook it installed hands Copilot CLI the memory the service keeps current", async () => {
-    await expect.poll(() => sessionStart(HOME)).toMatch(/Orion migration/);
+    await expect.poll(() => sessionStart(HOME), HOOK_POLL).toMatch(/Orion migration/);
     expect(JSON.parse(sessionStart(HOME)).additionalContext).toMatch(/^<attache-memory>\n[\s\S]*Orion migration[\s\S]*\n<\/attache-memory>$/);
     expect(sessionStart(HOME)).not.toMatch(/Vega launch/);
     await svc.post("/memory/save", { confirmed: true, items: [{ action: "create", type: "project", title: "Vega launch", facts: [{ subject: "Status", value: "Launch review on Thursday" }] }] });
-    await expect.poll(() => sessionStart(HOME)).toMatch(/Vega launch/);
+    await expect.poll(() => sessionStart(HOME), HOOK_POLL).toMatch(/Vega launch/);
   });
 
   it("disconnecting removes Attache's entry and hooks file only, and says what it changed", async () => {

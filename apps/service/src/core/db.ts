@@ -251,6 +251,12 @@ export const MIGRATIONS: readonly string[] = [
   `
   create table schema_writer (id integer primary key check (id = 1), version text not null, schema_version integer not null, at text not null);
   `,
+  // ADR 0008: Replication paused on a Brain format newer than this Machine reads records that format, and an
+  // Inbox item keeps the fields of its record a newer release wrote (JSON), so rewriting it here keeps them.
+  `
+  alter table replication add column paused_format integer;
+  alter table attention_items add column unknown_fields text;
+  `,
 ];
 
 const fitsInNumber = (v: number | bigint): number | bigint => (typeof v === "bigint" && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(v) : v);

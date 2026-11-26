@@ -20,10 +20,13 @@ export const ProposalDecision = z.object({
   path: z.string().nullable().default(null),
   /** The change-log batch the approval wrote on its Machine, so that Machine can undo it if a later rejection wins. */
   batch: z.string().nullable().default(null),
-});
+}).loose();
 export type ProposalDecision = z.infer<typeof ProposalDecision>;
 
-/** A Proposal as one file in the Brain: what it suggests, where it came from, and every decision on it. */
+/**
+ * A Proposal as one file in the Brain: what it suggests, where it came from, and every decision on it.
+ * Fields a later release adds are kept (`loose`), so a decision added here or a merge does not drop them (ADR 0008).
+ */
 export const ProposalRecord = z.object({
   version: z.literal(1),
   id: z.string().min(1),
@@ -46,7 +49,7 @@ export const ProposalRecord = z.object({
   /** Checked when read, so a Proposal whose item no longer validates still lists and can be rejected. */
   item: z.unknown(),
   decisions: z.array(ProposalDecision).default([]),
-});
+}).loose();
 export type ProposalRecord = z.infer<typeof ProposalRecord>;
 
 /** The record in a file, or null when the file is not a Proposal. */

@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
-import { startTestService, testFolder, type TestService } from "./harness.ts";
+import { startTestService, testFolder, type TestService, type TestServiceOptions } from "./harness.ts";
 
 // A test with several Machines runs git dozens of times, one process after another; on Windows each
 // start is slow, and a whole multi-Machine test took over 30 s while the suite ran in parallel there.
@@ -39,8 +39,17 @@ export interface TestWorld {
   /** Start another Machine; it joins unless `join: false`. */
   addMachine(name: string, opts?: { join?: boolean }): Promise<TestMachine>;
   /** Stop a Machine's service and start it again on the same state and Brain, as after a crash or reboot. */
-  restart(machine: TestMachine, opts?: { version?: string }): Promise<TestMachine>;
+  restart(machine: TestMachine, opts?: RestartOptions): Promise<TestMachine>;
   stop(): Promise<void>;
+}
+
+export interface RestartOptions {
+  /** The version it runs from now on, as after an Update or a rollback. */
+  version?: string;
+  /** The Brain formats it reads and writes from now on. */
+  brainFormat?: WorldOptions["brainFormat"];
+  /** How long the Machine was off before it starts again (ms), as for a laptop left in a drawer. */
+  after?: number;
 }
 
 const gitEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" };
@@ -95,7 +104,7 @@ function holdLeaseWrites(repo: string, count: number): { arrived(): number; stop
 
 async function startMachine(name: string, opts: { setup: boolean } & WorldOptions): Promise<TestMachine> {
   const clock = new ManualClock();
-  const svc = await startTestService({ clock, setup: opts.setup, leaseGenerationCommits: opts.leaseGenerationCommits, version: opts.version });
+  const svc = await startTestService({ clock, setup: opts.setup, leaseGenerationCommits: opts.leaseGenerationCommits, version: opts.version, brainFormat: opts.brainFormat });
   await svc.call("PATCH", "/machine", { name });
   return Object.assign(svc, { name, clock });
 }
@@ -109,6 +118,8 @@ export interface WorldOptions {
   leaseGenerationCommits?: number;
   /** The Attache version every Machine runs, unless a restart names another, as after an Update. */
   version?: string;
+  /** The Brain formats every Machine reads and writes, unless a restart names others; this release's when left out. */
+  brainFormat?: TestServiceOptions["brainFormat"];
 }
 
 export async function startMachines(names: string[], world: WorldOptions = {}): Promise<TestWorld> {
@@ -126,12 +137,19 @@ export async function startMachines(names: string[], world: WorldOptions = {}): 
     return m;
   };
   for (const name of names) await addMachine(name);
-  const restart = async (machine: TestMachine, opts: { version?: string } = {}) => {
+  const restart = async (machine: TestMachine, opts: RestartOptions = {}) => {
     const i = machines.indexOf(machine);
     if (i < 0) throw new Error(`${machine.name} is not part of this world`);
     await machine.stop();
-    const clock = new ManualClock(machine.clock.now().getTime());
-    const svc = await startTestService({ clock, stateDir: machine.stateDir, dataDir: machine.dataDir, leaseGenerationCommits: world.leaseGenerationCommits, version: opts.version ?? world.version });
+    const clock = new ManualClock(machine.clock.now().getTime() + (opts.after ?? 0));
+    const svc = await startTestService({
+      clock,
+      stateDir: machine.stateDir,
+      dataDir: machine.dataDir,
+      leaseGenerationCommits: world.leaseGenerationCommits,
+      version: opts.version ?? world.version,
+      brainFormat: opts.brainFormat ?? world.brainFormat,
+    });
     const again = Object.assign(svc, { name: machine.name, clock });
     machines.splice(i, 1, again);
     return again;
