@@ -168,8 +168,10 @@ test("Ask first: Check now downloads an Update and waits; Install now hands it t
   await expect(status(page).getByRole("heading", { name: "Installing Attache 0.7.0" })).toBeVisible();
   // Install now is gone with the status that offered it, so focus is on what happens now, not lost.
   await expect(status(page).getByRole("heading", { name: "Installing Attache 0.7.0" })).toBeFocused();
-  // While the installer runs, the settings wait for the version it starts.
+  // While the installer runs, the settings wait for the version it starts, and say so.
   await expect(radio(page, "Automatic")).toBeDisabled();
+  await expect(radio(page, "Beta")).toBeDisabled();
+  await expect(section(page).getByText("Automatic updates and the Update channel can change once Attache 0.7.0 has finished installing.")).toBeVisible();
   expect(installRequests(stack)).toEqual(["0.7.0"]);
   await capture(page, "installing");
 

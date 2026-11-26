@@ -28,7 +28,7 @@
  * (`bad-versions.ts`), so a check never offers it again; `lastUpdate` says what became of the database.
  * It also raises the one system notification an Update raises (#141, `rollback-notice.ts`), once per outcome.
  */
-import type { LastUpdateView, UpdateChannel, UpdateMode, UpdateSettings, UpdatesStatus, UpdatesView } from "@attache/contracts";
+import { settingsLockedWhileInstalling, type LastUpdateView, type UpdateChannel, type UpdateMode, type UpdateSettings, type UpdatesStatus, type UpdatesView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import { ReleaseRefusedError } from "../release/verify-release.ts";
 import type { Clock, TimerHandle } from "../replication/clock.ts";
@@ -79,6 +79,14 @@ export interface UpdaterDeps {
 export interface CheckOptions {
   /** Only find out what is available: download and install nothing, whatever the mode. Without it, the check goes on as Automatic updates says. */
   reportOnly?: boolean;
+}
+
+/**
+ * The settings cannot change while an Update installs: a rollback restores the database from before the Update, never the
+ * configuration, so a choice made now would hold on the version that started and not on the one the rollback returns to.
+ */
+export class SettingsLockedError extends Error {
+  readonly code = "update_installing";
 }
 
 export class Updater {
@@ -201,19 +209,18 @@ export class Updater {
   /**
    * Change this Machine's Updates settings. A new channel forgets what the old one found; turning Off stops every timer;
    * a new channel, or turning Updates back on, checks at once. Changing between Automatic and Ask first acts on a verified Update as the new mode says.
-   * While the installer runs, the settings are kept for the version it starts.
+   * While the installer runs, a change is refused with `SettingsLockedError`.
    */
   setSettings(input: { channel?: UpdateChannel | undefined; mode?: UpdateMode | undefined }): UpdatesView {
     const current = this.deps.settings.get();
     const next: UpdateSettings = { ...current, ...(input.channel ? { channel: input.channel } : {}), ...(input.mode ? { mode: input.mode } : {}) };
     const channelChanged = next.channel !== current.channel;
     if (!channelChanged && next.mode === current.mode) return this.view();
+    if (this.status === "installing") {
+      throw new SettingsLockedError(settingsLockedWhileInstalling(readInstallRequest(this.deps.stateDir)?.to ?? null));
+    }
     this.deps.settings.set(next);
     this.generation++;
-    if (this.status === "installing") {
-      this.deps.changed();
-      return this.view();
-    }
     this.endJobWait();
     if (channelChanged) {
       this.running = null;

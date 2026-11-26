@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import type { UpdateMode, UpdatesView } from "@attache/contracts";
 import type { JobContext } from "../../src/jobs/queue.ts";
 import type { ReleaseServer } from "../fixtures/release-server.ts";
-import { updatesWorld, type UpdatesMachine } from "./updates-world.ts";
+import { installerFinished, updatesWorld, type UpdatesMachine } from "./updates-world.ts";
 
-const { releases, machine, restart } = updatesWorld();
+const { releases, machine, restart, outcomeSeen } = updatesWorld();
 
 const HOUR = 60 * 60_000;
 const view = (m: UpdatesMachine) => m.get<UpdatesView>("/updates");
@@ -98,6 +98,26 @@ describe("the mode", () => {
     expect((await m.get("/config")).config.updates).toEqual({ channel: "stable", mode: "ask_first" });
     expect((await m.call("PUT", "/updates/settings", { mode: "sometimes" })).status).toBe(400);
     expect((await view(await restart(m, "0.6.0"))).mode).toBe("ask_first");
+  });
+});
+
+describe("while an Update installs", () => {
+  // A rollback restores the database from before the Update, never the configuration: a choice made during the install would hold on the version that started and not on the one the rollback returns to.
+  it("refuses to change the mode or the Update channel, says why, and takes changes again once the new version runs", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await m.clock.advance(0);
+    expect((await view(m)).status).toBe("installing");
+    for (const body of [{ mode: "off" }, { channel: "beta" }]) {
+      const r = await m.call("PUT", "/updates/settings", body);
+      expect(r.status).toBe(409);
+      expect(r.body.error).toMatchObject({ code: "update_installing", message: "Automatic updates and the Update channel can change once Attache 0.7.0 has finished installing." });
+    }
+    expect((await m.get("/config")).config.updates).toEqual({ channel: "stable", mode: "automatic" });
+
+    const after = await restart(m, "0.7.0");
+    installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+    await outcomeSeen(after);
+    expect(await setMode(after, "off")).toMatchObject({ mode: "off" });
   });
 });
 
