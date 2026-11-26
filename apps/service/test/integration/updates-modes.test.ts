@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 import type { UpdateMode, UpdatesView } from "@attache/contracts";
 import type { JobContext } from "../../src/jobs/queue.ts";
 import type { ReleaseServer } from "../fixtures/release-server.ts";
+import { signedRelease } from "../fixtures/signed-release.ts";
 import { installerFinished, updatesWorld, type UpdatesMachine } from "./updates-world.ts";
 
-const { releases, machine, restart, outcomeSeen } = updatesWorld();
+const { key, releases, machine, restart, outcomeSeen } = updatesWorld();
 
 const HOUR = 60 * 60_000;
 const view = (m: UpdatesMachine) => m.get<UpdatesView>("/updates");
@@ -171,6 +172,47 @@ describe("Automatic", () => {
     await m.clock.advance(60_000);
     expect(await view(m)).toMatchObject({ status: "installing", jobs: null });
     expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    job.finish();
+  });
+
+  it("keeps counting the 24 hours across a restart, so a Machine restarted while always busy still installs", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    const job = await runningJob(m, "Research");
+    await m.clock.advance(0);
+    await m.clock.advance(20 * HOUR);
+    expect(await view(m)).toMatchObject({ status: "waiting_for_jobs", jobs: 1 });
+
+    // Still busy when the service restarts: the Job resumes after it.
+    const after = await restart(m, "0.6.0");
+    const busy = await runningJob(after, "Briefing");
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "waiting_for_jobs" });
+    await after.clock.advance(4 * HOUR - 60_000);
+    expect(after.runner.requests).toEqual([]);
+    await after.clock.advance(60_000);
+    expect(await view(after)).toMatchObject({ status: "installing", jobs: null });
+    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    busy.finish();
+    job.finish();
+  });
+
+  it("starts the 24 hours again for a newer Update than the one that waited", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const job = await runningJob(m, "Research");
+    await m.clock.advance(0);
+    await m.clock.advance(20 * HOUR);
+
+    server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));
+    const after = await restart(m, "0.6.0");
+    const busy = await runningJob(after, "Briefing");
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "waiting_for_jobs", update: { version: "0.7.1" } });
+    await after.clock.advance(4 * HOUR);
+    expect(after.runner.requests).toEqual([]);
+    await after.clock.advance(20 * HOUR);
+    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.1"]);
+    busy.finish();
     job.finish();
   });
 

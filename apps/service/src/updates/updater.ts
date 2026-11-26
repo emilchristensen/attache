@@ -37,6 +37,7 @@ import { findUpdate, unreachable, UpdateCheckError, type FoundUpdate } from "./f
 import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome, type OutcomeRecord } from "./install-records.ts";
 import type { InstallerRunner } from "./installer-runner.ts";
 import { JobWait, type RunningJobs } from "./job-wait.ts";
+import { forgetJobWait, jobWaitSince } from "./job-wait-record.ts";
 import { notifyRollbackOnce, type Notify } from "./rollback-notice.ts";
 import type { ReleaseFeed } from "./release-feed.ts";
 import type { ReleaseInstall } from "./release-install.ts";
@@ -328,6 +329,7 @@ export class Updater {
     this.jobWait = new JobWait(
       {
         clock: this.deps.clock,
+        since: jobWaitSince(this.deps.stateDir, found.manifest.version, this.deps.clock.now()),
         jobs: this.deps.jobs,
         onCount: (count) => {
           this.jobsRunning = count;
@@ -415,6 +417,7 @@ export class Updater {
       return;
     }
     this.endJobWait();
+    forgetJobWait(this.deps.stateDir);
     recordInstallRequest(this.deps.stateDir, { from: this.deps.version, to, notes: staged.manifest.notes, at: this.deps.clock.now().toISOString() });
     this.set("installing");
     try {
