@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ManualClock } from "../fixtures/manual-clock.ts";
+import { startTestService, type TestService } from "./harness.ts";
 import { startMachines, type TestMachine, type TestWorld } from "./machines.ts";
 
 const CHECK = 60_000;
@@ -13,15 +15,18 @@ const READS_2 = { reads: 2, writes: 2 };
 const READS_1 = { reads: 1, writes: 1 };
 
 let world: TestWorld | null = null;
+let joining: TestService | null = null;
 
 afterEach(async () => {
   await world?.stop();
+  await joining?.stop();
   world = null;
+  joining = null;
 });
 
 /** The Brain format record as the repository holds it, which is what every Machine reads. */
 const pushedFormat = (w: TestWorld) => JSON.parse(w.remote.git("show", `main:${FORMAT_FILE}`)) as Record<string, unknown>;
-const idOf = async (m: TestMachine) => ((await m.get("/machine")) as { id: string }).id;
+const idOf = async (m: TestService) => ((await m.get("/machine")) as { id: string }).id;
 const pushedRecord = (w: TestWorld, id: string) => JSON.parse(w.remote.git("show", `main:machines/${id}.json`)) as Record<string, unknown>;
 const localHead = (m: TestMachine) => execFileSync("git", ["rev-parse", "HEAD"], { cwd: m.dataDir, encoding: "utf8" }).trim();
 
@@ -126,6 +131,18 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(world.remote.git("ls-tree", "-r", "--name-only", "main")).toContain("memory/notes/while-paused.md");
     expect(pushedRecord(world, pcId)).toMatchObject({ readsBrainFormat: 2 });
     expect(readFileSync(join(pc.dataDir, "memory/notes/from-mac.md"), "utf8")).toContain("Written on Mac");
+  });
+
+  it("a Machine that joins a Brain in a newer format is paused by the join itself, and writes no record of itself", async () => {
+    world = await startMachines(["Mac"], { brainFormat: READS_2 });
+    expect(pushedFormat(world)).toMatchObject({ format: 2 });
+    const sent = world.remote.git("rev-parse", "main");
+    joining = await startTestService({ clock: new ManualClock(), setup: false });
+    const pc = joining;
+
+    expect(await pc.post("/replication/join", { remote: world.remote.url, path: pc.dataDir })).toMatchObject({ status: "paused", pause: { brainFormat: 2, readsBrainFormat: 1 } });
+    expect(existsSync(join(pc.dataDir, `machines/${await idOf(pc)}.json`))).toBe(false);
+    expect(world.remote.git("rev-parse", "main")).toBe(sent);
   });
 
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {

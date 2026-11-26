@@ -545,11 +545,14 @@ export class Replication {
       if (!isEmptyFolder(target)) throw await notEmptyRefusal(target, this.deps.backUpFolder, this.deps.log);
       await this.refuseRemote(remote);
       await cloneBrain(remote, target, this.deps.seams);
+      // Read the Brain format before anything opens or writes the folder: a newer one pauses Replication from the join on (ADR 0008).
+      const held = this.formatHold(this.repo(target));
       open(target);
       const at = this.deps.clock.now().toISOString();
       this.settings.enable({ dataFolder: target, remote, enabledAt: at, committedSeq: this.deps.latestSeq(), pushedAt: null });
+      if (held) this.report(held);
       const view = this.switchedOn();
-      // Sent with the next commit, so the other Machines list this one.
+      // Sent with the next commit, so the other Machines list this one; not while paused.
       this.machines.recordThisMachine(target);
       return view;
     });
