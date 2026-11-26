@@ -275,16 +275,18 @@ class ServiceDatabase extends DatabaseSync {
   }
 }
 
-export function openDb(file: string): Db {
+/** Open the service's database and migrate it, to the newest schema unless an earlier `schemaVersion` is given. */
+export function openDb(file: string, schemaVersion = MIGRATIONS.length): Db {
   const db = new ServiceDatabase(file);
   db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma synchronous = normal;");
-  migrate(db);
+  migrate(db, schemaVersion);
   return db;
 }
 
-export function migrate(db: Db): { from: number; to: number } {
+/** Run the migrations from the database's schema version up to `to`, each in one transaction. */
+export function migrate(db: Db, to = MIGRATIONS.length): { from: number; to: number } {
   const from = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
-  for (let i = from; i < MIGRATIONS.length; i++) {
+  for (let i = from; i < to; i++) {
     db.exec("begin");
     try {
       db.exec(MIGRATIONS[i]!);
@@ -295,7 +297,7 @@ export function migrate(db: Db): { from: number; to: number } {
       throw err;
     }
   }
-  return { from, to: MIGRATIONS.length };
+  return { from, to };
 }
 
 export function tx<T>(db: Db, fn: () => T): T {
