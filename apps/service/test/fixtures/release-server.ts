@@ -24,8 +24,8 @@ export interface ReleaseServer {
   requests: FixtureRequest[];
   /** Answer every request with this HTTP status from now on, as a failing GitHub would; null answers again. */
   failWith(status: number | null): void;
-  /** Hold every request from now on, as a slow network does, until the returned function lets them through. */
-  hold(): () => void;
+  /** Hold every request from now on (or only those whose path matches `only`), as a slow network does, until the returned function lets them through. */
+  hold(only?: RegExp): () => void;
   close(): Promise<void>;
 }
 
@@ -36,9 +36,11 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
   const releases: Array<{ tag: string; version: string; files: Map<string, Buffer> }> = [];
   let failing: number | null = null;
   let held: Promise<void> = Promise.resolve();
+  let heldOnly: RegExp | undefined;
+  const wait = (path: string) => (heldOnly && !heldOnly.test(path) ? undefined : held);
   const failure = () => ({ status: failing!, json: { message: "Server Error" } });
-  fx.route("GET", FEED_PATH, async () => {
-    await held;
+  fx.route("GET", FEED_PATH, async (req) => {
+    await wait(req.path);
     return failing
       ? failure()
       : {
@@ -53,7 +55,7 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
         };
   });
   fx.route("GET", /^\/download\//, async (req) => {
-    await held;
+    await wait(req.path);
     if (failing) return failure();
     const [, , tag, name] = req.path.split("/").map(decodeURIComponent);
     const body = releases.find((r) => r.tag === tag)?.files.get(name!);
@@ -73,8 +75,9 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
     failWith(status) {
       failing = status;
     },
-    hold() {
+    hold(only) {
       let release!: () => void;
+      heldOnly = only;
       held = new Promise((resolve) => (release = resolve));
       return release;
     },

@@ -275,6 +275,20 @@ describe("Ask first", () => {
   });
 });
 
+describe("Install now", () => {
+  it("installs nothing when Off is chosen while it downloads", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold(/\.(tar\.gz|zip)$/);
+    const installing = m.post<UpdatesView>("/updates/install");
+    await expect.poll(() => archiveDownloads(server)).toBe(1);
+    await setMode(m, "off");
+    letThrough();
+    expect(await installing).toMatchObject({ status: "off" });
+    expect(m.runner.requests).toEqual([]);
+  });
+});
+
 describe("Restart now", () => {
   it("applies the Update at once while Jobs run, and those Jobs resume from their checkpoint after the restart", async () => {
     const m = await machine("0.6.0", await releases("0.7.0"));

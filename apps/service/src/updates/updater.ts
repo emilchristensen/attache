@@ -199,6 +199,7 @@ export class Updater {
    */
   install(): Promise<UpdatesView> {
     if (this.unavailable() || this.mode() === "off") return Promise.resolve(this.view());
+    const generation = this.generation;
     return this.serial(async () => {
       if (this.status === "installing") return this.view();
       if (!(this.status === "ready" || this.status === "waiting_for_jobs") || !this.verified()) {
@@ -206,6 +207,11 @@ export class Updater {
         const found = this.found;
         if (!(this.status === "available" || this.status === "ready") || !found) return this.view();
         if (!this.verified() && !(await this.download(found))) return this.view();
+      }
+      // Off or another channel was chosen since Install now: the settings say what happens now, through the step they queued.
+      if (generation !== this.generation || this.mode() === "off" || !this.verified()) {
+        this.set(this.resting());
+        return this.view();
       }
       this.endJobWait();
       await this.apply();
