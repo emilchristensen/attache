@@ -92,7 +92,7 @@ test.afterAll(async () => {
   await stack?.stop();
 });
 
-const SETTINGS = ["features", "schedules", "identity", "saving", "meaning-search", "backup", "machines", "clients", "service"];
+const SETTINGS = ["features", "schedules", "identity", "saving", "meaning-search", "backup", "machines", "clients", "service", "updates"];
 
 /** Every screen and subview, with the h1 it shows once it has loaded (a Draft's h1 is its title). */
 const screens = (): ReadonlyArray<readonly [path: string, h1: string | null]> => [

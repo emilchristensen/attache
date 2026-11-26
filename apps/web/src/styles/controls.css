@@ -192,7 +192,8 @@ input[type="radio"] {
 .feature-row:last-child {
   border-bottom: none;
 }
-.feature-row > input[type="checkbox"] {
+.feature-row > input[type="checkbox"],
+.feature-row > input[type="radio"] {
   margin-top: 4px;
   width: 16px;
   height: 16px;

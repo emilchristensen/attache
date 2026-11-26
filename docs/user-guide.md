@@ -405,7 +405,7 @@ When a Connection needs you to sign in again, a **Needs you** group comes first 
 - **Attache:** *Features*, *Schedules and notifications* and *Identity*.
 - **Brain:** *Saving and review* (Auto-accept for each connected Harness, and Consolidation), *Meaning-based search* and *Backup and export*.
 - **Machines:** *Machines and Replication* (this Machine's name, then Replication with every state and action it has) and *Paired clients*.
-- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next.
+- **Service:** *Service health*, with the credential store, *Rebuild index* and, under *Diagnostics*, the process, the jobs and when each schedule runs next; and *Updates* (see [Updates](#updates)).
 
 Each section has its own address (`/settings/identity`, `/settings/machines` and so on), so a link or a bookmark opens it, and the browser's Back goes through the sections you opened.
 `/settings` itself opens Features.
@@ -735,6 +735,29 @@ Renaming the Machine affects files written from then on; earlier files keep thei
 
 Only one Attache service can use a data folder at a time.
 The lock that enforces this lives outside the data folder, in `~/Library/Application Support/Attache/locks` on macOS and `~/.local/state/attache/locks` on Linux.
+
+## Updates
+
+Attache keeps itself current.
+Each Machine looks for an Update when the service starts and every 6 hours, and checks every Update against Attache's signature before anything installs.
+**Settings → Updates** shows the version this Machine runs, when it last looked for an Update and what it found, and what is happening now.
+
+- **Automatic updates** is set per Machine:
+  *Automatic* (the default) installs an Update on its own once no Job is running, or after it has waited 24 hours for Jobs, and then tells you what changed;
+  *Ask first* downloads and checks an Update, then waits for you to select *Install now*;
+  *Off* never looks for Updates, so Attache makes no request about them, not even for *Check now*.
+- **Update channel** is set per Machine too: *Stable*, or *Beta*, which gets new releases first and also takes each Stable release that is newer.
+  A Machine never moves to an older version, so a Machine switched back from Beta to Stable stays on its version until a Stable release passes it.
+- **Check now** looks for an Update at once and goes on as Automatic updates says.
+  When a check fails, for example because the network is down, the section says so and why; a failed check never reads as up to date.
+- **Install now** installs an Update that is available or ready.
+  While an Update waits for Jobs to finish, **Restart now** installs it at once; the Jobs pick up from their last checkpoint once Attache is back.
+- After an Update, the section says which version this Machine updated from, with **What changed**: the release's notes, shown inside the Dashboard.
+  When an Update does not start, Attache goes back to the version it ran before, and the section says so with the reason.
+
+A copy of Attache run from a source checkout shows Updates as unavailable: it never replaces itself.
+Pull the newest code and build it instead.
+The command line has the same Updates as `attache update` (see [Where things live](#where-things-live)).
 
 ## Replication
 
