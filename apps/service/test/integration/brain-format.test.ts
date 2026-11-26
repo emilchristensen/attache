@@ -243,6 +243,25 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8")).toBe(format);
   });
 
+  it("a Machine paused by a newer format it fetched writes nothing into its folder after a restart, though its folder still holds the older format", async () => {
+    world = await startMachines(["Mac", "PC"]);
+    let [mac, pc] = world.machines as [TestMachine, TestMachine];
+    await settle([pc, mac]);
+    mac = await world.restart(mac, { brainFormat: READS_2 });
+    mac.clock.skip(31 * DAY);
+    await settle([mac]);
+    expect(pushedFormat(world)).toMatchObject({ format: 2 });
+    pc = await world.restart(pc, { after: 31 * DAY });
+    await settle([pc]);
+    expect((await pc.get("/replication")).status).toBe("paused");
+    expect(JSON.parse(readFileSync(join(pc.dataDir, FORMAT_FILE), "utf8"))).toMatchObject({ format: 1 });
+
+    rmSync(join(pc.dataDir, "README.md"));
+    pc = await world.restart(pc);
+    expect((await pc.get("/replication")).status).toBe("paused");
+    expect(existsSync(join(pc.dataDir, "README.md"))).toBe(false);
+  });
+
   it("a Machine back on a release that cannot read the format, as after a rolled-back Update, pauses at once and commits nothing", async () => {
     world = await startMachines(["Mac", "PC"], { brainFormat: READS_2 });
     const [mac, first] = world.machines as [TestMachine, TestMachine];
