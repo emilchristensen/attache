@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { LastUpdateView, UpdateChannel, UpdateMode, UpdatesView } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { Disclosure } from "../components/Disclosure.tsx";
@@ -28,11 +28,25 @@ type Act = (key: string, fn: () => Promise<UpdatesView>, ok?: string) => Promise
 function Status({ view, busy, act }: { view: UpdatesView; busy: string | null; act: Act }) {
   const shown = updatesShown(view);
   const check = lastCheckShown(view);
-  const { install } = shown.actions;
+  const heading = useRef<HTMLHeadingElement>(null);
+  const installing = useRef<"install" | "restart">("install");
+  if (shown.actions.install) installing.current = shown.actions.install;
+  // The button pressed stays, disabled and as it was named, while its request runs, though the status it moves through offers it no more.
+  const install = shown.actions.install ?? (busy === "install" ? installing.current : null);
+  const checkNow = shown.actions.check || busy === "check";
+  /** Run an action; when the status it ends in no longer offers the button that had focus, focus goes to the status. */
+  const press = (key: string, fn: () => Promise<UpdatesView>) =>
+    void act(key, fn).then(() =>
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body) heading.current?.focus();
+      }),
+    );
   return (
     <section className={`card stack updates-status ${shown.tone}`} aria-labelledby="updates-status-title" data-updates-status={view.status}>
       <div className="updates-status-head" aria-live="polite">
-        <h3 id="updates-status-title">{shown.headline}</h3>
+        <h3 id="updates-status-title" ref={heading} tabIndex={-1}>
+          {shown.headline}
+        </h3>
         {shown.detail && <p className="small updates-detail">{shown.detail}</p>}
       </div>
       <dl className="kv">
@@ -54,15 +68,15 @@ function Status({ view, busy, act }: { view: UpdatesView; busy: string | null; a
           </>
         )}
       </dl>
-      {(shown.actions.check || install) && (
+      {(checkNow || install) && (
         <div className="row">
           {install && (
-            <button className="primary" disabled={busy !== null} onClick={() => void act("install", () => post<UpdatesView>("/updates/install"))}>
+            <button className="primary" disabled={busy !== null} onClick={() => press("install", () => post<UpdatesView>("/updates/install"))}>
               {install === "restart" ? "Restart now" : "Install now"}
             </button>
           )}
-          {shown.actions.check && (
-            <button disabled={busy !== null} onClick={() => void act("check", () => post<UpdatesView>("/updates/check", { reportOnly: false }))}>
+          {checkNow && (
+            <button disabled={busy !== null} onClick={() => press("check", () => post<UpdatesView>("/updates/check", { reportOnly: false }))}>
               {busy === "check" ? "Checking…" : "Check now"}
             </button>
           )}

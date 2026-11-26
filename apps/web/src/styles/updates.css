@@ -13,6 +13,11 @@
   min-width: 0;
 }
 
+/* Focus lands on the status after the button pressed is gone; the heading is not a control, so no ring. */
+.updates-status-head h3:focus {
+  outline: none;
+}
+
 .updates-detail,
 .last-update-detail {
   margin: var(--s-1) 0 0;
