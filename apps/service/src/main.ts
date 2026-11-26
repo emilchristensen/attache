@@ -5,6 +5,8 @@ import { startServer } from "./http/server.ts";
 import { createPairingCode } from "./http/security.ts";
 import { resolvePaths } from "./core/paths.ts";
 import { openDb } from "./core/db.ts";
+import { NewerDatabaseError } from "./core/schema-guard.ts";
+import { REFUSED_EXIT_CODE, REFUSED_TO_START_FILE } from "./platform/service-manager/types.ts";
 import { createBackup, restoreBackup } from "./backup.ts";
 import { ConfigStore } from "./core/config.ts";
 import { RECALL_EXCLUDE, searchByMeaning } from "./memory/search.ts";
@@ -39,10 +41,29 @@ function arg(name: string, argv: string[]): string | undefined {
 
 const out = (s: string) => process.stdout.write(s + "\n");
 
+/**
+ * The service stops for good on a database a newer Attache wrote: it says so,
+ * and exits so that launchd, systemd and the Windows supervisor do not start it
+ * again every few seconds (`REFUSED_EXIT_CODE`).
+ */
+function openApp(stateDir: string | undefined): App {
+  const paths = resolvePaths(stateDir);
+  const refused = join(paths.stateDir, REFUSED_TO_START_FILE);
+  try {
+    const app = new App({ stateDir: paths.stateDir });
+    rmSync(refused, { force: true });
+    return app;
+  } catch (e) {
+    if (!(e instanceof NewerDatabaseError)) throw e;
+    writeFileWhole(refused, `${e.message}\n`);
+    process.stderr.write(`attache: ${e.message}\n`);
+    process.exit(REFUSED_EXIT_CODE);
+  }
+}
+
 async function serve(argv: string[]) {
-  const stateDir = arg("state-dir", argv);
   const port = Number(arg("port", argv) ?? process.env.ATTACHE_PORT ?? DEFAULT_PORT);
-  const app = new App({ ...(stateDir ? { stateDir } : {}) });
+  const app = openApp(arg("state-dir", argv));
   const handle = await startServer(app, { port });
   app.start();
   const runtime: Runtime = { pid: process.pid, port: handle.port, url: handle.url, version: VERSION, startedAt: app.startedAt, instance: app.instance };

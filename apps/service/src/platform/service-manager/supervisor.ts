@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { REFUSED_EXIT_CODE } from "./types.ts";
 
 /** What the Windows logon task runs, and in which environment. */
 export interface SupervisedService {
@@ -49,11 +50,13 @@ function serviceEnv(s: SupervisedService): NodeJS.ProcessEnv {
 /**
  * Keep `attache serve` running, as launchd's KeepAlive and systemd's
  * Restart=always do on macOS and Linux: Task Scheduler starts a task at logon
- * but does not restart a program that exits. The service's output is appended
- * to `service.out.log` and `service.err.log` in the state folder's `logs`.
- * The service is started with a channel back to this process and stops when
- * that closes, so it never outlives its supervisor. Resolves once the
- * supervisor was asked to stop and the service has stopped.
+ * but does not restart a program that exits. A service that refused to start
+ * (`REFUSED_EXIT_CODE`) is not started again, and the supervisor ends.
+ * The service's output is appended to `service.out.log` and
+ * `service.err.log` in the state folder's `logs`. The service is started with
+ * a channel back to this process and stops when that closes, so it never
+ * outlives its supervisor. Resolves once the supervisor was asked to stop, or
+ * the service refused to start, and the service has stopped.
  */
 export function superviseService(s: SupervisedService): Promise<void> {
   const logs = join(s.stateDir, "logs");
@@ -81,6 +84,13 @@ export function superviseService(s: SupervisedService): Promise<void> {
       c.on("exit", (code, signal) => {
         child = null;
         if (stopping) return done();
+        if (code === REFUSED_EXIT_CODE) {
+          // Starting it again would only refuse again, so the supervisor ends, as systemd's RestartPreventExitStatus does.
+          note("the service refused to start; it starts again with `attache start` or when Attache is installed again");
+          stopping = true;
+          clearInterval(watch);
+          return done();
+        }
         delay = Date.now() - startedAt >= STEADY_MS ? FIRST_DELAY_MS : delay;
         note(`the service stopped (${signal ? `signal ${signal}` : `exit code ${code}`}); starting it again in ${delay / 1000} s`);
         timer = setTimeout(start, delay);

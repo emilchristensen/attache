@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { MIGRATIONS } from "../src/core/db.ts";
 import { runPowerShell } from "../src/platform/powershell.ts";
 import { tempDir } from "./helpers.ts";
 import { childEnv, FAKE_PLATFORM, attacheCli, MAIN } from "./fixtures/attache-child.ts";
@@ -180,6 +182,25 @@ describe("the entry point of the Windows logon task", () => {
     await exited;
     await eventually("the service to stop with its supervisor", () => (alive(second.pid) ? null : true), 15_000);
     expect(existsSync(join(stateDir, "runtime.json"))).toBe(false);
+  });
+
+  it("does not start a service again that refused to start, such as on a database a newer Attache wrote", async () => {
+    const stateDir = join(tempDir("attache-supervised-"), "state");
+    mkdirSync(stateDir, { recursive: true });
+    const db = new DatabaseSync(join(stateDir, "attache.sqlite"));
+    db.exec(`pragma user_version = ${MIGRATIONS.length + 1}`);
+    db.close();
+    const supervisor = spawn(process.execPath, ["--import", FAKE_PLATFORM, MAIN, "service", "run", "--port", "0", "--state-dir", stateDir, "--instance", "supervised", "--home", tempDir("attache-supervised-home-")], {
+      env: childEnv({ ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ATTACHE_STATE_DIR: undefined, ATTACHE_INSTANCE: undefined }),
+      stdio: "ignore",
+    });
+    supervisors.push(supervisor);
+    const code = await new Promise((r) => supervisor.once("exit", r));
+    expect(code).toBe(0);
+    const log = readFileSync(join(stateDir, "logs", "service.err.log"), "utf8");
+    expect(log).toContain("Install the newest Attache again to keep using it.");
+    expect(log).toMatch(/attache service run: the service refused to start; it starts again with `attache start` or when Attache is installed again\n$/);
+    expect(log.match(/Install the newest Attache again/g), "started once").toHaveLength(1);
   });
 
   it("stops the service cleanly when the supervisor itself is killed outright", async () => {

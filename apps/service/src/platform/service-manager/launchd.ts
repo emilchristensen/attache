@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { run } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
-import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { REFUSED_TO_START_FILE, type ServiceManager, type ServiceSpec } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
 import { sleep, waitUntil } from "../wait.ts";
 import { escapeXml } from "../xml.ts";
@@ -12,7 +12,7 @@ const LAUNCHCTL = "/bin/launchctl";
 const STOP_WAIT_MS = 10_000;
 const BOOTSTRAP_ATTEMPTS = 6;
 
-/** The LaunchAgent: starts at login, restarts on crash, runs the bundled runtime through the stable `current` link. */
+/** The LaunchAgent: starts at login, restarts when it stops unless it refused to start, runs the bundled runtime through the stable `current` link. */
 export function launchAgentPlist(label: string, home: string, spec: ServiceSpec): string {
   const p = escapeXml;
   const current = join(spec.installPrefix, "current");
@@ -37,7 +37,7 @@ export function launchAgentPlist(label: string, home: string, spec: ServiceSpec)
     <key>PATH</key><string>${p(`${home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key><dict><key>PathState</key><dict><key>${p(join(spec.stateDir, REFUSED_TO_START_FILE))}</key><false/></dict></dict>
   <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>${p(join(spec.stateDir, "logs/launchd.out.log"))}</string>
   <key>StandardErrorPath</key><string>${p(join(spec.stateDir, "logs/launchd.err.log"))}</string>

@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import { randomUUID } from "node:crypto";
 import { run, type RunResult } from "../run.ts";
 import type { PlatformLocations } from "../locations.ts";
-import type { ServiceManager, ServiceSpec } from "./types.ts";
+import { REFUSED_EXIT_CODE, type ServiceManager, type ServiceSpec } from "./types.ts";
 import { replaceWith } from "../replace-file.ts";
 import { waitUntil } from "../wait.ts";
 
@@ -24,7 +24,7 @@ const cQuoted = (s: string) => `"${s.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 const execArg = (s: string) => cQuoted(specifiers(s).replace(/\$/g, "$$$$"));
 const environment = (name: string, value: string) => `Environment=${cQuoted(`${name}=${specifiers(value)}`)}`;
 
-/** The systemd user unit: starts at login, restarts after a crash, runs the bundled runtime through the stable `current` link. */
+/** The systemd user unit: starts at login, restarts after a crash unless it refused to start, runs the bundled runtime through the stable `current` link. */
 export function systemdUnit(home: string, spec: ServiceSpec): string {
   const current = join(spec.installPrefix, "current");
   const logs = join(spec.stateDir, "logs");
@@ -42,6 +42,7 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
     environment("PATH", `${home}/.local/bin:/usr/local/bin:/usr/bin:/bin`),
     "Restart=always",
     "RestartSec=2",
+    `RestartPreventExitStatus=${REFUSED_EXIT_CODE}`,
     `StandardOutput=append:${specifiers(join(logs, "service.out.log"))}`,
     `StandardError=append:${specifiers(join(logs, "service.err.log"))}`,
     "",
