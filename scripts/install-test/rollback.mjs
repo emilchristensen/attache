@@ -58,7 +58,7 @@ export async function rollbackScenario(t) {
   // --- an Update that fails its health check rolls back, with the database from before it ---
   await server.publish(failing, join(root, "release", failing));
   const failed = runUpdate(attacheCli);
-  check("rollback", "attache update says the Update failed and Attache went back, with the reason and what became of the database", !failed.ok && failed.said.includes(`The Update to Attache ${failing} failed, so Attache went back to ${next}: the service did not become healthy`) && failed.said.includes(RESTORED), lastLines(failed.said));
+  check("rollback", "attache update says the Update failed and Attache went back, with the reason and what became of the database", !failed.ok && failed.said.includes(`The Update to ${failing} failed, so Attache went back to ${next}: the service did not become healthy`) && failed.said.includes(RESTORED), lastLines(failed.said));
   const health = await http("GET", "/health");
   check("rollback", "the previous version runs again, healthy", health.status === 200 && health.body.version === next && currentVersion() === next, `version ${health.body?.version}, current ${currentVersion()}`);
   check("rollback", "the database is the one from before the Update", JSON.stringify(schemaOf(db)) === JSON.stringify(schemaBefore), `${JSON.stringify(schemaBefore)} -> ${JSON.stringify(schemaOf(db))}`);
