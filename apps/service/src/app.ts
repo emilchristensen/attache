@@ -44,6 +44,7 @@ import { CaptureArrivals } from "./consolidation/arrivals.ts";
 import { queueCaptureConsolidation } from "./consolidation/capture.ts";
 import { Reader } from "./reader/reader.ts";
 import { isFullRefresh, lastSourceRefresh } from "./reader/last-refresh.ts";
+import { VERSION } from "./core/version.ts";
 
 export interface AppOptions {
   stateDir?: string;
@@ -63,7 +64,7 @@ export interface AppOptions {
   brainFormat?: BrainFormatSupport;
 }
 
-export const VERSION = process.env.ATTACHE_VERSION ?? "0.6.0";
+export { VERSION };
 /** How often housekeeping runs at the latest: stale drafts expire and snoozes end within this long of their time. Approvals end on time, see `untilNextHousekeeping`. */
 const HOUSEKEEPING_EVERY_MS = 30_000;
 

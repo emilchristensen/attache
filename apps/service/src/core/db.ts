@@ -1,4 +1,6 @@
 import { DatabaseSync, type PrepareOptions, type SQLInputValue, type StatementResultingChanges, type StatementSync } from "node:sqlite";
+import { recordSchemaWriter, refuseNewerSchema, schemaVersionOf } from "./schema-guard.ts";
+import { VERSION } from "./version.ts";
 
 export type Db = DatabaseSync;
 export type Row = Record<string, SQLInputValue>;
@@ -244,6 +246,11 @@ export const MIGRATIONS: readonly string[] = [
   `
   alter table attention_items add column meeting text;
   `,
+  // The Attache version that brought the schema to its current number, so an older Attache that refuses this
+  // database can name the version to install (see schema-guard.ts). Every later version keeps this table as it is.
+  `
+  create table schema_writer (id integer primary key check (id = 1), version text not null, schema_version integer not null, at text not null);
+  `,
   // ADR 0008: Replication paused on a Brain format newer than this Machine reads records that format, and an
   // Inbox item keeps the fields of its record a newer release wrote (JSON), so rewriting it here keeps them.
   `
@@ -283,25 +290,46 @@ class ServiceDatabase extends DatabaseSync {
 
 export function openDb(file: string): Db {
   const db = new ServiceDatabase(file);
-  db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma synchronous = normal;");
-  migrate(db);
+  try {
+    db.exec("pragma journal_mode = wal; pragma foreign_keys = on; pragma busy_timeout = 5000; pragma synchronous = normal;");
+    migrate(db);
+  } catch (err) {
+    db.close();
+    throw err;
+  }
   return db;
 }
 
-export function migrate(db: Db): { from: number; to: number } {
-  const from = Number((db.prepare("pragma user_version").get() as { user_version: number }).user_version);
-  for (let i = from; i < MIGRATIONS.length; i++) {
+export interface MigrateOptions {
+  /** The migrations to apply; this version's own by default. */
+  migrations?: readonly string[];
+  /** The Attache version applying them, recorded with each one. */
+  version?: string;
+}
+
+/**
+ * Apply the migrations the database has not had yet. A database past them was
+ * written by a newer Attache: it is refused unchanged with `NewerDatabaseError`,
+ * since running on a schema this version does not know could damage it.
+ */
+export function migrate(db: Db, opts: MigrateOptions = {}): { from: number; to: number } {
+  const migrations = opts.migrations ?? MIGRATIONS;
+  const version = opts.version ?? VERSION;
+  refuseNewerSchema(db, migrations.length, version);
+  const from = schemaVersionOf(db);
+  for (let i = from; i < migrations.length; i++) {
     db.exec("begin");
     try {
-      db.exec(MIGRATIONS[i]!);
+      db.exec(migrations[i]!);
       db.exec(`pragma user_version = ${i + 1}`);
+      recordSchemaWriter(db, i + 1, version);
       db.exec("commit");
     } catch (err) {
       db.exec("rollback");
       throw err;
     }
   }
-  return { from, to: MIGRATIONS.length };
+  return { from, to: migrations.length };
 }
 
 export function tx<T>(db: Db, fn: () => T): T {

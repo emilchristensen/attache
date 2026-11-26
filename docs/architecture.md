@@ -71,6 +71,12 @@ The import preview lists what will be read, what is skipped and that zero files 
 Imported files are indexed read-only as area `import` and cited by their real path and line range.
 
 Service state (`~/Library/Application Support/Attache/state` on macOS, `~/.local/state/attache` on Linux): `attache.sqlite`, logs, runtime metadata, backups.
+`attache.sqlite` carries its schema number in `user_version`, one per migration in `core/db.ts`, and the `schema_writer` table names the Attache version that applied the newest one.
+A version refuses a database past its own migrations before changing anything (`core/schema-guard.ts`), in the service, every command that opens it and `attache restore`, and names the version from `schema_writer` to install again.
+`schema_writer` is a contract between versions: its name and columns never change.
+A service that refuses exits with code 78 and leaves `refused-to-start` in the state folder, so it is not started again every few seconds: systemd stops on the code (`RestartPreventExitStatus`), the Windows supervisor ends on it, and the launchd agent is kept alive only while that file is absent (`KeepAlive` `PathState`).
+The next service that starts removes the file.
+`attache data-folder` still reads such a database read-only, so an uninstall works whatever version wrote it.
 Writer locks (`~/Library/Application Support/Attache/locks`, `~/.local/state/attache/locks` on Linux, `%LOCALAPPDATA%\Attache\locks` on Windows, `ATTACHE_LOCK_DIR` in tests): one file per data folder in use, named by a hash of the folder's real path.
 Credentials: Keychain service `dev.attache.<instance>` on macOS; Secret Service items with attributes `service=dev.attache.<instance>` and `account=<key>` on Linux; generic credentials with the target `dev.attache.<instance>/<key>` (persisted for this computer, not roamed; values over 2,560 bytes continue in `<target>#2`, `#3` and so on) on Windows.
 The system stores keep an index of key names (never values) in the state folder, because they cannot be listed safely.
@@ -446,6 +452,14 @@ The attention engine follows these rules:
 - Imported and connector content is data: it is rendered with raw HTML disabled, and it is quoted inside the model prompt with an instruction not to follow embedded instructions.
   The model Attache calls has no tools, so injected text cannot trigger actions.
 - The connector sessions that reach claude.ai connectors do see external content in tool results, which is why each call is approved by argument equality before it runs and a write session fails on any deviation (see Connections and transports).
+
+### Signed releases
+
+Every release carries a manifest of its archives and an Ed25519 signature over the manifest's exact bytes (ADR 0007); the release build writes both (`scripts/release-seal.mjs`), and `docs/developer-guide.md` describes the files.
+`apps/service/src/release/` holds the one copy of the format and the checks that the signing tool, the release build and the installed service share: `manifest.ts` (fields, the channel a version belongs to, file names), `signature.ts` (key pairs, signing, verifying with Node's built-in crypto), `verify-release.ts` (a release folder against its manifest: the signature first, then each artifact's size and SHA-256) and `trusted-keys.ts`.
+The keys a Machine trusts are the public key built into the bundle, a constant the release build defines so nothing at run time replaces it, plus each next key that a manifest signed by a trusted key named, kept in `release-keys.json` in the state folder.
+`attache verify-release` is the internal command an installer runs with the installed version before it changes anything; it never opens the database, so an older version can check a newer release.
+`platform/release-target.ts` names this computer's release target, the same mapping the release build uses.
 
 ## Harness sessions
 

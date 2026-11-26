@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Installation, upgrade, backup/restore and uninstall checks against
- * release artifacts built for this computer (macOS on Apple silicon, Linux or
+ * signed release artifacts (built with a test key) for this computer (macOS on Apple silicon, Linux or
  * Windows on x86_64), in a clean temporary profile (fresh home folder whose
  * name has a space and the letters æøå, a minimal PATH with no developer
  * tools, its own service name and port).
@@ -15,6 +15,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { installTestPlatform } from "./install-test/platform.mjs";
+import { removeSignedReleaseFolders, signedWithAnotherKey, tamperedArtifactInstaller, tamperedManifestInstaller, testKeyPair } from "./install-test/signed-releases.mjs";
 import { copyLogFolder } from "./service-logs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -53,6 +54,14 @@ function keepLogs(stateDir, name) {
 }
 /** Run an installer or command-line wrapper as the owner would from a terminal. */
 const sh = (file, args = [], env = cleanEnv) => P.runScript(file, args, env);
+/** Run an installer that is expected to refuse: whether it succeeded, and everything it said. */
+function shRefused(file) {
+  try {
+    return { ok: true, said: sh(file) };
+  } catch (e) {
+    return { ok: false, said: `${e.stdout ?? ""}${e.stderr ?? ""}` };
+  }
+}
 const attacheCli = (args, extraEnv = {}) => P.runScript(P.command(P.binDir, "attache"), args, { ...cleanEnv, ...extraEnv });
 /** The installed release's own runtime and service, without a wrapper in between. */
 const installed = (args, env = cleanEnv) => execFileSync(NODE, [SERVICE, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -156,7 +165,9 @@ function runClaudeHook(event, input) {
 async function main() {
   rmSync(INSTALL_LOGS, { recursive: true, force: true });
   // Always from the current source: a release left over from an earlier build would test old code.
-  for (const v of [FROM, TO]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target], { stdio: "inherit" });
+  // Both are signed with a test key made by the signing tool, which is also the key built into them.
+  const key = testKeyPair("install-test");
+  for (const v of [FROM, TO]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target, "--signing-key", key.signingKey, "--public-key", key.publicKey], { stdio: "inherit" });
   const machineBefore = P.machineFingerprint();
   console.log(`Clean profile HOME=${HOME} service=${P.serviceName} port=${PORT}`);
   for (const [path, text] of Object.entries(OWNER_FILES)) {
@@ -171,6 +182,7 @@ async function main() {
   const out1 = sh(artifact(FROM));
   const h1 = await http("GET", "/health");
   check("install", "clean-profile install starts the service", h1.status === 200 && h1.body.version === FROM, `version ${h1.body?.version}`);
+  check("signing", "a first install has no installed version to check the release with, and installs as before", !/checked that this release|cannot check signed releases/.test(out1), out1.split("\n")[1] ?? "");
   const pairUrl = /Open: (http:\/\/127\.0\.0\.1:\d+\/pair#code=\w+)/.exec(out1)?.[1];
   check("install", "installer prints a first-run pairing URL (opened automatically without ATTACHE_NO_OPEN)", !!pairUrl, pairUrl ?? out1.slice(-300));
   // Open that URL in a real browser and confirm first-run setup appears.
@@ -221,6 +233,36 @@ async function main() {
   const definitions = P.definitions();
   check("install", "reinstall leaves exactly one service definition", definitions.length === 1, definitions.join(","));
 
+  // --- the installed version holds the public key the build was given ---
+  const verifyWithInstalled = (folder) => {
+    try {
+      return JSON.parse(installed(["verify-release", folder, "--version", TO, "--state-dir", STATE])).verified === true;
+    } catch (e) {
+      return String(e.stderr ?? e.message).trim();
+    }
+  };
+  const genuine = verifyWithInstalled(join(ROOT, "release", TO));
+  check("signing", "the installed release verifies a release signed with the key its build was given", genuine === true, String(genuine));
+  const otherSigner = verifyWithInstalled(signedWithAnotherKey(ROOT, TO, P.target));
+  check("signing", "the installed release refuses the same release signed with another key", typeof otherSigner === "string" && otherSigner.includes("is not signed with Attache's key"), String(otherSigner));
+
+  // --- a tampered release is refused before anything on the Machine changes ---
+  const machineState = async () => ({
+    health: (await http("GET", "/health")).body?.version,
+    pid: (await http("GET", "/status", null, token)).body?.pid,
+    apps: readdirSync(join(PREFIX, "app")).sort().join(","),
+    current: readFileSync(join(PREFIX, "current", "VERSION"), "utf8").trim(),
+    backups: readdirSync(join(STATE, "backups")).sort().join(","),
+  });
+  for (const [what, installer] of [["a manifest changed after signing", tamperedManifestInstaller(ROOT, TO, P.target)], ["an archive changed after signing", tamperedArtifactInstaller(ROOT, TO, P.target)]]) {
+    const before = await machineState();
+    const r = shRefused(installer);
+    const after = await machineState();
+    const reason = what.startsWith("a manifest") ? "is not signed with Attache's key" : "does not match the signed manifest";
+    check("signing", `an installer carrying ${what} is refused with the reason`, !r.ok && r.said.includes(reason) && r.said.includes("nothing was changed"), r.said.trim().split("\n").slice(-2).join(" | "));
+    check("signing", `refusing ${what} changes nothing on the Machine (same version still running, no backup, no new folder)`, JSON.stringify(before) === JSON.stringify(after) && after.health === FROM, `${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+  }
+
   // --- upgrade preserves configuration and data ---
   // A speech model an earlier version downloaded for voice goes with the upgrade.
   const oldSpeechModel = join(STATE, "models", "ggml-base.en.bin");
@@ -233,7 +275,8 @@ async function main() {
     writeFileSync(join(skillsDir, name, "SKILL.md"), `---\nname: ${name}\n---\n`);
     writeFileSync(join(skillsDir, name, ".attache-skill.json"), JSON.stringify({ managedBy: "attache", stateDir: STATE, agents: ["claude-code"] }));
   }
-  sh(artifact(TO));
+  const outUpgrade = sh(artifact(TO));
+  check("signing", "an install over an existing install has the installed version check the new release first", outUpgrade.includes(`Attache ${FROM} checked that this release is signed by Attache.`), outUpgrade.split("\n").slice(0, 3).join(" | "));
   const h2 = await http("GET", "/health");
   token = await pairToken();
   const cfgAfterUpgrade = (await http("GET", "/config", null, token)).body.config;
@@ -360,6 +403,7 @@ async function main() {
   mkdirSync(join(ROOT, "test-results"), { recursive: true });
   writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, home: HOME, at: new Date().toISOString(), results }, null, 2));
   rmSync(HOME, { recursive: true, force: true });
+  removeSignedReleaseFolders();
   const failed = results.filter((r) => !r.ok).length;
   // The logs are kept for a failed run only.
   if (!failed) rmSync(INSTALL_LOGS, { recursive: true, force: true });
@@ -370,5 +414,6 @@ main().catch((e) => {
   console.error(e);
   keepLogs(STATE, "state");
   P.cleanup();
+  removeSignedReleaseFolders();
   process.exit(1);
 });

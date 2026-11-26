@@ -276,6 +276,8 @@ describe("the background service", () => {
       expect(text).toContain(`Environment="HOME=${home}"\n`);
       expect(text).toContain("StandardError=append:/opt/Attache 100%% $Test/state/logs/service.err.log\n");
       expect(text).toMatch(/\nRestart=always\n/);
+      // A service that refused to start, such as on a database a newer Attache wrote, is not started again and again.
+      expect(text).toMatch(/\nRestartPreventExitStatus=78\n/);
       expect(text).toMatch(/\[Install\]\nWantedBy=default\.target\n/);
       // Installing enables it for the next login, without starting it yet.
       expect(systemctl.state()).toEqual({ enabled: [unitName], active: [] });
@@ -312,7 +314,9 @@ describe("the background service", () => {
     const r = attache(["service", "install", "--prefix", "/opt/Attache Test", "--state-dir", "/opt/Attache Test/state", "--port", "7998"], { env });
     expect(r.stderr).toBe("");
     const text = readFileSync(plist, "utf8");
-    for (const s of ["<string>/opt/Attache Test/current/runtime/node</string>", "<string>/opt/Attache Test/current/service/attache-service.mjs</string>", "<string>7998</string>", `<key>ATTACHE_INSTANCE</key><string>${instance}</string>`, "<key>KeepAlive</key><true/>", "<key>RunAtLoad</key><true/>"]) expect(text).toContain(s);
+    for (const s of ["<string>/opt/Attache Test/current/runtime/node</string>", "<string>/opt/Attache Test/current/service/attache-service.mjs</string>", "<string>7998</string>", `<key>ATTACHE_INSTANCE</key><string>${instance}</string>`, "<key>RunAtLoad</key><true/>"]) expect(text).toContain(s);
+    // Kept running unless it refused to start, such as on a database a newer Attache wrote: launchd cannot tell exit codes apart, so the service leaves a file.
+    expect(text).toContain("<key>KeepAlive</key><dict><key>PathState</key><dict><key>/opt/Attache Test/state/refused-to-start</key><false/></dict></dict>");
     expect(JSON.parse(attache(["service", "status"], { env }).stdout)).toMatchObject({ loaded: false, definition: plist });
     const removed = attache(["service", "uninstall"], { env });
     expect(removed.stderr).toBe("");
