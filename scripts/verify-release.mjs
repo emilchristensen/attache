@@ -11,7 +11,7 @@
  *   pnpm verify -- --quick skip release build, install and platform suites
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -54,8 +54,15 @@ step("Unit, contract and integration tests (Vitest)", npx, ["vitest", "run", "--
 });
 
 if (!QUICK) {
-  step(`Release artifacts ${version}`, process.execPath, ["scripts/build-release.mjs", "--version", version]);
-  step(`Release artifacts ${nextPatch} (upgrade target)`, process.execPath, ["scripts/build-release.mjs", "--version", nextPatch]);
+  // Signed with a throwaway test key made by the signing tool; the release workflow signs with the real one.
+  const keys = join(OUT, "release-test-key");
+  rmSync(keys, { recursive: true, force: true });
+  mkdirSync(keys, { recursive: true });
+  const signing = ["--signing-key", join(keys, "release-signing-key.pem"), "--public-key", join(keys, "release-public-key.pem")];
+  step("Test release key", process.execPath, ["scripts/release-signing.mjs", "keygen", signing[1], signing[3]]);
+  step(`Release artifacts ${version}`, process.execPath, ["scripts/build-release.mjs", "--version", version, ...signing]);
+  step(`Release artifacts ${nextPatch} (upgrade target)`, process.execPath, ["scripts/build-release.mjs", "--version", nextPatch, ...signing]);
+  step(`Signed manifest of ${version} verifies`, process.execPath, ["scripts/release-signing.mjs", "verify", `release/${version}`, "--public-key", signing[3], "--version", version]);
   const e2eExtract = (file) => () => {
     try {
       const j = JSON.parse(readFileSync(join(OUT, `e2e-${file}.json`), "utf8"));
@@ -96,7 +103,7 @@ if (!QUICK) {
   }
 }
 
-const artifacts = [`release/${version}/Attache-Installer-${version}-macos-arm64.command`, `release/${version}/attache-${version}-macos-arm64.tar.gz`, `release/${version}/SHA256SUMS`];
+const artifacts = [`release/${version}/Attache-Installer-${version}-macos-arm64.command`, `release/${version}/attache-${version}-macos-arm64.tar.gz`, `release/${version}/attache-${version}-manifest.json`, `release/${version}/attache-${version}-manifest.json.sig`, `release/${version}/SHA256SUMS`];
 const missingArtifacts = QUICK ? [] : artifacts.filter((a) => !existsSync(join(ROOT, a)));
 
 const report = { version, at: new Date().toISOString(), quick: QUICK, host: { platform: process.platform, arch: process.arch, node: process.version }, steps, missingArtifacts, live };

@@ -17,7 +17,12 @@ const options = {
   format: "esm",
   sourcemap: "linked",
   legalComments: "none",
-  define: { "process.env.ATTACHE_VERSION": JSON.stringify(process.env.ATTACHE_VERSION ?? version) },
+  define: {
+    "process.env.ATTACHE_VERSION": JSON.stringify(process.env.ATTACHE_VERSION ?? version),
+    // The public key releases are signed with, a build input (ADR 0007): a constant in the bundle, so nothing at
+    // run time can replace it. A bundle built without one (development, the browser journeys) checks no release.
+    "process.env.ATTACHE_RELEASE_PUBLIC_KEY": process.env.ATTACHE_RELEASE_PUBLIC_KEY ? JSON.stringify(process.env.ATTACHE_RELEASE_PUBLIC_KEY) : "undefined",
+  },
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
   logLevel: "info",
 };

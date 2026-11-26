@@ -12,6 +12,9 @@
 #   ATTACHE_STATE_DIR  service state      (default: <prefix>\state)
 #   ATTACHE_PORT       service port       (default: 7427)
 #   ATTACHE_INSTANCE   instance name      (default: default; also names the logon task)
+#   ATTACHE_RELEASE_DIR  the release folder holding the signed manifest, its signature and the
+#                      archive this release came from (default: the folder this release was unpacked in,
+#                      which is where the one-step installer puts them)
 #
 # This file is plain ASCII on purpose: Windows PowerShell reads a script
 # without a byte order mark in the computer's legacy code page.
@@ -65,13 +68,35 @@ if ($Link -and $Link.LinkType -eq 'Junction') { $Previous = Split-Path -Leaf ([s
 Say ("Installing Attache $Version" + $(if ($Previous) { " (currently $Previous)" } else { '' }))
 New-Item -ItemType Directory -Force -Path (Join-Path $Prefix 'app'), (Join-Path $State 'logs') | Out-Null
 
-# If a service is already installed, back it up before changing anything.
 $OldNode = Join-Path $Current 'runtime\node.exe'
+$OldService = Join-Path $Current 'service\attache-service.mjs'
+
+# Over an existing install, the installed version checks this release against its signed manifest with the
+# key it holds, before anything changes (ADR 0007). A first install has nothing to check against.
+if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
+  # A version from before signed releases answers "Unknown command" on its error stream, which must not stop this script.
+  $Supported = $false
+  try {
+    $ErrorActionPreference = 'Continue'
+    $null = & $OldNode $OldService verify-release --supported 2>$null
+    $Supported = $LASTEXITCODE -eq 0
+  } finally { $ErrorActionPreference = 'Stop' }
+  if ($Supported) {
+    $ReleaseDir = if ($env:ATTACHE_RELEASE_DIR) { $env:ATTACHE_RELEASE_DIR } else { Split-Path -Parent $Src }
+    $null = & $OldNode $OldService verify-release $ReleaseDir --version $Version --target $Target --state-dir $State
+    if ($LASTEXITCODE -ne 0) { Fail "Attache $Previous could not confirm that this release is signed by Attache; nothing was changed. Download the installer again from the Attache releases page." }
+    Say "Attache $Previous checked that this release is signed by Attache."
+  } else {
+    Say "Attache $Previous cannot check signed releases, so this release is installed without that check."
+  }
+}
+
+# If a service is already installed, back it up before changing anything.
 if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   Say 'Backing up the existing installation'
   $Stamp = Get-Date -Format 'yyyyMMddHHmmss'
   $env:ATTACHE_STATE_DIR = $State
-  $null = & $OldNode (Join-Path $Current 'service\attache-service.mjs') backup --out (Join-Path $State "backups\pre-upgrade-$Previous-to-$Version-$Stamp.tar.gz")
+  $null = & $OldNode $OldService backup --out (Join-Path $State "backups\pre-upgrade-$Previous-to-$Version-$Stamp.tar.gz")
   if ($LASTEXITCODE -ne 0) { Fail 'could not back up the existing installation; nothing was changed' }
 }
 

@@ -7,20 +7,31 @@
  *   release/<version>/Attache-Installer-<version>-macos-arm64.command   one-step installer (macOS)
  *   release/<version>/Attache-Installer-<version>-linux-x64.sh          one-step installer (Linux)
  *   release/<version>/Attache-Installer-<version>-windows-x64.cmd       one-step installer (Windows)
- *   release/<version>/SHA256SUMS                         every artifact in the folder
+ *   release/<version>/attache-<version>-manifest.json    the signed manifest: version, channel, notes, each archive's size and SHA-256
+ *   release/<version>/attache-<version>-manifest.json.sig  its Ed25519 signature
+ *   release/<version>/SHA256SUMS                         every file above
+ *
+ * Every release is signed (ADR 0007). The public key is a build input, built
+ * into the service bundle, and the signing key must belong to it; test builds
+ * use a test key from `scripts/release-signing.mjs keygen`, the release
+ * workflow the real one. Each one-step installer carries the manifest, its
+ * signature and the archive (`scripts/release-seal.mjs`).
  *
  * The Node.js runtime is bundled (BUNDLED_NODE_VERSION in release-targets.mjs; Node 24 LTS has SQLite FTS5 built in),
  * so end users need no developer tools. macOS and Linux build every target;
  * Windows builds its own.
- * Usage: node scripts/build-release.mjs [--version x.y.z] [--target macos-arm64|linux-x64|windows-x64]
+ * Usage: node scripts/build-release.mjs --signing-key <private-key.pem> --public-key <public-key.pem>
+ *          [--version x.y.z] [--target macos-arm64|linux-x64|windows-x64] [--notes <notes.md>] [--next-public-key <public-key.pem>]
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, chmodSync, copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { releaseLauncher } from "../apps/service/src/platform/wrapper.ts";
-import { posixInstallerHeader, windowsInstallerHeader, WINDOWS_INSTALL_CMD } from "./release-installers.mjs";
+import { channelOf, manifestFileName } from "../apps/service/src/release/manifest.ts";
+import { sha256File } from "../apps/service/src/release/verify-release.ts";
+import { WINDOWS_INSTALL_CMD } from "./release-installers.mjs";
+import { assertKeyPair, sealRelease } from "./release-seal.mjs";
 import { BUNDLED_NODE_VERSION, chooseTarget, hostTarget, releaseArchive, RELEASE_TARGETS } from "./release-targets.mjs";
 import { zipFolder } from "./zip.mjs";
 
@@ -34,11 +45,16 @@ const NODE_VERSION = BUNDLED_NODE_VERSION;
 const OUT = join(ROOT, "release", VERSION);
 const STAGE = join(OUT, `.stage-${TARGET}`, `attache-${VERSION}`);
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit", ...opts });
-const sha256 = (file) =>
-  new Promise((res, rej) => {
-    const h = createHash("sha256");
-    createReadStream(file).on("data", (d) => h.update(d)).on("end", () => res(h.digest("hex"))).on("error", rej);
-  });
+
+/** A key or notes file named on the command line, as text. */
+function inputFile(name, { required }) {
+  const file = arg(name);
+  if (!file) {
+    if (required) throw new Error(`--${name} is missing: every release is signed. Make a test key pair with node scripts/release-signing.mjs keygen <private-key.pem> <public-key.pem>.`);
+    return undefined;
+  }
+  return readFileSync(file, "utf8");
+}
 
 async function download(url, file) {
   const res = await fetch(url);
@@ -62,7 +78,7 @@ async function nodeRuntime() {
   if (!existsSync(file)) await download(`${base}/${name}`, file);
   const sums = await (await fetch(`${base}/SHASUMS256.txt`)).text();
   const expected = sums.split("\n").find((l) => l.endsWith(`  ${name}`))?.split(/\s+/)[0];
-  const actual = await sha256(file);
+  const actual = await sha256File(file);
   if (!expected || expected !== actual) {
     rmSync(file, { force: true });
     throw new Error(`checksum mismatch for ${name}`);
@@ -104,13 +120,21 @@ function packArchive(archivePath) {
 }
 
 async function main() {
+  const signingKey = inputFile("signing-key", { required: true });
+  const publicKey = inputFile("public-key", { required: true });
+  // Before the long build: a pair that does not match could never verify the release it signs.
+  assertKeyPair(signingKey, publicKey);
+  const notes = inputFile("notes", { required: false });
+  const nextPublicKey = inputFile("next-public-key", { required: false });
+  // A version no release can carry is refused before the build, not after it.
+  channelOf(VERSION);
   console.log(`Building Attache ${VERSION} for ${T.label} (Node ${NODE_VERSION})`);
   const archiveName = releaseArchive(VERSION, TARGET);
   const installerName = T.installer(VERSION);
   mkdirSync(OUT, { recursive: true });
   for (const f of [archiveName, installerName, ".stage-" + TARGET]) rmSync(join(OUT, f), { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
-  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, ATTACHE_VERSION: VERSION } });
+  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, ATTACHE_VERSION: VERSION, ATTACHE_RELEASE_PUBLIC_KEY: publicKey } });
   buildWeb();
 
   const node = await nodeRuntime();
@@ -143,18 +167,8 @@ async function main() {
   packArchive(archivePath);
   rmSync(join(OUT, ".stage-" + TARGET), { recursive: true, force: true });
 
-  const installerPath = join(OUT, installerName);
-  const header = { version: VERSION, label: T.label, installer: installerName, tar: T.tar };
-  writeFileSync(installerPath, WINDOWS ? windowsInstallerHeader(header) : posixInstallerHeader(header));
-  appendFileSync(installerPath, readFileSync(archivePath));
-  chmodSync(installerPath, 0o755);
-
-  // Checksums cover every target built into this folder so far.
-  const artifacts = readdirSync(OUT).filter((f) => /\.(tar\.gz|zip|command|sh|cmd)$/.test(f)).sort();
-  const lines = [];
-  for (const f of artifacts) lines.push(`${await sha256(join(OUT, f))}  ${f}`);
-  writeFileSync(join(OUT, "SHA256SUMS"), lines.join("\n") + "\n");
-  for (const f of [archiveName, installerName, "SHA256SUMS"]) console.log(`  ${join(OUT, f)}  ${(statSync(join(OUT, f)).size / 1_048_576).toFixed(1)} MB`);
+  await sealRelease({ folder: OUT, version: VERSION, signingKey, publicKey, ...(notes !== undefined ? { notes } : {}), ...(nextPublicKey ? { nextPublicKey } : {}) });
+  for (const f of [archiveName, installerName, manifestFileName(VERSION), "SHA256SUMS"]) console.log(`  ${join(OUT, f)}  ${(statSync(join(OUT, f)).size / 1_048_576).toFixed(1)} MB`);
 }
 
 main().catch((e) => {
