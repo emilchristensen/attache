@@ -10,8 +10,8 @@ import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync }
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { runUpdate } from "./update.mjs";
+import { waitUntil } from "./wait.mjs";
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const lastLines = (said, n = 3) => said.trim().split("\n").slice(-n).join(" | ");
 const RESTORED = "The database was restored from the backup taken just before the Update.";
 
@@ -85,7 +85,7 @@ export async function rollbackScenario(t) {
     // The service refuses to start, which is the point.
   }
   const refused = join(state, "refused-to-start");
-  for (let i = 0; i < 80 && !existsSync(refused); i++) await sleep(250);
+  await waitUntil(20, () => existsSync(refused));
   check("rollback", "a Machine on a database a newer Attache wrote refuses to start", existsSync(refused));
   const backupsBefore = backups();
   const noBackup = shRefused(artifact(failing));

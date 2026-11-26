@@ -21,6 +21,7 @@ import { removeSignedReleaseFolders, signedWithAnotherKey, tamperedArtifactInsta
 import { startReleaseServer } from "./install-test/release-server.mjs";
 import { updateScenario } from "./install-test/update.mjs";
 import { rollbackScenario } from "./install-test/rollback.mjs";
+import { sleep, waitUntil } from "./install-test/wait.mjs";
 import { copyLogFolder } from "./service-logs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -77,7 +78,6 @@ function shRefused(file) {
 const attacheCli = (args, extraEnv = {}) => P.runScript(P.command(P.binDir, "attache"), args, { ...cleanEnv, ...extraEnv });
 /** The installed release's own runtime and service, without a wrapper in between. */
 const installed = (args, env = cleanEnv) => execFileSync(NODE, [SERVICE, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Which process listens on `port`, for a failure's detail (macOS and Linux). */
 function listenerOf(port) {
   if (P.os === "windows") return "(not looked up on Windows)";
@@ -148,14 +148,12 @@ async function pairToken() {
   const code = JSON.parse(url).code;
   return (await http("POST", "/pair", { code, kind: "cli", clientName: "install-test" })).body.token;
 }
-/** Wait until the service answers, and return what it says. */
-async function waitForHealth(attempts = 120) {
-  for (let i = 0; i < attempts; i++) {
-    const h = await http("GET", "/health").catch(() => null);
-    if (h?.status === 200) return h;
-    await sleep(250);
-  }
-  return null;
+/** Wait until the service answers, and return what it says; null when it did not within `seconds`. */
+async function waitForHealth(seconds = 30) {
+  return waitUntil(seconds, async () => {
+    const h = await http("GET", "/health");
+    return h.status === 200 ? h : null;
+  });
 }
 
 /**
@@ -247,12 +245,10 @@ async function main() {
   // --- the service manager brings the service back after a crash ---
   const crashedPid = (await http("GET", "/status", null, token)).body.pid;
   process.kill(crashedPid, "SIGKILL");
-  let restartedPid = null;
-  for (let i = 0; i < 120 && !restartedPid; i++) {
-    await sleep(250);
-    const s = await http("GET", "/status", null, token).catch(() => null);
-    if (s?.status === 200 && s.body.pid !== crashedPid) restartedPid = s.body.pid;
-  }
+  const restartedPid = await waitUntil(30, async () => {
+    const s = await http("GET", "/status", null, token);
+    return s.status === 200 && s.body.pid !== crashedPid ? s.body.pid : null;
+  });
   check("install", "the service is restarted after a crash", !!restartedPid, `pid ${crashedPid} -> ${restartedPid}`);
 
   // --- reinstall is idempotent ---
@@ -328,11 +324,7 @@ async function main() {
   writeFileSync(transcript, [{ type: "user", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "user", content: "Where do sessions go?" } }, { type: "assistant", sessionId: "inst-1", cwd: HOME, timestamp: new Date().toISOString(), message: { role: "assistant", content: [{ type: "text", text: "We decided they go to the data folder." }] } }].map((r) => JSON.stringify(r)).join("\n"));
   runClaudeHook("SessionEnd", { session_id: "inst-1", transcript_path: transcript, cwd: HOME, reason: "exit" });
   const saved = join(DATA, "evidence/sessions/transcripts/claude-code");
-  let sessionSaved = false;
-  for (let i = 0; i < 80 && !sessionSaved; i++) {
-    await sleep(250);
-    sessionSaved = existsSync(saved) && readdirSync(saved).some((f) => f.includes("inst-1"));
-  }
+  const sessionSaved = await waitUntil(20, () => existsSync(saved) && readdirSync(saved).some((f) => f.includes("inst-1")));
   rmSync(transcript, { force: true });
   check("install", "a Claude Code session that ends is saved to the data folder by the installed hook", sessionSaved);
 
@@ -369,7 +361,7 @@ async function main() {
   attacheCli(["stop"]);
   const stopped = await http("GET", "/health").then(() => false, () => true);
   attacheCli(["start"]);
-  const started = await waitForHealth(60);
+  const started = await waitForHealth(15);
   check("install", "attache stop / attache start control the service", stopped && !!started && P.loaded());
 
   // --- backup, then restore into a fresh profile ---
@@ -382,10 +374,7 @@ async function main() {
   const svc = spawn(NODE, [SERVICE, "serve", "--state-dir", freshState, "--port", String(restorePort)], { env: { ...cleanEnv, ATTACHE_STATE_DIR: freshState, ATTACHE_WEB_DIR: join(PREFIX, "current", "web"), ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_INSTANCE: `${INSTANCE}r` }, stdio: "ignore" });
   let restoredOk = false;
   try {
-    for (let i = 0; i < 120 && !restoredOk; i++) {
-      await sleep(250);
-      restoredOk = await fetch(`http://127.0.0.1:${restorePort}/api/v1/health`).then((r) => r.ok, () => false);
-    }
+    restoredOk = await waitUntil(30, () => fetch(`http://127.0.0.1:${restorePort}/api/v1/health`).then((r) => r.ok));
     const code = JSON.parse(installed(["pair", "--state-dir", freshState, "--json"], { ...cleanEnv, ATTACHE_PORT: String(restorePort) })).code;
     const tok = (await (await fetch(`http://127.0.0.1:${restorePort}/api/v1/pair`, { method: "POST", headers: { "content-type": "application/json", "x-attache-client": "1" }, body: JSON.stringify({ code, kind: "cli" }) })).json()).token;
     const get = async (p) => (await fetch(`http://127.0.0.1:${restorePort}/api/v1${p}`, { headers: { authorization: `Bearer ${tok}` } })).json();

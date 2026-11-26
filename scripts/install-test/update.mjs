@@ -9,8 +9,8 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { releaseArchive } from "../release-targets.mjs";
+import { waitUntil } from "./wait.mjs";
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Run `attache update`; whether it succeeded, and everything it said. */
 export function runUpdate(attacheCli) {
@@ -88,7 +88,7 @@ export async function updateScenario(t) {
   const heldIntact = P.os !== "windows" || ["VERSION", join("runtime", "node.exe"), join("service", "attache-service.mjs")].every((f) => existsSync(join(prefix, "app", from, f)));
   check("update", P.os === "windows" ? "only the current and previous versions remain, besides a folder a running program holds, which stays whole" : "only the current and previous versions remain after the Update", JSON.stringify(appsAfter) === JSON.stringify(expected) && heldIntact, `apps=${appsAfter.join(",")}`);
   // The service removes the staged release once it reads the outcome; on Windows the installer may take a moment to let go of it.
-  for (let i = 0; i < 40 && staged().length; i++) await sleep(250);
+  await waitUntil(10, () => staged().length === 0);
   check("update", "the installed release is no longer staged", staged().length === 0, staged().join(","));
   check("update", "the Update leaves exactly one service definition", P.definitions().length === 1, P.definitions().join(","));
   return token;
