@@ -1,4 +1,5 @@
 import { cliScript, stablePath } from "../agents/install.ts";
+import { posixShellWord } from "../platform/shell-command.ts";
 import { githubRepoOf, type GitHubAccess } from "./github.ts";
 import type { GitCredentials } from "./seams.ts";
 
@@ -7,13 +8,13 @@ export const CREDENTIAL_HELPER_COMMAND = "git-credential";
 /** The user name GitHub expects alongside a token. */
 export const TOKEN_USERNAME = "x-access-token";
 
-/** Quoted for the POSIX shell git runs helpers with (Git for Windows brings its own). */
-const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
-/** This install's `attache`: the bundled runtime and service through the stable `current` path, or `attache` on PATH. */
+/**
+ * This install's `attache`: the bundled runtime and service through the stable `current` path, or `attache` on PATH.
+ * Quoted for the POSIX shell git runs helpers with, on Windows too (Git for Windows brings its own).
+ */
 function attacheCommand(): string {
   const script = cliScript();
-  return script ? `${quote(stablePath(process.execPath))} ${quote(stablePath(script))}` : "attache";
+  return script ? `${posixShellWord(stablePath(process.execPath))} ${posixShellWord(stablePath(script))}` : "attache";
 }
 
 /**
@@ -32,7 +33,7 @@ export function githubCredentials(deps: { github: GitHubAccess; stateDir: string
       const connection = deps.github.connection();
       // An empty helper first drops every helper the Machine's git config lists.
       if (!connection) return ["credential.helper="];
-      return ["credential.helper=", `credential.helper=!${attacheCommand()} ${CREDENTIAL_HELPER_COMMAND} --state-dir ${quote(deps.stateDir)} --connection ${quote(connection.id)}`];
+      return ["credential.helper=", `credential.helper=!${attacheCommand()} ${CREDENTIAL_HELPER_COMMAND} --state-dir ${posixShellWord(deps.stateDir)} --connection ${posixShellWord(connection.id)}`];
     },
     env(remote): Readonly<Record<string, string>> {
       return githubRepoOf(remote)?.transport === "https" ? { ATTACHE_INSTANCE: deps.instance } : {};

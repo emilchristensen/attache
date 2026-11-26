@@ -23,6 +23,7 @@ import type { InstallerRunner, InstallRequest } from "../updates/installer-runne
 import { currentOs, type Os } from "./os.ts";
 import { powershellPath, runPowerShell } from "./powershell.ts";
 import { run } from "./run.ts";
+import { posixShellWord } from "./shell-command.ts";
 import { userManagerEnv } from "./service-manager/systemd.ts";
 import { escapeXml } from "./xml.ts";
 
@@ -61,9 +62,6 @@ function installerEnv(request: InstallRequest): NodeJS.ProcessEnv {
   };
 }
 
-/** A value as one single-quoted POSIX shell word. */
-const shellWord = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
 /**
  * A script that runs the installer in this process's environment, with its output in `log`: systemd and launchd start
  * a job with their own environment (the user manager's XDG folders, for one), so the environment travels in the script.
@@ -72,8 +70,8 @@ function launcherScript(installer: string, log: string, env: NodeJS.ProcessEnv, 
   // Exactly this environment, none of the job's own: `env -i` starts from nothing.
   const vars = Object.entries(env)
     .filter((e): e is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && !e[1].includes("\0"))
-    .map(([k, v]) => `  ${shellWord(`${k}=${v}`)} \\`);
-  const run = ["/usr/bin/env -i \\", ...vars, `  /bin/sh ${shellWord(installer)} >>${shellWord(log)} 2>&1`].join("\n");
+    .map(([k, v]) => `  ${posixShellWord(`${k}=${v}`)} \\`);
+  const run = ["/usr/bin/env -i \\", ...vars, `  /bin/sh ${posixShellWord(installer)} >>${posixShellWord(log)} 2>&1`].join("\n");
   // `after` runs once the installer is done, whatever its outcome: on macOS it removes the installer's own job.
   return ["#!/bin/sh", after ? `${run}\n${after}` : `exec ${run}`, ""].join("\n");
 }
@@ -104,7 +102,7 @@ async function startLaunchdJob(request: InstallRequest, installer: string, log: 
   const domain = `gui/${process.getuid?.() ?? 0}`;
   const label = `dev.attache.update.${(env.ATTACHE_INSTANCE ?? "default").replace(/[^A-Za-z0-9.-]/g, "-")}`;
   const launcher = join(request.release, "run-installer.sh");
-  writeFileSync(launcher, launcherScript(installer, log, env, `/bin/launchctl bootout ${shellWord(`${domain}/${label}`)}`), { mode: 0o700 });
+  writeFileSync(launcher, launcherScript(installer, log, env, `/bin/launchctl bootout ${posixShellWord(`${domain}/${label}`)}`), { mode: 0o700 });
   const plist = join(request.release, `${label}.plist`);
   writeFileSync(plist, installerJobPlist(label, launcher, log));
   // An earlier Update's job that did not remove itself would refuse the new one.
