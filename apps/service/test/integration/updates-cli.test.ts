@@ -59,6 +59,18 @@ describe("attache update --check", () => {
     expect(r.stderr).toMatch(/^attache: The check for an Update failed: 127\.0\.0\.1:\d+ answered HTTP 503/);
   });
 
+  it("fails with the reason when the check fails while an Update is ready, and still names that Update", async () => {
+    const server = await releases("0.7.0");
+    const svc = await machine("0.6.0", server);
+    await svc.put("/updates/settings", { mode: "ask_first" });
+    await svc.clock.advance(0);
+    server.failWith(503);
+    const r = await cli(svc, ["update", "--check"]);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("Attache 0.6.0, Update channel Stable\nAttache 0.7.0 is ready to install.\n");
+    expect(r.stderr).toMatch(/^attache: The check for an Update failed: 127\.0\.0\.1:\d+ answered HTTP 503/);
+  });
+
   it("says Updates are unavailable on a source checkout", async () => {
     const svc = await machine("0.6.0", await releases("0.7.0"), { releaseInstall: false });
     const r = await cli(svc, ["update", "--check"]);

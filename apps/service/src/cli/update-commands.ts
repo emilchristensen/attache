@@ -17,8 +17,10 @@ export function renderUpdateCheck(v: UpdatesView): { lines: string[]; failure: s
       return { lines: [head], failure: `Updates are unavailable here: ${v.reason ?? "this copy cannot update itself."}` };
     case "check_failed":
       return { lines: [head], failure: `The check for an Update failed: ${v.reason ?? "no reason was given."}` };
-    case "up_to_date":
+    // A verified Update stays ready when a later check fails: it is named, and the failure still fails the command.
     case "ready":
+      return { lines: [head, `${updatesHeadline(v)}.`], failure: v.reason && `The check for an Update failed: ${v.reason}` };
+    case "up_to_date":
     case "waiting_for_jobs":
     case "available":
       return { lines: [head, `${updatesHeadline(v)}.`], failure: null };

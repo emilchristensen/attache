@@ -26,7 +26,8 @@ const DETAIL: Record<UpdatesStatus, { detail: (v: UpdatesView) => string | null;
   up_to_date: { detail: (v) => `No newer release in the ${CHANNEL_LABEL[v.channel]} channel.`, check: true },
   available: { detail: () => "Select Install now to install it. Attache restarts on the new version.", check: true },
   downloading: { detail: () => "Attache checks it against its signature before anything installs.", check: false },
-  ready: { detail: () => "It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.", check: true },
+  // A later check that failed leaves the Update ready: its reason comes first.
+  ready: { detail: (v) => `${v.reason ? `${v.reason} ` : ""}It is downloaded and checked. Select Install now when it suits you; Attache restarts on the new version.`, check: true },
   waiting_for_jobs: {
     detail: (v) => `It installs once no Job is running, or after waiting 24 hours. Restart now installs it at once; ${v.jobs === 1 ? "the Job resumes from its" : "the Jobs resume from their"} last checkpoint.`,
     check: false,
