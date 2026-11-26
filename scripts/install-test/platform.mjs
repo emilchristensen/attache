@@ -127,7 +127,8 @@ function windows(loc, name) {
     runtime: (prefix) => join(prefix, "current", "runtime", "node.exe"),
     command: (binDir, name) => join(binDir, `${name}.cmd`),
     // As a terminal runs them: through cmd.exe (Node uses `cmd.exe /d /s /c "<command>"`).
-    runScript: (file, args, env) => execSync([`"${file}"`, ...args].join(" "), { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
+    // Through cmd, as an owner types it: a path with a space is quoted.
+    runScript: (file, args, env) => execSync([`"${file}"`, ...args.map((a) => (/\s/.test(a) ? `"${a}"` : a))].join(" "), { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }),
     // Claude Code runs hook commands through Git Bash on Windows.
     runHook: (command, input, env) => execFileSync(gitBash, ["-c", command], { input, env, encoding: "utf8" }),
     commandPath: (p) => p.replace(/\\/g, "/"),

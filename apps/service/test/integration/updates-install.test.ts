@@ -6,6 +6,7 @@ import type { UpdatesView } from "@attache/contracts";
 import { manifestFileName, signatureFileName } from "../../src/release/manifest.ts";
 import { releaseTarget } from "../../src/platform/release-target.ts";
 import { signedRelease } from "../fixtures/signed-release.ts";
+import { CHECK_EVERY_MS } from "../../src/updates/updater.ts";
 import { installerFinished, updatesWorld, type UpdatesMachine } from "./updates-world.ts";
 
 const { key, releases, machine, restart, outcomeSeen } = updatesWorld();
@@ -131,5 +132,79 @@ describe("after the installer finishes", () => {
     installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
     await outcomeSeen(after);
     expect((await view(after)).lastUpdate).toMatchObject({ outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
+  });
+});
+
+// A failed Update is never retried (spec #130, ticket #138): the version the installer switched back from is marked bad on this Machine.
+describe("after an Update rolled back", () => {
+  async function rolledBack(versions: string[]) {
+    const server = await releases(...versions);
+    const m = await machine("0.6.0", server);
+    await install(m);
+    const after = await restart(m, "0.6.0");
+    installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored", backup: join(after.stateDir, "backups", "pre-update-0.6.0-to-0.7.0-20261126101500.tar.gz") });
+    await outcomeSeen(after);
+    expect((await view(after)).lastUpdate?.outcome).toBe("rolled_back");
+    return { server, after };
+  }
+
+  it("shows the rollback, the versions involved, the reason and what became of the database", async () => {
+    const { after } = await rolledBack(["0.7.0"]);
+    expect((await view(after)).lastUpdate).toEqual({
+      outcome: "rolled_back",
+      from: "0.6.0",
+      to: "0.7.0",
+      at: expect.any(String),
+      reason: "the service did not become healthy",
+      database: "restored",
+      backup: join(after.stateDir, "backups", "pre-update-0.6.0-to-0.7.0-20261126101500.tar.gz"),
+    });
+  });
+
+  it("never offers that version again, also after another restart", async () => {
+    const { after } = await rolledBack(["0.7.0"]);
+    expect(await after.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null });
+    const again = await restart(after, "0.6.0");
+    expect(await again.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null });
+  });
+
+  it("in Automatic, the version it went back to never installs the failed one again, neither at its start nor 6 hours later", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    // The installer starts the earlier version again before it writes its outcome: that service checks at start.
+    const after = await restart(m, "0.6.0");
+    await after.clock.advance(0);
+    installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(after);
+    await after.clock.advance(CHECK_EVERY_MS);
+    expect(await view(after)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
+    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+  });
+
+  it("looks again at once, and no longer shows the failed version as available", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    // The version it went back to: it waits for the outcome, so its check at start is skipped.
+    const after = await restart(m, "0.6.0");
+    await after.clock.advance(0);
+    installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(after);
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "up_to_date", update: null, lastCheckedAt: expect.any(String), lastUpdate: { outcome: "rolled_back", to: "0.7.0" } });
+  });
+
+  it("forgets the failed version as the Update it found, in a service that read the rollback without restarting", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    installerFinished(m.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(m);
+    await m.clock.advance(0);
+    expect(await view(m)).toMatchObject({ status: "up_to_date", update: null });
+  });
+
+  it("still offers a newer release", async () => {
+    const { server, after } = await rolledBack(["0.7.0"]);
+    server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));
+    expect(await after.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "available", update: { version: "0.7.1" } });
   });
 });

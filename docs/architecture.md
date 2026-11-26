@@ -109,6 +109,7 @@ The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, 
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
 `Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
+`attache start` (and the installer's `service start`) first runs `systemctl --user reset-failed`, because a version that kept crashing, such as one an Update rolls back, can use up systemd's start limit, which refuses every later start until it is reset.
 Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Attache wrote it to (an `XDG_CONFIG_HOME` the login does not share).
 `systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Attache tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
 The service's output goes to `service.out.log` and `service.err.log` in the state folder's `logs`, as launchd's does on macOS.
@@ -479,6 +480,10 @@ The real runner (`platform/installer-runner.ts`) unpacks the archive and starts 
 The installer runs in exactly the service's environment, and the systemd unit pins the XDG base folders the installer saw (`UnsetEnvironment=` for those it did not have), so the user manager's own XDG folders never move an Update's unit, release or state elsewhere.
 The installer stops the service as a manual install does (Jobs resume after the restart), never pairs or opens the browser, keeps only the new and the previous version in `app/` (on Windows a folder still in use stays whole for the next install), and writes `<state>/updates/outcome.json`: `updated`, `rolled_back` or `failed` (stopped before changing anything), with from, to, at and a reason.
 Whichever service runs next reads that outcome into `lastUpdate`, watching for it every second while the installer is still at work, and clears the staging folder.
+Before it stops the running service, the installer backs up with the installed version's `attache backup` as `<state>/backups/pre-update-<from>-to-<to>-<stamp>.tar.gz` (skipped when `<state>/refused-to-start` says the installed version cannot open the database), and after a healthy install it runs `attache prune-backups`, which keeps the 3 newest pre-Update backups by modification time and never touches the owner's `attache-backup-*` (`updates/pre-update-backups.ts`; the label `pre-upgrade-` of older installers counts too).
+A rollback stops the new service, restores only the database from that backup with the new release's `attache restore <backup> --database-only` (`restoreDatabase` in `backup.ts`: the replaced database is kept with its write-ahead log as `attache.sqlite.pre-restore-<ms>`; unlike a full restore it leaves the data folder, paired clients and connections alone), switches `current` back and starts the previous version.
+Its outcome adds `database` (`restored`, `no_backup` or `restore_failed`) and `backup`, which `lastUpdate` carries and `rollbackDatabaseSentence` (`packages/contracts/src/wording.ts`) words; the restarted service marks `to` bad (`updates/bad-versions.ts`), so no check offers it again while a newer release still is.
+The install test's release built to fail its health check (`build-release.mjs --fail-health-check`, `updates/health-check-fault.ts`) migrates the database past every release and exits, so its rollback only leaves a running Machine when the database is restored.
 `attache update` checks, asks for the install, and waits for the outcome across the restart.
 
 Automatic updates has three modes.

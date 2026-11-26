@@ -5,6 +5,7 @@
  * test key; its installer runner only records what it is asked, and the journey plays the installer's outcome and the
  * restart on the new version. A development install, where Updates are unavailable, is in `settings.spec.ts`.
  */
+import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import type { UpdatesView } from "@attache/contracts";
 import { signedRelease, testReleaseKeys } from "../../apps/service/test/fixtures/signed-release.ts";
@@ -211,11 +212,11 @@ test("Automatic: an Update waits for a running Job; Restart now installs it at o
 
   // 0.8.0 did not come up, so the installer switched back: this service, still on 0.7.0, reads the outcome.
   const rolledBack = dashboardAnswer<UpdatesView>(page, "/updates", (v) => v.lastUpdate?.outcome === "rolled_back");
-  installerFinished(stack.stateDir, { outcome: "rolled_back", from: "0.7.0", to: "0.8.0", reason: "Attache 0.8.0 did not answer within 30 seconds." });
+  installerFinished(stack.stateDir, { outcome: "rolled_back", from: "0.7.0", to: "0.8.0", reason: "Attache 0.8.0 did not answer within 30 seconds.", database: "restored", backup: join(stack.stateDir, "backups", "pre-update-0.7.0-to-0.8.0-20261126090000.tar.gz") });
   await rolledBack;
   const last = section(page).locator('[data-last-update="rolled_back"]');
   await expect(last.getByRole("heading", { name: "The Update to 0.8.0 failed, so Attache went back to 0.7.0" })).toBeVisible();
-  await expect(last.getByText("Attache 0.8.0 did not answer within 30 seconds.")).toBeVisible();
+  await expect(last.getByText("Attache 0.8.0 did not answer within 30 seconds. The database was restored from the backup taken just before the Update.")).toBeVisible();
   await expect(section(page).locator("[data-installed-version]")).toHaveText("Attache 0.7.0");
   await capture(page, "rolled-back");
   expect(journeys.consoleErrors).toEqual([]);

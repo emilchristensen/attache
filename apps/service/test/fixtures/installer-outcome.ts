@@ -5,7 +5,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export function installerFinished(stateDir: string, outcome: { outcome: "updated" | "rolled_back" | "failed"; from: string; to: string; reason?: string }): void {
+export function installerFinished(
+  stateDir: string,
+  outcome: { outcome: "updated" | "rolled_back" | "failed"; from: string; to: string; reason?: string; database?: "restored" | "no_backup" | "restore_failed"; backup?: string },
+): void {
   mkdirSync(join(stateDir, "updates"), { recursive: true });
   writeFileSync(join(stateDir, "updates", "outcome.json"), JSON.stringify({ ...outcome, at: new Date().toISOString() }) + "\n");
 }

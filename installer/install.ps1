@@ -37,6 +37,10 @@ $Unattended = $env:ATTACHE_UNATTENDED -eq '1'
 $Previous = ''
 $State = ''
 $Prefix = ''
+# The pre-Update backup taken just before the switch, which a rollback restores the database from; empty when none was.
+$script:Backup = ''
+# What a rollback did with the database: restored, no_backup or restore_failed.
+$script:Database = ''
 # How far the install got: an outcome was written, the running service was stopped, `current` was switched.
 $script:Done = $false
 $script:Stopped = $false
@@ -44,10 +48,10 @@ $script:Switched = $false
 
 function Say([string]$Message) { Write-Host $Message }
 
-# Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason? }
+# Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason?, database?, backup? }
 # (apps/service/src/updates/install-records.ts). The bundled runtime writes the JSON, so any reason is escaped;
 # the values travel in the environment, where Windows PowerShell cannot drop an empty one or mangle a quote.
-$OutcomeScript = "const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + String.fromCharCode(10)); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
+$OutcomeScript = "const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; if (e.ATTACHE_OUTCOME_DATABASE) r.database = e.ATTACHE_OUTCOME_DATABASE; if (e.ATTACHE_OUTCOME_DATABASE && e.ATTACHE_OUTCOME_BACKUP) r.backup = e.ATTACHE_OUTCOME_BACKUP; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + String.fromCharCode(10)); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
 function Write-Outcome([string]$Kind, [string]$Reason) {
   $script:Done = $true
   if (-not $Unattended) { return }
@@ -60,6 +64,8 @@ function Write-Outcome([string]$Kind, [string]$Reason) {
     $env:ATTACHE_OUTCOME_FROM = $Previous
     $env:ATTACHE_OUTCOME_TO = $Version
     $env:ATTACHE_OUTCOME_REASON = $Reason
+    $env:ATTACHE_OUTCOME_DATABASE = $script:Database
+    $env:ATTACHE_OUTCOME_BACKUP = $script:Backup
     & $NewNode -e $OutcomeScript
     if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
   } catch {
@@ -75,13 +81,39 @@ function Fail([string]$Message) {
   exit 1
 }
 
-# After the switch: go back to the version that was installed, and start it.
+# While the service is stopped: put back the database from the pre-Update backup, so the version going back never
+# runs on a database this version migrated. Only the database: the data folder is not rolled back, and paired clients
+# and connections stay as they are. Without that backup (the installed version could not open the database a newer
+# Attache wrote, see below), the database stays as it is.
+function Restore-Database {
+  if (-not $script:Backup) {
+    $script:Database = 'no_backup'
+    Say "The database was not restored, because Attache $Previous could not open it to back it up before the Update."
+    return
+  }
+  $Restored = $false
+  try {
+    $ErrorActionPreference = 'Continue'
+    $null = & $NewNode $NewService restore $script:Backup --database-only --state-dir $State
+    $Restored = $LASTEXITCODE -eq 0
+  } catch { $Restored = $false } finally { $ErrorActionPreference = 'Stop' }
+  if ($Restored) {
+    $script:Database = 'restored'
+    Say 'The database was restored from the backup taken just before the Update.'
+  } else {
+    $script:Database = 'restore_failed'
+    Say "The database could not be restored from $($script:Backup). To restore it, run attache stop, then attache restore `"$($script:Backup)`" --database-only, then attache start."
+  }
+}
+
+# After the switch: go back to the version that was installed, with its database, and start it.
 function Rollback([string]$Why) {
   $Before = Join-Path $Prefix "app\$Previous"
   if ($Previous -and $Previous -ne $Version -and (Test-Path -LiteralPath $Before)) {
     Say "Rolling back to $Previous"
     $Current = Join-Path $Prefix 'current'
     & $NewNode $NewService service stop | Out-Null
+    Restore-Database
     if (Test-Path -LiteralPath $Current) { [IO.Directory]::Delete($Current) }
     New-Item -ItemType Junction -Path $Current -Value $Before | Out-Null
     & $NewNode $NewService service start | Out-Null
@@ -153,17 +185,22 @@ if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   }
 }
 
-# If a service is already installed, back it up before changing anything. A service that refused to start on a
-# database a newer Attache wrote (refused-to-start) cannot open that database to back it up, and could not run on a
-# copy of it either: installing a version that reads it is the way out, so it goes ahead without that backup.
+# If a service is already installed, back it up before changing anything: the pre-Update backup, which a rollback
+# restores the database from (only the newest 3 stay, see below; the owner's own backups are never touched).
+# A service that refused to start on a database a newer Attache wrote (refused-to-start) cannot open that database to
+# back it up, and could not run on a copy of it either: installing a version that reads it is the way out, so it goes
+# ahead without that backup, and a rollback then leaves the database as it is.
 if ($Previous -and (Test-Path -LiteralPath (Join-Path $State 'refused-to-start'))) {
   Say "Attache $Previous cannot open this Machine's database, which a newer Attache wrote, so Attache $Version is installed without a backup first."
 } elseif ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   Say 'Backing up the existing installation'
   $Stamp = Get-Date -Format 'yyyyMMddHHmmss'
   $env:ATTACHE_STATE_DIR = $State
-  $null = & $OldNode $OldService backup --out (Join-Path $State "backups\pre-upgrade-$Previous-to-$Version-$Stamp.tar.gz")
+  # The pre-update- label tells it apart from the owner's backups (apps/service/src/updates/pre-update-backups.ts).
+  $Taken = Join-Path $State "backups\pre-update-$Previous-to-$Version-$Stamp.tar.gz"
+  $null = & $OldNode $OldService backup --out $Taken
   if ($LASTEXITCODE -ne 0) { Fail 'could not back up the existing installation; nothing was changed' }
+  $script:Backup = $Taken
 }
 
 # Stop the running service (if any) and wait until it has really stopped.
@@ -224,6 +261,10 @@ for ($i = 0; $i -lt 60 -and -not $Healthy; $i++) {
 if (-not $Healthy) { Rollback "the service did not become healthy; see the logs in $State\logs" }
 
 Say "Attache $Version is running."
+
+# Only the 3 newest pre-Update backups stay; the owner's own backups are never touched.
+$null = & $NewNode $NewService prune-backups --state-dir $State
+if ($LASTEXITCODE -ne 0) { Say 'Could not remove older backups taken before an Update; the next install tries again.' }
 
 # Keep this version and the one it replaced, for going back; remove the rest, and folders an earlier install left.
 # A version whose runtime still runs (such as a Harness's MCP server) stays, whole, until the next install: Windows

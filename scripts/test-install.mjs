@@ -9,6 +9,7 @@
  * service's logs to test-results/install-logs. Usage:
  *   node scripts/test-install.mjs [--from 0.1.0 --to 0.1.1] [--next 0.1.2] [--port 7690]
  * `--next` is the release `attache update` installs over `--to` (by default `--to` with its last number raised by one).
+ * The two versions after `--next` are a release built to fail its health check, which rolls back, and a good one after it.
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -19,13 +20,18 @@ import { installTestPlatform } from "./install-test/platform.mjs";
 import { removeSignedReleaseFolders, signedWithAnotherKey, tamperedArtifactInstaller, tamperedManifestInstaller, testKeyPair } from "./install-test/signed-releases.mjs";
 import { startReleaseServer } from "./install-test/release-server.mjs";
 import { updateScenario } from "./install-test/update.mjs";
+import { rollbackScenario } from "./install-test/rollback.mjs";
 import { copyLogFolder } from "./service-logs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const arg = (n, d) => (process.argv.includes(`--${n}`) ? process.argv[process.argv.indexOf(`--${n}`) + 1] : d);
 const FROM = arg("from", "0.1.0");
 const TO = arg("to", "0.1.1");
-const NEXT = arg("next", TO.replace(/\d+$/, (n) => String(Number(n) + 1)));
+/** `v` with its last number raised by `by`. */
+const raised = (v, by = 1) => v.replace(/\d+$/, (n) => String(Number(n) + by));
+const NEXT = arg("next", raised(TO));
+const FAILING = raised(NEXT);
+const NEWER = raised(NEXT, 2);
 const PORT = Number(arg("port", "7690"));
 const INSTANCE = `installtest${process.pid}`;
 // The real path, as the installed service reports its own (no /var symlink on macOS, no 8.3 short names on Windows).
@@ -184,11 +190,15 @@ async function main() {
   // Always from the current source: a release left over from an earlier build would test old code.
   // Both are signed with a test key made by the signing tool, which is also the key built into them.
   const key = testKeyPair("install-test");
-  for (const v of [FROM, TO, NEXT]) execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target, "--signing-key", key.signingKey, "--public-key", key.publicKey], { stdio: "inherit" });
+  for (const v of [FROM, TO, NEXT, FAILING, NEWER]) {
+    const fault = v === FAILING ? ["--fail-health-check"] : [];
+    execFileSync(process.execPath, [join(ROOT, "scripts/build-release.mjs"), "--version", v, "--target", P.target, "--signing-key", key.signingKey, "--public-key", key.publicKey, ...fault], { stdio: "inherit" });
+  }
   const machineBefore = P.machineFingerprint();
   // GitHub Releases, here: the installed service lists releases from it (ATTACHE_RELEASE_FEED_URL, which the installer passes on to the service).
+  // A release is published only when a scenario installs it: a service checks when it starts and, in Automatic, installs
+  // a newer release on its own, which would move the Machine to another version in the middle of a check.
   releaseServer = await startReleaseServer();
-  for (const v of [FROM, TO]) await releaseServer.publish(v, join(ROOT, "release", v));
   cleanEnv = { ...cleanEnv, ATTACHE_RELEASE_FEED_URL: releaseServer.feedUrl };
   console.log(`Clean profile HOME=${HOME} service=${P.serviceName} port=${PORT}`);
   for (const [path, text] of Object.entries(OWNER_FILES)) {
@@ -302,11 +312,11 @@ async function main() {
   token = await pairToken();
   const cfgAfterUpgrade = (await http("GET", "/config", null, token)).body.config;
   const hits = (await http("GET", "/memory/search?q=Helios budget", null, token)).body.hits;
-  const preUpgrade = readdirSync(join(STATE, "backups")).filter((f) => f.startsWith(`pre-upgrade-${FROM}-to-${TO}`));
+  const preUpgrade = readdirSync(join(STATE, "backups")).filter((f) => f.startsWith(`pre-update-${FROM}-to-${TO}-`));
   check("install", "upgrade runs the new version", h2.body.version === TO, `version ${h2.body.version}`);
   check("install", "upgrade preserves configuration", JSON.stringify(cfgAfterUpgrade) === JSON.stringify(cfgBefore));
   check("install", "upgrade preserves data (decision still retrievable)", hits.some((h) => h.text.includes("Cap Helios at 40k")));
-  check("data", "upgrade takes a pre-upgrade backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
+  check("data", "upgrade takes a pre-Update backup first", preUpgrade.length === 1, preUpgrade[0] ?? "none");
   check("install", "upgrade removes the speech model voice downloaded", !existsSync(oldSpeechModel));
   const skillsLeft = readdirSync(skillsDir).sort();
   check("install", "upgrade removes the save and audit skills Attache installed, and leaves other skills", JSON.stringify(skillsLeft) === JSON.stringify(["my-own-skill"]), skillsLeft.join(", "));
@@ -351,6 +361,9 @@ async function main() {
 
   // --- attache update installs a newer release, unattended ---
   token = await updateScenario({ root: ROOT, P, prefix: PREFIX, state: STATE, from: FROM, to: TO, next: NEXT, check, http, attacheCli, pairToken, machineState, cfgBefore, server: releaseServer });
+
+  // --- an Update that fails its health check rolls back and is never offered again; only 3 pre-Update backups stay ---
+  token = await rollbackScenario({ root: ROOT, prefix: PREFIX, state: STATE, next: NEXT, failing: FAILING, newer: NEWER, check, http, attacheCli, pairToken, shRefused, artifact, waitForHealth, server: releaseServer });
 
   // --- service control from the command line ---
   attacheCli(["stop"]);
@@ -406,7 +419,8 @@ async function main() {
   check("data", "uninstall removes exactly the hooks Attache added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
   const mcpAfterUninstall = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers;
   check("data", "uninstall removes the MCP server Attache added to Claude Code", mcpAfterUninstall === undefined, JSON.stringify(mcpAfterUninstall));
-  sh(artifact(TO));
+  // The newest release: the service checks when it starts, and would install a newer one on its own.
+  sh(artifact(NEWER));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
   check("data", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
@@ -425,7 +439,7 @@ async function main() {
   check("data", "the owner's own Attache services on this computer are unchanged", JSON.stringify(machineBefore) === JSON.stringify(P.machineFingerprint()), JSON.stringify(P.machineFingerprint()));
 
   mkdirSync(join(ROOT, "test-results"), { recursive: true });
-  writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, next: NEXT, home: HOME, at: new Date().toISOString(), results }, null, 2));
+  writeFileSync(join(ROOT, "test-results/install-results.json"), JSON.stringify({ target: P.target, from: FROM, to: TO, next: NEXT, failing: FAILING, newer: NEWER, home: HOME, at: new Date().toISOString(), results }, null, 2));
   rmSync(HOME, { recursive: true, force: true });
   removeSignedReleaseFolders();
   await releaseServer.close();

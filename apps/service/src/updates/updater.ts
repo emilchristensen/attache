@@ -24,16 +24,19 @@
  * step at a time (`serial`), so a timer, Check now and Install now never
  * download twice or start two installers.
  *
+ * A rolled-back Update (#138): `settle()` marks the version the installer switched back from bad
+ * (`bad-versions.ts`), so a check never offers it again; `lastUpdate` says what became of the database.
+ *
  * Still to come, extending this class rather than adding a second one:
- * - marking a rolled-back version bad (`markVersionBad`) and the notification for it (#138).
+ * - the system notification for a rolled-back Update (#141): raise it once per outcome, keyed on the outcome's `at`.
  */
 import type { LastUpdateView, UpdateChannel, UpdateMode, UpdateSettings, UpdatesStatus, UpdatesView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import { ReleaseRefusedError } from "../release/verify-release.ts";
 import type { Clock, TimerHandle } from "../replication/clock.ts";
-import { badVersions } from "./bad-versions.ts";
+import { badVersions, markVersionBad } from "./bad-versions.ts";
 import { findUpdate, unreachable, UpdateCheckError, type FoundUpdate } from "./find-update.ts";
-import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome } from "./install-records.ts";
+import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome, type OutcomeRecord } from "./install-records.ts";
 import type { InstallerRunner } from "./installer-runner.ts";
 import { JobWait, type RunningJobs } from "./job-wait.ts";
 import type { ReleaseFeed } from "./release-feed.ts";
@@ -420,8 +423,14 @@ export class Updater {
     const outcome = readOutcome(this.deps.stateDir);
     if (outcome) {
       this.lastUpdate = lastUpdateOf(outcome, request);
+      // A version the installer switched back from is never tried again here, while a newer release still is.
+      // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
+      if (outcome.outcome === "rolled_back") this.markBad(outcome);
       this.clearStaged();
-      if (this.status === "installing") this.set(this.resting());
+      if (this.status !== "installing") return;
+      this.set(this.resting());
+      // After a rollback, what this Machine may take changed, and its check at start was skipped while it waited: look again now.
+      if (outcome.outcome === "rolled_back") this.scheduleCheck(0);
       return;
     }
     if (!request) return;
@@ -433,6 +442,14 @@ export class Updater {
     }
     if (this.status !== "installing") this.set("installing");
     this.watchForOutcome();
+  }
+
+  /** Mark the version a rollback switched back from bad, and forget it as the Update found, so nothing offers it. */
+  private markBad(outcome: OutcomeRecord): void {
+    const at = Number.isNaN(Date.parse(outcome.at)) ? this.deps.clock.now() : new Date(outcome.at);
+    markVersionBad(this.deps.stateDir, { version: outcome.to, reason: outcome.reason ?? "The installer gave no reason.", at });
+    if (this.found?.manifest.version === outcome.to) this.found = null;
+    if (this.staged?.manifest.version === outcome.to) this.staged = null;
   }
 
   private watchForOutcome(): void {

@@ -3,7 +3,7 @@
  * (`GET /updates`), which of Check now, Install now and Restart now it offers, and what the last Update did.
  * Pure, so every status has a table test; the line under the masthead (#141) words its notices from here too.
  */
-import { plural, type LastUpdateView, type UpdateChannel, type UpdatesStatus, type UpdatesView } from "@attache/contracts";
+import { plural, rollbackDetail, type LastUpdateView, type UpdateChannel, type UpdatesStatus, type UpdatesView } from "@attache/contracts";
 
 export const CHANNEL_LABEL: Record<UpdateChannel, string> = { stable: "Stable", beta: "Beta" };
 
@@ -72,14 +72,14 @@ export function lastCheckShown(v: UpdatesView): { at: string; result: string | n
 
 /**
  * What the last Update did. `tone` is the `state` class it shows with.
- * A rollback's database sentence (#138: `rollbackDatabaseSentence` in contracts' `wording.ts`) belongs in its `detail`.
+ * A rollback's `detail` is why it failed, then what became of the database (`rollbackDetail` in contracts' `wording.ts`).
  */
 export function lastUpdateShown(last: LastUpdateView): { headline: string; detail: string | null; tone: "ok" | "error" | "partial" } {
   switch (last.outcome) {
     case "updated":
       return { headline: `Attache updated from ${last.from} to ${last.to}`, detail: null, tone: "ok" };
     case "rolled_back":
-      return { headline: `The Update to ${last.to} failed, so Attache went back to ${last.from}`, detail: last.reason, tone: "error" };
+      return { headline: `The Update to ${last.to} failed, so Attache went back to ${last.from}`, detail: rollbackDetail(last), tone: "error" };
     case "failed":
       return { headline: `The Update to ${last.to} did not install, so Attache stayed on ${last.from}`, detail: last.reason, tone: "partial" };
   }

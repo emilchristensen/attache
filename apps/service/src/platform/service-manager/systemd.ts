@@ -124,6 +124,10 @@ export class SystemdServiceManager implements ServiceManager {
 
   async start(): Promise<void> {
     if (!existsSync(this.definition)) throw new Error(`Attache is not set up as a background service here: ${this.definition} is missing. Run the Attache installer again.`);
+    // Asked to start, it starts: a version that kept crashing under Restart=always (one an Update then rolled back) can
+    // have used up systemd's start limit, which refuses every start, the owner's and the installer's, until reset.
+    // Resetting a unit that has not failed changes nothing; one systemd does not know yet is not an error either.
+    await this.systemctl(["reset-failed", this.name]);
     await this.must(["restart", this.name]);
   }
 

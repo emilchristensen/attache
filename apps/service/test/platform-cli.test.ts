@@ -298,6 +298,20 @@ describe("the background service", () => {
       expect(systemctl.state()).toEqual({ enabled: [], active: [] });
     });
 
+    it("starts a service that systemd stopped restarting after it crashed too often, as after an Update that rolled back", () => {
+      const systemctl = fakeSystemctl();
+      const home = tempDir("attache-systemd-home-");
+      const instance = `limit${process.pid}`;
+      const env = { HOME: home, ATTACHE_INSTANCE: instance };
+      const unitName = `attache-${instance}.service`;
+      expect(linux(["service", "install", "--prefix", join(home, "attache"), "--state-dir", join(home, "state"), "--port", "7998"], env, systemctl).stderr).toBe("");
+      systemctl.hitStartLimit(unitName);
+
+      const r = linux(["start"], env, systemctl);
+      expect(r.stderr).toBe("");
+      expect(systemctl.state().active).toEqual([unitName]);
+    });
+
     it("passes on the release feed address the installer was given, so a test's service reads its releases there", () => {
       const home = tempDir("attache-systemd-home-");
       const unitText = (extra: Record<string, string>) => {
