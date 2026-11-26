@@ -130,7 +130,8 @@ describe("The Brain format rises only when every Machine can read it", () => {
 
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {
     world = await startMachines(["Mac", "PC"]);
-    let [mac, pc] = world.machines as [TestMachine, TestMachine];
+    const [first, pc] = world.machines as [TestMachine, TestMachine];
+    let mac = first;
     await settle([pc, mac]);
     // PC keeps working for 31 days and sends its record again; Mac is away all that time, so its copy of PC's record is 31 days old.
     pc.clock.skip(31 * DAY);

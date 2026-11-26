@@ -1,22 +1,24 @@
 /**
  * The line under the masthead about Attache itself (spec #130, "Dashboard"): in the same full-width place as the
  * Connection banner, after it when both show. It shows one of:
- * - "Attache updated to 0.7.0 · What changed", for one day after an Update;
- * - "Attache 0.7.0 is ready · Install", in Ask first;
+ * - "Attache updated from 0.6.1 to 0.7.0 · What changed", for one day after an Update;
+ * - "Attache 0.7.0 is ready to install · Install", in Ask first;
  * - "Attache 0.7.0 is waiting for 2 Jobs to finish · Restart now";
  * - "Installing Attache 0.7.0", while the installer runs, so the line pressed Install on says what happens now;
  * - "The Update to 0.7.0 failed, so Attache went back to 0.6.1 · Details", for one day after a rollback;
  * - "Update this Machine to keep replicating", while Replication is paused because the Brain is in a Brain format this
- *   Machine's Attache cannot read (#143, ADR 0008). Its action is the way to that Update: Install or Restart now once
- *   one waits, otherwise Details in Settings' Updates section, which also tells when Updates are Off.
+ *   Machine's Attache cannot read (#143, ADR 0008). Its action is the way to that Update: Install or Restart now where
+ *   Settings offers them (contracts' `installAction`), otherwise Details in Settings' Updates section, which also tells
+ *   when Updates are Off.
  * None of them counts toward the Decision count or turns on the Attention dot: they are not decisions.
+ * The sentences are the ones Settings and `attache update` say (contracts' `update-wording.ts`).
  *
  * Pure, so every state has a table test (`test/update-line.test.ts`). `LINES` holds the rules in the order they win:
  * what waits for the owner or happens now comes before news of the last Update.
  * A later line adds its input to `UpdateLineInput`, its state and action to the unions below, and one rule to `LINES`
  * where it ranks; `components/UpdateLine.tsx` renders any rule's line.
  */
-import { plural, type LastUpdateView, type ReplicationView, type UpdatesView } from "@attache/contracts";
+import { installAction, lastUpdateHeadline, PAUSED_FOR_UPDATE, updatesHeadline, type LastUpdateView, type ReplicationView, type UpdatesView } from "@attache/contracts";
 
 /** How long the line tells of a finished Update: one day, then Settings' Updates section keeps it. */
 export const UPDATED_LINE_MS = 24 * 60 * 60_000;
@@ -65,18 +67,21 @@ function recent(input: UpdateLineInput): LastUpdateView | null {
   return age < UPDATED_LINE_MS ? last : null;
 }
 
+/** The action for Install now or Restart now, worded for the line. */
+function lineAction(kind: "install" | "restart"): UpdateLineAction {
+  return kind === "install" ? { kind: "install", label: "Install" } : { kind: "restart", label: "Restart now" };
+}
+
 const pending: Rule = ({ updates: v }) => {
-  const version = v?.update?.version;
-  if (!v || !version) return null;
+  if (!v) return null;
+  const version = v.update?.version ?? "";
   switch (v.status) {
     case "installing":
-      return { key: `installing:${version}`, state: "installing", tone: "plain", text: `Installing Attache ${version}`, action: null };
-    case "waiting_for_jobs": {
-      const jobs = v.jobs ?? 0;
-      return { key: `waiting:${version}:${jobs}`, state: "waiting_for_jobs", tone: "plain", text: `Attache ${version} is waiting for ${plural(jobs, "Job")} to finish`, action: { kind: "restart", label: "Restart now" } };
-    }
+      return { key: `installing:${version}`, state: "installing", tone: "plain", text: updatesHeadline(v), action: null };
+    case "waiting_for_jobs":
+      return v.update ? { key: `waiting:${version}:${v.jobs ?? 0}`, state: "waiting_for_jobs", tone: "plain", text: updatesHeadline(v), action: lineAction("restart") } : null;
     case "ready":
-      return { key: `ready:${version}`, state: "ready", tone: "plain", text: `Attache ${version} is ready`, action: { kind: "install", label: "Install" } };
+      return v.update ? { key: `ready:${version}`, state: "ready", tone: "plain", text: updatesHeadline(v), action: lineAction("install") } : null;
     default:
       return null;
   }
@@ -86,22 +91,19 @@ const lastUpdate: Rule = (input) => {
   const last = recent(input);
   switch (last?.outcome) {
     case "updated":
-      return { key: `updated:${last.to}:${last.at}`, state: "updated", tone: "plain", text: `Attache updated to ${last.to}`, action: { kind: "what_changed", label: "What changed", version: last.to, notes: last.notes } };
+      return { key: `updated:${last.to}:${last.at}`, state: "updated", tone: "plain", text: lastUpdateHeadline(last), action: { kind: "what_changed", label: "What changed", version: last.to, notes: last.notes } };
     case "rolled_back":
-      return { key: `rolled_back:${last.to}:${last.at}`, state: "rolled_back", tone: "danger", text: `The Update to ${last.to} failed, so Attache went back to ${last.from}`, action: { kind: "details", label: "Details" } };
+      return { key: `rolled_back:${last.to}:${last.at}`, state: "rolled_back", tone: "danger", text: lastUpdateHeadline(last), action: { kind: "details", label: "Details" } };
     default:
       // An Update that installed nothing left the Machine as it was: Settings tells it.
       return null;
   }
 };
 
-const PAUSED_TEXT = "Update this Machine to keep replicating";
-
-/** The way to the Update a paused Machine needs: the one that waits for the owner, else where Updates are told. */
+/** The way to the Update a paused Machine needs: the button Settings offers for it, else where Updates are told. */
 function pausedAction(v: UpdatesView | null): UpdateLineAction {
-  if (v?.update && v.status === "ready") return { kind: "install", label: "Install" };
-  if (v?.update && v.status === "waiting_for_jobs") return { kind: "restart", label: "Restart now" };
-  return { kind: "details", label: "Details" };
+  const kind = v ? installAction(v) : null;
+  return kind ? lineAction(kind) : { kind: "details", label: "Details" };
 }
 
 /** Replication waits for this Machine to read the Brain's format: the line asks for the Update until it is installed. */
@@ -109,7 +111,7 @@ const paused: Rule = ({ replication, updates, inUpdatesSection }) => {
   const pause = replication?.status === "paused" ? replication.pause : null;
   if (!pause) return null;
   const action = inUpdatesSection ? null : pausedAction(updates);
-  return { key: `paused:${pause.brainFormat}:${action?.kind ?? "none"}`, state: "paused", tone: "warn", text: PAUSED_TEXT, action };
+  return { key: `paused:${pause.brainFormat}:${action?.kind ?? "none"}`, state: "paused", tone: "warn", text: PAUSED_FOR_UPDATE, action };
 };
 
 /** Installing Attache: what happens now, also when it is the Update a paused Replication waits for. */

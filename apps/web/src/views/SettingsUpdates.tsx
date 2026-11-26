@@ -1,10 +1,10 @@
 import { useRef, useState, type ReactNode } from "react";
-import { settingsLockedWhileInstalling, type LastUpdateView, type UpdateChannel, type UpdateMode, type UpdatesView } from "@attache/contracts";
+import { CHANNEL_LABEL, settingsLockedWhileInstalling, type LastUpdateView, type UpdateChannel, type UpdateMode, type UpdatesView } from "@attache/contracts";
 import { post, put } from "../api.ts";
 import { Disclosure } from "../components/Disclosure.tsx";
 import { ReleaseNotes } from "../components/ReleaseNotes.tsx";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
-import { CHANNEL_LABEL, lastCheckShown, lastUpdateShown, updatesShown } from "../updates.ts";
+import { lastCheckShown, lastUpdateShown, updatesShown } from "../updates.ts";
 import { useUpdates } from "../updates-live.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -91,10 +91,7 @@ function Status({ view, busy, act }: { view: UpdatesView; busy: string | null; a
   );
 }
 
-/**
- * What the last Update did. A rollback's reason is the installer's; the database sentence #138 adds to a rollback
- * (`rollbackDatabaseSentence`) goes in `lastUpdateShown`'s detail, so this view and the line under the masthead say it alike.
- */
+/** What the last Update did. A rollback's detail is the installer's reason, then what became of the database. */
 function LastUpdate({ last }: { last: LastUpdateView }) {
   const shown = lastUpdateShown(last);
   return (

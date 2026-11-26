@@ -1,4 +1,4 @@
-import { plural, rollbackDetail, type LastUpdateView, type UpdatesView } from "@attache/contracts";
+import { CHANNEL_LABEL, installAction, lastUpdateDetail, lastUpdateHeadline, UPDATES_OFF_DETAIL, updatesHeadline, type LastUpdateView, type UpdatesView } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import type { CliIo } from "./memory-commands.ts";
 import { ServiceClient, ServiceError } from "./client.ts";
@@ -9,43 +9,33 @@ attache update installs an available Update now, also one that waits for Jobs to
 --check looks for an Update now and reports the version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 The Update channel and Automatic updates are set in the Dashboard, under Settings.`;
 
-const CHANNEL: Record<UpdatesView["channel"], string> = { stable: "Stable", beta: "Beta" };
-
 /** What `attache update --check` prints for a status; a failure goes to stderr instead, through the error it throws. */
 export function renderUpdateCheck(v: UpdatesView): { lines: string[]; failure: string | null } {
-  const head = `Attache ${v.version}, Update channel ${CHANNEL[v.channel]}`;
+  const head = `Attache ${v.version}, Update channel ${CHANNEL_LABEL[v.channel]}`;
   switch (v.status) {
     case "unavailable":
       return { lines: [head], failure: `Updates are unavailable here: ${v.reason ?? "this copy cannot update itself."}` };
     case "check_failed":
       return { lines: [head], failure: `The check for an Update failed: ${v.reason ?? "no reason was given."}` };
     case "up_to_date":
-      return { lines: [head, "Attache is up to date."], failure: null };
+    case "ready":
+    case "waiting_for_jobs":
+    case "available":
+      return { lines: [head, `${updatesHeadline(v)}.`], failure: null };
     case "off":
-      return { lines: [head, "Automatic updates is Off, so Attache does not look for Updates. Change it in the Dashboard, under Settings."], failure: null };
+      return { lines: [head, `${updatesHeadline(v)}. ${UPDATES_OFF_DETAIL} Change it in the Dashboard, under Settings.`], failure: null };
     case "not_checked":
     case "checking":
       return { lines: [head], failure: "The check for an Update did not finish. Try again." };
-    case "ready":
-      return { lines: [head, `Attache ${version(v)} is ready to install.`], failure: null };
-    case "waiting_for_jobs":
-      return { lines: [head, `Attache ${version(v)} is waiting for ${plural(v.jobs ?? 0, "Job")} to finish.`], failure: null };
-    case "available":
+    // A report-only check never starts these; another request did, and the Update it found is available.
     case "downloading":
     case "installing":
-      return { lines: [head, `Attache ${version(v)} is available.`], failure: null };
+      return { lines: [head, `${updatesHeadline({ ...v, status: "available" })}.`], failure: null };
   }
 }
 
-function version(v: UpdatesView): string {
-  return v.update?.version ?? "(unknown version)";
-}
-
-/** Statuses from which `attache update` installs at once: found, verified for Ask first, or waiting for Jobs (Restart now). */
-const INSTALLABLE: ReadonlySet<UpdatesView["status"]> = new Set(["available", "ready", "waiting_for_jobs"]);
-
 /** Why `attache update` installs nothing in Off: it makes no request, so it cannot know of an Update. */
-const OFF_FAILURE = "Automatic updates is Off, so Attache makes no request about Updates. Choose Automatic or Ask first in the Dashboard, under Settings, to install one.";
+const offFailure = (v: UpdatesView) => `${updatesHeadline(v)}. ${UPDATES_OFF_DETAIL} Choose Automatic or Ask first in the Dashboard, under Settings, to install one.`;
 
 /** How long `attache update` waits for the installer: a backup, the switch, and up to 30 s for the new version's health. */
 const INSTALL_WAIT_MS = 10 * 60_000;
@@ -53,14 +43,8 @@ const POLL_MS = 500;
 
 /** What `attache update` says once the installer reported back; a failure goes to stderr through the error it throws. */
 export function renderUpdateOutcome(last: LastUpdateView): { line: string | null; failure: string | null } {
-  switch (last.outcome) {
-    case "updated":
-      return { line: `Attache updated from ${last.from} to ${last.to}.`, failure: null };
-    case "rolled_back":
-      return { line: null, failure: `The Update to Attache ${last.to} failed, so Attache went back to ${last.from}: ${rollbackDetail(last)}` };
-    case "failed":
-      return { line: null, failure: `The Update to Attache ${last.to} failed, and Attache stayed on ${last.from}: ${last.reason}` };
-  }
+  const detail = lastUpdateDetail(last);
+  return detail === null ? { line: `${lastUpdateHeadline(last)}.`, failure: null } : { line: null, failure: `${lastUpdateHeadline(last)}: ${detail}` };
 }
 
 /** What `attache update` says when Install did not start an installer: up to date, or why not. */
@@ -102,9 +86,10 @@ async function installCommand(paths: ServicePaths, io: CliIo): Promise<void> {
   const checked = await client.post<UpdatesView>("/updates/check", { reportOnly: true });
   if (checked.status === "off") {
     io.out(renderUpdateCheck(checked).lines[0]!);
-    throw new Error(OFF_FAILURE);
+    throw new Error(offFailure(checked));
   }
-  if (!INSTALLABLE.has(checked.status) || !checked.update) {
+  // A failed check is reported, not acted on, even when an earlier one found an Update.
+  if (checked.status === "check_failed" || !installAction(checked) || !checked.update) {
     const { lines, failure } = renderUpdateCheck(checked);
     io.out(lines.join("\n"));
     if (failure) throw new Error(failure);
@@ -125,7 +110,7 @@ async function installCommand(paths: ServicePaths, io: CliIo): Promise<void> {
     // The installer stops the service as its first change; it can do so before the answer arrives.
     if (!(e instanceof ServiceError && e.code === "unreachable")) throw e;
   }
-  io.out(`Installing Attache ${to}. Attache restarts to finish the Update.`);
+  io.out(`${updatesHeadline({ ...checked, status: "installing", update: { ...checked.update, version: to } })}. Attache restarts to finish the Update.`);
   const done = await waitForOutcome(paths, to, before);
   if (!done.lastUpdate) throw new Error(`The Update to Attache ${to} did not finish: ${done.reason ?? "the installer gave no outcome."}`);
   const { line, failure } = renderUpdateOutcome(done.lastUpdate);

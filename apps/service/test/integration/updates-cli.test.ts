@@ -97,7 +97,7 @@ describe("attache update", () => {
     };
     const r = await cli(m, ["update"]);
     expect(r.status).toBe(1);
-    expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, and Attache stayed on 0.6.0: could not back up the existing installation; nothing was changed\n");
+    expect(r.stderr).toBe("attache: The Update to 0.7.0 did not install, so Attache stayed on 0.6.0: could not back up the existing installation; nothing was changed\n");
   });
 
   it("fails with the reason when the Update went back to the earlier version", async () => {
@@ -109,7 +109,7 @@ describe("attache update", () => {
     };
     const r = await cli(m, ["update"]);
     expect(r.status).toBe(1);
-    expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy\n");
+    expect(r.stderr).toBe("attache: The Update to 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy\n");
   });
 
   for (const [database, said] of [
@@ -127,7 +127,7 @@ describe("attache update", () => {
       };
       const r = await cli(m, ["update"]);
       expect(r.status).toBe(1);
-      expect(r.stderr).toBe(`attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy. ${said.replaceAll("BACKUP", backup)}\n`);
+      expect(r.stderr).toBe(`attache: The Update to 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy. ${said.replaceAll("BACKUP", backup)}\n`);
     });
   }
 
@@ -169,7 +169,7 @@ describe("attache update", () => {
     const r = await cli(m, ["update"]);
     expect(r.status).toBe(1);
     expect(r.stdout).toBe("Attache 0.6.0, Update channel Stable\n");
-    expect(r.stderr).toBe("attache: Automatic updates is Off, so Attache makes no request about Updates. Choose Automatic or Ask first in the Dashboard, under Settings, to install one.\n");
+    expect(r.stderr).toBe("attache: Automatic updates is Off. Attache does not look for Updates and makes no request about them. Choose Automatic or Ask first in the Dashboard, under Settings, to install one.\n");
     expect(server.requests).toEqual([]);
     expect(m.runner.requests).toEqual([]);
   });

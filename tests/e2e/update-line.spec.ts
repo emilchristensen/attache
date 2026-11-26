@@ -106,7 +106,7 @@ async function capture(page: Page, name: string, target?: () => Promise<void>) {
   await page.setViewportSize({ width: 1360, height: 900 });
 }
 
-test("no line while nothing happened; Ask first: 'Attache 0.7.0 is ready · Install', after the Connection banner, and Install hands it to the installer", async () => {
+test("no line while nothing happened; Ask first: 'Attache 0.7.0 is ready to install · Install', after the Connection banner, and Install hands it to the installer", async () => {
   const page = await journeys.open("/");
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await expect(line(page)).toHaveCount(0);
@@ -116,7 +116,7 @@ test("no line while nothing happened; Ask first: 'Attache 0.7.0 is ready · Inst
   const ready = reported(page, (v) => v.status === "ready");
   await api(page, "POST", "/updates/check", { reportOnly: false });
   await ready;
-  await expectLine(page, "ready", "Attache 0.7.0 is ready", "Install");
+  await expectLine(page, "ready", "Attache 0.7.0 is ready to install", "Install");
   // No Harness is set up here, so a Connection issue shows too: the Connection banner comes first, the line right under it.
   await expect(connectionBanner(page)).toBeVisible();
   const order = await page.evaluate(() => {
@@ -138,7 +138,7 @@ test("no line while nothing happened; Ask first: 'Attache 0.7.0 is ready · Inst
   await capture(page, "installing");
 });
 
-test("'Attache updated to 0.7.0 · What changed' shows the release notes with no request outside the service, and is gone a day later", async () => {
+test("'Attache updated from 0.6.0 to 0.7.0 · What changed' shows the release notes with no request outside the service, and is gone a day later", async () => {
   installerFinished(stack.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
   await stack.stopService();
   await stack.startService({ version: "0.7.0" });
@@ -148,7 +148,7 @@ test("'Attache updated to 0.7.0 · What changed' shows the release notes with no
     if (new URL(r.url()).origin !== new URL(stack.url).origin) elsewhere.push(r.url());
   });
   await page.reload();
-  await expectLine(page, "updated", "Attache updated to 0.7.0", "What changed");
+  await expectLine(page, "updated", "Attache updated from 0.6.0 to 0.7.0", "What changed");
   await capture(page, "updated");
 
   const whatChanged = line(page).getByRole("button", { name: "What changed", exact: true });
@@ -282,7 +282,7 @@ test("Replication paused on a newer Brain format: 'Update this Machine to keep r
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await dashboardAnswer<ReplicationView>(page, "/replication", (v) => v.status === "up_to_date");
-  await expectLine(page, "updated", "Attache updated to 0.9.0", "What changed");
+  await expectLine(page, "updated", "Attache updated from 0.7.0 to 0.9.0", "What changed");
   expect(journeys.consoleErrors).toEqual([]);
   await api(page, "POST", "/replication/off");
 });

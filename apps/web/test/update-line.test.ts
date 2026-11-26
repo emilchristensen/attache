@@ -37,12 +37,12 @@ describe("updateLine: which line shows under the masthead, in the spec's words",
   const cases: ReadonlyArray<[name: string, v: UpdatesView | null, shown: string | null]> = [
     ["nothing known yet", null, null],
     ["up to date, no Update ever", view("up_to_date"), null],
-    ["updated a moment ago", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(0)) }), "Attache updated to 0.7.0 · What changed"],
-    ["updated 23 hours ago", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(23 * HOUR)) }), "Attache updated to 0.7.0 · What changed"],
+    ["updated a moment ago", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(0)) }), "Attache updated from 0.6.1 to 0.7.0 · What changed"],
+    ["updated 23 hours ago", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(23 * HOUR)) }), "Attache updated from 0.6.1 to 0.7.0 · What changed"],
     ["updated exactly one day ago: gone", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(UPDATED_LINE_MS)) }), null],
     ["updated two days ago", view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(48 * HOUR)) }), null],
-    ["updated, while Updates are Off", view("off", { mode: "off", version: "0.7.0", lastUpdate: updated(ago(HOUR)) }), "Attache updated to 0.7.0 · What changed"],
-    ["ready in Ask first", view("ready", { mode: "ask_first", update: UPDATE }), "Attache 0.7.0 is ready · Install"],
+    ["updated, while Updates are Off", view("off", { mode: "off", version: "0.7.0", lastUpdate: updated(ago(HOUR)) }), "Attache updated from 0.6.1 to 0.7.0 · What changed"],
+    ["ready in Ask first", view("ready", { mode: "ask_first", update: UPDATE }), "Attache 0.7.0 is ready to install · Install"],
     ["waiting for 1 Job", view("waiting_for_jobs", { update: UPDATE, jobs: 1 }), "Attache 0.7.0 is waiting for 1 Job to finish · Restart now"],
     ["waiting for 2 Jobs", view("waiting_for_jobs", { update: UPDATE, jobs: 2 }), "Attache 0.7.0 is waiting for 2 Jobs to finish · Restart now"],
     ["installing", view("installing", { update: UPDATE }), "Installing Attache 0.7.0"],
@@ -63,8 +63,10 @@ describe("updateLine: which line shows under the masthead, in the spec's words",
 
 describe("updateLine: what waits for the owner now comes before news of the last Update", () => {
   const cases: ReadonlyArray<[name: string, v: UpdatesView, shown: string]> = [
-    ["ready, after an Update yesterday", view("ready", { mode: "ask_first", version: "0.7.0", update: { ...UPDATE, version: "0.7.1" }, lastUpdate: updated(ago(HOUR)) }), "Attache 0.7.1 is ready · Install"],
+    ["ready, after an Update yesterday", view("ready", { mode: "ask_first", version: "0.7.0", update: { ...UPDATE, version: "0.7.1" }, lastUpdate: updated(ago(HOUR)) }), "Attache 0.7.1 is ready to install · Install"],
     ["waiting for Jobs, after a rollback", view("waiting_for_jobs", { update: { ...UPDATE, version: "0.7.1" }, jobs: 2, lastUpdate: rolledBack(ago(HOUR)) }), "Attache 0.7.1 is waiting for 2 Jobs to finish · Restart now"],
+    // A service that restarted while the installer runs knows no manifest.
+    ["installing, the version not known", view("installing"), "Installing an Update"],
     ["installing, after a rollback", view("installing", { update: { ...UPDATE, version: "0.7.1" }, lastUpdate: rolledBack(ago(HOUR)) }), "Installing Attache 0.7.1"],
   ];
   it.each(cases)("%s", (_name, v, shown) => {
@@ -103,6 +105,9 @@ describe("updateLine: a Machine whose Replication paused asks to be updated", ()
     ["Updates are unavailable", view("unavailable", { reason: "Attache runs from a source checkout here." }), "Update this Machine to keep replicating · Details"],
     ["the check failed", view("check_failed", { reason: "The release server did not answer." }), "Update this Machine to keep replicating · Details"],
     ["downloading the Update", view("downloading", { update: UPDATE }), "Update this Machine to keep replicating · Details"],
+    // The same buttons Settings offers for the status (contracts' `installAction`).
+    ["found, not downloaded yet", view("available", { update: UPDATE }), "Update this Machine to keep replicating · Install"],
+    ["the download failed, the Update still known", view("check_failed", { reason: "The download of Attache 0.7.0 failed.", update: UPDATE }), "Update this Machine to keep replicating · Install"],
     ["ready in Ask first", view("ready", { mode: "ask_first", update: UPDATE }), "Update this Machine to keep replicating · Install"],
     ["waiting for Jobs", view("waiting_for_jobs", { update: UPDATE, jobs: 2 }), "Update this Machine to keep replicating · Restart now"],
     ["after a rollback", view("up_to_date", { lastUpdate: rolledBack(ago(HOUR)) }), "Update this Machine to keep replicating · Details"],
@@ -129,7 +134,7 @@ describe("updateLine: a Machine whose Replication paused asks to be updated", ()
 
   it("once Replication resumes, the line is gone, or tells of the Update that made it resume", () => {
     expect(read(updateLine({ updates: view("up_to_date"), replication: REPLICATING, now: NOW }))).toBeNull();
-    expect(read(updateLine({ updates: view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(0)) }), replication: REPLICATING, now: NOW }))).toBe("Attache updated to 0.7.0 · What changed");
+    expect(read(updateLine({ updates: view("up_to_date", { version: "0.7.0", lastUpdate: updated(ago(0)) }), replication: REPLICATING, now: NOW }))).toBe("Attache updated from 0.6.1 to 0.7.0 · What changed");
   });
 
   it("in Settings' Updates section nothing else shows: the section says it all", () => {

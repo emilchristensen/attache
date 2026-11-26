@@ -68,7 +68,7 @@ describe("a Machine whose Replication paused on a newer Brain format", () => {
     expect(pc.runner.requests).toEqual([]);
     expect((await pc.get<UpdatesView>("/updates")).status).toBe("off");
     expect(pc.notifications.shown).toEqual([
-      { title: PAUSED_TITLE, body: `${PAUSED_BODY} Automatic updates is Off, so Attache does not look for one: install a newer release, or choose Automatic or Ask first in Settings, Updates.` },
+      { title: PAUSED_TITLE, body: `${PAUSED_BODY} Automatic updates is Off. Attache does not look for Updates and makes no request about them. Install a newer release, or choose Automatic or Ask first in Settings, Updates.` },
     ]);
   });
 
