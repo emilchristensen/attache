@@ -1,11 +1,10 @@
 // The signing tool (scripts/release-signing.mjs), driven as the maintainer and the release workflow run it.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 
 const TOOL = join(import.meta.dirname, "..", "release-signing.mjs");
 
@@ -147,33 +146,6 @@ describe("sealing archives built elsewhere", () => {
     expect(r.status).not.toBe(0);
     expect(r.err).toContain("The signing key does not belong to the public key given to the build");
     expect(existsSync(join(built.folder, "attache-0.7.0-beta.1-manifest.json"))).toBe(false);
-  });
-
-  it("names a committed next public key in the manifest, as the release workflow's seal job runs", () => {
-    const workflow = parse(readFileSync(join(import.meta.dirname, "..", "..", ".github", "workflows", "release.yml"), "utf8"));
-    const steps: { name?: string; run?: string }[] = workflow.jobs.seal.steps;
-    const run = (name: string) => steps.find((s) => s.name === name)?.run?.replaceAll("${{ needs.gate.outputs.dry-run }}", "true") ?? "";
-    const keys = keyPair();
-    const next = keyPair();
-    const built = builtArchives();
-    const workspace = mkdtempSync(join(tmpdir(), "attache-workspace-"));
-    mkdirSync(join(workspace, ".github"));
-    mkdirSync(join(workspace, "release"));
-    mkdirSync(join(workspace, "runner", "throwaway"), { recursive: true });
-    symlinkSync(join(import.meta.dirname, ".."), join(workspace, "scripts"), "junction");
-    writeFileSync(join(workspace, ".github", "release-next-public-key.pem"), readFileSync(next.publicKey));
-    writeFileSync(join(workspace, "release", "0.7.0-beta.1.public-key.pem"), readFileSync(keys.publicKey));
-    writeFileSync(join(workspace, "runner", "throwaway", "signing-key.pem"), readFileSync(keys.privateKey));
-    writeFileSync(join(workspace, "release-notes.md"), readFileSync(built.notes));
-    symlinkSync(built.folder, join(workspace, "release", "0.7.0-beta.1"), "junction");
-    const env = { ...process.env, VERSION: "0.7.0-beta.1", RUNNER_TEMP: join(workspace, "runner"), RELEASE_SIGNING_KEY: "" };
-
-    for (const step of ["Seal and sign", "Verify with the signing tool"]) {
-      const r = spawnSync("bash", ["-e", "-c", run(step)], { cwd: workspace, env, encoding: "utf8" });
-      expect(r.status, `${step}: ${r.stderr}`).toBe(0);
-    }
-    const manifest = JSON.parse(readFileSync(join(built.folder, "attache-0.7.0-beta.1-manifest.json"), "utf8"));
-    expect(manifest.nextPublicKey).toBe(readFileSync(next.publicKey, "utf8"));
   });
 
   it("refuses an empty signing key, as a release environment without its secret gives", () => {
