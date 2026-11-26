@@ -1,7 +1,7 @@
 // The signing tool (scripts/release-signing.mjs), driven as the maintainer and the release workflow run it.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -104,6 +104,60 @@ describe("the release signing tool", () => {
   });
 });
 
+describe("sealing archives built elsewhere", () => {
+  /** A folder with the three targets' archives, as the release workflow's build job hands them over. */
+  function builtArchives() {
+    const folder = mkdtempSync(join(tmpdir(), "attache-built-"));
+    for (const name of ["attache-0.7.0-beta.1-macos-arm64.tar.gz", "attache-0.7.0-beta.1-linux-x64.tar.gz", "attache-0.7.0-beta.1-windows-x64.zip"]) writeFileSync(join(folder, name), `${name} bytes`);
+    const notes = join(folder, "..", `notes-${Date.now()}.md`);
+    writeFileSync(notes, "Attache keeps itself current.\n");
+    return { folder, notes };
+  }
+
+  it("writes the signed manifest with the notes, the installers and SHA256SUMS, which the tool then verifies", () => {
+    const keys = keyPair();
+    const built = builtArchives();
+    const sealed = tool("seal", built.folder, "--version", "0.7.0-beta.1", "--key", keys.privateKey, "--public-key", keys.publicKey, "--notes", built.notes);
+    expect(sealed.status, sealed.err).toBe(0);
+    const manifest = JSON.parse(readFileSync(join(built.folder, "attache-0.7.0-beta.1-manifest.json"), "utf8"));
+    expect(manifest).toMatchObject({ version: "0.7.0-beta.1", channel: "beta", notes: "Attache keeps itself current.\n" });
+    expect(Object.keys(manifest.artifacts).sort()).toEqual(["linux-x64", "macos-arm64", "windows-x64"]);
+    for (const f of ["attache-0.7.0-beta.1-manifest.json.sig", "SHA256SUMS", "Attache-Installer-0.7.0-beta.1-macos-arm64.command", "Attache-Installer-0.7.0-beta.1-linux-x64.sh", "Attache-Installer-0.7.0-beta.1-windows-x64.cmd"]) expect(existsSync(join(built.folder, f)), f).toBe(true);
+
+    const verified = tool("verify", built.folder, "--public-key", keys.publicKey, "--version", "0.7.0-beta.1");
+    expect(verified.status, verified.err).toBe(0);
+    expect(verified.out).toContain("Attache 0.7.0-beta.1 (Beta) is signed with this key");
+  });
+
+  it("verifies that a release has every target the workflow builds", () => {
+    const keys = keyPair();
+    const built = builtArchives();
+    rmSync(join(built.folder, "attache-0.7.0-beta.1-windows-x64.zip"));
+    expect(tool("seal", built.folder, "--version", "0.7.0-beta.1", "--key", keys.privateKey, "--public-key", keys.publicKey).status).toBe(0);
+
+    const r = tool("verify", built.folder, "--public-key", keys.publicKey, "--targets", "macos-arm64,linux-x64,windows-x64");
+    expect(r.status).not.toBe(0);
+    expect(r.err).toContain("Attache 0.7.0-beta.1 has no release for windows-x64");
+  });
+
+  it("refuses a signing key that does not belong to the public key built into the archives", () => {
+    const built = builtArchives();
+    const r = tool("seal", built.folder, "--version", "0.7.0-beta.1", "--key", keyPair().privateKey, "--public-key", keyPair().publicKey);
+    expect(r.status).not.toBe(0);
+    expect(r.err).toContain("The signing key does not belong to the public key given to the build");
+    expect(existsSync(join(built.folder, "attache-0.7.0-beta.1-manifest.json"))).toBe(false);
+  });
+
+  it("refuses an empty signing key, as a release environment without its secret gives", () => {
+    const built = builtArchives();
+    const empty = join(built.folder, "..", `empty-${Date.now()}.pem`);
+    writeFileSync(empty, "");
+    const r = tool("seal", built.folder, "--version", "0.7.0-beta.1", "--key", empty, "--public-key", keyPair().publicKey);
+    expect(r.status).not.toBe(0);
+    expect(r.err).toContain("is empty");
+  });
+});
+
 describe("the keys the release build is given", () => {
   const BUILD = join(import.meta.dirname, "..", "build-release.mjs");
   const build = (...args: string[]) => spawnSync(process.execPath, [BUILD, "--version", "0.7.0", ...args], { encoding: "utf8" });
@@ -119,6 +173,20 @@ describe("the keys the release build is given", () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("The signing key does not belong to the public key given to the build");
     expect(r.stdout).not.toContain("Building Attache");
+  });
+
+  it("builds unsealed archives without a signing key, for the release workflow to seal apart", () => {
+    // A version no release can carry stops the build before it starts, after the keys are read.
+    const r = spawnSync(process.execPath, [BUILD, "--version", "0.7.0-rc.1", "--unsealed", "--public-key", keyPair().publicKey], { encoding: "utf8" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).not.toContain("--signing-key is missing");
+    expect(r.stderr).toContain("0.7.0-rc.1 is not a release version");
+  });
+
+  it("still needs the public key to build into the service when unsealed", () => {
+    const r = build("--unsealed");
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("--public-key is missing");
   });
 
   it("refuses a version no release can carry", () => {

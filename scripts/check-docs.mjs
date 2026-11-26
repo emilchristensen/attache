@@ -6,7 +6,8 @@
  * 1. One sentence per line in Markdown (`check-docs/sentences.mjs`). A prose
  *    line must not hold two sentences; headings, tables, code, HTML, front
  *    matter and link reference definitions are left as they are. Read in the
- *    repository's own Markdown: README.md, GLOSSARY.md, AGENTS.md,
+ *    repository's own Markdown: README.md, CHANGELOG.md (whose sections are
+ *    the release notes owners read), GLOSSARY.md, AGENTS.md,
  *    CODING_STANDARDS.md, docs/** and installer/**. Third-party skills
  *    (.claude/skills, .agents/skills), research/, design records under
  *    docs/design/ (which keep the words and reviews of their time),
@@ -56,7 +57,7 @@ import { findMissingSpecHeader } from "./check-docs/spec-headers.mjs";
 import { plural } from "../packages/contracts/src/wording.ts";
 
 const GLOSSARY = "GLOSSARY.md";
-const ROOT_MARKDOWN = ["README.md", GLOSSARY, "AGENTS.md", "CODING_STANDARDS.md"];
+const ROOT_MARKDOWN = ["README.md", "CHANGELOG.md", GLOSSARY, "AGENTS.md", "CODING_STANDARDS.md"];
 const NEVER_READ = new Set(["node_modules", "release", "research", "dist", ".claude", ".agents", ".git"]);
 /** Folders skipped by their path from the repository root, not by name. */
 const NEVER_READ_PATHS = new Set(["docs/design"]);

@@ -22,13 +22,19 @@
  * Windows builds its own.
  * Usage: node scripts/build-release.mjs --signing-key <private-key.pem> --public-key <public-key.pem>
  *          [--version x.y.z] [--target macos-arm64|linux-x64|windows-x64] [--notes <notes.md>] [--next-public-key <public-key.pem>]
+ *        node scripts/build-release.mjs --unsealed --public-key <public-key.pem> [--version x.y.z] [--target ...]
+ *
+ * `--unsealed` builds only the archive, with the public key built in, and no
+ * signing key: the release workflow builds that way and seals the folder in a
+ * separate job, the only one that reads the signing key
+ * (`release-signing.mjs seal`).
  */
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { releaseLauncher } from "../apps/service/src/platform/wrapper.ts";
-import { channelOf, manifestFileName } from "../apps/service/src/release/manifest.ts";
+import { channelOf, manifestFileName, signatureFileName } from "../apps/service/src/release/manifest.ts";
 import { sha256File } from "../apps/service/src/release/verify-release.ts";
 import { WINDOWS_INSTALL_CMD } from "./release-installers.mjs";
 import { assertKeyPair, sealRelease } from "./release-seal.mjs";
@@ -50,7 +56,7 @@ const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: "inherit"
 function inputFile(name, { required }) {
   const file = arg(name);
   if (!file) {
-    if (required) throw new Error(`--${name} is missing: every release is signed. Make a test key pair with node scripts/release-signing.mjs keygen <private-key.pem> <public-key.pem>.`);
+    if (required) throw new Error(`--${name} is missing: every release is signed and holds the public key that checks its Updates. Make a test key pair with node scripts/release-signing.mjs keygen <private-key.pem> <public-key.pem>.`);
     return undefined;
   }
   return readFileSync(file, "utf8");
@@ -119,11 +125,13 @@ function packArchive(archivePath) {
   run("tar", [...portable, "-czf", archivePath, "-C", join(STAGE, ".."), `attache-${VERSION}`], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
 }
 
+const UNSEALED = process.argv.includes("--unsealed");
+
 async function main() {
-  const signingKey = inputFile("signing-key", { required: true });
+  const signingKey = UNSEALED ? undefined : inputFile("signing-key", { required: true });
   const publicKey = inputFile("public-key", { required: true });
   // Before the long build: a pair that does not match could never verify the release it signs.
-  assertKeyPair(signingKey, publicKey);
+  if (signingKey !== undefined) assertKeyPair(signingKey, publicKey);
   const notes = inputFile("notes", { required: false });
   const nextPublicKey = inputFile("next-public-key", { required: false });
   // A version no release can carry is refused before the build, not after it.
@@ -167,6 +175,12 @@ async function main() {
   packArchive(archivePath);
   rmSync(join(OUT, ".stage-" + TARGET), { recursive: true, force: true });
 
+  if (UNSEALED) {
+    // A seal from an earlier build no longer covers this folder's archives.
+    for (const f of [manifestFileName(VERSION), signatureFileName(VERSION), "SHA256SUMS"]) rmSync(join(OUT, f), { force: true });
+    console.log(`  ${archivePath}  ${(statSync(archivePath).size / 1_048_576).toFixed(1)} MB (unsealed: seal the folder with release-signing.mjs seal)`);
+    return;
+  }
   await sealRelease({ folder: OUT, version: VERSION, signingKey, publicKey, ...(notes !== undefined ? { notes } : {}), ...(nextPublicKey ? { nextPublicKey } : {}) });
   for (const f of [archiveName, installerName, manifestFileName(VERSION), "SHA256SUMS"]) console.log(`  ${join(OUT, f)}  ${(statSync(join(OUT, f)).size / 1_048_576).toFixed(1)} MB`);
 }
