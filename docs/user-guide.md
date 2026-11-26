@@ -925,6 +925,7 @@ The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `e
 Jobs that were running pick up from where they stopped once Attache is back.
 When Automatic updates is Off, `attache update` makes no request and says so.
 When the new version does not start, Attache goes back to the version it had, with the database from just before the Update, and never offers that version again on this Machine; a newer release is still offered.
+The same holds for an Update whose installer stopped before changing anything.
 `attache update` then fails with the reason and says what became of the database.
 `attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 `attache agent-hooks status` lists the hooks and MCP servers Attache added to your Harnesses.

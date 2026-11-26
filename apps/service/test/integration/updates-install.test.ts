@@ -107,7 +107,6 @@ describe("after the installer finishes", () => {
     await outcomeSeen(after);
     expect((await view(after)).lastUpdate).toMatchObject({ outcome: "updated", from: "0.6.0", to: "0.7.0", notes: "## 0.7.0\n\nWhat changed in 0.7.0.\n" });
     const v = await view(after);
-    expect(v.status).toBe("not_checked");
     expect(Date.parse(v.lastUpdate!.at)).not.toBeNaN();
     // The installed release is no longer staged.
     expect(updateFiles(after.stateDir).filter((f) => f.startsWith("staging/"))).toEqual([]);
@@ -116,13 +115,58 @@ describe("after the installer finishes", () => {
     expect((await view(await restart(after, "0.7.0"))).lastUpdate).toMatchObject({ outcome: "updated", from: "0.6.0", to: "0.7.0" });
   });
 
-  it("says why, and stays on its version, when the installer stopped before changing anything", async () => {
-    const m = await machine("0.6.0", await releases("0.7.0"));
+  // The service on the version the installer leaves running starts while the installer still checks its health, so its check at start waits for the outcome.
+  for (const [outcome, runs] of [
+    ["updated", "0.7.0"],
+    ["failed", "0.6.0"],
+    ["rolled_back", "0.6.0"],
+  ] as const) {
+    it(`looks for an Update as soon as it reads that the Update ${outcome === "updated" ? "installed" : outcome === "failed" ? "failed" : "rolled back"}, not 6 hours later`, async () => {
+      const server = await releases("0.7.0");
+      const m = await machine("0.6.0", server);
+      await install(m);
+      const after = await restart(m, runs);
+      await after.clock.advance(0);
+      const checksBefore = server.requests.filter((r) => r.path.endsWith("/releases")).length;
+      installerFinished(after.stateDir, { outcome, from: "0.6.0", to: "0.7.0", ...(outcome === "updated" ? {} : { reason: "the service did not become healthy" }) });
+      await outcomeSeen(after);
+      await after.clock.advance(0);
+      expect(server.requests.filter((r) => r.path.endsWith("/releases")).length).toBe(checksBefore + 1);
+      expect(await view(after)).toMatchObject({ version: runs, status: "up_to_date", update: null, lastCheckedAt: expect.any(String) });
+      expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    });
+  }
+
+  it("says why, stays on its version and never tries that version again, when the installer stopped before changing anything", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
     m.runner.onStart = () => installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
     await install(m);
     await outcomeSeen(m);
     expect((await view(m)).lastUpdate).toMatchObject({ outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
-    expect(await view(m)).toMatchObject({ version: "0.6.0", status: "available", update: { version: "0.7.0" } });
+    await m.clock.advance(0);
+    await m.clock.advance(CHECK_EVERY_MS);
+    expect(await view(m)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
+    expect(m.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
+    const again = await restart(m, "0.6.0");
+    expect(await again.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null, lastUpdate: { outcome: "failed" } });
+
+    // A newer release is still offered.
+    server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));
+    expect(await again.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "available", update: { version: "0.7.1" } });
+  });
+
+  it("never tries a version again whose installer did not report back within 15 minutes", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    await install(m);
+    const after = await restart(m, "0.6.0");
+    await after.clock.advance(15 * 60_000);
+    expect((await view(after)).lastUpdate).toMatchObject({ outcome: "failed", from: "0.6.0", to: "0.7.0", reason: expect.stringMatching(/did not report back within 15 minutes/) });
+    await after.clock.advance(0);
+    await after.clock.advance(CHECK_EVERY_MS);
+    expect(await view(after)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
+    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
   });
 
   it("tells a rolled-back Update apart from a successful one", async () => {

@@ -432,15 +432,15 @@ export class Updater {
     const outcome = readOutcome(this.deps.stateDir);
     if (outcome) {
       this.lastUpdate = lastUpdateOf(outcome, request);
-      // A version the installer switched back from is never tried again here, while a newer release still is.
+      // A version that failed on this Machine (switched back from, or never switched to) is never tried again here, while a newer release still is.
       // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
-      if (outcome.outcome === "rolled_back") this.markBad(outcome);
+      if (outcome.outcome !== "updated") this.markBad(outcome);
       notifyRollbackOnce({ stateDir: this.deps.stateDir, notify: this.deps.notify, log: this.deps.log, now: this.deps.clock.now() }, outcome);
       this.clearStaged();
       if (this.status !== "installing") return;
       this.set(this.resting());
-      // After a rollback, what this Machine may take changed, and its check at start was skipped while it waited: look again now.
-      if (outcome.outcome === "rolled_back") this.scheduleCheck(0);
+      // The check at start was skipped while this service waited for the outcome, and after a rollback what it may take changed: look now, not 6 hours later.
+      this.scheduleCheck(0);
       return;
     }
     if (!request) return;
@@ -454,7 +454,7 @@ export class Updater {
     this.watchForOutcome();
   }
 
-  /** Mark the version a rollback switched back from bad, and forget it as the Update found, so nothing offers it. */
+  /** Mark the version that failed on this Machine bad, and forget it as the Update found, so nothing offers it. */
   private markBad(outcome: OutcomeRecord): void {
     const at = Number.isNaN(Date.parse(outcome.at)) ? this.deps.clock.now() : new Date(outcome.at);
     markVersionBad(this.deps.stateDir, { version: outcome.to, reason: outcome.reason ?? "The installer gave no reason.", at });
