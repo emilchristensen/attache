@@ -11,6 +11,8 @@ import { replaceWith } from "../platform/replace-file.ts";
  * `machines/preferred-reader.json`, which any Machine may change. JSON, so
  * search never indexes them. Both replicate like any other file; when two
  * Machines changed the same one, the later `updatedAt` wins (`machineRecordRule`).
+ * A record from an earlier version, without `version` or `readsBrainFormat`,
+ * still parses: the Machine's version is then unknown.
  */
 export const MACHINES_DIR = "machines";
 export const PREFERRED_READER_FILE = `${MACHINES_DIR}/preferred-reader.json`;
@@ -19,7 +21,15 @@ export const MachineRecord = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(MACHINE_NAME_MAX),
   standby: z.boolean(),
+  /**
+   * When the Machine last wrote its record. It refreshes the record at least
+   * weekly while running, so this is also when it was last heard from (ADR 0008).
+   */
   updatedAt: z.iso.datetime(),
+  /** The Attache version the Machine runs. Absent in records an earlier version wrote. */
+  version: z.string().min(1).max(64).optional(),
+  /** The newest Brain format the Machine can read. Absent in records an earlier version wrote. */
+  readsBrainFormat: z.int().min(1).optional(),
 });
 export type MachineRecord = z.infer<typeof MachineRecord>;
 
@@ -92,8 +102,16 @@ export class MachineRecords {
     return parsed.success ? parsed.data.machine : null;
   }
 
-  writeMachine(record: MachineRecord): void {
-    writeAtomic(join(this.root, machineRecordPath(record.id)), renderRecord(MachineRecord.parse(record)));
+  /** The fields of a Machine's record this version does not know, as a newer version wrote them; empty when there are none. */
+  unknownFields(id: string): Record<string, unknown> {
+    const raw = readJson(join(this.root, machineRecordPath(id)));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    return Object.fromEntries(Object.entries(raw).filter(([k]) => !(k in MachineRecord.shape)));
+  }
+
+  /** Write a Machine's record; `keep` carries fields this version does not know, so a newer version's additions survive the rewrite. */
+  writeMachine(record: MachineRecord, keep: Record<string, unknown> = {}): void {
+    writeAtomic(join(this.root, machineRecordPath(record.id)), renderRecord({ ...keep, ...MachineRecord.parse(record) }));
   }
 
   writePreferredReader(record: PreferredReaderRecord): void {

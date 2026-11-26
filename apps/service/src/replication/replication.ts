@@ -32,6 +32,8 @@ export interface ReplicationDeps {
   clock: Clock;
   seams: ReplicationSeams;
   machine: () => MachineIdentity;
+  /** The Attache version this Machine runs, which its Machine record carries. */
+  version: string;
   /** The data folder that is open now, if any. */
   dataRoot: () => string | null;
   /** Change-log entries after `seq`, to describe a commit. */
@@ -101,6 +103,7 @@ export class Replication {
     this.machines = new ReplicatedMachines({
       root: () => this.activeRoot(),
       machine: deps.machine,
+      version: deps.version,
       clock: deps.clock,
       lastChangeBy: (root, id) => this.repo(root).lastChangeBy(id),
       written: () => {
@@ -300,6 +303,8 @@ export class Replication {
 
   private async replicate(repo: BrainRepo, s: ReplicationSettings): Promise<Outcome> {
     this.recoverInterrupted(repo, s.dataFolder);
+    // A week-old record is written again here, and committed with this check rather than one more after it.
+    if (this.machines.refresh(s.dataFolder)) this.deps.onChange?.();
     const first = this.commitLocal(repo);
     if (first) return first;
     const guard = await this.checkRemote(s.remote);
