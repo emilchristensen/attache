@@ -1,4 +1,4 @@
-import type { ReplicationView } from "@attache/contracts";
+import type { ReplicationPause, ReplicationView } from "@attache/contracts";
 import type { Logger } from "../core/log.ts";
 import type { Db } from "../core/db.ts";
 import type { MachineIdentity } from "../core/machine.ts";
@@ -45,6 +45,11 @@ export interface ReplicationDeps {
   latestSeq: () => number;
   /** Called whenever the status may have changed. */
   onChange?: () => void;
+  /**
+   * A pause began: the Brain is in a format this Machine cannot read, and it waits for an Update (ADR 0008). Called
+   * once per pause, after the paused status is written, so a service that starts while paused does not call it again.
+   */
+  onPaused?: (pause: ReplicationPause) => void;
   /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
   backUpFolder: (folder: string) => Promise<string>;
   /** This Machine's last Source refresh of every source, which the Reader lease carries to the others. */
@@ -447,9 +452,11 @@ export class Replication {
 
   private report(o: Outcome): void {
     const before = this.view();
+    const wasPaused = this.settings.get()?.status === "paused";
     this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false, pausedFormat: o.pausedFormat ?? null });
     const after = this.view();
     if (before.status !== after.status || before.cause !== after.cause || o.pushed) this.deps.onChange?.();
+    if (!wasPaused && after.pause) this.deps.onPaused?.(after.pause);
   }
 
   private machineRef() {

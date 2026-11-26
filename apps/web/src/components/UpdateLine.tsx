@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import type { UpdatesView } from "@attache/contracts";
 import { post } from "../api.ts";
 import { settingsHref } from "../routes.ts";
+import { useReplication } from "../replication-live.ts";
 import { updateLine, type UpdateLine as Line, type UpdateLineAction } from "../update-line.ts";
 import { useUpdates } from "../updates-live.ts";
 import { useModalDialog } from "./dialog.ts";
@@ -9,7 +10,8 @@ import { Icon, type IconName } from "./icons.tsx";
 import { ReleaseNotes } from "./ReleaseNotes.tsx";
 import { Link, useAction, useNow } from "./ui.tsx";
 
-const ICON: Record<Line["state"], IconName> = { updated: "check", ready: "update", waiting_for_jobs: "update", installing: "update", rolled_back: "warning" };
+const ICON: Record<Line["state"], IconName> = { updated: "check", ready: "update", waiting_for_jobs: "update", installing: "update", rolled_back: "warning", paused: "update" };
+const TONE_CLASS: Record<Line["tone"], string> = { plain: "news", warn: "warn", danger: "danger" };
 
 /** What changed: the release notes from the signed manifest, in a dialog over the page. */
 function WhatChanged({ action, describedBy }: { action: Extract<UpdateLineAction, { kind: "what_changed" }>; describedBy: string }) {
@@ -66,13 +68,15 @@ function Action({ action, describedBy, onDone }: { action: UpdateLineAction; des
 
 /**
  * The line under the masthead about Attache itself (`update-line.ts`), after the Connection banner, and its polite
- * announcement, which is always there so a screen reader hears each new line once. `shown` is false where the page
- * itself says it all (Settings' Updates section). The line of a finished Update goes after one day, also on an open page.
+ * announcement, which is always there so a screen reader hears each new line once. In Settings' Updates section, which
+ * says everything about Updates itself, only a paused Replication shows. The line of a finished Update goes after one
+ * day, also on an open page.
  */
-export function UpdateLine({ shown }: { shown: boolean }) {
+export function UpdateLine({ inUpdatesSection }: { inUpdatesSection: boolean }) {
   const updates = useUpdates();
+  const replication = useReplication();
   useNow(60_000);
-  const line = shown ? updateLine({ updates: updates.data, now: Date.now() }) : null;
+  const line = updateLine({ updates: updates.data, replication: replication.data, now: Date.now(), inUpdatesSection });
   const textId = useId();
   const text = useRef<HTMLSpanElement>(null);
   /** After Install or Restart now, the button is gone with the line that offered it: focus goes to the line's words. */
@@ -85,7 +89,7 @@ export function UpdateLine({ shown }: { shown: boolean }) {
   return (
     <>
       {line && (
-        <section className={`update-line banner ${line.tone === "danger" ? "danger" : "news"}`} aria-label="Update" data-update-line data-state={line.state}>
+        <section className={`update-line banner ${TONE_CLASS[line.tone]}`} aria-label="Update" data-update-line data-state={line.state}>
           <Icon name={ICON[line.state]} />
           <span id={textId} ref={text} className="update-line-text" tabIndex={-1}>
             {line.text}

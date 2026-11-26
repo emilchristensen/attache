@@ -28,6 +28,8 @@ export function SettingsNav({ current }: { current: string | null }) {
                 <li key={s.id}>
                   <Link to={settingsHref(s.id)} aria-current={s.id === current ? "page" : undefined} aria-label={problem ? spokenName(s.label, [problem]) : undefined}>
                     <span className="settings-nav-label">{s.label}</span>
+                    {/* A space keeps the words apart in the text, so what shows is what the name says (WCAG 2.5.3). */}
+                    {problem && " "}
                     {problem && (
                       <span className="settings-nav-warning">
                         <AttentionDot decorative />

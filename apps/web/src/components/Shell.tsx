@@ -64,8 +64,8 @@ export function Shell({ children, path }: { children: ReactNode; path: string })
       <Masthead current={current} signals={signals} onSearch={search} connections={connections.status} />
       {current !== "connections" && <ConnectionBanner view={connections} />}
       <ConnectionAnnouncement view={connections} shown={current !== "connections"} />
-      {/* After the Connection banner when both show (spec #130); not on Settings' Updates section, which says it all. */}
-      <UpdateLine shown={path !== settingsHref("updates")} />
+      {/* After the Connection banner when both show (spec #130); Settings' Updates section says the rest itself. */}
+      <UpdateLine inUpdatesSection={path === settingsHref("updates")} />
       {/* Present from the start and empty, so what a Source refresh changed is read out when it is written. */}
       <p className="sr-only" role="status" data-count-announcement>
         {announcement}

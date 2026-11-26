@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type Ref } from "react";
 import type { ReplicationStatus, ReplicationView } from "@attache/contracts";
 import { post, type ApiError } from "../api.ts";
-import { useResource, type Resource } from "../live.ts";
+import type { Resource } from "../live.ts";
 import { ErrorState, Loading, Time, useAction } from "../components/ui.tsx";
 import { StateTag } from "../components/StateTag.tsx";
 import { ReplicationMachines } from "./ReplicationMachines.tsx";
@@ -275,11 +275,6 @@ function On({ view, dataFolder, onChanged }: { view: ReplicationView; dataFolder
 }
 
 /** Replication on this Machine: set it up or join, watch its status and the other Machines, or switch it off. */
-/** This Machine's Replication, as Settings' Machines and Replication section asks for it once for the card and its notice. */
-export function useReplication(): Resource<ReplicationView> {
-  return useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
-}
-
 export function ReplicationCard({ view, dataFolder }: { view: Resource<ReplicationView>; dataFolder: string | null }) {
   const v = view.data;
   const shown = v ? STATE[v.status] : null;

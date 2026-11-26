@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from "react";
-import { DECISION_COUNT_PATH, WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type DecisionTotals, type ProposalView, type ReplicationStatus, type ReplicationView } from "@attache/contracts";
+import { DECISION_COUNT_PATH, WAITING_ACTION_STATUSES, type ActionView, type AttentionItemView, type ConnectionStatus, type DecisionTotals, type ProposalView, type ReplicationStatus } from "@attache/contracts";
 import { countDecisions, dotAfter, shownCount, spokenCount, withRows, type Answer, type DecisionCount, type Tally, type Totals } from "./count.ts";
 import type { ApiError } from "./api.ts";
 import { REFRESH_DELAY_MS, useLiveEvent, useResource, type Resource } from "./live.ts";
 import { pairFailure } from "./pair.ts";
+import { useReplication } from "./replication-live.ts";
 import type { CountFailures } from "./inbox-empty.ts";
 import type { ScreenId } from "./routes.ts";
 
@@ -151,7 +152,7 @@ export function useNavSignals(): NavSignals {
   const drafts = useResource<ActionView[]>(draftsOn ? `/actions?status=${WAITING_ACTION_STATUSES.join(",")}&limit=${COUNT_LIMITS.drafts}` : null);
   const proposals = useResource<{ proposals: ProposalView[] }>(`/memory/proposals?status=proposed&limit=${COUNT_LIMITS.proposals}`, ["memory.changed"]);
   const totals = useResource<DecisionTotals>(DECISION_COUNT_PATH);
-  const replication = useResource<ReplicationView>("/replication", ["replication.changed", "config.changed"]);
+  const replication = useReplication();
   const { reload: reloadInbox } = inbox;
   const { reload: reloadDrafts } = drafts;
   const { reload: reloadTotals } = totals;

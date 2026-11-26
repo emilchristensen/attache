@@ -140,6 +140,14 @@ export class Updater {
     this.scheduleCheck(0);
   }
 
+  /**
+   * Something waits for an Update (a Replication paused on a newer Brain format, #143): check at once, then every
+   * 6 hours again, going on as the mode says. Nothing while Off, unavailable or stopped: Off makes no request.
+   */
+  checkSoon(): void {
+    this.scheduleCheck(0);
+  }
+
   stop(): void {
     this.stopped = true;
     if (this.watch) this.deps.clock.clearTimeout(this.watch);

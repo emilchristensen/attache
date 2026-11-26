@@ -5,10 +5,15 @@
  * Update state. The service runs as a release install (`update-service.ts`) against a TEST-ONLY local release server
  * with releases signed by a test key; its installer runner only records what it is asked, and the journey plays the
  * installer's outcome and the restart. Each line is captured in both themes at desktop and phone widths, with axe.
+ * Last, a Machine whose Replication paused on a newer Brain format (#143) asks to be updated, and the line goes once
+ * the Update that reads the format is installed and Replication resumes.
  */
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import type { UpdatesView } from "@attache/contracts";
+import type { ReplicationView, UpdatesView } from "@attache/contracts";
 import { signedRelease, testReleaseKeys } from "../../apps/service/test/fixtures/signed-release.ts";
 import { startReleaseServer, type ReleaseServer } from "../../apps/service/test/fixtures/release-server.ts";
 import { installerFinished } from "../../apps/service/test/fixtures/installer-outcome.ts";
@@ -215,4 +220,69 @@ test("a rollback: 'The Update to 0.8.0 failed, so Attache went back to 0.7.0 · 
   await page.goto(`${stack.url}/settings/service`);
   await expect(line(page)).toBeVisible();
   expect(journeys.consoleErrors).toEqual([]);
+});
+
+/** Git in `cwd` as the other Machine, the Work Mac, writes its commits. */
+const workMacGit = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "Work Mac", GIT_AUTHOR_EMAIL: "w@example.invalid", GIT_COMMITTER_NAME: "Work Mac", GIT_COMMITTER_EMAIL: "w@example.invalid" } });
+
+test("Replication paused on a newer Brain format: 'Update this Machine to keep replicating', with Updates Off then Ask first, and gone once the Update is installed", async () => {
+  const page = await journeys.open("/");
+  await api(page, "PUT", "/updates/settings", { mode: "off" });
+  // Replication on, then the Work Mac, on a later release, moves the Brain to Brain format 2, which 0.7.0 cannot read.
+  const base = mkdtempSync(join(tmpdir(), "attache-e2e-remote-"));
+  const remote = join(base, "brain.git");
+  workMacGit(base, "init", "--bare", "--quiet", "-b", "main", remote);
+  await api(page, "POST", "/replication/setup", { remote });
+  const clone = join(base, "work-mac");
+  workMacGit(base, "clone", "--quiet", remote, clone);
+  mkdirSync(join(clone, "machines"), { recursive: true });
+  writeFileSync(join(clone, "machines", "brain-format.json"), `${JSON.stringify({ format: 2, updatedAt: new Date().toISOString(), by: "6b1f0c7e-2d4a-4c55-9a8e-1f2e3d4c5b6a" }, null, 2)}\n`);
+  workMacGit(clone, "add", "machines");
+  workMacGit(clone, "commit", "--quiet", "-m", "Work Mac: Brain format 2");
+  workMacGit(clone, "push", "--quiet", "origin", "main");
+
+  // Off: the line only says so; Details leads to Updates, which says Off. No request goes to the release server.
+  const asked = releases.requests.length;
+  const paused = dashboardAnswer<ReplicationView>(page, "/replication", (v) => v.status === "paused");
+  await api(page, "POST", "/replication/check");
+  await paused;
+  await expectLine(page, "paused", "Update this Machine to keep replicating", "Details");
+  await expect(connectionBanner(page)).toBeVisible();
+  const gap = await page.evaluate(() => document.querySelector("[data-update-line]")!.getBoundingClientRect().top - document.querySelector("[data-connection-banner]")!.getBoundingClientRect().bottom);
+  expect(Math.abs(gap), "the line sits right under the Connection banner").toBeLessThan(1);
+  await capture(page, "paused");
+  await line(page).getByRole("link", { name: "Details", exact: true }).click();
+  await expect(page).toHaveURL(`${stack.url}/settings/updates`);
+  await expect(page.getByRole("heading", { name: "Automatic updates is Off" })).toBeVisible();
+  // The section offers what Updates can do itself; the line above it only says why this Machine needs one.
+  await expectLine(page, "paused", "Update this Machine to keep replicating", null);
+  await capture(page, "paused-updates-section");
+  expect(releases.requests.length, "Off makes no request").toBe(asked);
+  expect(installRequests(stack)).toEqual(["0.7.0", "0.8.0"]);
+
+  // Ask first: Updates on again checks at once; the line offers the verified Update.
+  publish("0.9.0");
+  const ready = reported(page, (v) => v.status === "ready" && v.update?.version === "0.9.0");
+  await api(page, "PUT", "/updates/settings", { mode: "ask_first" });
+  await ready;
+  await page.goto(`${stack.url}/`);
+  await expectLine(page, "paused", "Update this Machine to keep replicating", "Install");
+  await capture(page, "paused-ready");
+  const installing = reported(page, (v) => v.status === "installing");
+  await line(page).getByRole("button", { name: "Install", exact: true }).click();
+  await installing;
+  expect(installRequests(stack)).toEqual(["0.7.0", "0.8.0", "0.9.0"]);
+  await expectLine(page, "installing", "Installing Attache 0.9.0", null);
+
+  // The installer switches to 0.9.0, which reads Brain format 2: Replication resumes and the line tells of the Update instead.
+  installerFinished(stack.stateDir, { outcome: "updated", from: "0.7.0", to: "0.9.0" });
+  await stack.stopService();
+  await stack.startService({ version: "0.9.0", readsBrainFormat: 2 });
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await dashboardAnswer<ReplicationView>(page, "/replication", (v) => v.status === "up_to_date");
+  await expectLine(page, "updated", "Attache updated to 0.9.0", "What changed");
+  expect(journeys.consoleErrors).toEqual([]);
+  await api(page, "POST", "/replication/off");
 });
