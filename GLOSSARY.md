@@ -73,7 +73,7 @@ _Avoid_: Command palette, quick open
 
 **Settings section**:
 One page of Settings, at its own address under `/settings/`, such as Identity or Machines and Replication.
-Settings lists its nine sections in four groups, Attache, Brain, Machines and Service, and shows one at a time; each setting and action is in exactly one section.
+Settings lists its ten sections in four groups, Attache, Brain, Machines and Service, and shows one at a time; each setting and action is in exactly one section.
 
 **Attention dot**:
 The brass dot on the logo, and beside a count in the Dashboard, that shows something waits for the owner's decision.

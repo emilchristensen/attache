@@ -9,9 +9,7 @@
  * for the installer's outcome) fire only when a test moves the clock, so a
  * test that only calls the API sees a Machine where no time has passed.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
 import type { UpdatesView } from "@attache/contracts";
-import { join } from "node:path";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { signedRelease, testReleaseKeys } from "../fixtures/signed-release.ts";
 import { startReleaseServer, type ReleaseServer } from "../fixtures/release-server.ts";
@@ -34,14 +32,7 @@ export interface UpdatesMachine extends TestService {
   clock: ManualClock;
 }
 
-/** What the installer leaves in the Machine's state when it finishes (`<state>/updates/outcome.json`), written as the installers write it. */
-export function installerFinished(
-  stateDir: string,
-  outcome: { outcome: "updated" | "rolled_back" | "failed"; from: string; to: string; reason?: string; database?: "restored" | "no_backup" | "restore_failed"; backup?: string },
-): void {
-  mkdirSync(join(stateDir, "updates"), { recursive: true });
-  writeFileSync(join(stateDir, "updates", "outcome.json"), JSON.stringify({ ...outcome, at: new Date().toISOString() }) + "\n");
-}
+export { installerFinished } from "../fixtures/installer-outcome.ts";
 
 export function updatesWorld() {
   // The key this copy is built with: a constant in a release bundle, read from the environment when run from source.

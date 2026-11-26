@@ -181,6 +181,27 @@ describe("after an Update rolled back", () => {
     expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
   });
 
+  it("looks again at once, and no longer shows the failed version as available", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    // The version it went back to: it waits for the outcome, so its check at start is skipped.
+    const after = await restart(m, "0.6.0");
+    await after.clock.advance(0);
+    installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(after);
+    await after.clock.advance(0);
+    expect(await view(after)).toMatchObject({ status: "up_to_date", update: null, lastCheckedAt: expect.any(String), lastUpdate: { outcome: "rolled_back", to: "0.7.0" } });
+  });
+
+  it("forgets the failed version as the Update it found, in a service that read the rollback without restarting", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    installerFinished(m.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(m);
+    await m.clock.advance(0);
+    expect(await view(m)).toMatchObject({ status: "up_to_date", update: null });
+  });
+
   it("still offers a newer release", async () => {
     const { server, after } = await rolledBack(["0.7.0"]);
     server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));

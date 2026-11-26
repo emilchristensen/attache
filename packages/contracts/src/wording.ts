@@ -28,3 +28,9 @@ export function rollbackDatabaseSentence(rollback: { from: string; database: Rol
       return null;
   }
 }
+
+/** Why a rolled-back Update failed, followed by what became of the database when the installer said. */
+export function rollbackDetail(rollback: { from: string; reason: string; database: RollbackDatabase | null; backup: string | null }): string {
+  const database = rollbackDatabaseSentence(rollback);
+  return database ? `${rollback.reason.replace(/\.$/, "")}. ${database}` : rollback.reason;
+}

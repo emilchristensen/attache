@@ -1,6 +1,7 @@
 /**
  * Settings (#32 of spec #14): a section list in four groups beside the one section the address names, every setting
- * and action in exactly one section, and feature switches that only speak up about a problem. Driven through the
+ * and action in exactly one section, and feature switches that only speak up about a problem. Updates on a
+ * development install are here; their other states are in `settings-updates.spec.ts`. Driven through the
  * Dashboard against the real bundled service and the TEST-ONLY fixtures; set up through the API, so it runs on its own.
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
@@ -22,7 +23,7 @@ const GROUPS = [
   ["Attache", ["Features", "Schedules and notifications", "Identity"]],
   ["Brain", ["Saving and review", "Meaning-based search", "Backup and export"]],
   ["Machines", ["Machines and Replication", "Paired clients"]],
-  ["Service", ["Service health"]],
+  ["Service", ["Service health", "Updates"]],
 ] as const;
 
 const SECTIONS: Record<string, string> = {
@@ -35,6 +36,7 @@ const SECTIONS: Record<string, string> = {
   machines: "Machines and Replication",
   clients: "Paired clients",
   service: "Service health",
+  updates: "Updates",
 };
 
 type Role = "button" | "checkbox" | "textbox" | "spinbutton" | "tab" | "combobox";
@@ -132,7 +134,7 @@ test("sections: a list in four groups beside one section; each section has its o
     await expectSection(page, id);
   }
   await page.reload();
-  await expectSection(page, "service");
+  await expectSection(page, "updates");
   await page.goto(`${stack.url}/settings/nothing-here`);
   await expect(shown(page)).toHaveCount(0);
   await expect(page.getByText("There is no Settings section at this address.")).toBeVisible();
@@ -294,6 +296,19 @@ test("machines: each Machine shows the Attache version it runs, and a Machine on
   } finally {
     await api(page, "POST", "/replication/off");
   }
+});
+
+test("updates: a development install shows Updates as unavailable, why, and the version it runs, with nothing to set or start", async () => {
+  const page = await journeys.open("/settings/updates");
+  await expectSection(page, "updates");
+  const { version, reason } = await api<{ version: string; reason: string }>(page, "GET", "/updates");
+  const status = shown(page).locator('[data-updates-status="unavailable"]');
+  await expect(status.getByRole("heading", { name: "Updates are unavailable on this Machine" })).toBeVisible();
+  await expect(status.getByText(reason, { exact: true })).toBeVisible();
+  await expect(status.locator("[data-installed-version]")).toHaveText(`Attache ${version}`);
+  // The service never replaces a development install, so there is no setting or action to offer.
+  await expect(shown(page).getByRole("button")).toHaveCount(0);
+  await expect(shown(page).getByRole("radio")).toHaveCount(0);
 });
 
 test("settings captures: every section, light, dark and narrow", async () => {

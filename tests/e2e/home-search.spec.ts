@@ -428,6 +428,7 @@ test("palette: Go to reaches every screen and every Settings section", async () 
     /^Machines and Replication/,
     /^Paired clients/,
     /^Service health/,
+    /^Updates/,
   ]);
   await expect(passages(page)).toHaveCount(0);
   await expect(places.first()).toHaveAttribute("aria-selected", "true");
@@ -462,6 +463,7 @@ test("palette: Go to reaches every screen and every Settings section", async () 
     ["Replication", "machines", "Machines and Replication"],
     ["Paired", "clients", "Paired clients"],
     ["Service health", "service", "Service health"],
+    ["Updates", "updates", "Updates"],
   ];
   for (const [typed, id, label] of sections) {
     await openPaletteAt(page, "/jobs", "Jobs");
