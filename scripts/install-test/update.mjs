@@ -85,7 +85,7 @@ export async function updateScenario(t) {
   check("update", "the unattended installer checks the release with the installed version and backs up first", said.includes(`Attache ${to} checked that this release is signed by Attache.`) && readdirSync(join(state, "backups")).some((f) => f.startsWith(`pre-upgrade-${to}-to-${next}`)));
   // On Windows the folder a running program holds stays, whole, for the next install; everywhere else only two versions remain.
   const expected = P.os === "windows" ? [from, to, next].sort() : [to, next].sort();
-  const heldIntact = P.os !== "windows" || existsSync(join(prefix, "app", from, "VERSION"));
+  const heldIntact = P.os !== "windows" || ["VERSION", join("runtime", "node.exe"), join("service", "attache-service.mjs")].every((f) => existsSync(join(prefix, "app", from, f)));
   check("update", P.os === "windows" ? "only the current and previous versions remain, besides a folder a running program holds, which stays whole" : "only the current and previous versions remain after the Update", JSON.stringify(appsAfter) === JSON.stringify(expected) && heldIntact, `apps=${appsAfter.join(",")}`);
   // The service removes the staged release once it reads the outcome; on Windows the installer may take a moment to let go of it.
   for (let i = 0; i < 40 && staged().length; i++) await sleep(250);

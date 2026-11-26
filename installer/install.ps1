@@ -226,13 +226,17 @@ if (-not $Healthy) { Rollback "the service did not become healthy; see the logs 
 Say "Attache $Version is running."
 
 # Keep this version and the one it replaced, for going back; remove the rest, and folders an earlier install left.
-# Windows refuses to rename a folder a program still runs from (such as a Harness's MCP server): that one stays,
-# whole, until the next install. A folder that could be renamed aside is no longer in use and is removed.
+# A version whose runtime still runs (such as a Harness's MCP server) stays, whole, until the next install: Windows
+# never deletes a running program, so deleting the runtime first is the test. Renaming is not: Windows allows it.
+# The rest is renamed aside before it is removed, so a folder that is only partly removed never carries a version's name.
 if ($Previous -and $Previous -ne $Version) {
   foreach ($Old in @(Get-ChildItem -LiteralPath (Join-Path $Prefix 'app') -Directory -Force)) {
     if ($Old.Name -eq $Version -or $Old.Name -eq $Previous) { continue }
     $Gone = $Old.FullName
     if (-not $Old.Name.StartsWith('.')) {
+      $Runtime = Join-Path $Old.FullName 'runtime\node.exe'
+      try { if (Test-Path -LiteralPath $Runtime) { Remove-Item -LiteralPath $Runtime -Force } }
+      catch { Say "Attache $($Old.Name) is still in use, so it stays until the next install."; continue }
       $Gone = Join-Path $Old.Parent.FullName ".$($Old.Name).removing.$PID"
       try { Rename-Item -LiteralPath $Old.FullName -NewName (Split-Path -Leaf $Gone) }
       catch { Say "Attache $($Old.Name) is still in use, so it stays until the next install."; continue }
