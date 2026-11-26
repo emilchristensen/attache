@@ -56,6 +56,8 @@ export interface AppOptions {
   meaning?: Partial<MeaningOptions>;
   /** Lease commits per generation of the Reader lease; tests make it small to see the history stay bounded. */
   leaseGenerationCommits?: number;
+  /** The Attache version this Machine records in the Brain; `VERSION` when left out. Tests name one to play a Machine before and after an Update. */
+  version?: string;
 }
 
 export const VERSION = process.env.ATTACHE_VERSION ?? "0.6.0";
@@ -134,6 +136,7 @@ export class App {
       clock: this.clock,
       seams: defaultSeams({ github: this.githubAccess(), clock: this.clock, install: { stateDir: this.paths.stateDir, instance: this.instance } }),
       machine: () => this.machine.get(),
+      version: opts.version ?? VERSION,
       dataRoot: () => this.memory.dataRoot,
       changesAfter: (seq) => this.memory.listChanges({ after: seq, limit: 500 }),
       latestSeq: () => this.memory.listChanges({ limit: 1 })[0]?.seq ?? 0,

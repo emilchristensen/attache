@@ -53,12 +53,14 @@ export interface TestServiceOptions {
   /** Lease commits per generation of the Reader lease ref; small in tests that check the history stays bounded. */
   leaseGenerationCommits?: number;
   meaning?: AppOptions["meaning"];
+  /** The Attache version this Machine runs, as a release build says it; `VERSION` when left out. */
+  version?: string;
 }
 
 export async function startTestService(opts: TestServiceOptions = {}): Promise<TestService> {
   const stateDir = opts.stateDir ?? testFolder("state");
   const dataDir = opts.dataDir ?? join(testFolder("data"), "data");
-  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}) });
+  const app = new App({ stateDir, quiet: true, schedulerTickMs: 60_000, instance: `it-${Math.random().toString(36).slice(2, 8)}`, ...(opts.clock ? { clock: opts.clock } : {}), ...(opts.leaseGenerationCommits ? { leaseGenerationCommits: opts.leaseGenerationCommits } : {}), ...(opts.meaning ? { meaning: opts.meaning } : {}), ...(opts.version ? { version: opts.version } : {}) });
   const server = await startServer(app, { port: 0 });
   app.start();
   // What `attache serve` writes, so the CLI finds this service.

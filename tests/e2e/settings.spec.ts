@@ -4,6 +4,10 @@
  * Dashboard against the real bundled service and the TEST-ONLY fixtures; set up through the API, so it runs on its own.
  */
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { FeatureStatus } from "@attache/contracts";
 import { api, JourneyBrowser, settled } from "./browser.ts";
 import { buildAll, startStack, type Stack } from "./stack.ts";
@@ -262,6 +266,33 @@ test("tablet: a wide touch window keeps the list beside the section, with no way
     }
   } finally {
     await tablet.close();
+  }
+});
+
+test("machines: each Machine shows the Attache version it runs, and a Machine on an earlier version shows version unknown", async () => {
+  const page = await journeys.open("/settings/machines");
+  const { version } = await api<{ version: string }>(page, "GET", "/health");
+  const row = (name: string) => shown(page).locator(`.machine-row[data-machine="${name}"]`);
+  const { name: mine } = await api<{ name: string }>(page, "GET", "/machine");
+  const base = mkdtempSync(join(tmpdir(), "attache-settings-remote-"));
+  const remote = join(base, "brain.git");
+  execFileSync("git", ["init", "--bare", "--quiet", "-b", "main", remote]);
+  await api(page, "POST", "/replication/setup", { remote });
+  try {
+    // Two other Machines' records, as they arrive from the repository: one on this version, one on a version that did not record it.
+    const records = [
+      { id: "6b1f0c7e-2d4a-4c55-9a8e-1f2e3d4c5b6a", name: "Work Mac", standby: false, version, readsBrainFormat: 1 },
+      { id: "0f3c2b1a-9e8d-4c7b-8a6f-5e4d3c2b1a09", name: "Old Laptop", standby: false },
+    ];
+    mkdirSync(join(stack.dataDir, "machines"), { recursive: true });
+    for (const r of records) writeFileSync(join(stack.dataDir, "machines", `${r.id}.json`), `${JSON.stringify({ ...r, updatedAt: new Date().toISOString() }, null, 2)}\n`);
+    await api(page, "POST", "/replication/check");
+    await page.reload();
+    await expect(row(mine).getByText(`Attache ${version}`, { exact: true })).toBeVisible();
+    await expect(row("Work Mac").getByText(`Attache ${version}`, { exact: true })).toBeVisible();
+    await expect(row("Old Laptop").getByText("Version unknown", { exact: true })).toBeVisible();
+  } finally {
+    await api(page, "POST", "/replication/off");
   }
 });
 
