@@ -47,7 +47,8 @@ export interface ReplicationDeps {
   onChange?: () => void;
   /**
    * A pause began: the Brain is in a format this Machine cannot read, and it waits for an Update (ADR 0008). Called
-   * once per pause, after the paused status is written, so a service that starts while paused does not call it again.
+   * once per pause (`paused_notified_format`, kept until Replication is up to date again), so neither a restart nor a
+   * failure of another kind in between calls it again.
    */
   onPaused?: (pause: ReplicationPause) => void;
   /** Back up a folder a join refused, so the Brain in it is safe; returns the archive's path. */
@@ -447,11 +448,14 @@ export class Replication {
 
   private report(o: Outcome): void {
     const before = this.view();
-    const wasPaused = this.settings.get()?.status === "paused";
     this.settings.report({ status: o.status, cause: o.cause, at: this.deps.clock.now().toISOString(), pushed: o.pushed ?? false, pausedFormat: o.pausedFormat ?? null });
     const after = this.view();
     if (before.status !== after.status || before.cause !== after.cause || o.pushed) this.deps.onChange?.();
-    if (!wasPaused && after.pause) this.deps.onPaused?.(after.pause);
+    // Once per pause, not per status change: a blocked check in between, or a restart, raises nothing more. Recorded first, so a crash loses the call rather than repeating it.
+    if (after.pause && this.settings.get()?.pausedNotifiedFormat !== after.pause.brainFormat) {
+      this.settings.pauseNotified(after.pause.brainFormat);
+      this.deps.onPaused?.(after.pause);
+    }
   }
 
   private machineRef() {
