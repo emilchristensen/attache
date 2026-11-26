@@ -60,8 +60,10 @@ describe("An open Harness session after an Update", () => {
   });
 
   it("orders prerelease versions below their release", async () => {
-    const client = await serverAt(`${serviceVersion}-beta.1`);
-    expect((await searches(client, 1))[0]).toContain(`${UPDATED} to ${serviceVersion} after this session started, so this session still has the tools of ${serviceVersion}-beta.1.`);
+    // A prerelease of the service's release: below it whether the service runs x.y.z or x.y.z-beta.N.
+    const older = `${serviceVersion.replace(/-.*$/, "")}-alpha.1`;
+    const client = await serverAt(older);
+    expect((await searches(client, 1))[0]).toContain(`${UPDATED} to ${serviceVersion} after this session started, so this session still has the tools of ${older}.`);
   });
 
   it("is never told anything when the MCP server runs the service's version", async () => {
