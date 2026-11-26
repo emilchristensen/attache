@@ -279,9 +279,11 @@ test("Replication paused on a newer Brain format: 'Update this Machine to keep r
   installerFinished(stack.stateDir, { outcome: "updated", from: "0.7.0", to: "0.9.0" });
   await stack.stopService();
   await stack.startService({ version: "0.9.0", readsBrainFormat: 2 });
+  // Listening before the reload: the page may hear Replication up to date in its first load or after an event, and either must count.
+  const resumed = dashboardAnswer<ReplicationView>(page, "/replication", (v) => v.status === "up_to_date");
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
-  await dashboardAnswer<ReplicationView>(page, "/replication", (v) => v.status === "up_to_date");
+  await resumed;
   await expectLine(page, "updated", "Attache updated from 0.7.0 to 0.9.0", "What changed");
   expect(journeys.consoleErrors).toEqual([]);
   await api(page, "POST", "/replication/off");
