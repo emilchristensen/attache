@@ -185,6 +185,10 @@ if ($Previous -and (Test-Path -LiteralPath $OldNode)) {
   }
 }
 
+# Stop the running service (if any) and wait until it has really stopped: the backup below then holds its last write.
+$script:Stopped = $true
+$null = NewAttache 'could not stop the running Attache service; nothing was changed' service stop
+
 # If a service is already installed, back it up before changing anything: the pre-Update backup, which a rollback
 # restores the database from (only the newest 3 stay, see below; the owner's own backups are never touched).
 # A service that refused to start on a database a newer Attache wrote (refused-to-start) cannot open that database to
@@ -199,13 +203,10 @@ if ($Previous -and (Test-Path -LiteralPath (Join-Path $State 'refused-to-start')
   # The pre-update- label tells it apart from the owner's backups (apps/service/src/updates/pre-update-backups.ts).
   $Taken = Join-Path $State "backups\pre-update-$Previous-to-$Version-$Stamp.tar.gz"
   $null = & $OldNode $OldService backup --out $Taken
+  # Fail starts the installed version again.
   if ($LASTEXITCODE -ne 0) { Fail 'could not back up the existing installation; nothing was changed' }
   $script:Backup = $Taken
 }
-
-# Stop the running service (if any) and wait until it has really stopped.
-$script:Stopped = $true
-$null = NewAttache 'could not stop the running Attache service; nothing was changed' service stop
 
 # Move a folder out of the way. Windows refuses while a program still runs from it; a service that
 # was just stopped can take a moment to exit, so this waits up to 15 seconds before giving up.

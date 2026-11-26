@@ -6,7 +6,7 @@
  * stops the service, switches versions and writes its outcome. Checks are id `update`.
  */
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { releaseArchive } from "../release-targets.mjs";
 import { waitUntil } from "./wait.mjs";
@@ -29,6 +29,14 @@ function holdFolder(P, prefix, version) {
   if (P.os !== "windows") return { release: () => {} };
   const child = spawn(join(prefix, "app", version, "runtime", "node.exe"), ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
   return { release: () => child.kill() };
+}
+
+/** When the service last said it was stopping before `version` first listened, from its log; null when it never did. */
+function stoppedBefore(state, version) {
+  const lines = readFileSync(join(state, "logs", "service.log"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const started = lines.findIndex((l) => l.msg === "attache service listening" && l.data?.version === version);
+  const stopping = lines.slice(0, started < 0 ? lines.length : started).findLast((l) => l.msg === "stopping");
+  return stopping ? Date.parse(stopping.t) : null;
 }
 
 /**
@@ -83,6 +91,11 @@ export async function updateScenario(t) {
   const said = existsSync(log) ? readFileSync(log, "utf8") : "";
   check("update", "the unattended installer never pairs or opens the browser", said.includes(`Attache ${next} is running.`) && !/Pairing code|Open: http/.test(said), said.trim().split("\n").slice(-3).join(" | "));
   check("update", "the unattended installer checks the release with the installed version and backs up first", said.includes(`Attache ${to} checked that this release is signed by Attache.`) && readdirSync(join(state, "backups")).some((f) => f.startsWith(`pre-update-${to}-to-${next}-`)));
+  // A write the old service made after the backup would be lost by a rollback: the installer stops it first.
+  const backup = readdirSync(join(state, "backups")).find((f) => f.startsWith(`pre-update-${to}-to-${next}-`));
+  const backupAt = backup ? statSync(join(state, "backups", backup)).mtimeMs : null;
+  const stoppedAt = stoppedBefore(state, next);
+  check("update", "the installer stops the running service before it takes the pre-Update backup", backupAt !== null && stoppedAt !== null && backupAt >= stoppedAt, `stopped ${stoppedAt && new Date(stoppedAt).toISOString()}, backup ${backupAt && new Date(backupAt).toISOString()}`);
   // On Windows the folder a running program holds stays, whole, for the next install; everywhere else only two versions remain.
   const expected = P.os === "windows" ? [from, to, next].sort() : [to, next].sort();
   const heldIntact = P.os !== "windows" || ["VERSION", join("runtime", "node.exe"), join("service", "attache-service.mjs")].every((f) => existsSync(join(prefix, "app", from, f)));
