@@ -196,8 +196,9 @@ async function main() {
   }
   const machineBefore = P.machineFingerprint();
   // GitHub Releases, here: the installed service lists releases from it (ATTACHE_RELEASE_FEED_URL, which the installer passes on to the service).
+  // A release is published only when a scenario installs it: a service checks when it starts and, in Automatic, installs
+  // a newer release on its own, which would move the Machine to another version in the middle of a check.
   releaseServer = await startReleaseServer();
-  for (const v of [FROM, TO]) await releaseServer.publish(v, join(ROOT, "release", v));
   cleanEnv = { ...cleanEnv, ATTACHE_RELEASE_FEED_URL: releaseServer.feedUrl };
   console.log(`Clean profile HOME=${HOME} service=${P.serviceName} port=${PORT}`);
   for (const [path, text] of Object.entries(OWNER_FILES)) {
@@ -418,7 +419,8 @@ async function main() {
   check("data", "uninstall removes exactly the hooks Attache added to Claude Code", JSON.stringify(JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf8"))) === JSON.stringify(JSON.parse(CLAUDE_BEFORE)));
   const mcpAfterUninstall = JSON.parse(readFileSync(CLAUDE_JSON, "utf8")).mcpServers;
   check("data", "uninstall removes the MCP server Attache added to Claude Code", mcpAfterUninstall === undefined, JSON.stringify(mcpAfterUninstall));
-  sh(artifact(TO));
+  // The newest release: the service checks when it starts, and would install a newer one on its own.
+  sh(artifact(NEWER));
   token = await pairToken();
   const cfgReinstalled = (await http("GET", "/config", null, token)).body.config;
   check("data", "reinstall after uninstall continues with the kept data", cfgReinstalled.setupCompleted && cfgReinstalled.dataFolder === DATA);
