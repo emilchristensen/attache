@@ -447,6 +447,16 @@ The keys a Machine trusts are the public key built into the bundle, a constant t
 `attache verify-release` is the internal command an installer runs with the installed version before it changes anything; it never opens the database, so an older version can check a newer release.
 `platform/release-target.ts` names this computer's release target, the same mapping the release build uses.
 
+### Updates
+
+The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind four calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `setSettings()` and, to come, `install()`.
+The HTTP API is `GET /updates`, `PUT /updates/settings` and `POST /updates/check` (`http/routes-updates.ts`), and every change fires `updates.changed` on the event stream.
+A check lists the repository's GitHub releases without signing in (`updates/release-feed.ts`; `ATTACHE_RELEASE_FEED_URL` points it elsewhere, for tests), and `updates/channel.ts` keeps the versions in the Machine's Update channel that are newer than the one it runs and not marked bad here, newest first.
+`updates/find-update.ts` downloads the newest one's manifest and signature and checks them (`verifySignedManifest`) before believing anything in them; a refused release is skipped, and when every newer release is refused the check fails with the reason instead of reporting the Machine up to date.
+The Update channel is the Machine's configuration (`config.updates`, Stable by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
+Only a release install updates itself (`updates/release-install.ts`: the service script runs from `<prefix>/app/<version>/` with `<prefix>/current` beside it); a source checkout, or a build without a release key, shows Updates as unavailable and makes no request.
+`attache update --check` (`cli/update-commands.ts`) asks the running service to check without acting on what it finds.
+
 ## Harness sessions
 
 Claude Code, Codex, Antigravity and Claude Desktop are connections (`connectors/agent.ts`, `agents/integrations.ts`).
