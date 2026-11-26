@@ -11,6 +11,7 @@ import { registerPrompts } from "./prompts.ts";
 import { registerSaveTool } from "./save-tool.ts";
 import type { ServerContext } from "./harness.ts";
 import { registerWrapUpTool } from "./wrap-up-tool.ts";
+import { withUpdateNotice } from "./update-notice.ts";
 import { unverifiedLabel } from "../memory/review-date.ts";
 import type { Clock } from "../replication/clock.ts";
 
@@ -63,7 +64,7 @@ function renderNote(n: NoteText): string {
 /** The MCP server a Harness talks to, over any transport. */
 /** `clock` times the owner's confirmation of a save; the system clock when left out. */
 export function createMcpServer(brain: BrainAccess, info: { version: string; instructions: string; context: ServerContext; clock?: Clock }): McpServer {
-  const server = new McpServer({ name: "attache", title: "Attache", version: info.version }, { instructions: info.instructions });
+  const server = withUpdateNotice(new McpServer({ name: "attache", title: "Attache", version: info.version }, { instructions: info.instructions }), info.version, () => brain.serviceVersion());
   server.registerTool(
     "search",
     {
