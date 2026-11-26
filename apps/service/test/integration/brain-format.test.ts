@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ManualClock } from "../fixtures/manual-clock.ts";
 import { startTestService, type TestService } from "./harness.ts";
@@ -143,6 +144,22 @@ describe("The Brain format rises only when every Machine can read it", () => {
     expect(await pc.post("/replication/join", { remote: world.remote.url, path: pc.dataDir })).toMatchObject({ status: "paused", pause: { brainFormat: 2, readsBrainFormat: 1 } });
     expect(existsSync(join(pc.dataDir, `machines/${await idOf(pc)}.json`))).toBe(false);
     expect(world.remote.git("rev-parse", "main")).toBe(sent);
+  });
+
+  it("a Machine that joins a Brain in a newer format writes none of its Inbox items into it", async () => {
+    world = await startMachines(["Mac"], { brainFormat: READS_2 });
+    joining = await startTestService({ clock: new ManualClock() });
+    const pc = joining;
+    const due = new Date(Date.now() + DAY).toISOString().slice(0, 10);
+    mkdirSync(join(pc.dataDir, "memory/projects"), { recursive: true });
+    writeFileSync(join(pc.dataDir, "memory/projects/launch.md"), `# Launch\n\n- [ ] Book the venue 📅 ${due}\n`);
+    const { job } = await pc.post("/briefings", { kind: "manual" });
+    expect((await pc.waitJob(job.id)).job.status).toBe("succeeded");
+    expect(readdirSync(join(pc.dataDir, "review/inbox"))).toHaveLength(1);
+    const target = join(mkdtempSync(join(tmpdir(), "attache-it-join-")), "brain");
+
+    expect(await pc.post("/replication/join", { remote: world.remote.url, path: target })).toMatchObject({ status: "paused" });
+    expect(existsSync(join(target, "review/inbox"))).toBe(false);
   });
 
   it("is not raised from what a Machine heard before it was away: it fetches the others' records first", async () => {

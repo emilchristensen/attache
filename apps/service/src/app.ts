@@ -410,8 +410,9 @@ export class App {
   /**
    * Open the configured data folder and make sure it is registered as the builtin vault source.
    * `adopt` is for a folder the owner just chose or joined: the meeting captures already in it are not consolidated.
+   * `paused` is for a joined Brain in a newer format: this Machine writes none of its Inbox items into it.
    */
-  openDataFolder(path: string, opts: { adopt?: boolean } = {}): { created: string[] } {
+  openDataFolder(path: string, opts: { adopt?: boolean; paused?: boolean } = {}): { created: string[] } {
     const r = this.memory.open(path);
     const existing = this.connections.record("vault-data");
     const now = nowIso();
@@ -422,7 +423,7 @@ export class App {
     }
     const root = this.memory.rootRef!;
     this.memory.indexer.scan(root);
-    this.inbox.reconcile();
+    if (!opts.paused) this.inbox.reconcile();
     this.proposals.open();
     this.captures.opened({ adopt: opts.adopt ?? false });
     this.dataWatcher?.stop();
@@ -438,8 +439,8 @@ export class App {
   }
 
   /** Make `path` this Machine's data folder: open it, index it and remember it. */
-  useDataFolder(path: string): { created: string[] } {
-    const r = this.openDataFolder(path, { adopt: true });
+  useDataFolder(path: string, paused = false): { created: string[] } {
+    const r = this.openDataFolder(path, { adopt: true, paused });
     this.config.patch({ dataFolder: path });
     this.bus.emit("event", { type: "config.changed" });
     return r;
