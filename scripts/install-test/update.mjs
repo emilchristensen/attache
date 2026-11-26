@@ -13,7 +13,7 @@ import { releaseArchive } from "../release-targets.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Run `attache update`; whether it succeeded, and everything it said. */
-function runUpdate(attacheCli) {
+export function runUpdate(attacheCli) {
   try {
     return { ok: true, said: attacheCli(["update"]) };
   } catch (e) {
@@ -82,7 +82,7 @@ export async function updateScenario(t) {
   const log = join(state, "logs", `update-${next}.log`);
   const said = existsSync(log) ? readFileSync(log, "utf8") : "";
   check("update", "the unattended installer never pairs or opens the browser", said.includes(`Attache ${next} is running.`) && !/Pairing code|Open: http/.test(said), said.trim().split("\n").slice(-3).join(" | "));
-  check("update", "the unattended installer checks the release with the installed version and backs up first", said.includes(`Attache ${to} checked that this release is signed by Attache.`) && readdirSync(join(state, "backups")).some((f) => f.startsWith(`pre-upgrade-${to}-to-${next}`)));
+  check("update", "the unattended installer checks the release with the installed version and backs up first", said.includes(`Attache ${to} checked that this release is signed by Attache.`) && readdirSync(join(state, "backups")).some((f) => f.startsWith(`pre-update-${to}-to-${next}-`)));
   // On Windows the folder a running program holds stays, whole, for the next install; everywhere else only two versions remain.
   const expected = P.os === "windows" ? [from, to, next].sort() : [to, next].sort();
   const heldIntact = P.os !== "windows" || ["VERSION", join("runtime", "node.exe"), join("service", "attache-service.mjs")].every((f) => existsSync(join(prefix, "app", from, f)));

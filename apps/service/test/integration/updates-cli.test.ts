@@ -106,6 +106,24 @@ describe("attache update", () => {
     expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy\n");
   });
 
+  for (const [database, said] of [
+    ["restored", "The database was restored from the backup taken just before the Update."],
+    ["no_backup", "The database was not restored, because Attache 0.6.0 could not open it to back it up before the Update."],
+    ["restore_failed", 'The database could not be restored from BACKUP. To restore it, run attache stop, then attache restore "BACKUP" --database-only, then attache start.'],
+  ] as const) {
+    it(`says what became of the database after a rollback (${database})`, async () => {
+      const m = await machine("0.6.0", await releases("0.7.0"));
+      const backup = join(m.stateDir, "backups", "pre-update-0.6.0-to-0.7.0-20261126101500.tar.gz");
+      m.runner.onStart = async () => {
+        const after = await restart(m, "0.6.0");
+        installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database, ...(database === "no_backup" ? {} : { backup }) });
+      };
+      const r = await cli(m, ["update"]);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toBe(`attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy. ${said.replaceAll("BACKUP", backup)}\n`);
+    });
+  }
+
   it("says when there is nothing to install", async () => {
     const m = await machine("0.7.0", await releases("0.7.0"));
     const r = await cli(m, ["update"]);

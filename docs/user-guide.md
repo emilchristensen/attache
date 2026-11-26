@@ -721,6 +721,11 @@ The next time Attache starts with Credential Manager working, it moves the crede
   Credentials stay in your Keychain (on Linux, the Secret Service; on Windows, Credential Manager) and are not included; after restoring elsewhere, reconnect your accounts.
 - **Restore:** run `attache stop`, then `attache restore <backup.tar.gz> --data-folder <empty folder> --force`, then `attache start`.
   `--force` keeps the replaced database as a `.pre-restore` copy; without it, restore only writes into a fresh profile.
+- **Backups taken before an Update:** before it installs a newer version, the installer backs up the Machine as `pre-update-<from>-to-<to>-<time>.tar.gz` in the `backups` folder of the service state.
+  Only the 3 newest of these stay; backups you made yourself are never removed.
+  When an Update does not start, the installer goes back to the previous version and restores the database from that backup, so the previous version never runs on a database the newer one changed.
+  Only the database goes back: your data folder, your paired browsers and your connections stay as they are.
+  If the database could not be restored, run `attache stop`, then `attache restore <backup.tar.gz> --database-only`, then `attache start`.
 - **Uninstall:** `~/.local/bin/attache-uninstall` (on Windows, `%LOCALAPPDATA%\Attache\bin\attache-uninstall`) removes the app, the background service and the command line, removes Attache's hooks from each Harness, and keeps your data.
   `attache-uninstall --delete-data` also removes service state, stored credentials and the data folder, after asking you to type DELETE.
   Files you had before Attache are left alone, including notes already in the data folder you chose: only what Attache created there is removed.
@@ -886,6 +891,8 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 
 The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `update`, `mcp`, `agent-hooks`, `backup` and `restore`.
 `attache update` installs an available Update now: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+When the new version does not start, Attache goes back to the version it had, with the database from just before the Update, and never offers that version again on this Machine; a newer release is still offered.
+`attache update` then fails with the reason and says what became of the database.
 `attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.
 `attache agent-hooks status` lists the hooks and MCP servers Attache added to your Harnesses.
 On Linux, setting `XDG_DATA_HOME`, `XDG_STATE_HOME` or `XDG_CONFIG_HOME` moves the app, the state or the service definition.

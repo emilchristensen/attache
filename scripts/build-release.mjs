@@ -28,6 +28,10 @@
  * signing key: the release workflow builds that way and seals the folder in a
  * separate job, the only one that reads the signing key
  * (`release-signing.mjs seal`).
+ *
+ * `--fail-health-check` is for the install test only: the release's service migrates the database one step past what
+ * any release knows and then exits, so it never passes the installer's health check and the installer rolls back
+ * (`apps/service/src/updates/health-check-fault.ts`).
  */
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -126,6 +130,7 @@ function packArchive(archivePath) {
 }
 
 const UNSEALED = process.argv.includes("--unsealed");
+const FAIL_HEALTH_CHECK = process.argv.includes("--fail-health-check");
 
 async function main() {
   const signingKey = UNSEALED ? undefined : inputFile("signing-key", { required: true });
@@ -136,13 +141,13 @@ async function main() {
   const nextPublicKey = inputFile("next-public-key", { required: false });
   // A version no release can carry is refused before the build, not after it.
   channelOf(VERSION);
-  console.log(`Building Attache ${VERSION} for ${T.label} (Node ${NODE_VERSION})`);
+  console.log(`Building Attache ${VERSION} for ${T.label} (Node ${NODE_VERSION})${FAIL_HEALTH_CHECK ? ", built to fail its health check" : ""}`);
   const archiveName = releaseArchive(VERSION, TARGET);
   const installerName = T.installer(VERSION);
   mkdirSync(OUT, { recursive: true });
   for (const f of [archiveName, installerName, ".stage-" + TARGET]) rmSync(join(OUT, f), { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
-  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, ATTACHE_VERSION: VERSION, ATTACHE_RELEASE_PUBLIC_KEY: publicKey } });
+  run(process.execPath, [join(ROOT, "apps/service/build.mjs")], { env: { ...process.env, ATTACHE_VERSION: VERSION, ATTACHE_RELEASE_PUBLIC_KEY: publicKey, ATTACHE_FAIL_HEALTH_CHECK: FAIL_HEALTH_CHECK ? "1" : "" } });
   buildWeb();
 
   const node = await nodeRuntime();

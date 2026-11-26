@@ -1,4 +1,4 @@
-import type { LastUpdateView, UpdatesView } from "@attache/contracts";
+import { rollbackDatabaseSentence, type LastUpdateView, type UpdatesView } from "@attache/contracts";
 import type { ServicePaths } from "../core/paths.ts";
 import type { CliIo } from "./memory-commands.ts";
 import { ServiceClient, ServiceError } from "./client.ts";
@@ -44,8 +44,10 @@ export function renderUpdateOutcome(last: LastUpdateView): { line: string | null
   switch (last.outcome) {
     case "updated":
       return { line: `Attache updated from ${last.from} to ${last.to}.`, failure: null };
-    case "rolled_back":
-      return { line: null, failure: `The Update to Attache ${last.to} failed, so Attache went back to ${last.from}: ${last.reason}` };
+    case "rolled_back": {
+      const database = rollbackDatabaseSentence(last);
+      return { line: null, failure: `The Update to Attache ${last.to} failed, so Attache went back to ${last.from}: ${database ? `${last.reason.replace(/\.$/, "")}. ${database}` : last.reason}` };
+    }
     case "failed":
       return { line: null, failure: `The Update to Attache ${last.to} failed, and Attache stayed on ${last.from}: ${last.reason}` };
   }

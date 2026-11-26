@@ -4,14 +4,15 @@
  * - `<state>/updates/install.json`, written by the Updater just before it starts the installer: which version it
  *   moves from and to, and the new version's release notes from its signed manifest.
  * - `<state>/updates/outcome.json`, written by the installer in unattended mode when it is done (`installer/install.sh`,
- *   `installer/install.ps1`): `{ outcome, from, to, at, reason? }`, where outcome is `updated`, `rolled_back` (the new
- *   version did not come up, so it switched back) or `failed` (it stopped before changing anything).
+ *   `installer/install.ps1`): `{ outcome, from, to, at, reason?, database?, backup? }`, where outcome is `updated`,
+ *   `rolled_back` (the new version did not come up, so it switched back, and says in `database` what became of the
+ *   database and in `backup` which pre-Update backup it restored) or `failed` (it stopped before changing anything).
  * The outcome's fields are a contract with installers of other versions: add fields, never rename them.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import type { LastUpdateView } from "@attache/contracts";
+import { RollbackDatabase, type LastUpdateView } from "@attache/contracts";
 import { writeFileWhole } from "../platform/replace-file.ts";
 import { updatesDir } from "./bad-versions.ts";
 
@@ -30,6 +31,9 @@ const OutcomeRecord = z.looseObject({
   to: z.string(),
   at: z.string(),
   reason: z.string().optional(),
+  /** After a rollback (#138): what became of the database, and the pre-Update backup it came from. */
+  database: RollbackDatabase.optional(),
+  backup: z.string().optional(),
 });
 export type OutcomeRecord = z.infer<typeof OutcomeRecord>;
 
@@ -71,5 +75,7 @@ export const forgetInstallRequest = (stateDir: string): void => rmSync(requestFi
 export function lastUpdateOf(outcome: OutcomeRecord, request: InstallRequestRecord | null): LastUpdateView {
   const { from, to, at } = outcome;
   if (outcome.outcome === "updated") return { outcome: "updated", from, to, at, notes: request?.to === to ? request.notes : "" };
-  return { outcome: outcome.outcome, from, to, at, reason: outcome.reason ?? "The installer gave no reason." };
+  const reason = outcome.reason ?? "The installer gave no reason.";
+  if (outcome.outcome === "rolled_back") return { outcome: "rolled_back", from, to, at, reason, database: outcome.database ?? null, backup: outcome.backup ?? null };
+  return { outcome: "failed", from, to, at, reason };
 }

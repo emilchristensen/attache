@@ -22,6 +22,9 @@ const options = {
     // The public key releases are signed with, a build input (ADR 0007): a constant in the bundle, so nothing at
     // run time can replace it. A bundle built without one (development, the browser journeys) checks no release.
     "process.env.ATTACHE_RELEASE_PUBLIC_KEY": process.env.ATTACHE_RELEASE_PUBLIC_KEY ? JSON.stringify(process.env.ATTACHE_RELEASE_PUBLIC_KEY) : "undefined",
+    // Only the install test's release built to fail its health check (`build-release.mjs --fail-health-check`); every
+    // other bundle has it as a constant too, so nothing at run time can turn it on.
+    "process.env.ATTACHE_FAIL_HEALTH_CHECK": process.env.ATTACHE_FAIL_HEALTH_CHECK === "1" ? JSON.stringify("1") : "undefined",
   },
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
   logLevel: "info",

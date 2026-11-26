@@ -57,14 +57,27 @@ export interface AvailableUpdateView {
 }
 
 /**
+ * What a rollback did with the database, which the version being installed may have changed:
+ * - `restored`: put back from the pre-Update backup taken just before the switch.
+ * - `no_backup`: left as it was, because no pre-Update backup was taken (the installed version could not open the
+ *   database a newer Attache wrote, so it could not back it up either).
+ * - `restore_failed`: the pre-Update backup could not be put back; it is still in the backups folder.
+ */
+export const RollbackDatabase = z.enum(["restored", "no_backup", "restore_failed"]);
+export type RollbackDatabase = z.infer<typeof RollbackDatabase>;
+
+/**
  * What the last Update did, read from the outcome the installer left in the Machine's state:
  * - `updated`: the Machine moved from `from` to `to`; `notes` are `to`'s release notes.
- * - `rolled_back`: `to` did not come up, so the installer switched back to `from`.
+ * - `rolled_back`: `to` did not come up, so the installer switched back to `from`, and `to` is never offered again on
+ *   this Machine. `database` says what became of the database (null from an installer that did not say), and `backup`
+ *   is the pre-Update backup it was restored from, or could not be (null when there was none).
  * - `failed`: the installer stopped before it changed anything, so the Machine stayed on `from`.
  */
 export type LastUpdateView =
   | { outcome: "updated"; from: string; to: string; at: string; notes: string }
-  | { outcome: "rolled_back" | "failed"; from: string; to: string; at: string; reason: string };
+  | { outcome: "rolled_back"; from: string; to: string; at: string; reason: string; database: RollbackDatabase | null; backup: string | null }
+  | { outcome: "failed"; from: string; to: string; at: string; reason: string };
 
 export interface UpdatesView {
   /** The version this Machine runs. */

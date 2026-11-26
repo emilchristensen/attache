@@ -22,7 +22,10 @@ export interface UpdatesMachine extends TestService {
 }
 
 /** What the installer leaves in the Machine's state when it finishes (`<state>/updates/outcome.json`), written as the installers write it. */
-export function installerFinished(stateDir: string, outcome: { outcome: "updated" | "rolled_back" | "failed"; from: string; to: string; reason?: string }): void {
+export function installerFinished(
+  stateDir: string,
+  outcome: { outcome: "updated" | "rolled_back" | "failed"; from: string; to: string; reason?: string; database?: "restored" | "no_backup" | "restore_failed"; backup?: string },
+): void {
   mkdirSync(join(stateDir, "updates"), { recursive: true });
   writeFileSync(join(stateDir, "updates", "outcome.json"), JSON.stringify({ ...outcome, at: new Date().toISOString() }) + "\n");
 }

@@ -12,8 +12,11 @@
  * new version, or this one when the installer changed nothing or switched
  * back) watches for that outcome and shows it as `lastUpdate`.
  *
+ * A rolled-back Update (#138): `settle()` marks the version the installer switched back from bad
+ * (`bad-versions.ts`), so a check never offers it again; `lastUpdate` says what became of the database.
+ *
  * Still to come, extending this class rather than adding a second one:
- * - marking a rolled-back version bad (`markVersionBad`) and the notification for it (#138);
+ * - the system notification for a rolled-back Update (#141): raise it once per outcome, keyed on the outcome's `at`;
  * - Automatic updates' modes, the check at start and every 6 hours, waiting for Jobs, Restart now (#139):
  *   `start()`/`stop()` already run with the service on the App's clock; act on a check only when `reportOnly` is false.
  */
@@ -21,7 +24,7 @@ import type { LastUpdateView, UpdateChannel, UpdateSettings, UpdatesStatus, Upda
 import type { Logger } from "../core/log.ts";
 import { ReleaseRefusedError } from "../release/verify-release.ts";
 import type { Clock, TimerHandle } from "../replication/clock.ts";
-import { badVersions } from "./bad-versions.ts";
+import { badVersions, markVersionBad } from "./bad-versions.ts";
 import { findUpdate, unreachable, UpdateCheckError, type FoundUpdate } from "./find-update.ts";
 import { forgetInstallRequest, lastUpdateOf, readInstallRequest, readOutcome, recordInstallRequest, recordOutcome } from "./install-records.ts";
 import type { InstallerRunner } from "./installer-runner.ts";
@@ -241,6 +244,9 @@ export class Updater {
     const outcome = readOutcome(this.deps.stateDir);
     if (outcome) {
       this.lastUpdate = lastUpdateOf(outcome, request);
+      // A version the installer switched back from is never tried again here, while a newer release still is.
+      // Marking is idempotent, so every start does it: one that stopped right after reading the outcome still marks it.
+      if (outcome.outcome === "rolled_back") markVersionBad(this.deps.stateDir, { version: outcome.to, reason: outcome.reason ?? "The installer gave no reason.", at: Number.isNaN(Date.parse(outcome.at)) ? this.deps.clock.now() : new Date(outcome.at) });
       this.clearStaged();
       if (this.status === "installing") this.set(this.found ? "available" : "not_checked");
       return;

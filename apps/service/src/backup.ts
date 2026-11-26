@@ -9,6 +9,7 @@ import { VERSION } from "./app.ts";
 import { MIGRATIONS, nowIso } from "./core/db.ts";
 import { refuseNewerSchemaFile } from "./core/schema-guard.ts";
 import { platformLocations } from "./platform/locations.ts";
+import { replaceWith } from "./platform/replace-file.ts";
 import { run } from "./platform/run.ts";
 
 async function tar(args: string[]): Promise<void> {
@@ -123,4 +124,61 @@ export async function restoreBackup(archive: string, opts: { stateDir: string; d
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * Put back only the database from a backup, while the service is stopped: what an Update's rollback runs (spec #130,
+ * ticket #138), so the version the Machine goes back to never runs on a database a newer version migrated. Unlike
+ * `restoreBackup` it leaves everything else as it is: the data folder is not rolled back, paired clients stay
+ * paired, and connections keep their credentials. The database it replaces is kept beside it, with its write-ahead
+ * log, as `attache.sqlite.pre-restore-<ms>`. At every moment there is a whole database at `attache.sqlite`, or the
+ * old one stays where it was.
+ */
+export async function restoreDatabase(archive: string, opts: { stateDir: string }): Promise<{ database: string; keptAs: string | null; manifest: BackupManifest }> {
+  const work = mkdtempSync(join(tmpdir(), "attache-restore-db-"));
+  const dbFile = join(opts.stateDir, "attache.sqlite");
+  const restoring = `${dbFile}.restoring`;
+  try {
+    try {
+      // Only these two: a backup's data folder can be large, and it is not put back.
+      await tar(["-xzf", archive, "-C", work, "./manifest.json", "./attache.sqlite"]);
+    } catch (e) {
+      throw new Error(`${archive} is not an Attache backup: ${(e as Error).message}`, { cause: e });
+    }
+    const manifest = JSON.parse(readFileSync(join(work, "manifest.json"), "utf8")) as BackupManifest;
+    if (manifest.format !== "attache-backup-1") throw new Error(`${archive} is not an Attache backup.`);
+    refuseNewerSchemaFile(join(work, "attache.sqlite"), MIGRATIONS.length, VERSION);
+    mkdirSync(opts.stateDir, { recursive: true, mode: 0o700 });
+    cpSync(join(work, "attache.sqlite"), restoring);
+    const keptAs = existsSync(dbFile) ? keepAside(dbFile) : null;
+    try {
+      replaceWith(restoring, dbFile);
+    } catch (e) {
+      if (keptAs) putBack(keptAs, dbFile);
+      throw e;
+    }
+    return { database: dbFile, keptAs, manifest };
+  } finally {
+    rmSync(restoring, { force: true });
+    rmSync(work, { recursive: true, force: true });
+  }
+}
+
+/** Move a database aside with its write-ahead log, which holds its newest writes; the shared-memory index is rebuilt from them. */
+function keepAside(dbFile: string): string {
+  const keptAs = `${dbFile}.pre-restore-${Date.now()}`;
+  renameSync(dbFile, keptAs);
+  try {
+    if (existsSync(`${dbFile}-wal`)) renameSync(`${dbFile}-wal`, `${keptAs}-wal`);
+    rmSync(`${dbFile}-shm`, { force: true });
+  } catch (e) {
+    putBack(keptAs, dbFile);
+    throw e;
+  }
+  return keptAs;
+}
+
+function putBack(keptAs: string, dbFile: string): void {
+  renameSync(keptAs, dbFile);
+  if (existsSync(`${keptAs}-wal`)) renameSync(`${keptAs}-wal`, `${dbFile}-wal`);
 }

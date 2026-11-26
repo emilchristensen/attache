@@ -28,6 +28,10 @@ NEW="$SRC/bin/attache"
 UNATTENDED="${ATTACHE_UNATTENDED:-0}"
 PREVIOUS=""
 STATE=""
+# The pre-Update backup taken just before the switch, which a rollback restores the database from; empty when none was.
+BACKUP=""
+# What a rollback did with the database: restored, no_backup or restore_failed.
+DATABASE=""
 # How far the install got: an outcome was written, the running service was stopped, `current` was switched.
 DONE=0
 STOPPED=0
@@ -35,7 +39,7 @@ SWITCHED=0
 
 say() { printf '%s\n' "$*"; }
 
-# Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason? }
+# Unattended, the outcome goes where the service reads it: { outcome, from, to, at, reason?, database?, backup? }
 # (apps/service/src/updates/install-records.ts). The bundled runtime writes the JSON, so any reason is escaped.
 outcome() {
   DONE=1
@@ -43,11 +47,11 @@ outcome() {
   dir="${STATE:-${ATTACHE_STATE_DIR:-}}"
   [ -n "$dir" ] || return 0
   mkdir -p "$dir/updates" &&
-    ATTACHE_OUTCOME_FILE="$dir/updates/outcome.json" ATTACHE_OUTCOME="$1" ATTACHE_OUTCOME_FROM="$PREVIOUS" ATTACHE_OUTCOME_TO="$VERSION" ATTACHE_OUTCOME_REASON="${2:-}" \
+    ATTACHE_OUTCOME_FILE="$dir/updates/outcome.json" ATTACHE_OUTCOME="$1" ATTACHE_OUTCOME_FROM="$PREVIOUS" ATTACHE_OUTCOME_TO="$VERSION" ATTACHE_OUTCOME_REASON="${2:-}" ATTACHE_OUTCOME_DATABASE="$DATABASE" ATTACHE_OUTCOME_BACKUP="$BACKUP" \
       "$SRC/runtime/node" -e "$OUTCOME_SCRIPT" 2>/dev/null ||
     printf 'Attache install: could not write the outcome to %s\n' "$dir/updates/outcome.json" >&2
 }
-OUTCOME_SCRIPT="const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + '\\n', { mode: 0o600 }); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
+OUTCOME_SCRIPT="const fs = require('node:fs'); const e = process.env; const r = { outcome: e.ATTACHE_OUTCOME, from: e.ATTACHE_OUTCOME_FROM || '', to: e.ATTACHE_OUTCOME_TO, at: new Date().toISOString() }; if (e.ATTACHE_OUTCOME_REASON) r.reason = e.ATTACHE_OUTCOME_REASON; if (e.ATTACHE_OUTCOME_DATABASE) r.database = e.ATTACHE_OUTCOME_DATABASE; if (e.ATTACHE_OUTCOME_DATABASE && e.ATTACHE_OUTCOME_BACKUP) r.backup = e.ATTACHE_OUTCOME_BACKUP; fs.writeFileSync(e.ATTACHE_OUTCOME_FILE + '.tmp', JSON.stringify(r, null, 2) + '\\n', { mode: 0o600 }); fs.renameSync(e.ATTACHE_OUTCOME_FILE + '.tmp', e.ATTACHE_OUTCOME_FILE);"
 
 # Stopped before anything changed: an installed version that was stopped runs again.
 fail() {
@@ -57,11 +61,29 @@ fail() {
   exit 1
 }
 
-# After the switch: go back to the version that was installed, and start it.
+# While the service is stopped: put back the database from the pre-Update backup, so the version going back never
+# runs on a database this version migrated. Only the database: the data folder is not rolled back, and paired clients
+# and connections stay as they are. Without that backup (the installed version could not open the database a newer
+# Attache wrote, see below), the database stays as it is.
+restore_database() {
+  if [ -z "$BACKUP" ]; then
+    DATABASE=no_backup
+    say "The database was not restored, because Attache $PREVIOUS could not open it to back it up before the Update."
+  elif "$NEW" restore "$BACKUP" --database-only --state-dir "$STATE" >/dev/null; then
+    DATABASE=restored
+    say "The database was restored from the backup taken just before the Update."
+  else
+    DATABASE=restore_failed
+    say "The database could not be restored from $BACKUP. To restore it, run attache stop, then attache restore \"$BACKUP\" --database-only, then attache start."
+  fi
+}
+
+# After the switch: go back to the version that was installed, with its database, and start it.
 rollback() {
   if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$VERSION" ] && [ -d "$PREFIX/app/$PREVIOUS" ]; then
     say "Rolling back to $PREVIOUS"
     "$NEW" service stop >/dev/null 2>&1 || true
+    restore_database
     ln -sfn "$PREFIX/app/$PREVIOUS" "$PREFIX/current"
     "$NEW" service start >/dev/null 2>&1 || true
     printf 'Attache install failed: %s\n' "$1" >&2
@@ -120,14 +142,21 @@ fi
 mkdir -p "$PREFIX/app" "$STATE/logs"
 chmod 700 "$PREFIX" "$STATE"
 
-# If a service is already running, back it up before changing anything. A service that refused to start on a
-# database a newer Attache wrote (refused-to-start) cannot open that database to back it up, and could not run on a
-# copy of it either: installing a version that reads it is the way out, so it goes ahead without that backup.
+# If a service is already running, back it up before changing anything: the pre-Update backup, which a rollback
+# restores the database from (only the newest 3 stay, see below; the owner's own backups are never touched).
+# A service that refused to start on a database a newer Attache wrote (refused-to-start) cannot open that database to
+# back it up, and could not run on a copy of it either: installing a version that reads it is the way out, so it goes
+# ahead without that backup, and a rollback then leaves the database as it is.
 if [ -n "$PREVIOUS" ] && [ -f "$STATE/refused-to-start" ]; then
   say "Attache $PREVIOUS cannot open this Machine's database, which a newer Attache wrote, so Attache $VERSION is installed without a backup first."
 elif [ -n "$PREVIOUS" ] && [ -x "$PREFIX/current/bin/attache" ]; then
   say "Backing up the existing installation"
-  ATTACHE_STATE_DIR="$STATE" "$PREFIX/current/bin/attache" backup --out "$STATE/backups/pre-upgrade-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz" >/dev/null || fail "could not back up the existing installation; nothing was changed"
+  # The pre-update- label tells it apart from the owner's backups (apps/service/src/updates/pre-update-backups.ts).
+  BACKUP="$STATE/backups/pre-update-$PREVIOUS-to-$VERSION-$(date +%Y%m%d%H%M%S).tar.gz"
+  ATTACHE_STATE_DIR="$STATE" "$PREFIX/current/bin/attache" backup --out "$BACKUP" >/dev/null || {
+    BACKUP=""
+    fail "could not back up the existing installation; nothing was changed"
+  }
 fi
 
 # Stop the running service (if any) and wait until it has really stopped.
@@ -168,6 +197,9 @@ until healthy; do
 done
 
 say "Attache $VERSION is running."
+
+# Only the 3 newest pre-Update backups stay; the owner's own backups are never touched.
+"$NEW" prune-backups --state-dir "$STATE" >/dev/null || say "Could not remove older backups taken before an Update; the next install tries again."
 
 # Keep this version and the one it replaced, for going back; remove the rest, and folders an earlier install left.
 if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$VERSION" ]; then
