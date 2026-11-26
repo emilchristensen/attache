@@ -43,6 +43,7 @@ export function dataFolderPreview(path: string) {
 }
 
 export function registerCoreRoutes(r: Router, app: App, port: () => number) {
+  // `version` is read by the installers' health check and by MCP servers of earlier versions (mcp/update-notice.ts): keep it.
   r.get(
     "/health",
     () => ({ ok: true, service: "attache", version: VERSION, api: "v1", setupCompleted: app.config.get().setupCompleted, time: nowIso() }),
