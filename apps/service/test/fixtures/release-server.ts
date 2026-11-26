@@ -22,8 +22,11 @@ export interface ReleaseServer {
   publish(version: string, release: SignedRelease, opts?: PublishOptions): void;
   /** Every request the server answered, so a test can see that none was made. */
   requests: FixtureRequest[];
-  /** Answer every request with this HTTP status from now on, as a failing GitHub would; null answers again. */
-  failWith(status: number | null): void;
+  /**
+   * Answer every request with this HTTP status from now on, as a failing GitHub would; null answers again.
+   * With `bodyAfter`, each failure sends its status and headers at once and its body only once that settles.
+   */
+  failWith(status: number | null, opts?: { bodyAfter?: Promise<void> }): void;
   /** Hold every request from now on (or only those whose path matches `only`), as a slow network does, until the returned function lets them through. */
   hold(only?: RegExp): () => void;
   close(): Promise<void>;
@@ -35,10 +38,11 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
   const fx = await startFixtureServer();
   const releases: Array<{ tag: string; version: string; files: Map<string, Buffer> }> = [];
   let failing: number | null = null;
+  let failingBodyAfter: Promise<void> | undefined;
   let held: Promise<void> = Promise.resolve();
   let heldOnly: RegExp | undefined;
   const wait = (path: string) => (heldOnly && !heldOnly.test(path) ? undefined : held);
-  const failure = () => ({ status: failing!, json: { message: "Server Error" } });
+  const failure = () => ({ status: failing!, json: { message: "Server Error" }, ...(failingBodyAfter ? { bodyAfter: failingBodyAfter } : {}) });
   fx.route("GET", FEED_PATH, async (req) => {
     await wait(req.path);
     return failing
@@ -72,8 +76,9 @@ export async function startReleaseServer(): Promise<ReleaseServer> {
       );
       releases.push({ tag: opts.tag ?? `v${version}`, version, files });
     },
-    failWith(status) {
+    failWith(status, opts = {}) {
       failing = status;
+      failingBodyAfter = opts.bodyAfter;
     },
     hold(only) {
       let release!: () => void;

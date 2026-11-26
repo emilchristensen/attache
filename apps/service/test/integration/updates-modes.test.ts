@@ -94,6 +94,20 @@ describe("when the Updater checks", () => {
     expect(await view(m)).toMatchObject({ status: "off", update: null });
   });
 
+  it("in Off asks for the release list no second time, even when a failure's headers came before Off and its body after", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    let sendBody!: () => void;
+    server.failWith(503, { bodyAfter: new Promise<void>((resolve) => (sendBody = resolve)) });
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    sendBody();
+    await checking;
+    expect(server.requests).toHaveLength(1);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
   it("checks at once when Automatic updates is turned back on", async () => {
     const server = await releases("0.7.0");
     const m = await machine("0.6.0", server);
