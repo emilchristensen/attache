@@ -24,6 +24,9 @@ const GitHubRelease = z.object({
   assets: z.array(z.object({ name: z.string(), browser_download_url: z.string() })).default([]),
 });
 
+/** How long a release archive may take to download: tens of megabytes on a slow connection. */
+const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
+
 /** GitHub lists at most this many releases on a page; the newest page is all a check needs. */
 const PER_PAGE = 100;
 
@@ -53,6 +56,15 @@ export class ReleaseFeed {
       if (!r.success || r.data.draft) return [];
       return [{ tag: r.data.tag_name, assets: new Map(r.data.assets.map((a) => [a.name, a.browser_download_url])) }];
     });
+  }
+
+  /**
+   * Save a release file into `file`, streamed, so a release archive never sits in memory whole.
+   * Saving stops one byte past `maxBytes`: a file that large cannot be the one the manifest names. Resolves with the bytes saved.
+   */
+  async downloadTo(url: string, file: string, maxBytes: number): Promise<number> {
+    const res = await this.http.request<number>({ url, headers: { accept: "application/octet-stream" }, saveTo: { file, maxBytes }, retries: 1, timeoutMs: DOWNLOAD_TIMEOUT_MS });
+    return res.data;
   }
 
   /** A release file's exact bytes. */

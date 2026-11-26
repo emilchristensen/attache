@@ -14,6 +14,8 @@ export interface SupervisedService {
   home: string;
   localAppData?: string;
   appData?: string;
+  /** Where the service lists releases, when the installer was given an address (`ServiceSpec.releaseFeedUrl`). */
+  releaseFeedUrl?: string;
 }
 
 const FIRST_DELAY_MS = 2_000;
@@ -44,6 +46,7 @@ function serviceEnv(s: SupervisedService): NodeJS.ProcessEnv {
     ATTACHE_STATE_DIR: s.stateDir,
     ATTACHE_INSTANCE: s.instance,
     ATTACHE_WEB_DIR: resolve(dirname(s.script), "..", "web"),
+    ...(s.releaseFeedUrl ? { ATTACHE_RELEASE_FEED_URL: s.releaseFeedUrl } : {}),
   };
 }
 

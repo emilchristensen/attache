@@ -7,7 +7,7 @@ import { clearStaleLocks } from "../memory/writer-lock.ts";
 import { currentOs } from "../platform/os.ts";
 import { platformLocations, type PlatformLocations } from "../platform/locations.ts";
 import { HARNESS_FILES, harnessInstalls, harnessMcpConfigs, type HarnessKind } from "../platform/harness-locations.ts";
-import { serviceManagerFor } from "../platform/service-manager/index.ts";
+import { serviceManagerFor, type ServiceSpec } from "../platform/service-manager/index.ts";
 import { superviseService } from "../platform/service-manager/supervisor.ts";
 import { clearSecrets, createSecretStore } from "../platform/secret-store/index.ts";
 import { notifierFor } from "../platform/notifier/index.ts";
@@ -48,7 +48,13 @@ function installSpec(io: PlatformCliIo, loc: PlatformLocations): WrapperSpec {
   return { installPrefix, stateDir: io.arg("state-dir") ?? process.env.ATTACHE_STATE_DIR ?? loc.stateDir, instance: instance(), port };
 }
 
-const RUN_USAGE = "Usage: attache service run --port <n> --state-dir <path> --instance <name> --home <path> [--local-app-data <path>] [--app-data <path>]";
+/** What the background service runs: the install, and the release feed the installer was given, if any. */
+function serviceSpec(io: PlatformCliIo, loc: PlatformLocations): ServiceSpec {
+  const releaseFeedUrl = process.env.ATTACHE_RELEASE_FEED_URL;
+  return { ...installSpec(io, loc), ...(releaseFeedUrl ? { releaseFeedUrl } : {}) };
+}
+
+const RUN_USAGE = "Usage: attache service run --port <n> --state-dir <path> --instance <name> --home <path> [--local-app-data <path>] [--app-data <path>] [--release-feed <url>]";
 
 /** `attache service run`, what the Windows logon task starts: keeps `attache serve` running until it is stopped. */
 function runSupervised(io: PlatformCliIo): Promise<void> {
@@ -62,6 +68,7 @@ function runSupervised(io: PlatformCliIo): Promise<void> {
   process.env.ATTACHE_INSTANCE = need("instance");
   const localAppData = io.arg("local-app-data");
   const appData = io.arg("app-data");
+  const releaseFeedUrl = io.arg("release-feed");
   return superviseService({
     script,
     port: portNumber(need("port"), true),
@@ -70,6 +77,7 @@ function runSupervised(io: PlatformCliIo): Promise<void> {
     home: need("home"),
     ...(localAppData ? { localAppData } : {}),
     ...(appData ? { appData } : {}),
+    ...(releaseFeedUrl ? { releaseFeedUrl } : {}),
   });
 }
 
@@ -80,7 +88,7 @@ export async function serviceCommand(sub: string | undefined, io: PlatformCliIo)
   const manager = serviceManagerFor(loc, instance());
   switch (sub) {
     case "install": {
-      await manager.install(installSpec(io, loc));
+      await manager.install(serviceSpec(io, loc));
       return io.out(`Attache background service ${manager.name} set up${manager.definition ? ` in ${manager.definition}` : ""}.`);
     }
     case "start":

@@ -45,9 +45,9 @@ describe("the background service on Windows", () => {
   const PREFIX = `${HOME}\\AppData\\Local\\Attache`;
   const FAKE = join(import.meta.dirname, "fixtures", "fake-task-powershell.mjs");
 
-  function windows() {
+  function windows(extra: Record<string, string> = {}) {
     const dir = tempDir("attache-fake-task-scheduler-");
-    const env = { ATTACHE_TEST_FAKE_PLATFORM: "win32", USERPROFILE: HOME, LOCALAPPDATA: `${HOME}\\AppData\\Local`, APPDATA: `${HOME}\\AppData\\Roaming`, ATTACHE_INSTANCE: "svctest", ATTACHE_POWERSHELL_BIN: FAKE, FAKE_TASK_SCHEDULER_DIR: dir, ATTACHE_STATE_DIR: undefined };
+    const env = { ...extra, ATTACHE_TEST_FAKE_PLATFORM: "win32", USERPROFILE: HOME, LOCALAPPDATA: `${HOME}\\AppData\\Local`, APPDATA: `${HOME}\\AppData\\Roaming`, ATTACHE_INSTANCE: "svctest", ATTACHE_POWERSHELL_BIN: FAKE, FAKE_TASK_SCHEDULER_DIR: dir, ATTACHE_STATE_DIR: undefined };
     return {
       attache: (args: string[]) => attacheCli(args, env),
       tasks: (): Record<string, { xml: string; state: string }> => (existsSync(join(dir, "tasks.json")) ? JSON.parse(readFileSync(join(dir, "tasks.json"), "utf8")) : {}),
@@ -73,6 +73,16 @@ describe("the background service on Windows", () => {
     expect(xml).toContain(
       `<Arguments>--headless "${prefix}\\current\\runtime\\node.exe" "${prefix}\\current\\service\\attache-service.mjs" service run --port 7998 --state-dir "${prefix}\\state" --instance svctest --home "${home}" --local-app-data "${home}\\AppData\\Local" --app-data "${home}\\AppData\\Roaming"</Arguments>`,
     );
+  });
+
+  it("passes on the release feed address the installer was given, so a test's service reads its releases there", () => {
+    const w = windows({ ATTACHE_RELEASE_FEED_URL: "http://127.0.0.1:9/repos/emilchristensen/attache/releases" });
+    w.attache(["service", "install", "--prefix", PREFIX, "--state-dir", `${PREFIX}\\state`, "--port", "7998"]);
+    expect(w.tasks()["Attache-svctest"]!.xml).toMatch(/ --release-feed http:\/\/127\.0\.0\.1:9\/repos\/emilchristensen\/attache\/releases<\/Arguments>/);
+
+    const plain = windows();
+    plain.attache(["service", "install", "--prefix", PREFIX, "--state-dir", `${PREFIX}\\state`, "--port", "7998"]);
+    expect(plain.tasks()["Attache-svctest"]!.xml).not.toContain("--release-feed");
   });
 
   // Each `attache` command below starts Node twice (the command from source, then the PowerShell stand-in), and

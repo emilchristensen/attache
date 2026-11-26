@@ -42,7 +42,7 @@ export type UpdateCheckInput = z.infer<typeof UpdateCheckInput>;
  * - `ready`: `update` is downloaded and verified, and waits for Install (Ask first).
  * - `waiting_for_jobs`: `update` waits for `jobs` Jobs to finish before it installs.
  * - `installing`: the installer runs; the service is about to restart.
- * - `check_failed`: the last check did not finish; `reason` says why. Never read as up to date.
+ * - `check_failed`: the last check, or the download of `update`, did not finish or was refused; `reason` says why. Never read as up to date.
  */
 export const UpdatesStatus = z.enum(["unavailable", "off", "not_checked", "checking", "up_to_date", "available", "downloading", "ready", "waiting_for_jobs", "installing", "check_failed"]);
 export type UpdatesStatus = z.infer<typeof UpdatesStatus>;
@@ -56,10 +56,15 @@ export interface AvailableUpdateView {
   notes: string;
 }
 
-/** What the last Update did, read after the restart from the outcome the installer left. */
+/**
+ * What the last Update did, read from the outcome the installer left in the Machine's state:
+ * - `updated`: the Machine moved from `from` to `to`; `notes` are `to`'s release notes.
+ * - `rolled_back`: `to` did not come up, so the installer switched back to `from`.
+ * - `failed`: the installer stopped before it changed anything, so the Machine stayed on `from`.
+ */
 export type LastUpdateView =
   | { outcome: "updated"; from: string; to: string; at: string; notes: string }
-  | { outcome: "rolled_back"; from: string; to: string; at: string; reason: string };
+  | { outcome: "rolled_back" | "failed"; from: string; to: string; at: string; reason: string };
 
 export interface UpdatesView {
   /** The version this Machine runs. */

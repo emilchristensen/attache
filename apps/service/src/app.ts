@@ -48,6 +48,8 @@ import { VERSION } from "./core/version.ts";
 import { Updater } from "./updates/updater.ts";
 import { ReleaseFeed, releaseFeedUrl } from "./updates/release-feed.ts";
 import { releaseInstallOf, type ReleaseInstall } from "./updates/release-install.ts";
+import type { InstallerRunner } from "./updates/installer-runner.ts";
+import { platformInstallerRunner } from "./platform/installer-runner.ts";
 import { releaseTarget } from "./platform/release-target.ts";
 import { trustedReleaseKeys } from "./release/trusted-keys.ts";
 import { UPDATES_EVENT, type UpdatesChangedEvent } from "@attache/contracts";
@@ -68,8 +70,11 @@ export interface AppOptions {
   version?: string;
   /** The Brain formats this Machine reads and writes; this release's when left out. Tests name a later release's (ADR 0008). */
   brainFormat?: BrainFormatSupport;
-  /** Where the Updater reads releases, and the release install it updates; by default `releaseFeedUrl()` and the install the service script runs from. */
-  updates?: { feedUrl?: string; releaseInstall?: ReleaseInstall | null };
+  /**
+   * Where the Updater reads releases, the release install it updates and what starts an installer; by default
+   * `releaseFeedUrl()`, the install the service script runs from, and this operating system's installer runner.
+   */
+  updates?: { feedUrl?: string; releaseInstall?: ReleaseInstall | null; installerRunner?: InstallerRunner };
 }
 
 export { VERSION };
@@ -118,6 +123,13 @@ export class App {
     this.streams.delete(clientId);
   }
   readonly startedAt = nowIso();
+  /** The port the HTTP API answers on, once it listens. */
+  private httpPort: number | null = null;
+
+  /** The HTTP API listens on `port`: the installer of an Update keeps it. */
+  listening(port: number): void {
+    this.httpPort = port;
+  }
   private cachedModel: { key: string; provider: ModelProvider | null } | null = null;
   /** Re-indexes edits made to the data folder outside the service. */
   private dataWatcher: FolderWatcher | null = null;
@@ -232,6 +244,8 @@ export class App {
       install: opts.updates && "releaseInstall" in opts.updates ? (opts.updates.releaseInstall ?? null) : releaseInstallOf(process.argv[1], version),
       target: releaseTarget(),
       trustedKeys: () => trustedReleaseKeys(this.paths.stateDir),
+      runner: opts.updates?.installerRunner ?? platformInstallerRunner(this.log),
+      port: () => this.httpPort,
     });
     this.wire();
     registerRunners(this);
@@ -505,12 +519,23 @@ export class App {
     this.scheduler.start();
     this.sessions.start();
     this.replication.start();
+    this.startUpdater();
     this.scheduleHousekeeping();
     this.bus.on("event", this.onAttentionChanged);
     void this.refreshModel();
   }
 
+  private startUpdater() {
+    try {
+      this.updater.start();
+    } catch (e) {
+      // An unreadable record of the last Update must not keep the service from starting.
+      this.log.error("could not read what the last Update did", { error: (e as Error).message });
+    }
+  }
+
   async stop() {
+    this.updater.stop();
     this.bus.off("event", this.onAttentionChanged);
     if (this.housekeeping) this.clock.clearTimeout(this.housekeeping);
     this.housekeeping = null;

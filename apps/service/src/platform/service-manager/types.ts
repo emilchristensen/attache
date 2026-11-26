@@ -17,6 +17,11 @@ export interface ServiceSpec {
   port: number;
   /** Install name, passed on to the service as `ATTACHE_INSTANCE`. */
   instance: string;
+  /**
+   * Where the service lists releases, passed on as `ATTACHE_RELEASE_FEED_URL` when the installer was given one: the
+   * install test points it at a local server. A release still needs the signature of a key the Machine trusts.
+   */
+  releaseFeedUrl?: string;
 }
 
 /**

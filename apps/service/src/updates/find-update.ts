@@ -32,8 +32,17 @@ export interface FindUpdateInput {
   refused?: (version: string, reason: string) => void;
 }
 
+/** An Update a check found: its verified manifest, the exact bytes that were verified, and the release's files. */
+export interface FoundUpdate {
+  manifest: ReleaseManifest;
+  /** The manifest's exact bytes and its signature, as the release carries them, so a staged copy verifies again. */
+  signed: { manifest: Buffer; signature: string };
+  /** The release's files by name: the artifact for this computer is downloaded from here. */
+  assets: ReadonlyMap<string, string>;
+}
+
 /** What the owner reads when the feed could not be read. */
-function unreachable(feed: ReleaseFeed, e: unknown): UpdateCheckError {
+export function unreachable(feed: ReleaseFeed, e: unknown): UpdateCheckError {
   if (e instanceof RemoteError) {
     if (e.state === "offline" && e.status === null) return new UpdateCheckError(`Could not reach ${feed.host} to look for an Update. Check the network connection, then check again.`, { cause: e });
     if (e.state === "partial") return new UpdateCheckError(`${feed.host} turned the check away for now (rate limit). Check again later.`, { cause: e });
@@ -42,7 +51,7 @@ function unreachable(feed: ReleaseFeed, e: unknown): UpdateCheckError {
   return new UpdateCheckError(`Could not look for an Update at ${feed.host}: ${(e as Error).message}`, { cause: e });
 }
 
-async function verifiedManifest(input: FindUpdateInput, release: FeedRelease, version: string): Promise<ReleaseManifest> {
+async function verifiedManifest(input: FindUpdateInput, release: FeedRelease, version: string): Promise<FoundUpdate> {
   const name = manifestFileName(version);
   const manifestUrl = release.assets.get(name);
   const signatureUrl = release.assets.get(signatureFileName(version));
@@ -55,15 +64,17 @@ async function verifiedManifest(input: FindUpdateInput, release: FeedRelease, ve
   } catch (e) {
     throw unreachable(input.feed, e);
   }
-  return verifySignedManifest(bytes, signature.toString("utf8"), { trustedKeys: input.trustedKeys, version, name });
+  const signatureText = signature.toString("utf8");
+  const manifest = verifySignedManifest(bytes, signatureText, { trustedKeys: input.trustedKeys, version, name });
+  return { manifest, signed: { manifest: bytes, signature: signatureText }, assets: release.assets };
 }
 
 /**
- * The verified manifest of the Update to take, or null when the Machine is up to date.
+ * The Update to take, with its verified manifest, or null when the Machine is up to date.
  * Throws `UpdateCheckError` when the feed cannot be read, or when newer releases exist but every one was refused:
  * a refused release never looks like being up to date.
  */
-export async function findUpdate(input: FindUpdateInput): Promise<ReleaseManifest | null> {
+export async function findUpdate(input: FindUpdateInput): Promise<FoundUpdate | null> {
   let listed: FeedRelease[];
   try {
     listed = await input.feed.releases();
@@ -74,9 +85,9 @@ export async function findUpdate(input: FindUpdateInput): Promise<ReleaseManifes
   let firstRefusal: string | null = null;
   for (const version of eligibleVersions(listed.map((r) => r.tag), input)) {
     try {
-      const manifest = await verifiedManifest(input, byVersion.get(version)!, version);
+      const found = await verifiedManifest(input, byVersion.get(version)!, version);
       // A release without a build for this computer is not an Update here, nor a fault.
-      if (manifest.artifacts[input.target]) return manifest;
+      if (found.manifest.artifacts[input.target]) return found;
     } catch (e) {
       if (!(e instanceof ReleaseRefusedError)) throw e;
       input.refused?.(version, e.message);

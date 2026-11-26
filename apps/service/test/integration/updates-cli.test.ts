@@ -1,15 +1,18 @@
 // `attache update --check` from a terminal, against a test service that reads a local stand-in for GitHub Releases.
 import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { releaseTarget } from "../../src/platform/release-target.ts";
+import { signedRelease } from "../fixtures/signed-release.ts";
 import type { TestService } from "./harness.ts";
-import { updatesWorld } from "./updates-world.ts";
+import { installerFinished, updatesWorld } from "./updates-world.ts";
 
 // Each test starts the `attache` executable from source, which is slow while the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 120_000 });
 
 const MAIN = join(import.meta.dirname, "../../src/main.ts");
-const { releases, machine } = updatesWorld();
+const { key, releases, machine, restart } = updatesWorld();
 
 /** The real CLI, pinned to one test service's state folder. Asynchronous: the service runs in this process. */
 function cli(svc: TestService, args: string[]): Promise<{ status: number | null; stdout: string; stderr: string }> {
@@ -67,5 +70,59 @@ describe("attache update --check", () => {
     const r = await cli(svc, ["update", "--check", "--json"]);
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout)).toMatchObject({ version: "0.6.0", channel: "stable", status: "available", update: { version: "0.7.0" } });
+  });
+});
+
+describe("attache update", () => {
+  it("installs the Update, waits for the restart and says which version the Machine updated from", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    // Play the installer: it stops the service, starts the new version, checks its health, then writes its outcome.
+    m.runner.onStart = async () => {
+      const after = await restart(m, "0.7.0");
+      installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
+    };
+    const r = await cli(m, ["update"]);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("Installing Attache 0.7.0. Attache restarts to finish the Update.\nAttache updated from 0.6.0 to 0.7.0.\n");
+  });
+
+  it("fails with the reason when the installer changed nothing", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    m.runner.onStart = () => installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
+    const r = await cli(m, ["update"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, and Attache stayed on 0.6.0: could not back up the existing installation; nothing was changed\n");
+  });
+
+  it("fails with the reason when the Update went back to the earlier version", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    m.runner.onStart = async () => {
+      const after = await restart(m, "0.6.0");
+      installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
+    };
+    const r = await cli(m, ["update"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toBe("attache: The Update to Attache 0.7.0 failed, so Attache went back to 0.6.0: the service did not become healthy\n");
+  });
+
+  it("says when there is nothing to install", async () => {
+    const m = await machine("0.7.0", await releases("0.7.0"));
+    const r = await cli(m, ["update"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("Attache 0.7.0, Update channel Stable\nAttache is up to date.\n");
+    expect(m.runner.requests).toEqual([]);
+  });
+
+  it("fails with the reason when the download is refused", async () => {
+    const server = await releases();
+    const release = signedRelease({ version: "0.7.0", key });
+    writeFileSync(release.artifacts[releaseTarget()!]!, "not the archive the manifest names");
+    server.publish("0.7.0", release);
+    const m = await machine("0.6.0", server);
+    const r = await cli(m, ["update"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/^attache: The Update to Attache 0\.7\.0 was refused: attache-0\.7\.0-\S+ does not match the signed manifest, so it was refused\.\n$/);
+    expect(m.runner.requests).toEqual([]);
   });
 });
