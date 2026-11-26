@@ -109,6 +109,7 @@ The installer and uninstaller are thin scripts (POSIX shell on macOS and Linux, 
 
 The Linux service is a systemd user unit in `~/.config/systemd/user`.
 `Restart=always` brings it back after a crash, and `WantedBy=default.target` starts it with the owner's user manager, that is, at login.
+`attache start` (and the installer's `service start`) first runs `systemctl --user reset-failed`, because a version that kept crashing, such as one an Update rolls back, can use up systemd's start limit, which refuses every later start until it is reset.
 Installing enables the unit by its full path, so systemd links it in even when the user manager does not read the folder Attache wrote it to (an `XDG_CONFIG_HOME` the login does not share).
 `systemctl --user` reaches the user manager through `XDG_RUNTIME_DIR`; when that is unset (`su`, some SSH setups), Attache tries `/run/user/<uid>`, and otherwise tells the owner to log in as themselves or turn on lingering.
 The service's output goes to `service.out.log` and `service.err.log` in the state folder's `logs`, as launchd's does on macOS.

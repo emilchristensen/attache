@@ -2,10 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "../helpers.ts";
 
-/** What the fake `systemctl --user` remembers: which units are enabled and which are running. */
+/**
+ * What the fake `systemctl --user` remembers: which units are enabled, which are running, and which hit their start
+ * limit (restarted too often, as a version that keeps crashing under `Restart=always` does) until `reset-failed`.
+ */
 export interface FakeSystemdState {
   enabled: string[];
   active: string[];
+  startLimitHit?: string[];
 }
 
 /**
@@ -34,9 +38,12 @@ const without = (list, u) => list.filter((x) => x !== u);
 switch (cmd) {
   case "enable": { const u = unit(rest[0]); if (!fs.existsSync(rest[0])) { console.error("Failed to enable unit: Unit file " + rest[0] + " does not exist."); process.exit(1); } s.enabled = [...without(s.enabled, u), u]; break; }
   case "disable": s.enabled = without(s.enabled, rest[0]); break;
-  case "restart": case "start": s.active = [...without(s.active, rest[0]), rest[0]]; break;
+  case "restart": case "start":
+    if ((s.startLimitHit || []).includes(rest[0])) { console.error("Job for " + rest[0] + " failed because start of the service was attempted too often."); process.exit(1); }
+    s.active = [...without(s.active, rest[0]), rest[0]]; break;
   case "stop": s.active = without(s.active, rest[0]); break;
-  case "daemon-reload": case "reset-failed": break;
+  case "reset-failed": if (s.startLimitHit) { s.startLimitHit = without(s.startLimitHit, rest[0]); if (!s.startLimitHit.length) delete s.startLimitHit; } break;
+  case "daemon-reload": break;
   case "show": process.stdout.write((s.active.includes(rest[0]) ? "active" : "inactive") + "\\n"); break;
   default: console.error("unfaked command " + cmd); process.exit(2);
 }
@@ -47,5 +54,10 @@ save();
     /** Put this folder first on PATH. */
     bin,
     state: (): FakeSystemdState => JSON.parse(readFileSync(stateFile, "utf8")) as FakeSystemdState,
+    /** Play a unit that was restarted too often: systemd refuses to start it until its failed state is reset. */
+    hitStartLimit(unit: string): void {
+      const s = JSON.parse(readFileSync(stateFile, "utf8")) as FakeSystemdState;
+      writeFileSync(stateFile, JSON.stringify({ ...s, active: s.active.filter((u) => u !== unit), startLimitHit: [...(s.startLimitHit ?? []), unit] }));
+    },
   };
 }
