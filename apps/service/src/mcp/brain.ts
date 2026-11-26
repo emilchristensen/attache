@@ -78,6 +78,8 @@ export interface BrainAccess {
   propose(input: MemorySaveProposalInput): Promise<MemorySaveProposalResult>;
   /** Store a conversation's durable points as evidence; no points stores nothing. */
   wrapUp(input: WrapUpInput): Promise<WrapUpResult>;
+  /** The version the running service reports, which an Update can move past this server's own. */
+  serviceVersion(): Promise<string>;
 }
 
 interface RawHit {
@@ -148,6 +150,9 @@ export function serviceBrain(paths: ServicePaths): BrainAccess {
     propose: async (input) => client().post<MemorySaveProposalResult>("/memory/save/proposals", input),
     async wrapUp(input) {
       return client().post<WrapUpResult>("/memory/wrap-up", input);
+    },
+    async serviceVersion() {
+      return (await client().get<{ version: string }>("/health")).version;
     },
   };
 }
