@@ -189,6 +189,37 @@ Run over an existing install, `install.sh` and `install.ps1` first have the inst
 A version from before signed releases cannot run that command, so the installer says so and installs without the check; a first install has nothing to check against.
 `ATTACHE_RELEASE_DIR` names another folder holding the manifest, signature and archive, for an installer run from a release unpacked elsewhere.
 
+### Publishing a release
+
+Releases are published by CI, never from a laptop: pushing a tag `v<version>` runs `.github/workflows/release.yml`.
+Its header says what each job does; in short, it refuses before building, builds every target on Linux, signs in the protected `release` environment and creates the GitHub release.
+
+1. Write the release notes as a new section `## <version>` at the top of `CHANGELOG.md`, for owners and in the glossary's words.
+   The workflow copies that section, unchanged, into the GitHub release and into the signed manifest, which the Dashboard shows under What changed.
+2. Bump the version in a commit: `version` in `package.json` (the one the release build reads and the workflow checks the tag against), and the same number in `apps/service/package.json`, `apps/web/package.json`, `packages/contracts/package.json` and the fallback in `apps/service/src/core/version.ts`.
+3. Merge it to `main`, then start the full CI run on that commit: `gh workflow run ci.yml --ref main`.
+   Only a run started by hand runs every job on the commit itself, the install test on Linux, macOS and Windows included; a push runs the Linux jobs only, and a pull request runs macOS and Windows on the commit it would merge.
+4. When that run has passed, tag the same commit and push the tag: `git tag v0.7.0-beta.1 <commit> && git push origin v0.7.0-beta.1`.
+5. With a required reviewer on the `release` environment, approve the `seal` job in the run; the `publish` job then creates the release.
+
+`scripts/release-gate.mjs` refuses, each with a message saying what to do: a tag that is not `v` followed by the version in `package.json`, a version that is neither `x.y.z` nor `x.y.z-beta.N`, a version without a section in `CHANGELOG.md` or with an empty one, a missing `.github/release-public-key.pem`, and a commit with no CI run started by hand on it whose jobs all passed, none skipped.
+After fixing the cause, re-run the workflow run (Re-run all jobs); the tag stays where it is unless the fix needed a new commit, which needs a new version and tag.
+A tag `vx.y.z-beta.N` makes a GitHub release marked as a pre-release, a Beta release; a tag `vx.y.z` makes a Stable release marked Latest.
+Each release holds the three one-step installers, the three archives, the manifest, its signature and `SHA256SUMS`.
+
+The signing key is the `RELEASE_SIGNING_KEY` secret of the `release` environment, which only tags `v*` may use, so a branch's workflow can never read it.
+The build job builds the archives unsealed (`build-release.mjs --unsealed`), with the committed public key built in and without the signing key; the seal job writes and signs the manifest (`release-signing.mjs seal`), verifies the result with the signing tool, and deletes the key file before anything else runs, and the publish job verifies again against the committed public key.
+
+A dry run proves the workflow without publishing.
+A push to any branch that changes the release machinery (the `paths` in the workflow: the workflow itself, `CHANGELOG.md`, the release scripts, `apps/service/src/release/`) starts one, and `gh workflow run release.yml --ref <branch> [-f version=0.7.0-beta.1]` starts one by hand; GitHub only offers that for a workflow that is on `main`.
+It builds the version given (by default the one in `package.json`) with a throwaway key pair made for the run, seals and verifies it outside the `release` environment, and keeps the sealed release as the run's `release` artifact for a day.
+What would refuse a real release shows as warnings in the run's summary instead of failing it.
+The throwaway signing key is deleted from the run once used.
+
+The key is made once, by hand: `bash scripts/release-key-wizard.sh` makes the key pair, creates the protected `release` environment (tags `v*` only, optionally your approval before each release is signed), stores the signing key as its secret, waits until you have an offline backup, deletes this computer's copy and commits the public key at `.github/release-public-key.pem` (added with `--force`, since `*.pem` is ignored).
+Never replace that key: installed Machines would refuse every later release.
+To change it, rotate it with a release whose manifest names the next key (`--next-public-key`, see below).
+
 ### Signing tool
 
 `scripts/release-signing.mjs` makes a key pair, signs a manifest and verifies a release, with the same code the release build and the installed service run (`apps/service/src/release/`) and Node's built-in Ed25519.
@@ -196,7 +227,8 @@ A version from before signed releases cannot run that command, so the installer 
 ```sh
 node scripts/release-signing.mjs keygen key.pem public.pem                          # never overwrites an existing key
 node scripts/release-signing.mjs sign release/0.1.0/attache-0.1.0-manifest.json --key key.pem
-node scripts/release-signing.mjs verify release/0.1.0 --public-key public.pem       # the signature, then every archive the manifest names
+node scripts/release-signing.mjs seal release/0.1.0 --version 0.1.0 --key key.pem --public-key public.pem [--notes notes.md]   # archives built with --unsealed
+node scripts/release-signing.mjs verify release/0.1.0 --public-key public.pem [--targets macos-arm64,linux-x64,windows-x64]   # the signature, then every archive the manifest names
 ```
 
 Keys are PEM files: PKCS #8 for the signing key, SPKI for the public key, so `openssl` reads them too.

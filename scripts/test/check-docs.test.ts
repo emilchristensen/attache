@@ -122,6 +122,7 @@ describe("checking a repository", () => {
     expect(checkDocs(repo)).toEqual({
       sentences: [{ file: "README.md", line: 4, text: "This line holds two sentences. It is flagged." }],
       terms: [
+        { file: "CHANGELOG.md", line: 5, term: "sync", found: "sync", preferred: ["Replication", "Source refresh"] },
         { file: "docs/adr/0001-example.md", line: 3, term: "sync", found: "sync", preferred: ["Replication", "Source refresh"] },
         { file: "installer/install.sh", line: 2, term: "poll", found: "Polling", preferred: ["Source refresh"] },
         { file: "apps/web/src/View.tsx", line: 2, term: "second brain", found: "second brain", preferred: ["Brain"] },
@@ -143,7 +144,7 @@ describe("checking a repository", () => {
     expect(run.stdout).toContain('docs/adr/0001-example.md:3: "sync" is avoided in GLOSSARY.md; use Replication or Source refresh');
     expect(run.stdout).toContain('apps/service/src/notes.ts:2: "event(s)" writes a count with (s); write the noun in its number ("1 event", "2 events"), with plural() from @attache/contracts in code');
     expect(run.stdout).toContain("tests/e2e/bare.spec.ts:1: a browser spec opens with a /** comment saying what it covers and whether it runs on its own");
-    expect(run.stderr).toContain("Docs check: 1 line with two sentences, 3 avoided glossary terms, 3 counts written with (s), 1 browser spec without its opening comment.");
+    expect(run.stderr).toContain("Docs check: 1 line with two sentences, 4 avoided glossary terms, 3 counts written with (s), 1 browser spec without its opening comment.");
   });
 
   it("passes from the command line when nothing is found", () => {
