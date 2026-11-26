@@ -399,6 +399,7 @@ export class Updater {
         trustedKeys,
         target,
         refused: (version, reason) => this.deps.log.warn("a newer release was refused", { version, reason }),
+        wanted: () => generation === this.generation,
       });
       outcome = found ? { status: "available", reason: null, found } : { status: "up_to_date", reason: null, found: null };
     } catch (e) {

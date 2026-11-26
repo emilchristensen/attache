@@ -67,6 +67,19 @@ describe("when the Updater checks", () => {
     expect(m.runner.requests).toEqual([]);
   });
 
+  it("in Off asks for nothing more, even when Off comes while a check waits for the release list", async () => {
+    const server = await releases("0.7.0");
+    const m = await machine("0.6.0", server);
+    const letThrough = server.hold();
+    const checking = m.post<UpdatesView>("/updates/check", { reportOnly: true });
+    await expect.poll(() => checks(server)).toBe(1);
+    await setMode(m, "off");
+    letThrough();
+    await checking;
+    expect(server.requests.map((r) => r.path).filter((p) => !p.endsWith("/releases"))).toEqual([]);
+    expect(await view(m)).toMatchObject({ status: "off", update: null });
+  });
+
   it("checks at once when Automatic updates is turned back on", async () => {
     const server = await releases("0.7.0");
     const m = await machine("0.6.0", server);

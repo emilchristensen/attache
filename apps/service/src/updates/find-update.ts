@@ -30,6 +30,8 @@ export interface FindUpdateInput {
   target: string;
   /** Told about each newer release that was refused, with the reason. */
   refused?: (version: string, reason: string) => void;
+  /** Whether the check is still wanted: once Off or another channel is chosen, no further request is made (spec #130, story 4). */
+  wanted?: () => boolean;
 }
 
 /** An Update a check found: its verified manifest, the exact bytes that were verified, and the release's files. */
@@ -84,6 +86,8 @@ export async function findUpdate(input: FindUpdateInput): Promise<FoundUpdate | 
   const byVersion = new Map(listed.map((r) => [tagVersion(r.tag), r]));
   let firstRefusal: string | null = null;
   for (const version of eligibleVersions(listed.map((r) => r.tag), input)) {
+    // The caller drops the answer of a check no longer wanted, so what it returns here is never shown.
+    if (input.wanted && !input.wanted()) return null;
     try {
       const found = await verifiedManifest(input, byVersion.get(version)!, version);
       // A release without a build for this computer is not an Update here, nor a fault.
