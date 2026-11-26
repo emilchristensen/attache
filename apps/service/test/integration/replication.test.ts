@@ -261,4 +261,21 @@ describe("Replication between Machines", () => {
     expect((await single.get("/replication")).status).toBe("off");
     expect(existsSync(join(single.dataDir, ".git"))).toBe(false);
   });
+
+  it("opens a data folder the owner keeps in git, with Replication off, on a Machine without git", async () => {
+    single = await startTestService();
+    const folder = join(single.stateDir, "own-git");
+    execFileSync("git", ["init", "-q", folder]);
+    const before = process.env.ATTACHE_GIT_BIN;
+    process.env.ATTACHE_GIT_BIN = join(single.stateDir, "no-git-here", process.platform === "win32" ? "git.exe" : "git");
+    try {
+      const r = await single.call("POST", "/setup/data-folder", { path: folder });
+      expect(r.status).toBe(200);
+      expect(r.body.path).toBe(folder);
+    } finally {
+      if (before === undefined) delete process.env.ATTACHE_GIT_BIN;
+      else process.env.ATTACHE_GIT_BIN = before;
+    }
+    expect((await single.get("/replication")).status).toBe("off");
+  });
 });

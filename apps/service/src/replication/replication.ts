@@ -389,12 +389,12 @@ export class Replication {
   }
 
   /**
-   * Whether `folder` holds a Brain in a format this Machine cannot read, in its files or in what it last fetched, or one
-   * whose format record is unreadable: opening it then writes nothing that replicates (ADR 0008).
+   * Whether `folder` holds a Brain in a format this Machine cannot read, or one whose format record is unreadable:
+   * opening it then writes nothing that replicates (ADR 0008). It reads the record file only, never git, so a folder
+   * opens on a Machine without git; what was fetched is checked when Replication starts or joins.
    */
   formatHeld(folder: string): boolean {
-    const repo = this.repo(folder);
-    return repo.isRepository() && this.formatHold(repo) !== null;
+    return brainFormatHold([{ reading: readBrainFormatFile(folder), where: "in this Machine's data folder" }], this.brainFormat.reads) !== null;
   }
 
   private formatHold(repo: BrainRepo): Outcome | null {
