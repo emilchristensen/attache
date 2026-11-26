@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import type { CoverageState } from "@attache/contracts";
 import { redact } from "../core/log.ts";
 
@@ -25,6 +26,12 @@ export interface HttpRequest {
   retries?: number;
   /** "bytes": `data` is the body's exact bytes (a signed file, a download) instead of parsed JSON or text. */
   responseType?: "bytes";
+  /**
+   * Stream a successful body into this file instead of reading it into memory (a release archive); `data` is the
+   * number of bytes written. With `maxBytes`, writing stops after one byte more than that, so a body that is too
+   * large never fills the disk and still shows as too large. `timeoutMs` then covers the whole body.
+   */
+  saveTo?: { file: string; maxBytes?: number };
 }
 
 export interface HttpResponse<T = unknown> {
@@ -71,6 +78,25 @@ function retryAfter(headers: Headers): number | null {
   return null;
 }
 
+/** Write a response body to a file, at most `maxBytes + 1` bytes of it; resolves with the bytes written. */
+async function saveBody(body: ReadableStream<Uint8Array>, to: { file: string; maxBytes?: number }): Promise<number> {
+  const limit = to.maxBytes === undefined ? Infinity : to.maxBytes + 1;
+  let written = 0;
+  const out = await open(to.file, "w");
+  try {
+    for await (const chunk of body) {
+      const part = chunk.length > limit - written ? chunk.subarray(0, limit - written) : chunk;
+      await out.write(part);
+      written += part.length;
+      // Enough to show the body is too large: leaving the loop cancels the rest of it.
+      if (written >= limit) break;
+    }
+  } finally {
+    await out.close();
+  }
+  return written;
+}
+
 export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: number; userAgent?: string } = {}): HttpClient {
   const baseDelay = opts.baseDelayMs ?? 500;
   return {
@@ -103,6 +129,18 @@ export function createHttpClient(opts: { signal?: AbortSignal; baseDelayMs?: num
             continue;
           }
           throw new RemoteError(`Network error contacting ${new URL(req.url).host}: ${(e as Error).message}`, "offline");
+        }
+        if (res.ok && req.saveTo && res.body) {
+          try {
+            const written = await saveBody(res.body, req.saveTo);
+            return { status: res.status, headers: res.headers, data: written as T };
+          } catch (e) {
+            if (opts.signal?.aborted) throw new RemoteError("Cancelled", "error");
+            throw new RemoteError(`Network error reading ${new URL(req.url).host}: ${(e as Error).message}`, "offline");
+          } finally {
+            clearTimeout(timer);
+            opts.signal?.removeEventListener("abort", onAbort);
+          }
         }
         clearTimeout(timer);
         opts.signal?.removeEventListener("abort", onAbort);

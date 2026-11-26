@@ -57,7 +57,7 @@ export function systemdUnit(home: string, spec: ServiceSpec): string {
  * which a login sets. Where it is missing (`su`, some SSH setups), the
  * standard location is tried.
  */
-function userManagerEnv(): NodeJS.ProcessEnv {
+export function userManagerEnv(): NodeJS.ProcessEnv {
   const uid = process.getuid?.();
   return process.env.XDG_RUNTIME_DIR || uid === undefined ? process.env : { ...process.env, XDG_RUNTIME_DIR: `/run/user/${uid}` };
 }
