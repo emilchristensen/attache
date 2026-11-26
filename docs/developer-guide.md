@@ -220,6 +220,7 @@ The throwaway signing key is deleted from the run once used.
 The key is made once, by hand: `bash scripts/release-key-wizard.sh` makes the key pair, creates the protected `release` environment (tags `v*` only, optionally your approval before each release is signed), stores the signing key as its secret, waits until you have an offline backup, deletes this computer's copy and commits the public key at `.github/release-public-key.pem` (added with `--force`, since `*.pem` is ignored).
 Never replace that key: installed Machines would refuse every later release.
 To change it, rotate it with a release whose manifest names the next key (`--next-public-key`, see below).
+The seal job does that while `.github/release-next-public-key.pem` is committed (with `--force`): every release it signs then names that key, and its verify step refuses a manifest that does not.
 
 ### Signing tool
 

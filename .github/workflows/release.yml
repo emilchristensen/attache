@@ -32,6 +32,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - .github/release-public-key.pem
+      - .github/release-next-public-key.pem
       - CHANGELOG.md
       - scripts/build-release.mjs
       - scripts/release-*.mjs
@@ -193,13 +194,22 @@ jobs:
             key="$RUNNER_TEMP/signing-key.pem"
             (umask 077 && printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key")
           fi
+          # A committed next public key goes into the manifest, so installed Machines rotate to it (ADR 0007).
+          set -- --notes release-notes.md
+          if [ -f .github/release-next-public-key.pem ]; then set -- "$@" --next-public-key .github/release-next-public-key.pem; fi
           status=0
-          node scripts/release-signing.mjs seal "release/$VERSION" --version "$VERSION" --key "$key" --public-key "release/$VERSION.public-key.pem" --notes release-notes.md || status=$?
+          node scripts/release-signing.mjs seal "release/$VERSION" --version "$VERSION" --key "$key" --public-key "release/$VERSION.public-key.pem" "$@" || status=$?
           rm -f "$key"
           exit "$status"
 
       - name: Verify with the signing tool
-        run: node scripts/release-signing.mjs verify "release/$VERSION" --version "$VERSION" --public-key "release/$VERSION.public-key.pem" --targets macos-arm64,linux-x64,windows-x64
+        run: |
+          set -o pipefail
+          node scripts/release-signing.mjs verify "release/$VERSION" --version "$VERSION" --public-key "release/$VERSION.public-key.pem" --targets macos-arm64,linux-x64,windows-x64 | tee verify.txt
+          if [ -f .github/release-next-public-key.pem ] && ! grep -q "It names the next public key." verify.txt; then
+            echo "::error title=Release refused::.github/release-next-public-key.pem is committed, but the manifest does not name it." >&2
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v7
         with:
