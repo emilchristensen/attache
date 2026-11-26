@@ -69,12 +69,9 @@ export async function rollbackScenario(t) {
   const log = readFileSync(join(state, "logs", `update-${failing}.log`), "utf8");
   check("rollback", "the installer's log says it rolled back and restored the database", log.includes(`Rolling back to ${next}`) && log.includes(RESTORED), lastLines(log, 4));
 
-  // --- the failed version is never offered again; a newer release is ---
+  // --- the failed version is never offered again ---
   const checked = attacheCli(["update", "--check"]);
   check("rollback", "the failed version is not offered again", checked.includes("Attache is up to date."), checked.trim());
-  await server.publish(newer, join(root, "release", newer));
-  const checkedNewer = attacheCli(["update", "--check"]);
-  check("rollback", "a newer release is offered", checkedNewer.includes(`Attache ${newer} is available.`), checkedNewer.trim());
 
   // --- without a pre-Update backup, a rollback leaves the database as it is and says so ---
   // A Machine left on a database a newer Attache wrote: its service refuses to start (#132), so no backup can be taken.
@@ -101,6 +98,13 @@ export async function rollbackScenario(t) {
   attacheCli(["start"]);
   const recovered = await waitForHealth();
   check("rollback", `restoring the pre-Update backup by hand brings Attache ${next} back`, recovered?.body.version === next && !existsSync(refused), `version ${recovered?.body.version}`);
+
+  // --- a newer release is offered ---
+  // Published only now: a service checks when it starts and installs on its own in Automatic, and the restarts above
+  // would then install it before attache update could.
+  await server.publish(newer, join(root, "release", newer));
+  const checkedNewer = attacheCli(["update", "--check"]);
+  check("rollback", "a newer release is offered", checkedNewer.includes(`Attache ${newer} is available.`), checkedNewer.trim());
 
   // --- the fourth Update keeps only the 3 newest pre-Update backups, and the owner's own ---
   const newest = preUpdate()

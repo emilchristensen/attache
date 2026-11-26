@@ -28,7 +28,10 @@ function withOverrides(overrides: Record<string, string | undefined>): Record<st
 function attache(args: string[], opts: { platform?: string; env?: Record<string, string | undefined> } = {}) {
   const env = withOverrides({ HOME: tempDir("attache-cli-home-"), ATTACHE_CREDENTIAL_STORE: "file", ATTACHE_NO_NOTIFY: "1", ...opts.env });
   if (opts.platform) env.ATTACHE_TEST_FAKE_PLATFORM = opts.platform;
-  const r = spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env, encoding: "utf8", timeout: 20_000, killSignal: "SIGKILL" });
+  // One Node start can wait up to 18 s before Node's own code runs while other suites start Node (decision log, "flaky under load"), so each run gets 60 s.
+  const r = spawnSync(process.execPath, ["--import", FAKE_PLATFORM, MAIN, ...args], { env, encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL" });
+  // A run cut off by the budget says so, rather than failing later on its empty output.
+  if (r.error || r.signal) throw new Error(`attache ${args.join(" ")} did not finish: ${r.error?.message ?? `killed by ${r.signal}`}`);
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 

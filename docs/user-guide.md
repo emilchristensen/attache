@@ -890,7 +890,9 @@ A secret that was ever pushed should be treated as exposed: rotate it as well.
 | Harness MCP server | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/config/mcp_config.json`, `~/Library/Application Support/Claude/claude_desktop_config.json` (only the `attache` entry) | the same, with Claude Desktop's in `~/.config/Claude/claude_desktop_config.json` | the same, under `%USERPROFILE%`, with Claude Desktop's in `%APPDATA%\Claude\claude_desktop_config.json` |
 
 The command line offers `status`, `start`, `stop`, `pair`, `search`, `audit`, `evaluate-recall`, `replication`, `update`, `mcp`, `agent-hooks`, `backup` and `restore`.
-`attache update` installs an available Update now: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+`attache update` installs an available Update now, also one that waits for Jobs to finish: Attache downloads it, checks it against Attache's signature, and restarts on the new version, then the command says which version this Machine updated from.
+Jobs that were running pick up from where they stopped once Attache is back.
+When Automatic updates is Off, `attache update` makes no request and says so.
 When the new version does not start, Attache goes back to the version it had, with the database from just before the Update, and never offers that version again on this Machine; a newer release is still offered.
 `attache update` then fails with the reason and says what became of the database.
 `attache update --check` looks for an Update now and says which version this Machine runs, its Update channel and the newest version it may take, without installing anything.

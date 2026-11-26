@@ -4,9 +4,10 @@ import type { App } from "../app.ts";
 
 /**
  * Updates on this Machine (spec #130): `GET /updates` reads the status,
- * `PUT /updates/settings` sets the Update channel, `POST /updates/check`
- * checks now, `POST /updates/install` installs an Update now (it answers once
- * the installer runs; the service restarts after). Every answer is the status
+ * `PUT /updates/settings` sets the Update channel and Automatic updates' mode,
+ * `POST /updates/check` checks now (and goes on as the mode says unless
+ * `reportOnly`), `POST /updates/install` is Install now and Restart now (it
+ * answers once the installer runs; the service restarts after). Every answer is the status
  * after the request.
  */
 export function registerUpdatesRoutes(r: Router, app: App) {

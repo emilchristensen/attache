@@ -356,6 +356,7 @@ Connections created before these transports lose their old credentials once at s
 A `needs auth` connection without browser sign-in shows a Reconnect action on its card: for methods with secret fields it reopens the credential form, otherwise it re-runs the connection test; each auth method can carry `reconnectHelp`, the text telling the user what to fix outside Attache first.
 A test that succeeds on a connection that was `needs auth` or `error` queues a Source refresh of that connection, so its coverage no longer shows the failed run.
 Source refreshes of one connection may overlap (the first refresh after setup and one started by hand); `ConnectionManager.refresh` numbers them as they start and drops a read that started before the newest one already stored (its run is recorded with outcome `superseded`), so a slow earlier refresh never reopens what a later read resolved.
+A refresh compares with the read stored last as it stores, not as it starts: when an earlier refresh still running at its start stores first, the later read resolves what that earlier one found and it no longer sees.
 Before its first connector session the runner lists Claude Code's MCP servers with a session that disallows every MCP tool and stops at init, then hides every other server, because with tool search off their tool definitions would otherwise be inlined and can overflow the model's context; a session that still overflows lists again and is retried once.
 
 ## Attention and briefings
@@ -365,7 +366,7 @@ The attention engine follows these rules:
   Fingerprints are SHA-256 over length-prefixed parts, truncated to 16 hex characters, so a separator cannot forge a collision.
 - Keys use the work item identity (for example `jira:ISSUE-1`), and the category (due, overdue) goes in the fingerprint, fixing the due→overdue key churn.
 - Transport-dependent fields (`updated_at`) are not fingerprint parts.
-- An item is resolved only if its source was fully covered in this and the previous run.
+- An item is resolved only if its source was fully covered in this run and in the run stored before it.
 - A dismissal records the fingerprint it applied to.
   Unchanged items stay dismissed; a changed fingerprint reopens the item with the reason.
 - Snooze stores an absolute time and reopens only after it passes.
@@ -466,11 +467,11 @@ Releases are published only by `.github/workflows/release.yml` from a version ta
 
 ### Updates
 
-The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind a few calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `install()` (Install now), `setSettings()`, and `start()`/`stop()` with the service.
+The Updater (`apps/service/src/updates/updater.ts`, `App.updater`) owns the whole lifecycle of an Update behind a few calls: `view()` (the `UpdatesView` in `packages/contracts/src/updates.ts`), `check()` (Check now), `install()` (Install now and Restart now), `setSettings()` (channel and mode), and `start()`/`stop()` with the service.
 The HTTP API is `GET /updates`, `PUT /updates/settings`, `POST /updates/check` and `POST /updates/install` (`http/routes-updates.ts`), and every change fires `updates.changed` on the event stream.
 A check lists the repository's GitHub releases without signing in (`updates/release-feed.ts`; `ATTACHE_RELEASE_FEED_URL` points it elsewhere, for tests), and `updates/channel.ts` keeps the versions in the Machine's Update channel that are newer than the one it runs and not marked bad here, newest first.
 `updates/find-update.ts` downloads the newest one's manifest and signature and checks them (`verifySignedManifest`) before believing anything in them; a refused release is skipped, and when every newer release is refused the check fails with the reason instead of reporting the Machine up to date.
-The Update channel is the Machine's configuration (`config.updates`, Stable by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
+The Update channel and Automatic updates' mode are the Machine's configuration (`config.updates`, Stable and Automatic by default), and the versions that failed on this Machine are kept in `<state>/updates/bad-versions.json`.
 Only a release install updates itself (`updates/release-install.ts`: the service script runs from `<prefix>/app/<version>/` with `<prefix>/current` beside it); a source checkout, or a build without a release key, shows Updates as unavailable and makes no request.
 `attache update --check` (`cli/update-commands.ts`) asks the running service to check without acting on what it finds.
 Installing downloads this computer's archive, streamed and capped at the manifest's size, into `<state>/updates/staging/<version>/` next to the signed manifest and its signature, and checks the folder as an installer does (`updates/staging.ts`); a refused archive leaves nothing staged, and staging an Update removes what it supersedes.
@@ -484,6 +485,13 @@ A rollback stops the new service, restores only the database from that backup wi
 Its outcome adds `database` (`restored`, `no_backup` or `restore_failed`) and `backup`, which `lastUpdate` carries and `rollbackDatabaseSentence` (`packages/contracts/src/wording.ts`) words; the restarted service marks `to` bad (`updates/bad-versions.ts`), so no check offers it again while a newer release still is.
 The install test's release built to fail its health check (`build-release.mjs --fail-health-check`, `updates/health-check-fault.ts`) migrates the database past every release and exits, so its rollback only leaves a running Machine when the database is restored.
 `attache update` checks, asks for the install, and waits for the outcome across the restart.
+
+Automatic updates has three modes.
+Unless the mode is Off, the Updater checks when the service starts and every 6 hours after, on the App's clock (`Updater.scheduleCheck`); Off makes no request about Updates at all, not even for Check now, Install now or `attache update`, and shows the status `off`.
+A check that is not report-only (the timer, or `POST /updates/check` without `reportOnly`) goes on as the mode says (`Updater.proceed`): Ask first downloads and verifies the Update into the staging folder and waits at `ready`; Automatic does the same, then installs once no Job is running.
+While Jobs run the status is `waiting_for_jobs` with their exact count in `jobs`; `updates/job-wait.ts` looks again whenever a Job changes and every minute, and installs anyway once the Update has waited 24 hours (the wait starts again if the service restarts).
+Install now and Restart now hand a verified Update to the installer at once, whatever Jobs run; the installer stops the service, and the Job queue resumes those Jobs from their last checkpoint when it starts again.
+Downloads and installs run one step at a time (`Updater.serial`), so the timer, Check now, Install now and a change of mode never download twice or start two installers.
 
 ## Harness sessions
 

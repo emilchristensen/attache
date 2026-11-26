@@ -6,9 +6,10 @@ import type { UpdatesView } from "@attache/contracts";
 import { manifestFileName, signatureFileName } from "../../src/release/manifest.ts";
 import { releaseTarget } from "../../src/platform/release-target.ts";
 import { signedRelease } from "../fixtures/signed-release.ts";
+import { CHECK_EVERY_MS } from "../../src/updates/updater.ts";
 import { installerFinished, updatesWorld, type UpdatesMachine } from "./updates-world.ts";
 
-const { key, releases, machine, restart } = updatesWorld();
+const { key, releases, machine, restart, outcomeSeen } = updatesWorld();
 const TARGET = releaseTarget()!;
 
 const install = (m: UpdatesMachine) => m.post<UpdatesView>("/updates/install");
@@ -85,7 +86,8 @@ describe("installing an Update", () => {
     const m = await machine("0.6.0", server);
     m.runner.onStart = () => installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
     await install(m);
-    await expect.poll(async () => (await view(m)).lastUpdate?.outcome).toBe("failed");
+    await outcomeSeen(m);
+    expect((await view(m)).lastUpdate?.outcome).toBe("failed");
     server.publish("0.7.1", signedRelease({ version: "0.7.1", key }));
     m.runner.onStart = null;
     await install(m);
@@ -102,7 +104,8 @@ describe("after the installer finishes", () => {
     expect(await view(after)).toMatchObject({ version: "0.7.0", status: "installing", lastUpdate: null });
 
     installerFinished(after.stateDir, { outcome: "updated", from: "0.6.0", to: "0.7.0" });
-    await expect.poll(async () => (await view(after)).lastUpdate).toMatchObject({ outcome: "updated", from: "0.6.0", to: "0.7.0", notes: "## 0.7.0\n\nWhat changed in 0.7.0.\n" });
+    await outcomeSeen(after);
+    expect((await view(after)).lastUpdate).toMatchObject({ outcome: "updated", from: "0.6.0", to: "0.7.0", notes: "## 0.7.0\n\nWhat changed in 0.7.0.\n" });
     const v = await view(after);
     expect(v.status).toBe("not_checked");
     expect(Date.parse(v.lastUpdate!.at)).not.toBeNaN();
@@ -117,7 +120,8 @@ describe("after the installer finishes", () => {
     const m = await machine("0.6.0", await releases("0.7.0"));
     m.runner.onStart = () => installerFinished(m.stateDir, { outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
     await install(m);
-    await expect.poll(async () => (await view(m)).lastUpdate).toMatchObject({ outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
+    await outcomeSeen(m);
+    expect((await view(m)).lastUpdate).toMatchObject({ outcome: "failed", from: "0.6.0", to: "0.7.0", reason: "could not back up the existing installation; nothing was changed" });
     expect(await view(m)).toMatchObject({ version: "0.6.0", status: "available", update: { version: "0.7.0" } });
   });
 
@@ -126,7 +130,8 @@ describe("after the installer finishes", () => {
     await install(m);
     const after = await restart(m, "0.6.0");
     installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
-    await expect.poll(async () => (await view(after)).lastUpdate).toMatchObject({ outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
+    await outcomeSeen(after);
+    expect((await view(after)).lastUpdate).toMatchObject({ outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy" });
   });
 });
 
@@ -138,7 +143,8 @@ describe("after an Update rolled back", () => {
     await install(m);
     const after = await restart(m, "0.6.0");
     installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored", backup: join(after.stateDir, "backups", "pre-update-0.6.0-to-0.7.0-20261126101500.tar.gz") });
-    await expect.poll(async () => (await view(after)).lastUpdate?.outcome).toBe("rolled_back");
+    await outcomeSeen(after);
+    expect((await view(after)).lastUpdate?.outcome).toBe("rolled_back");
     return { server, after };
   }
 
@@ -160,6 +166,19 @@ describe("after an Update rolled back", () => {
     expect(await after.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null });
     const again = await restart(after, "0.6.0");
     expect(await again.post<UpdatesView>("/updates/check", { reportOnly: true })).toMatchObject({ status: "up_to_date", update: null });
+  });
+
+  it("in Automatic, the version it went back to never installs the failed one again, neither at its start nor 6 hours later", async () => {
+    const m = await machine("0.6.0", await releases("0.7.0"));
+    await install(m);
+    // The installer starts the earlier version again before it writes its outcome: that service checks at start.
+    const after = await restart(m, "0.6.0");
+    await after.clock.advance(0);
+    installerFinished(after.stateDir, { outcome: "rolled_back", from: "0.6.0", to: "0.7.0", reason: "the service did not become healthy", database: "restored" });
+    await outcomeSeen(after);
+    await after.clock.advance(CHECK_EVERY_MS);
+    expect(await view(after)).toMatchObject({ version: "0.6.0", status: "up_to_date", update: null });
+    expect(after.runner.requests.map((r) => r.version)).toEqual(["0.7.0"]);
   });
 
   it("still offers a newer release", async () => {

@@ -246,6 +246,13 @@ export class App {
       trustedKeys: () => trustedReleaseKeys(this.paths.stateDir),
       runner: opts.updates?.installerRunner ?? platformInstallerRunner(this.log),
       port: () => this.httpPort,
+      jobs: {
+        count: () => this.jobs.countRunning(),
+        onChange: (listener) => {
+          this.jobs.events.on("event", listener);
+          return () => this.jobs.events.off("event", listener);
+        },
+      },
     });
     this.wire();
     registerRunners(this);
